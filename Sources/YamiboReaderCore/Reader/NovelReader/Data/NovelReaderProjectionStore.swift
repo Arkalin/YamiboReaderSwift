@@ -1,7 +1,7 @@
 import Foundation
 @preconcurrency import GRDB
 
-public actor ReaderCacheStore {
+public actor NovelReaderProjectionStore {
     public static let projectionNamespace = "novel_reader_projections"
 
     private let cacheStore: DiskCacheStore
@@ -33,13 +33,13 @@ public actor ReaderCacheStore {
         self.fileManager = fileManager
     }
 
-    public func loadDocument(
+    public func loadProjection(
         for request: ReaderPageRequest,
         contentSource: ReaderContentSource? = nil
-    ) async -> ReaderPageDocument? {
+    ) async -> NovelReaderProjection? {
         let key = projectionCacheKey(threadID: request.threadID, view: request.view, authorID: request.authorID, contentSource: contentSource)
 
-        guard let document: ReaderPageDocument = try? await cacheStore.get(
+        guard let projection: NovelReaderProjection = try? await cacheStore.get(
             namespace: Self.projectionNamespace,
             key: key
         ) else {
@@ -47,14 +47,14 @@ public actor ReaderCacheStore {
             return nil
         }
 
-        memoryCache.setObject(CacheBox(document: document), forKey: key as NSString)
-        return document
+        memoryCache.setObject(CacheBox(projection: projection), forKey: key as NSString)
+        return projection
     }
 
-    public func save(_ document: ReaderPageDocument) async throws {
-        let key = projectionCacheKey(document: document)
-        try await cacheStore.set(document, namespace: Self.projectionNamespace, key: key)
-        memoryCache.setObject(CacheBox(document: document), forKey: key as NSString)
+    public func save(_ projection: NovelReaderProjection) async throws {
+        let key = projectionCacheKey(projection: projection)
+        try await cacheStore.set(projection, namespace: Self.projectionNamespace, key: key)
+        memoryCache.setObject(CacheBox(projection: projection), forKey: key as NSString)
     }
 
     public func cachedViews(
@@ -119,12 +119,12 @@ public actor ReaderCacheStore {
         memoryCache.removeAllObjects()
     }
 
-    private func projectionCacheKey(document: ReaderPageDocument) -> String {
+    private func projectionCacheKey(projection: NovelReaderProjection) -> String {
         projectionCacheKey(
-            threadID: document.threadID,
-            view: document.view,
-            authorID: document.resolvedAuthorID,
-            contentSource: document.contentSource
+            threadID: projection.threadID,
+            view: projection.view,
+            authorID: projection.resolvedAuthorID,
+            contentSource: projection.contentSource
         )
     }
 
@@ -178,16 +178,16 @@ public actor ReaderCacheStore {
         do {
             return try YamiboDatabase.openSharedPool(rootDirectory: rootDirectory, fileManager: fileManager)
         } catch {
-            fatalError("Failed to open ReaderCacheStore database: \(error)")
+            fatalError("Failed to open NovelReaderProjectionStore database: \(error)")
         }
     }
 }
 
 private final class CacheBox: NSObject {
-    let document: ReaderPageDocument
+    let projection: NovelReaderProjection
 
-    init(document: ReaderPageDocument) {
-        self.document = document
+    init(projection: NovelReaderProjection) {
+        self.projection = projection
     }
 }
 

@@ -3,7 +3,7 @@ import XCTest
 @testable import YamiboReaderCore
 
 private typealias NovelTextLayoutFixture = @Sendable (
-    ReaderPageDocument,
+    NovelReaderProjection,
     ReaderAppearanceSettings,
     ReaderContainerLayout
 ) throws -> NovelTextLayoutResult
@@ -278,7 +278,7 @@ final class NovelReadingSessionTests: XCTestCase {
             segmentProgress: 0.5,
             readingModeHint: .paged
         )
-        let refreshedDocument = ReaderPageDocument(
+        let refreshedDocument = NovelReaderProjection(
             threadID: originalDocument.threadID,
             view: 1,
             maxView: 1,
@@ -931,7 +931,7 @@ final class NovelReadingSessionTests: XCTestCase {
         XCTAssertEqual(session.snapshot.currentSurfaceIntraProgress, 0.25, accuracy: 0.001)
     }
 
-    func testPromotesPrefetchedReaderPageDocument() throws {
+    func testPromotesPrefetchedNovelReaderProjection() throws {
         let current = makeNovelDocument(view: 1, maxView: 2, segments: [("第一章", "当前页正文")])
         let prefetched = makeNovelDocument(view: 2, maxView: 2, segments: [("第二章", "预取页正文")])
         var session = NovelReadingSession(
@@ -985,8 +985,8 @@ private func makeNovelDocument(
     view: Int,
     maxView: Int,
     segments: [(chapterTitle: String, text: String)]
-) -> ReaderPageDocument {
-    ReaderPageDocument(
+) -> NovelReaderProjection {
+    NovelReaderProjection(
         threadID: "9001",
         view: view,
         maxView: maxView,
@@ -1006,7 +1006,7 @@ private func viewportSurfaceContainsSegmentOffset(_ page: NovelTextViewportIndex
 
 private extension NovelReadingSession {
     init(
-        document: ReaderPageDocument,
+        document: NovelReaderProjection,
         settings: ReaderAppearanceSettings,
         layout: ReaderContainerLayout,
         preferredSurfaceOrdinal: Int = 0,
@@ -1037,7 +1037,7 @@ private extension NovelReadingSession {
     }
 
     init(
-        validating document: ReaderPageDocument,
+        validating document: NovelReaderProjection,
         settings: ReaderAppearanceSettings,
         layout: ReaderContainerLayout,
         preferredSurfaceOrdinal: Int = 0,
@@ -1069,7 +1069,7 @@ private extension NovelReadingSession {
 }
 
 private func committedLayoutResult(
-    document: ReaderPageDocument,
+    document: NovelReaderProjection,
     settings: ReaderAppearanceSettings,
     layout: ReaderContainerLayout,
     usesPadPresentation: Bool = false,

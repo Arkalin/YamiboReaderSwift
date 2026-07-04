@@ -57,7 +57,7 @@ public struct ReaderPageRequest: Codable, Hashable, Sendable {
     }
 }
 
-public enum NovelReaderPageLoadSource: Hashable, Sendable {
+public enum NovelReaderProjectionLoadSource: Hashable, Sendable {
     case online
     case offlineFallback(updatedAt: Date?)
 
@@ -69,15 +69,15 @@ public enum NovelReaderPageLoadSource: Hashable, Sendable {
     }
 }
 
-public struct NovelReaderPageLoad: Hashable, Sendable {
-    public var document: ReaderPageDocument
-    public var source: NovelReaderPageLoadSource
+public struct NovelReaderProjectionLoad: Hashable, Sendable {
+    public var projection: NovelReaderProjection
+    public var source: NovelReaderProjectionLoadSource
 
     public init(
-        document: ReaderPageDocument,
-        source: NovelReaderPageLoadSource = .online
+        projection: NovelReaderProjection,
+        source: NovelReaderProjectionLoadSource = .online
     ) {
-        self.document = document
+        self.projection = projection
         self.source = source
     }
 }
@@ -311,7 +311,7 @@ extension ReaderSegment: Codable {
     }
 }
 
-public struct ReaderPageDocument: Codable, Hashable, Sendable {
+public struct NovelReaderProjection: Codable, Hashable, Sendable {
     public static let schemaVersion = 6
 
     public var threadID: String
@@ -346,7 +346,7 @@ public struct ReaderPageDocument: Codable, Hashable, Sendable {
         decodedSchemaVersion: Int? = Self.schemaVersion
     ) {
         let normalizedThreadID = threadID.trimmingCharacters(in: .whitespacesAndNewlines)
-        precondition(!normalizedThreadID.isEmpty, "ReaderPageDocument requires a Yamibo thread tid")
+        precondition(!normalizedThreadID.isEmpty, "NovelReaderProjection requires a Yamibo thread tid")
         self.threadID = normalizedThreadID
         self.view = max(1, view)
         self.maxView = max(self.view, maxView)
@@ -380,7 +380,7 @@ public struct ReaderPageDocument: Codable, Hashable, Sendable {
     }
 }
 
-extension ReaderPageDocument {
+extension NovelReaderProjection {
     private enum CodingKeys: String, CodingKey {
         case threadID
         case view
@@ -467,7 +467,7 @@ extension ReaderPageDocument {
     }
 }
 
-extension ReaderPageDocument {
+extension NovelReaderProjection {
     static func legacySegmentSemantics(
         segments: [ReaderSegment],
         segmentSources: [ReaderSegmentSource?],
@@ -923,7 +923,7 @@ package struct NovelTextViewportIndex: Hashable, Sendable {
     public func position(
         for textSegmentIdentity: NovelTextSegmentIdentity,
         displayedTextOffset: Int,
-        in document: ReaderPageDocument
+        in document: NovelReaderProjection
     ) -> NovelTextViewportIndexSurfacePosition? {
         guard document.view == documentView,
               let segmentIndex = document.segmentSemantics.firstIndex(where: {
@@ -989,7 +989,7 @@ package extension NovelTextViewportIndexSurface {
 
     func semanticTextPosition(
         for intraSurfaceProgress: Double,
-        in document: ReaderPageDocument
+        in document: NovelReaderProjection
     ) -> NovelTextViewportSemanticTextPosition? {
         guard let rangePosition = textRangePosition(for: intraSurfaceProgress),
               let semantics = document.semantics(forSegmentIndex: rangePosition.range.segmentIndex),
@@ -1010,7 +1010,7 @@ package extension NovelTextViewportIndexSurface {
 
     func contains(
         textSegmentIdentity: NovelTextSegmentIdentity,
-        in document: ReaderPageDocument
+        in document: NovelReaderProjection
     ) -> Bool {
         ranges.contains { range in
             document.semantics(forSegmentIndex: range.segmentIndex)?.textSegmentIdentity == textSegmentIdentity
@@ -1020,7 +1020,7 @@ package extension NovelTextViewportIndexSurface {
     func contains(
         textSegmentIdentity: NovelTextSegmentIdentity,
         displayedTextOffset: Int,
-        in document: ReaderPageDocument
+        in document: NovelReaderProjection
     ) -> Bool {
         ranges.contains { range in
             document.semantics(forSegmentIndex: range.segmentIndex)?.textSegmentIdentity == textSegmentIdentity &&
@@ -1030,7 +1030,7 @@ package extension NovelTextViewportIndexSurface {
 
     func contains(
         chapterIdentity: NovelChapterIdentity,
-        in document: ReaderPageDocument
+        in document: NovelReaderProjection
     ) -> Bool {
         ranges.contains { range in
             document.semantics(forSegmentIndex: range.segmentIndex)?.chapterIdentity == chapterIdentity
@@ -1042,7 +1042,7 @@ package extension NovelTextViewportIndexSurface {
     func distance(
         from displayedTextOffset: Int,
         textSegmentIdentity: NovelTextSegmentIdentity,
-        in document: ReaderPageDocument
+        in document: NovelReaderProjection
     ) -> Int {
         let matchingRanges = ranges.filter { range in
             document.semantics(forSegmentIndex: range.segmentIndex)?.textSegmentIdentity == textSegmentIdentity
@@ -1055,7 +1055,7 @@ package extension NovelTextViewportIndexSurface {
         displayedTextOffset: Int,
         textSegmentIdentity: NovelTextSegmentIdentity,
         fallbackProgress: Double,
-        in document: ReaderPageDocument
+        in document: NovelReaderProjection
     ) -> Double {
         progress(
             matching: { range in
@@ -1068,7 +1068,7 @@ package extension NovelTextViewportIndexSurface {
 
     func sample(
         displayOffset: Int,
-        in document: ReaderPageDocument
+        in document: NovelReaderProjection
     ) -> NovelTextViewportSample? {
         guard !ranges.isEmpty else { return nil }
         let normalizedOffset = max(0, displayOffset)
@@ -1116,7 +1116,7 @@ package extension NovelTextViewportIndexSurface {
     func displayOffset(
         for textSegmentIdentity: NovelTextSegmentIdentity,
         displayedTextOffset: Int,
-        in document: ReaderPageDocument
+        in document: NovelReaderProjection
     ) -> Int? {
         guard let segmentIndex = document.segmentSemantics.firstIndex(where: {
             $0?.textSegmentIdentity == textSegmentIdentity
@@ -1224,7 +1224,7 @@ package extension NovelTextViewportIndexSurface {
     }
 }
 
-package extension ReaderPageDocument {
+package extension NovelReaderProjection {
     func previewSourceText(from position: NovelTextViewportSemanticTextPosition) -> String {
         guard let startSegmentIndex = segmentSemantics.firstIndex(where: {
             $0?.textSegmentIdentity == position.textSegmentIdentity
@@ -1295,7 +1295,7 @@ package extension NovelTextViewportDocument {
 
     func semanticTextPosition(
         containingDocumentOffset documentOffset: Int,
-        in document: ReaderPageDocument
+        in document: NovelReaderProjection
     ) -> NovelTextViewportSemanticTextPosition? {
         guard let segmentRange = textRangesBySegment.first(where: { _, range in
             documentOffset >= range.startOffset && documentOffset <= range.endOffset
@@ -1315,7 +1315,7 @@ package extension NovelTextViewportDocument {
 
     func documentOffset(
         for position: ReaderResumePoint,
-        in document: ReaderPageDocument
+        in document: NovelReaderProjection
     ) -> Int? {
         guard position.view == document.view else { return nil }
         if let textSegmentIdentity = position.textSegmentIdentity,
@@ -1390,7 +1390,7 @@ package extension NovelTextViewportDocument {
         containingDocumentOffset documentOffset: Int,
         surfaceIdentity: NovelReaderSurfaceIdentity,
         documentView: Int,
-        in document: ReaderPageDocument
+        in document: NovelReaderProjection
     ) -> NovelTextViewportSample? {
         guard let position = semanticTextPosition(
             containingDocumentOffset: documentOffset,
@@ -1408,7 +1408,7 @@ package extension NovelTextViewportDocument {
 
     private func segmentRange(
         for textSegmentIdentity: NovelTextSegmentIdentity,
-        in document: ReaderPageDocument
+        in document: NovelReaderProjection
     ) -> ReaderRenderedTextRange? {
         guard let segmentIndex = document.segmentSemantics.firstIndex(where: {
             $0?.textSegmentIdentity == textSegmentIdentity
@@ -1447,7 +1447,7 @@ package extension NovelTextViewportIndexSurface {
         toDocumentOffset documentOffset: Int,
         surfaceIdentity: NovelReaderSurfaceIdentity,
         viewportDocument: NovelTextViewportDocument,
-        sourceDocument: ReaderPageDocument
+        sourceDocument: NovelReaderProjection
     ) -> NovelTextViewportSample? {
         let candidates = ranges.compactMap { range -> (distance: Int, sample: NovelTextViewportSample)? in
             guard let documentRange = viewportDocument.documentOffsets(forSurfaceRange: range),
@@ -1957,7 +1957,7 @@ public struct NovelReaderPresentation: Hashable, Sendable {
     public var committedSettings: ReaderAppearanceSettings
     public var readingState: NovelReaderReadingState
     public var currentContentSource: ReaderContentSource
-    public var pageLoadSource: NovelReaderPageLoadSource
+    public var pageLoadSource: NovelReaderProjectionLoadSource
     public var retainedChapterCount: Int
     public var filteredChapterCandidateCount: Int
     public var progressProjection: NovelReaderProgressProjection
@@ -1972,7 +1972,7 @@ public struct NovelReaderPresentation: Hashable, Sendable {
         committedSettings: ReaderAppearanceSettings,
         readingState: NovelReaderReadingState,
         currentContentSource: ReaderContentSource,
-        pageLoadSource: NovelReaderPageLoadSource = .online,
+        pageLoadSource: NovelReaderProjectionLoadSource = .online,
         retainedChapterCount: Int,
         filteredChapterCandidateCount: Int,
         selectedSurfaceIndex: Int? = nil,

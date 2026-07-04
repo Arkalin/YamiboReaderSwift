@@ -27,7 +27,7 @@ struct MangaReaderTestsReaderProjectionLoader {
             ))
         }
 
-        let loader = YamiboMangaReaderProjectionLoader(
+        let loader = MangaReaderProjectionLoader(
             client: YamiboClient(session: harness.session, cookie: "auth=1", userAgent: "TestAgent/1"),
             projectionStore: fixtures.projectionStore,
             forumCacheStore: fixtures.forumCacheStore
@@ -76,7 +76,7 @@ struct MangaReaderTestsReaderProjectionLoader {
             ))
         }
 
-        let loader = YamiboMangaReaderProjectionLoader(
+        let loader = MangaReaderProjectionLoader(
             client: YamiboClient(session: harness.session),
             projectionStore: fixtures.projectionStore,
             forumCacheStore: fixtures.forumCacheStore
@@ -123,7 +123,7 @@ struct MangaReaderTestsReaderProjectionLoader {
             authorID: "42"
         )
 
-        let loader = YamiboMangaReaderProjectionLoader(
+        let loader = MangaReaderProjectionLoader(
             client: YamiboClient(session: MangaReaderDataTestHarness().session),
             projectionStore: fixtures.projectionStore,
             forumCacheStore: fixtures.forumCacheStore
@@ -161,7 +161,7 @@ struct MangaReaderTestsReaderProjectionLoader {
             ))
         }
 
-        let loader = YamiboMangaReaderProjectionLoader(
+        let loader = MangaReaderProjectionLoader(
             client: YamiboClient(session: harness.session),
             projectionStore: FailingProjectionStore(),
             forumCacheStore: fixtures.forumCacheStore
@@ -192,7 +192,7 @@ struct MangaReaderTestsReaderProjectionLoader {
             ))
         }
 
-        let loader = YamiboMangaReaderProjectionLoader(
+        let loader = MangaReaderProjectionLoader(
             client: YamiboClient(session: harness.session),
             projectionStore: fixtures.projectionStore,
             forumCacheStore: fixtures.forumCacheStore
@@ -227,7 +227,7 @@ struct MangaReaderTestsReaderProjectionLoader {
             imageURLs: offlineSourcePage.posts.flatMap(\.images).compactMap { URL(string: $0.url) },
             sourcePage: offlineSourcePage
         ))
-        let loader = YamiboMangaReaderProjectionLoader(
+        let loader = MangaReaderProjectionLoader(
             client: YamiboClient(session: harness.session),
             projectionStore: fixtures.projectionStore,
             forumCacheStore: fixtures.forumCacheStore,
@@ -268,7 +268,7 @@ struct MangaReaderTestsReaderProjectionLoader {
             imageURLs: sourcePage.posts.flatMap(\.images).compactMap { URL(string: $0.url) },
             sourcePage: sourcePage
         ))
-        let loader = YamiboMangaReaderProjectionLoader(
+        let loader = MangaReaderProjectionLoader(
             client: YamiboClient(session: harness.session),
             projectionStore: fixtures.projectionStore,
             forumCacheStore: fixtures.forumCacheStore,
@@ -327,7 +327,7 @@ struct MangaReaderTestsReaderProjectionLoader {
             sourceIdentity: identity,
             sourceFingerprint: "stale"
         ))
-        let loader = YamiboMangaReaderProjectionLoader(
+        let loader = MangaReaderProjectionLoader(
             client: YamiboClient(session: harness.session),
             projectionStore: fixtures.projectionStore,
             forumCacheStore: fixtures.forumCacheStore,
@@ -351,7 +351,7 @@ struct MangaReaderTestsReaderProjectionLoader {
         harness.setHandler { _ in
             throw URLError(.notConnectedToInternet)
         }
-        let loader = YamiboMangaReaderProjectionLoader(
+        let loader = MangaReaderProjectionLoader(
             client: YamiboClient(session: harness.session),
             projectionStore: fixtures.projectionStore,
             forumCacheStore: fixtures.forumCacheStore,
@@ -389,7 +389,7 @@ struct MangaReaderTestsReaderProjectionLoader {
             imageURLs: sourcePage.posts.flatMap(\.images).compactMap { URL(string: $0.url) },
             sourcePage: sourcePage
         ))
-        let loader = YamiboMangaReaderProjectionLoader(
+        let loader = MangaReaderProjectionLoader(
             client: YamiboClient(session: harness.session),
             projectionStore: fixtures.projectionStore,
             forumCacheStore: fixtures.forumCacheStore,
@@ -426,7 +426,7 @@ struct MangaReaderTestsReaderProjectionLoader {
             imageURLs: sourcePage.posts.flatMap(\.images).compactMap { URL(string: $0.url) },
             sourcePage: sourcePage
         ))
-        let loader = YamiboMangaReaderProjectionLoader(
+        let loader = MangaReaderProjectionLoader(
             client: YamiboClient(session: harness.session),
             projectionStore: fixtures.projectionStore,
             forumCacheStore: fixtures.forumCacheStore,
@@ -461,7 +461,7 @@ struct MangaReaderTestsReaderProjectionLoader {
             imageURLs: sourcePage.posts.flatMap(\.images).compactMap { URL(string: $0.url) },
             sourcePage: sourcePage
         ))
-        let loader = YamiboMangaReaderProjectionLoader(
+        let loader = MangaReaderProjectionLoader(
             client: YamiboClient(session: harness.session),
             projectionStore: fixtures.projectionStore,
             forumCacheStore: fixtures.forumCacheStore,

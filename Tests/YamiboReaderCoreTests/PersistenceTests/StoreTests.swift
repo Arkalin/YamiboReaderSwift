@@ -624,10 +624,10 @@ private func persistedResumeRoute(_ route: ReaderResumeRoute) throws -> ReaderRe
 
 @Test func readerCacheStoreReportsUsageAndCanClearAll() async throws {
     let baseDirectory = makeTemporaryDirectory(prefix: "reader-cache-tests")
-    let store = ReaderCacheStore(baseDirectory: baseDirectory)
+    let store = NovelReaderProjectionStore(baseDirectory: baseDirectory)
 
     try await store.save(
-        ReaderPageDocument(
+        NovelReaderProjection(
             threadID: "600",
             view: 1,
             maxView: 1,
@@ -670,12 +670,12 @@ private func persistedResumeRoute(_ route: ReaderResumeRoute) throws -> ReaderRe
 
 @Test func clearingReaderCacheDoesNotDeleteFavoriteBackground() async throws {
     let rootDirectory = makeTemporaryDirectory(prefix: "cache-clear-background-root")
-    let readerCacheStore = ReaderCacheStore(baseDirectory: rootDirectory.appendingPathComponent("reader-cache", isDirectory: true))
+    let readerCacheStore = NovelReaderProjectionStore(baseDirectory: rootDirectory.appendingPathComponent("reader-cache", isDirectory: true))
     let backgroundStore = FavoriteBackgroundImageStore(baseDirectory: rootDirectory.appendingPathComponent("favorite-background", isDirectory: true))
     let backgroundData = Data(repeating: 4, count: 64)
 
     try await readerCacheStore.save(
-        ReaderPageDocument(
+        NovelReaderProjection(
             threadID: "701",
             view: 1,
             maxView: 1,
@@ -732,7 +732,7 @@ private func persistedResumeRoute(_ route: ReaderResumeRoute) throws -> ReaderRe
         defaults: try #require(UserDefaults(suiteName: suiteName)),
         key: "content-covers"
     )
-    let readerCacheStore = ReaderCacheStore(baseDirectory: rootDirectory.appendingPathComponent("reader-cache", isDirectory: true))
+    let readerCacheStore = NovelReaderProjectionStore(baseDirectory: rootDirectory.appendingPathComponent("reader-cache", isDirectory: true))
     let favoriteBackgroundImageStore = FavoriteBackgroundImageStore(
         baseDirectory: rootDirectory.appendingPathComponent("favorite-background", isDirectory: true)
     )
@@ -773,7 +773,7 @@ private func persistedResumeRoute(_ route: ReaderResumeRoute) throws -> ReaderRe
     )
     try await localFavoriteLibraryStore.save(localLibrary)
     try await readerCacheStore.save(
-        ReaderPageDocument(
+        NovelReaderProjection(
             threadID: "700",
             view: 1,
             maxView: 1,
@@ -834,7 +834,7 @@ private func persistedResumeRoute(_ route: ReaderResumeRoute) throws -> ReaderRe
         NovelOfflineCacheEntry(
             ownerTitle: "测试小说",
             title: "第一页",
-            document: ReaderPageDocument(
+            document: NovelReaderProjection(
                 threadID: "700",
                 view: 1,
                 maxView: 2,

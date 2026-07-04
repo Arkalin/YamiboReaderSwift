@@ -1047,7 +1047,7 @@ final class NovelTextViewportRuntimeTransaction {
 
     let generation: UInt64
     let result: NovelTextLayoutResult
-    let document: ReaderPageDocument?
+    let document: NovelReaderProjection?
     let settings: ReaderAppearanceSettings
     let layout: ReaderContainerLayout
     private(set) var semanticAttributedDocument: NSAttributedString?
@@ -1069,7 +1069,7 @@ final class NovelTextViewportRuntimeTransaction {
     init(
         generation: UInt64,
         result: NovelTextLayoutResult,
-        document: ReaderPageDocument?,
+        document: NovelReaderProjection?,
         settings: ReaderAppearanceSettings,
         layout: ReaderContainerLayout,
         candidate: NovelTextLayoutRuntimeCandidate
@@ -1137,7 +1137,7 @@ final class NovelTextViewportRuntimeOwner {
     private var activeGeneration: UInt64 = 0
     private var nextGeneration: UInt64 = 1
     private var result: NovelTextLayoutResult?
-    private var document: ReaderPageDocument?
+    private var document: NovelReaderProjection?
     private var settings = ReaderAppearanceSettings()
     private var layout = ReaderContainerLayout(width: 1, height: 1)
     private var visibleSurfaceOrdinals = Set<Int>()
@@ -1591,7 +1591,7 @@ final class NovelTextViewportRuntimeOwner {
         documentOffset: Int,
         page: NovelTextViewportIndexSurface,
         result: NovelTextLayoutResult,
-        document: ReaderPageDocument
+        document: NovelReaderProjection
     ) -> NovelTextViewportSample? {
         page.nearestTextSample(
             toDocumentOffset: documentOffset,

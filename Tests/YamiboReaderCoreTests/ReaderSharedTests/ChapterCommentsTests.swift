@@ -15,7 +15,7 @@ import Testing
         authorID: "7"
     )
 
-    let document = try ReaderHTMLParser.parseDocument(
+    let document = try ReaderHTMLParser.parseProjection(
         html: html,
         request: request,
         contentSource: .authorFilteredPage
@@ -47,7 +47,7 @@ import Testing
         authorID: "595655"
     )
 
-    let document = try ReaderHTMLParser.parseDocument(
+    let document = try ReaderHTMLParser.parseProjection(
         html: html,
         request: request,
         contentSource: .authorFilteredPage
@@ -77,7 +77,7 @@ import Testing
         authorID: "595655"
     )
 
-    let document = try ReaderHTMLParser.parseDocument(
+    let document = try ReaderHTMLParser.parseProjection(
         html: html,
         request: request,
         contentSource: .authorFilteredPage

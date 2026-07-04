@@ -461,7 +461,7 @@ extension OfflineCacheStore {
         )
     }
 
-    static func encodeNovelDocument(_ document: ReaderPageDocument) throws -> String {
+    static func encodeNovelDocument(_ document: NovelReaderProjection) throws -> String {
         let data = try JSONEncoder().encode(document)
         guard let value = String(data: data, encoding: .utf8) else {
             throw YamiboError.persistenceFailed("Failed to encode novel offline cache document")
@@ -469,11 +469,11 @@ extension OfflineCacheStore {
         return value
     }
 
-    private static func decodeNovelDocument(_ value: String) throws -> ReaderPageDocument {
+    private static func decodeNovelDocument(_ value: String) throws -> NovelReaderProjection {
         guard let data = value.data(using: .utf8) else {
             throw YamiboError.persistenceFailed("Failed to decode novel offline cache document")
         }
-        return try JSONDecoder().decode(ReaderPageDocument.self, from: data)
+        return try JSONDecoder().decode(NovelReaderProjection.self, from: data)
     }
 
     static func novelDisplayOwnerTitle(ownerTitle: String, threadID: String) -> String {

@@ -1,20 +1,20 @@
 import Foundation
 
 public actor NovelReaderRepository {
-    private static let projectionSchemaVersion = 1
-
     private let client: YamiboClient
-    private let cacheStore: ReaderCacheStore
+    private let cacheStore: NovelReaderProjectionStore
     private let forumCacheStore: ForumCacheStore
     private let offlineCacheStore: (any OfflineCacheStoring)?
+    private let projectionLoader: NovelReaderProjectionLoader
     private let novelOfflineAutoRefreshEnabled: @Sendable () async -> Bool
     private let novelOfflineRetainsInlineImages: @Sendable () async -> Bool
 
     public init(
         client: YamiboClient,
-        cacheStore: ReaderCacheStore = ReaderCacheStore(),
+        cacheStore: NovelReaderProjectionStore = NovelReaderProjectionStore(),
         forumCacheStore: ForumCacheStore = ForumCacheStore(),
         offlineCacheStore: (any OfflineCacheStoring)? = nil,
+        projectionLoader: NovelReaderProjectionLoader? = nil,
         novelOfflineAutoRefreshEnabled: @escaping @Sendable () async -> Bool = { true },
         novelOfflineRetainsInlineImages: @escaping @Sendable () async -> Bool = { false }
     ) {
@@ -22,24 +22,30 @@ public actor NovelReaderRepository {
         self.cacheStore = cacheStore
         self.forumCacheStore = forumCacheStore
         self.offlineCacheStore = offlineCacheStore
+        self.projectionLoader = projectionLoader ?? NovelReaderProjectionLoader(
+            client: client,
+            projectionStore: cacheStore,
+            forumCacheStore: forumCacheStore,
+            offlineCacheStore: offlineCacheStore
+        )
         self.novelOfflineAutoRefreshEnabled = novelOfflineAutoRefreshEnabled
         self.novelOfflineRetainsInlineImages = novelOfflineRetainsInlineImages
     }
 
-    public func loadPage(_ request: ReaderPageRequest) async throws -> ReaderPageDocument {
-        try await loadPageResult(request).document
+    public func loadPage(_ request: ReaderPageRequest) async throws -> NovelReaderProjection {
+        try await loadPageResult(request).projection
     }
 
-    public func loadPageResult(_ request: ReaderPageRequest) async throws -> NovelReaderPageLoad {
+    public func loadPageResult(_ request: ReaderPageRequest) async throws -> NovelReaderProjectionLoad {
         try await loadPage(request, ignoresCache: false)
     }
 
-    public func loadPage(threadID: String, view: Int, authorID: String? = nil) async throws -> ReaderPageDocument {
+    public func loadPage(threadID: String, view: Int, authorID: String? = nil) async throws -> NovelReaderProjection {
         try await loadPage(ReaderPageRequest(threadID: threadID, view: view, authorID: authorID))
     }
 
     public func prefetchNextPage(from request: ReaderPageRequest) async {
-        let current: ReaderPageDocument
+        let current: NovelReaderProjection
         do {
             current = try await loadPage(request)
         } catch {
@@ -105,7 +111,7 @@ public actor NovelReaderRepository {
         }
         for view in targets.sorted() {
             let request = ReaderPageRequest(threadID: normalizedThreadID, view: view, authorID: authorID)
-            _ = try await loadPage(request, ignoresCache: true)
+            _ = try await loadPageIgnoringCache(request)
         }
     }
 
@@ -183,15 +189,15 @@ public actor NovelReaderRepository {
         return result
     }
 
-    public func loadPageIgnoringCache(_ request: ReaderPageRequest) async throws -> ReaderPageDocument {
-        try await loadPageIgnoringCacheResult(request).document
+    public func loadPageIgnoringCache(_ request: ReaderPageRequest) async throws -> NovelReaderProjection {
+        try await loadPageIgnoringCacheResult(request).projection
     }
 
-    public func loadPageIgnoringCacheResult(_ request: ReaderPageRequest) async throws -> NovelReaderPageLoad {
+    public func loadPageIgnoringCacheResult(_ request: ReaderPageRequest) async throws -> NovelReaderProjectionLoad {
         try await loadPage(request, ignoresCache: true)
     }
 
-    public func loadPageIgnoringCache(threadID: String, view: Int, authorID: String? = nil) async throws -> ReaderPageDocument {
+    public func loadPageIgnoringCache(threadID: String, view: Int, authorID: String? = nil) async throws -> NovelReaderProjection {
         try await loadPageIgnoringCache(ReaderPageRequest(threadID: threadID, view: view, authorID: authorID))
     }
 
@@ -203,11 +209,10 @@ public actor NovelReaderRepository {
             view: request.view,
             authorID: request.authorID
         )
-        let thread = ThreadIdentity(tid: request.threadID)
-        let onlinePage = try await loadOnlinePage(readerRequest, thread: thread, ignoresCache: true)
+        let onlinePage = try await projectionLoader.loadOnlineProjection(readerRequest, ignoresCache: true)
         return NovelOfflineCachePreparedSourcePage(
             sourcePage: onlinePage.sourcePage,
-            document: onlinePage.document
+            projection: onlinePage.projection
         )
     }
 
@@ -219,239 +224,49 @@ public actor NovelReaderRepository {
         return title
     }
 
-    private func loadPage(_ request: ReaderPageRequest, ignoresCache: Bool) async throws -> NovelReaderPageLoad {
-        let thread = ThreadIdentity(tid: request.threadID)
-        do {
-            let onlinePage = try await loadOnlinePage(request, thread: thread, ignoresCache: ignoresCache)
-            await autoRefreshNovelOfflineCacheIfNeeded(onlinePage)
-            return NovelReaderPageLoad(document: onlinePage.document, source: .online)
-        } catch {
-            guard isEligibleOfflineFallbackTrigger(error),
-                  let fallback = await loadOfflineFallback(
-                    for: request,
-                    thread: thread,
-                    authorID: normalizedAuthorID(request.authorID)
-                  ) else {
-                throw error
-            }
-            return fallback
+    private func loadPage(_ request: ReaderPageRequest, ignoresCache: Bool) async throws -> NovelReaderProjectionLoad {
+        let loaded = ignoresCache
+            ? try await projectionLoader.loadProjectionIgnoringCache(request)
+            : try await projectionLoader.loadProjection(request)
+        if case let .online(sourceLoadedOnline) = loaded.source {
+            await autoRefreshNovelOfflineCacheIfNeeded(loaded, sourceLoadedOnline: sourceLoadedOnline)
+            return NovelReaderProjectionLoad(projection: loaded.projection, source: .online)
         }
-    }
-
-    private func loadOnlinePage(
-        _ request: ReaderPageRequest,
-        thread: ThreadIdentity,
-        ignoresCache: Bool
-    ) async throws -> OnlineNovelPage {
-        let authorID = try await resolveAuthorID(for: request, thread: thread, ignoresCache: ignoresCache)
-        let sourceLoad = try await loadAuthorScopedThreadPage(
-            thread: thread,
-            title: nil,
-            authorID: authorID,
-            view: request.view,
-            ignoresCache: ignoresCache
-        )
-        let fingerprint = Self.projectionFingerprint(
-            page: sourceLoad.page,
-            threadID: thread.tid,
-            view: request.view,
-            authorID: authorID
-        )
-        let projectedRequest = ReaderPageRequest(threadID: request.threadID, view: request.view, authorID: authorID)
-
-        if !ignoresCache,
-           let cached = await cacheStore.loadDocument(for: projectedRequest, contentSource: .authorFilteredPage),
-           isReusableProjection(cached, fingerprint: fingerprint) {
-            return OnlineNovelPage(
-                document: cached,
-                sourcePage: sourceLoad.page,
-                thread: thread,
-                authorID: authorID,
-                sourceLoadedOnline: sourceLoad.loadedOnline
+        if case let .offlineFallback(updatedAt) = loaded.source {
+            return NovelReaderProjectionLoad(
+                projection: loaded.projection,
+                source: .offlineFallback(updatedAt: updatedAt)
             )
         }
-
-        let document = try ReaderHTMLParser.parseDocument(
-            threadPage: sourceLoad.page,
-            request: projectedRequest,
-            authorID: authorID,
-            projectionSourceFingerprint: fingerprint,
-            projectionSchemaVersion: Self.projectionSchemaVersion
-        )
-        try? await cacheStore.save(document)
-        return OnlineNovelPage(
-            document: document,
-            sourcePage: sourceLoad.page,
-            thread: thread,
-            authorID: authorID,
-            sourceLoadedOnline: sourceLoad.loadedOnline
-        )
+        return NovelReaderProjectionLoad(projection: loaded.projection, source: .online)
     }
 
-    private func isLegacyCachedDocumentMissingChapterCommentSources(_ document: ReaderPageDocument) -> Bool {
-        guard document.retainedChapterCount > 0, !document.segments.isEmpty else {
-            return false
-        }
-        return !document.segmentSources.contains { source in
-            source?.ownerPostID?.isEmpty == false
-        }
-    }
-
-    private func isCachedDocumentMissingAuthorReplyMetadata(_ document: ReaderPageDocument) -> Bool {
-        (document.decodedSchemaVersion ?? 0) < ReaderPageDocument.schemaVersion
-    }
-
-    private func isReusableProjection(_ document: ReaderPageDocument, fingerprint: String) -> Bool {
-        document.contentSource == .authorFilteredPage &&
-            document.projectionSchemaVersion == Self.projectionSchemaVersion &&
-            document.projectionSourceFingerprint == fingerprint &&
-            !isLegacyCachedDocumentMissingChapterCommentSources(document) &&
-            !isCachedDocumentMissingAuthorReplyMetadata(document)
-    }
-
-    private func resolveAuthorID(
-        for request: ReaderPageRequest,
-        thread: ThreadIdentity,
-        ignoresCache: Bool
-    ) async throws -> String {
-        if let authorID = normalizedAuthorID(request.authorID) {
-            return authorID
-        }
-
-        let discoveryPage: ForumThreadPage
-        if !ignoresCache,
-           let cached = await forumCacheStore.loadThreadPage(thread: thread, page: 1, authorID: nil) {
-            discoveryPage = cached
-        } else {
-            let html = try await fetchThreadHTML(threadID: thread.tid, view: 1, authorID: nil)
-            discoveryPage = try ForumThreadPageHTMLParser.parsePage(
-                from: html,
-                thread: thread,
-                fallbackTitle: nil
-            )
-            try? await forumCacheStore.saveThreadPage(discoveryPage, thread: thread, pageNumber: 1, authorID: nil)
-            if let onlyAuthorID = ReaderHTMLParser.extractOnlyAuthorID(
-                from: html,
-                request: ReaderPageRequest(threadID: thread.tid, view: 1)
-            ) {
-                return onlyAuthorID
-            }
-        }
-
-        if let authorID = discoveryPage.posts.first?.author.uid.flatMap({ normalizedAuthorID($0) }) {
-            return authorID
-        }
-        throw YamiboError.parsingFailed(context: "小说作者范围")
-    }
-
-    private func loadAuthorScopedThreadPage(
-        thread: ThreadIdentity,
-        title: String?,
-        authorID: String,
-        view: Int,
-        ignoresCache: Bool
-    ) async throws -> ThreadPageLoad {
-        if !ignoresCache,
-           let cached = await forumCacheStore.loadThreadPage(thread: thread, page: view, authorID: authorID) {
-            return ThreadPageLoad(page: cached, loadedOnline: false)
-        }
-        let html = try await fetchThreadHTML(threadID: thread.tid, view: view, authorID: authorID)
-        let parsed = try ForumThreadPageHTMLParser.parsePage(from: html, thread: thread, fallbackTitle: title)
-        try? await forumCacheStore.saveThreadPage(parsed, thread: thread, pageNumber: view, authorID: authorID)
-        return ThreadPageLoad(page: parsed, loadedOnline: true)
-    }
-
-    private func fetchThreadHTML(threadID: String, view: Int, authorID: String?) async throws -> String {
-        do {
-            return try await client.fetchThreadById(tid: threadID, authorID: authorID, page: view)
-        } catch let error as URLError {
-            if error.code == .notConnectedToInternet || error.code == .networkConnectionLost {
-                throw YamiboError.offline
-            }
-            throw YamiboError.underlying(error.localizedDescription)
-        }
-    }
-
-    private func loadOfflineFallback(
-        for request: ReaderPageRequest,
-        thread: ThreadIdentity,
-        authorID: String?
-    ) async -> NovelReaderPageLoad? {
-        guard let offlineCacheStore else { return nil }
-        let normalizedRequestAuthorID = normalizedAuthorID(authorID)
-        let contentSource: ReaderContentSource = normalizedRequestAuthorID == nil ? .fallbackUnfilteredPage : .authorFilteredPage
-        guard let sourceSnapshot = await offlineCacheStore.novelOfflineSourcePageSnapshot(
-            threadID: thread.tid,
-            view: request.view,
-            authorID: normalizedRequestAuthorID,
-            contentSource: contentSource
-        ) else {
-            return nil
-        }
-        let effectiveAuthorID = normalizedRequestAuthorID
-            ?? sourceSnapshot.sourcePage.posts.first?.author.uid.flatMap { normalizedAuthorID($0) }
-        guard let effectiveAuthorID else { return nil }
-
-        let fingerprint = Self.projectionFingerprint(
-            page: sourceSnapshot.sourcePage,
-            threadID: thread.tid,
-            view: request.view,
-            authorID: effectiveAuthorID
-        )
-        let projectedRequest = ReaderPageRequest(
-            threadID: request.threadID,
-            view: request.view,
-            authorID: effectiveAuthorID
-        )
-        if let prewarm = await cacheStore.loadDocument(
-            for: projectedRequest,
-            contentSource: .authorFilteredPage
-        ),
-            isReusableProjection(prewarm, fingerprint: fingerprint) {
-            return NovelReaderPageLoad(
-                document: prewarm,
-                source: .offlineFallback(updatedAt: sourceSnapshot.updatedAt)
-            )
-        }
-
-        guard let document = try? ReaderHTMLParser.parseDocument(
-            threadPage: sourceSnapshot.sourcePage,
-            request: projectedRequest,
-            authorID: effectiveAuthorID,
-            projectionSourceFingerprint: fingerprint,
-            projectionSchemaVersion: Self.projectionSchemaVersion
-        ) else {
-            return nil
-        }
-        try? await cacheStore.save(document)
-        return NovelReaderPageLoad(
-            document: document,
-            source: .offlineFallback(updatedAt: sourceSnapshot.updatedAt)
-        )
-    }
-
-    private func autoRefreshNovelOfflineCacheIfNeeded(_ onlinePage: OnlineNovelPage) async {
-        guard onlinePage.sourceLoadedOnline,
+    private func autoRefreshNovelOfflineCacheIfNeeded(
+        _ onlinePage: NovelReaderProjectionLoadedPage,
+        sourceLoadedOnline: Bool
+    ) async {
+        guard sourceLoadedOnline,
               let offlineCacheStore,
-              await novelOfflineAutoRefreshEnabled() else {
+              await novelOfflineAutoRefreshEnabled(),
+              let authorID = normalizedAuthorID(onlinePage.projection.resolvedAuthorID) else {
             return
         }
         guard let existing = await offlineCacheStore.novelOfflineSourcePageSnapshot(
-            threadID: onlinePage.thread.tid,
-            view: onlinePage.document.view,
-            authorID: onlinePage.authorID,
+            threadID: onlinePage.projection.threadID,
+            view: onlinePage.projection.view,
+            authorID: authorID,
             contentSource: .authorFilteredPage
         ) else {
             return
         }
         let retainsInlineImages = await novelOfflineRetainsInlineImages()
-        let targetImageURLs = retainsInlineImages ? Self.inlineImageURLs(in: onlinePage.document) : []
+        let targetImageURLs = retainsInlineImages ? Self.inlineImageURLs(in: onlinePage.projection) : []
         let request = NovelOfflineCacheWorkRequest(
             ownerTitle: existing.ownerTitle,
-            title: NovelOfflineCacheEntry.defaultTitle(document: onlinePage.document),
-            threadID: onlinePage.thread.tid,
-            view: onlinePage.document.view,
-            authorID: onlinePage.authorID,
+            title: NovelOfflineCacheEntry.defaultTitle(document: onlinePage.projection),
+            threadID: onlinePage.projection.threadID,
+            view: onlinePage.projection.view,
+            authorID: authorID,
             contentSource: .authorFilteredPage,
             targetImageURLs: targetImageURLs,
             retainsInlineImages: retainsInlineImages
@@ -467,42 +282,7 @@ public actor NovelReaderRepository {
         _ = try? await offlineCacheStore.enqueueNovelOfflineCacheUpdateWork(request)
     }
 
-    private func isEligibleOfflineFallbackTrigger(_ error: Error) -> Bool {
-        if error is CancellationError {
-            return false
-        }
-        if let urlError = error as? URLError {
-            return urlError.code != .cancelled
-        }
-        guard let yamiboError = error as? YamiboError else {
-            return false
-        }
-        switch yamiboError {
-        case .offline, .underlying, .invalidResponse, .unreadableBody, .emptyHTML:
-            return true
-        case .parsingFailed,
-             .floodControl,
-             .notAuthenticated,
-             .accountUIDUnavailable,
-             .loginFormUnavailable,
-             .loginFailed,
-             .loginVerificationRequired,
-             .searchCooldown,
-             .persistenceFailed,
-             .missingFavoriteDeleteToken,
-             .missingFavoriteDeleteID,
-             .favoriteDeleteFailed,
-             .missingFavoriteAddToken,
-             .missingFavoriteThreadID,
-             .favoriteAddFailed,
-             .missingForumBoardFavoriteToken,
-             .forumBoardFavoriteFailed,
-             .missingForumSearchToken:
-            return false
-        }
-    }
-
-    private static func inlineImageURLs(in document: ReaderPageDocument) -> [URL] {
+    private static func inlineImageURLs(in document: NovelReaderProjection) -> [URL] {
         var seen: Set<String> = []
         var urls: [URL] = []
         for segment in document.segments {
@@ -525,46 +305,6 @@ public actor NovelReaderRepository {
         return value
     }
 
-    private static func projectionFingerprint(
-        page: ForumThreadPage,
-        threadID: String,
-        view: Int,
-        authorID: String
-    ) -> String {
-        let value = [
-            threadID.trimmingCharacters(in: .whitespacesAndNewlines),
-            String(max(1, view)),
-            authorID,
-            page.posts.map { post in
-                [
-                    post.postID,
-                    post.author.uid ?? "",
-                    post.contentHTML,
-                    post.images.map(\.url).joined(separator: ",")
-                ].joined(separator: "\u{1E}")
-            }.joined(separator: "\u{1D}"),
-            String(page.pageNavigation?.totalPages ?? 0)
-        ].joined(separator: "\u{1F}")
-        var hash: UInt64 = 1469598103934665603
-        for byte in value.utf8 {
-            hash ^= UInt64(byte)
-            hash &*= 1099511628211
-        }
-        return String(hash, radix: 16)
-    }
 }
 
 extension NovelReaderRepository: NovelOfflineCacheSourcePageLoading {}
-
-private struct ThreadPageLoad: Sendable {
-    var page: ForumThreadPage
-    var loadedOnline: Bool
-}
-
-private struct OnlineNovelPage: Sendable {
-    var document: ReaderPageDocument
-    var sourcePage: ForumThreadPage
-    var thread: ThreadIdentity
-    var authorID: String
-    var sourceLoadedOnline: Bool
-}

@@ -5,7 +5,7 @@ import XCTest
 @testable import YamiboReaderUI
 
 private typealias NovelTextLayoutFixture = @Sendable (
-    ReaderPageDocument,
+    NovelReaderProjection,
     ReaderAppearanceSettings,
     ReaderContainerLayout
 ) throws -> NovelTextLayoutResult
@@ -140,7 +140,7 @@ final class ReaderContainerModelTests: XCTestCase {
 
         await MainActor.run {
             XCTAssertTrue(navigationStateRecorder.0.states.contains(true))
-            XCTAssertTrue(model.isNavigatingReaderPageDocument)
+            XCTAssertTrue(model.isNavigatingNovelReaderProjection)
             XCTAssertEqual(model.currentView, 1)
             navigationStateRecorder.1.release()
         }
@@ -148,7 +148,7 @@ final class ReaderContainerModelTests: XCTestCase {
 
         await MainActor.run {
             XCTAssertEqual(navigationStateRecorder.0.states, [true, false])
-            XCTAssertFalse(model.isNavigatingReaderPageDocument)
+            XCTAssertFalse(model.isNavigatingNovelReaderProjection)
             XCTAssertEqual(model.currentView, 2)
             XCTAssertEqual(model.currentSurfaceNumber, 1)
         }
@@ -244,7 +244,7 @@ final class ReaderContainerModelTests: XCTestCase {
         }
     }
 
-    func testNavigationHistoryRestoreDoesNotPresentReaderPageDocumentNavigationOverlay() async throws {
+    func testNavigationHistoryRestoreDoesNotPresentNovelReaderProjectionNavigationOverlay() async throws {
         let model = try await makeModel(
             documents: [
                 makeDocument(view: 1, maxView: 1, chapterTitles: ["第一章", "第二章", "第三章"]),
@@ -272,7 +272,7 @@ final class ReaderContainerModelTests: XCTestCase {
         await MainActor.run {
             XCTAssertEqual(model.currentView, 1)
             XCTAssertEqual(model.currentSurfaceNumber, 1)
-            XCTAssertFalse(model.isNavigatingReaderPageDocument)
+            XCTAssertFalse(model.isNavigatingNovelReaderProjection)
             XCTAssertEqual(navigationStateRecorder.states, [])
         }
     }
@@ -313,7 +313,7 @@ final class ReaderContainerModelTests: XCTestCase {
 
         await MainActor.run {
             XCTAssertTrue(navigationStateRecorder.0.states.contains(true))
-            XCTAssertTrue(model.isNavigatingReaderPageDocument)
+            XCTAssertTrue(model.isNavigatingNovelReaderProjection)
             XCTAssertEqual(model.currentView, 2)
             XCTAssertEqual(model.currentSurfaceNumber, 1)
             navigationStateRecorder.1.release()
@@ -322,7 +322,7 @@ final class ReaderContainerModelTests: XCTestCase {
 
         await MainActor.run {
             XCTAssertEqual(navigationStateRecorder.0.states, [true, false])
-            XCTAssertFalse(model.isNavigatingReaderPageDocument)
+            XCTAssertFalse(model.isNavigatingNovelReaderProjection)
             XCTAssertEqual(model.currentView, 1)
             XCTAssertEqual(model.currentSurfaceNumber, model.surfaceCount)
         }
@@ -639,7 +639,7 @@ final class ReaderContainerModelTests: XCTestCase {
     }
 
     func testVerticalProgressScrubContextClampsSingleSurfaceWithoutChapters() async throws {
-        let document = ReaderPageDocument(
+        let document = NovelReaderProjection(
             threadID: "445566",
             view: 1,
             maxView: 1,
@@ -982,7 +982,7 @@ final class ReaderContainerModelTests: XCTestCase {
     }
 
     func testTwoPageSpreadRepaginatesTextForHalfWidthColumns() async throws {
-        let document = ReaderPageDocument(
+        let document = NovelReaderProjection(
             threadID: "9911",
             view: 1,
             maxView: 1,
@@ -1015,7 +1015,7 @@ final class ReaderContainerModelTests: XCTestCase {
     }
 
     func testLatestLandscapeLayoutSupersedesInFlightPortraitLayoutMatchingCommittedLayout() async throws {
-        let document = ReaderPageDocument(
+        let document = NovelReaderProjection(
             threadID: "9912",
             view: 1,
             maxView: 1,
@@ -1202,7 +1202,7 @@ final class ReaderContainerModelTests: XCTestCase {
     func testLayoutSettingsFailureKeepsCommittedSettingsAndDoesNotPersistDraft() async throws {
         let defaultsSuiteName = YamiboTestDefaults.suiteName(prefix: "reader-container-model")
         let settingsStore = try SettingsStore(testSuiteName: defaultsSuiteName, key: "settings")
-        let cacheStore = ReaderCacheStore(
+        let cacheStore = NovelReaderProjectionStore(
             baseDirectory: FileManager.default.temporaryDirectory
                 .appendingPathComponent(UUID().uuidString, isDirectory: true)
         )
@@ -1260,7 +1260,7 @@ final class ReaderContainerModelTests: XCTestCase {
     func testSurfaceOnlyAppearanceSettingsPublishRevisionWithoutRuntimeRebuild() async throws {
         let defaultsSuiteName = YamiboTestDefaults.suiteName(prefix: "reader-container-model")
         let settingsStore = try SettingsStore(testSuiteName: defaultsSuiteName, key: "settings")
-        let cacheStore = ReaderCacheStore(
+        let cacheStore = NovelReaderProjectionStore(
             baseDirectory: FileManager.default.temporaryDirectory
                 .appendingPathComponent(UUID().uuidString, isDirectory: true)
         )
@@ -1314,7 +1314,7 @@ final class ReaderContainerModelTests: XCTestCase {
     func testApplySettingsPersistsSharedApplePencilSettingsWithoutOverwritingMangaSettings() async throws {
         let defaultsSuiteName = YamiboTestDefaults.suiteName(prefix: "reader-container-model")
         let settingsStore = try SettingsStore(testSuiteName: defaultsSuiteName, key: "settings")
-        let cacheStore = ReaderCacheStore(
+        let cacheStore = NovelReaderProjectionStore(
             baseDirectory: FileManager.default.temporaryDirectory
                 .appendingPathComponent(UUID().uuidString, isDirectory: true)
         )
@@ -1432,7 +1432,7 @@ final class ReaderContainerModelTests: XCTestCase {
     func testChapterDirectoryPreviewHidesAuthorRepliesToOthersAcrossWebViews() async throws {
         let threadID = "889900"
         let documents = [
-            ReaderPageDocument(
+            NovelReaderProjection(
                 threadID: threadID,
                 view: 1,
                 maxView: 2,
@@ -1447,7 +1447,7 @@ final class ReaderContainerModelTests: XCTestCase {
                     ReaderSegmentSource(ownerPostID: "1002", isAuthorReplyToOther: true),
                 ]
             ),
-            ReaderPageDocument(
+            NovelReaderProjection(
                 threadID: threadID,
                 view: 2,
                 maxView: 2,
@@ -1521,7 +1521,7 @@ final class ReaderContainerModelTests: XCTestCase {
     }
 
     func testSettingsPreviewTextUsesDraftTranslationModeFromOriginalDocument() async throws {
-        let document = ReaderPageDocument(
+        let document = NovelReaderProjection(
             threadID: "9012",
             view: 1,
             maxView: 1,
@@ -1554,14 +1554,14 @@ final class ReaderContainerModelTests: XCTestCase {
     func testWorkflowBackedPreviewAndProgressStayAlignedAfterVerticalViewportMovement() async throws {
         let defaultsSuiteName = YamiboTestDefaults.suiteName(prefix: "reader-container-model")
         let settingsStore = try SettingsStore(testSuiteName: defaultsSuiteName, key: "settings")
-        let cacheStore = ReaderCacheStore(
+        let cacheStore = NovelReaderProjectionStore(
             baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         )
         let forumCacheStore = ForumCacheStore(
             baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         )
         let threadID = "9013"
-        let document = ReaderPageDocument(
+        let document = NovelReaderProjection(
             threadID: threadID,
             view: 1,
             maxView: 1,
@@ -1643,7 +1643,7 @@ final class ReaderContainerModelTests: XCTestCase {
     func testForumNovelProgressDoesNotCreateFavorite() async throws {
         let defaultsSuiteName = YamiboTestDefaults.suiteName(prefix: "reader-container-model")
         let settingsStore = try SettingsStore(testSuiteName: defaultsSuiteName, key: "settings")
-        let cacheStore = ReaderCacheStore(
+        let cacheStore = NovelReaderProjectionStore(
             baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         )
         let forumCacheStore = ForumCacheStore(
@@ -1695,7 +1695,7 @@ final class ReaderContainerModelTests: XCTestCase {
         let defaultsSuiteName = YamiboTestDefaults.suiteName(prefix: "reader-container-model")
         let settingsStore = try SettingsStore(testSuiteName: defaultsSuiteName, key: "settings")
         let readerResumeRouteStore = try ReaderResumeRouteStore(testSuiteName: defaultsSuiteName, key: "readerRoute")
-        let cacheStore = ReaderCacheStore(
+        let cacheStore = NovelReaderProjectionStore(
             baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         )
         let forumCacheStore = ForumCacheStore(
@@ -1755,7 +1755,7 @@ final class ReaderContainerModelTests: XCTestCase {
         let defaultsSuiteName = YamiboTestDefaults.suiteName(prefix: "reader-container-model")
         let settingsStore = try SettingsStore(testSuiteName: defaultsSuiteName, key: "settings")
         let readerResumeRouteStore = try ReaderResumeRouteStore(testSuiteName: defaultsSuiteName, key: "readerRoute")
-        let cacheStore = ReaderCacheStore(
+        let cacheStore = NovelReaderProjectionStore(
             baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         )
         let forumCacheStore = ForumCacheStore(
@@ -1821,7 +1821,7 @@ final class ReaderContainerModelTests: XCTestCase {
     func testForumNovelProgressUpdatesExistingFavorite() async throws {
         let defaultsSuiteName = YamiboTestDefaults.suiteName(prefix: "reader-container-model")
         let settingsStore = try SettingsStore(testSuiteName: defaultsSuiteName, key: "settings")
-        let cacheStore = ReaderCacheStore(
+        let cacheStore = NovelReaderProjectionStore(
             baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         )
         let forumCacheStore = ForumCacheStore(
@@ -1868,13 +1868,13 @@ final class ReaderContainerModelTests: XCTestCase {
     func testVerticalModePersistsSemanticResumePoint() async throws {
         let defaultsSuiteName = YamiboTestDefaults.suiteName(prefix: "reader-container-model")
         let settingsStore = try SettingsStore(testSuiteName: defaultsSuiteName, key: "settings")
-        let cacheStore = ReaderCacheStore(
+        let cacheStore = NovelReaderProjectionStore(
             baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         )
         let forumCacheStore = ForumCacheStore(
             baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         )
-        let document = ReaderPageDocument(
+        let document = NovelReaderProjection(
             threadID: "901",
             view: 1,
             maxView: 1,
@@ -1940,14 +1940,14 @@ final class ReaderContainerModelTests: XCTestCase {
     func testVerticalModeRestoresStoredResumePointWithinChapter() async throws {
         let defaultsSuiteName = YamiboTestDefaults.suiteName(prefix: "reader-container-model")
         let settingsStore = try SettingsStore(testSuiteName: defaultsSuiteName, key: "settings")
-        let cacheStore = ReaderCacheStore(
+        let cacheStore = NovelReaderProjectionStore(
             baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         )
         let forumCacheStore = ForumCacheStore(
             baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         )
         let threadID = "902"
-        let document = ReaderPageDocument(
+        let document = NovelReaderProjection(
             threadID: threadID,
             view: 2,
             maxView: 2,
@@ -2031,14 +2031,14 @@ final class ReaderContainerModelTests: XCTestCase {
     func testVerticalModePersistsSmallIntraPageScrollAndRestoresIt() async throws {
         let defaultsSuiteName = YamiboTestDefaults.suiteName(prefix: "reader-container-model")
         let settingsStore = try SettingsStore(testSuiteName: defaultsSuiteName, key: "settings")
-        let cacheStore = ReaderCacheStore(
+        let cacheStore = NovelReaderProjectionStore(
             baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         )
         let forumCacheStore = ForumCacheStore(
             baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         )
         let threadID = "905"
-        let document = ReaderPageDocument(
+        let document = NovelReaderProjection(
             threadID: threadID,
             view: 1,
             maxView: 1,
@@ -2112,14 +2112,14 @@ final class ReaderContainerModelTests: XCTestCase {
     func testStoredResumePointDeterminesPositionWhenPreparingReader() async throws {
         let defaultsSuiteName = YamiboTestDefaults.suiteName(prefix: "reader-container-model")
         let settingsStore = try SettingsStore(testSuiteName: defaultsSuiteName, key: "settings")
-        let cacheStore = ReaderCacheStore(
+        let cacheStore = NovelReaderProjectionStore(
             baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         )
         let forumCacheStore = ForumCacheStore(
             baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         )
         let threadID = "904"
-        let document = ReaderPageDocument(
+        let document = NovelReaderProjection(
             threadID: threadID,
             view: 2,
             maxView: 2,
@@ -2202,14 +2202,14 @@ final class ReaderContainerModelTests: XCTestCase {
     func testPagedFavoriteLaunchKeepsSelectionOnSavedResumePoint() async throws {
         let defaultsSuiteName = YamiboTestDefaults.suiteName(prefix: "reader-container-model")
         let settingsStore = try SettingsStore(testSuiteName: defaultsSuiteName, key: "settings")
-        let cacheStore = ReaderCacheStore(
+        let cacheStore = NovelReaderProjectionStore(
             baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         )
         let forumCacheStore = ForumCacheStore(
             baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         )
         let threadID = "909"
-        let document = ReaderPageDocument(
+        let document = NovelReaderProjection(
             threadID: threadID,
             view: 1,
             maxView: 1,
@@ -2285,7 +2285,7 @@ final class ReaderContainerModelTests: XCTestCase {
     }
 
     func testPagedDirectLaunchRestoresSemanticPosition() async throws {
-        let document = ReaderPageDocument(
+        let document = NovelReaderProjection(
             threadID: "910",
             view: 1,
             maxView: 1,
@@ -2333,7 +2333,7 @@ final class ReaderContainerModelTests: XCTestCase {
     }
 
     func testLaunchWithoutSemanticPositionStartsAtFirstSurface() async throws {
-        let document = ReaderPageDocument(
+        let document = NovelReaderProjection(
             threadID: "905",
             view: 1,
             maxView: 1,
@@ -2344,7 +2344,7 @@ final class ReaderContainerModelTests: XCTestCase {
         )
         let defaultsSuiteName = YamiboTestDefaults.suiteName(prefix: "reader-container-model")
         let settingsStore = try SettingsStore(testSuiteName: defaultsSuiteName, key: "settings")
-        let cacheStore = ReaderCacheStore(
+        let cacheStore = NovelReaderProjectionStore(
             baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         )
         let forumCacheStore = ForumCacheStore(
@@ -2386,7 +2386,7 @@ final class ReaderContainerModelTests: XCTestCase {
     }
 
     func testChangingReadingModeKeepsSemanticAnchorOnSameSegment() async throws {
-        let document = ReaderPageDocument(
+        let document = NovelReaderProjection(
             threadID: "903",
             view: 1,
             maxView: 1,
@@ -2430,7 +2430,7 @@ final class ReaderContainerModelTests: XCTestCase {
     }
 
     func testChangingReadingModeFromMergedPagedTextTargetsActualSegment() async throws {
-        let document = ReaderPageDocument(
+        let document = NovelReaderProjection(
             threadID: "906",
             view: 1,
             maxView: 1,
@@ -2471,7 +2471,7 @@ final class ReaderContainerModelTests: XCTestCase {
     }
 
     func testModeSwitchAnchorSurvivesFollowUpLayoutRepagination() async throws {
-        let document = ReaderPageDocument(
+        let document = NovelReaderProjection(
             threadID: "907",
             view: 1,
             maxView: 1,
@@ -2511,7 +2511,7 @@ final class ReaderContainerModelTests: XCTestCase {
     }
 
     func testVerticalToPagedModeSwitchDoesNotTemporarilyShowFirstPageBeforeLayoutSync() async throws {
-        let document = ReaderPageDocument(
+        let document = NovelReaderProjection(
             threadID: "908",
             view: 1,
             maxView: 1,
@@ -2675,7 +2675,7 @@ final class ReaderContainerModelTests: XCTestCase {
 
         let cacheDirectory = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
-        let cacheStore = ReaderCacheStore(baseDirectory: cacheDirectory.appendingPathComponent("reader", isDirectory: true))
+        let cacheStore = NovelReaderProjectionStore(baseDirectory: cacheDirectory.appendingPathComponent("reader", isDirectory: true))
         let forumCacheStore = ForumCacheStore(baseDirectory: cacheDirectory.appendingPathComponent("forum", isDirectory: true))
         let offlineStore = try makeReaderModelOfflineCacheStore(
             rootDirectory: cacheDirectory.appendingPathComponent("offline-root", isDirectory: true)
@@ -2701,11 +2701,11 @@ final class ReaderContainerModelTests: XCTestCase {
             await MainActor.run { model.cachingViews == [1] }
         }
 
-        let preservedAuthorFiltered = await cacheStore.loadDocument(
+        let preservedAuthorFiltered = await cacheStore.loadProjection(
             for: ReaderPageRequest(threadID: threadID, view: 1, authorID: "42"),
             contentSource: .authorFilteredPage
         )
-        let preservedUnfiltered = await cacheStore.loadDocument(
+        let preservedUnfiltered = await cacheStore.loadProjection(
             for: ReaderPageRequest(threadID: threadID, view: 1),
             contentSource: .fallbackUnfilteredPage
         )
@@ -3125,7 +3125,7 @@ final class ReaderContainerModelTests: XCTestCase {
         let threadID = "7003"
         let cacheDirectory = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
-        let cacheStore = ReaderCacheStore(baseDirectory: cacheDirectory.appendingPathComponent("reader", isDirectory: true))
+        let cacheStore = NovelReaderProjectionStore(baseDirectory: cacheDirectory.appendingPathComponent("reader", isDirectory: true))
         let forumCacheStore = ForumCacheStore(baseDirectory: cacheDirectory.appendingPathComponent("forum", isDirectory: true))
         let offlineStore = try makeReaderModelOfflineCacheStore(rootDirectory: cacheDirectory.appendingPathComponent("offline-root", isDirectory: true))
         let document = makeDocument(
@@ -3154,7 +3154,7 @@ final class ReaderContainerModelTests: XCTestCase {
         let thread = makeThreadIdentity(from: threadID)
         let retainedThreadPage = await forumCacheStore.loadThreadPage(thread: thread, page: 1, authorID: "42")
         XCTAssertNotNil(retainedThreadPage)
-        let retainedProjection = await cacheStore.loadDocument(
+        let retainedProjection = await cacheStore.loadProjection(
             for: ReaderPageRequest(threadID: threadID, view: 1, authorID: "42"),
             contentSource: .authorFilteredPage
         )
@@ -3163,11 +3163,11 @@ final class ReaderContainerModelTests: XCTestCase {
 }
 
 private func makeModel(
-    documents: [ReaderPageDocument],
+    documents: [NovelReaderProjection],
     settings: ReaderAppearanceSettings = ReaderAppearanceSettings(readingMode: .paged),
     launchContext: ReaderLaunchContext? = nil,
     session: URLSession = .shared,
-    cacheStore: ReaderCacheStore? = nil,
+    cacheStore: NovelReaderProjectionStore? = nil,
     forumCacheStore: ForumCacheStore? = nil,
     offlineCacheStore: (any OfflineCacheStoring)? = nil,
     seedSourceCaches: Bool = true,
@@ -3183,7 +3183,7 @@ private func makeModel(
     let cacheDirectory = FileManager.default.temporaryDirectory
         .appendingPathComponent(UUID().uuidString, isDirectory: true)
     let resolvedCacheStore = cacheStore
-        ?? ReaderCacheStore(baseDirectory: cacheDirectory.appendingPathComponent("reader", isDirectory: true))
+        ?? NovelReaderProjectionStore(baseDirectory: cacheDirectory.appendingPathComponent("reader", isDirectory: true))
     let resolvedForumCacheStore = forumCacheStore
         ?? ForumCacheStore(baseDirectory: cacheDirectory.appendingPathComponent("forum", isDirectory: true))
     let grdbRootDirectory = cacheDirectory.appendingPathComponent("grdb", isDirectory: true)
@@ -3234,8 +3234,8 @@ private func makeModel(
 }
 
 private func seedReaderSourceCaches(
-    documents: [ReaderPageDocument],
-    readerCacheStore: ReaderCacheStore,
+    documents: [NovelReaderProjection],
+    readerCacheStore: NovelReaderProjectionStore,
     forumCacheStore: ForumCacheStore
 ) async throws {
     var didSaveDiscoveryPage: Set<String> = []
@@ -3276,7 +3276,7 @@ private func seedReaderSourceCaches(
 
 private func seedNovelOfflineCache(
     _ store: any OfflineCacheStoring,
-    document: ReaderPageDocument,
+    document: NovelReaderProjection,
     ownerTitle: String = "测试线程",
     updatedAt: Date = Date(timeIntervalSince1970: 40_000)
 ) async throws {
@@ -3319,7 +3319,7 @@ private func makeThreadIdentity(from threadID: String) -> ThreadIdentity {
 }
 
 private func makeThreadPageSource(
-    from document: ReaderPageDocument,
+    from document: NovelReaderProjection,
     thread: ThreadIdentity,
     authorID: String
 ) -> ForumThreadPage {
@@ -3396,7 +3396,7 @@ private func makeReadingProgressStore(
 }
 
 private func readerModelSegmentPagination(
-    document: ReaderPageDocument,
+    document: NovelReaderProjection,
     settings: ReaderAppearanceSettings,
     layout: ReaderContainerLayout
 ) throws -> NovelTextLayoutResult {
@@ -3592,7 +3592,7 @@ private func makeDocument(
     authorID: String? = nil,
     contentSource: ReaderContentSource = .fallbackUnfilteredPage,
     ownerPostIDs: [String?]? = nil
-) -> ReaderPageDocument {
+) -> NovelReaderProjection {
     let segments = chapterTitles.map { title in
         ReaderSegment.text(String(repeating: "\(title) 内容。", count: 80), chapterTitle: title)
     }
@@ -3601,7 +3601,7 @@ private func makeDocument(
             postIDs.indices.contains(index) ? ReaderSegmentSource(ownerPostID: postIDs[index]) : nil
         }
     }
-    return ReaderPageDocument(
+    return NovelReaderProjection(
         threadID: threadID,
         view: view,
         maxView: maxView,
@@ -3617,14 +3617,14 @@ private func makeImageDocument(
     view: Int,
     maxView: Int,
     surfaceCount: Int
-) -> ReaderPageDocument {
+) -> NovelReaderProjection {
     let segments = (0..<surfaceCount).map { index in
         ReaderSegment.image(
             URL(string: "https://example.com/\(view)-\(index).jpg")!,
             chapterTitle: "第\(index + 1)章"
         )
     }
-    return ReaderPageDocument(
+    return NovelReaderProjection(
         threadID: threadID,
         view: view,
         maxView: maxView,
@@ -3724,7 +3724,7 @@ private func viewportTestPage(
 }
 
 private func readerModelPreviewSourcePagination(
-    document: ReaderPageDocument,
+    document: NovelReaderProjection,
     settings: ReaderAppearanceSettings,
     layout: ReaderContainerLayout
 ) -> NovelTextLayoutResult {
@@ -3777,7 +3777,7 @@ private func readerModelPreviewSourcePagination(
 }
 
 private func readerModelMergedTextPagination(
-    document: ReaderPageDocument,
+    document: NovelReaderProjection,
     settings: ReaderAppearanceSettings,
     layout: ReaderContainerLayout
 ) -> NovelTextLayoutResult {

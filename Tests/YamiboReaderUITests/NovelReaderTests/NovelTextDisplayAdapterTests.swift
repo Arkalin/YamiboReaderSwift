@@ -435,7 +435,7 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
 
     func testNovelReadingPositionDisplayFailureDoesNotPublishUIKitOrEstimatedFallback() throws {
         let text = String(repeating: "Novel Reading Position must not advance through fallback display. ", count: 12)
-        let document = ReaderPageDocument(
+        let document = NovelReaderProjection(
             threadID: "124",
             view: 1,
             maxView: 1,

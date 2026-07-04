@@ -492,7 +492,7 @@ private final class StubURLProtocol: URLProtocol {
         threadID: "1",
         view: 2
     )
-    let document = try ReaderHTMLParser.parseDocument(html: html, request: request)
+    let document = try ReaderHTMLParser.parseProjection(html: html, request: request)
 
     #expect(document.maxView == 4)
     #expect(document.resolvedAuthorID == "99")
@@ -520,7 +520,7 @@ private final class StubURLProtocol: URLProtocol {
         view: 1
     )
 
-    let document = try ReaderHTMLParser.parseDocument(html: html, request: request)
+    let document = try ReaderHTMLParser.parseProjection(html: html, request: request)
 
     #expect(document.segmentSemantics.count == document.segments.count)
     let firstText = try #require(document.semantics(forSegmentIndex: 0))
@@ -563,7 +563,7 @@ private final class StubURLProtocol: URLProtocol {
         authorID: "42"
     )
 
-    let document = try ReaderHTMLParser.parseDocument(
+    let document = try ReaderHTMLParser.parseProjection(
         html: html,
         request: request,
         contentSource: .authorFilteredPage
@@ -636,7 +636,7 @@ private final class StubURLProtocol: URLProtocol {
         view: 5
     )
 
-    let document = try ReaderHTMLParser.parseDocument(html: html, request: request)
+    let document = try ReaderHTMLParser.parseProjection(html: html, request: request)
 
     #expect(document.segments == [
         .text("文库版的一些插图", chapterTitle: "文库版的一些插图"),
@@ -680,7 +680,7 @@ private final class StubURLProtocol: URLProtocol {
         view: 1
     )
 
-    let document = try ReaderHTMLParser.parseDocument(html: html, request: request)
+    let document = try ReaderHTMLParser.parseProjection(html: html, request: request)
     let semantics = try #require(document.semantics(forSegmentIndex: 0))
 
     #expect(document.segments[0] == .text("第一章\n普通 粗体 重字 不粗 再粗", chapterTitle: "第一章"))
@@ -705,7 +705,7 @@ private final class StubURLProtocol: URLProtocol {
         view: 2
     )
 
-    let document = try ReaderHTMLParser.parseDocument(html: html, request: request)
+    let document = try ReaderHTMLParser.parseProjection(html: html, request: request)
     let first = try #require(document.semantics(forSegmentIndex: 0)?.chapterIdentity?.rawValue)
     let second = try #require(document.semantics(forSegmentIndex: 1)?.chapterIdentity?.rawValue)
 
@@ -819,7 +819,7 @@ private final class StubURLProtocol: URLProtocol {
         threadID: "2",
         view: 1
     )
-    let document = try ReaderHTMLParser.parseDocument(html: html, request: request)
+    let document = try ReaderHTMLParser.parseProjection(html: html, request: request)
 
     #expect(document.segments.count == 2)
 
@@ -960,7 +960,7 @@ private final class StubURLProtocol: URLProtocol {
     #expect(ReaderTextTransformer.transform("恋上朋友的妹妹了 后记", mode: .traditional) == "戀上朋友的妹妹了 後記")
 }
 
-@Test func parseDocumentCarriesContentSourceAndChapterStats() async throws {
+@Test func parseProjectionCarriesContentSourceAndChapterStats() async throws {
     let html = #"""
     <html>
       <body>
@@ -973,7 +973,7 @@ private final class StubURLProtocol: URLProtocol {
         threadID: "11",
         view: 1
     )
-    let document = try ReaderHTMLParser.parseDocument(html: html, request: request, contentSource: .authorFilteredPage)
+    let document = try ReaderHTMLParser.parseProjection(html: html, request: request, contentSource: .authorFilteredPage)
 
     #expect(document.contentSource == .authorFilteredPage)
     #expect(document.retainedChapterCount == 2)
@@ -1024,7 +1024,7 @@ private final class StubURLProtocol: URLProtocol {
         threadID: "557752",
         view: 1
     )
-    let document = try ReaderHTMLParser.parseDocument(html: html, request: request)
+    let document = try ReaderHTMLParser.parseProjection(html: html, request: request)
 
     let chapterTitles = document.segments.compactMap { segment -> String? in
         switch segment {
@@ -1063,7 +1063,7 @@ private final class StubURLProtocol: URLProtocol {
 
 #if canImport(UIKit)
 @Test func novelTextLayoutProducesChaptersForBothModes() async throws {
-    let document = ReaderPageDocument(
+    let document = NovelReaderProjection(
         threadID: "1",
         view: 1,
         maxView: 2,
@@ -1095,7 +1095,7 @@ private final class StubURLProtocol: URLProtocol {
 }
 
 @Test func novelTextLayoutFiltersAuthorRepliesToOthersWhenSettingIsDisabled() throws {
-    let document = ReaderPageDocument(
+    let document = NovelReaderProjection(
         threadID: "188",
         view: 1,
         maxView: 1,
@@ -1133,7 +1133,7 @@ private final class StubURLProtocol: URLProtocol {
 #endif
 
 @Test func novelChapterDirectoryExtractorMatchesReaderPreviewDirectoryRules() throws {
-    let document = ReaderPageDocument(
+    let document = NovelReaderProjection(
         threadID: "99",
         view: 2,
         maxView: 3,
@@ -1180,7 +1180,7 @@ private final class StubURLProtocol: URLProtocol {
 }
 
 @Test func novelChapterDirectoryExtractorUsesReaderAuthorReplyVisibilitySetting() throws {
-    let document = ReaderPageDocument(
+    let document = NovelReaderProjection(
         threadID: "100",
         view: 1,
         maxView: 1,
@@ -1264,7 +1264,7 @@ private final class StubURLProtocol: URLProtocol {
 #if canImport(UIKit)
 @Test func novelTextLayoutProducesPagedAndVerticalPagesAtModuleSeam() throws {
     let text = String(repeating: "这是用于模块边界测试的正文。", count: 120)
-    let document = ReaderPageDocument(
+    let document = NovelReaderProjection(
         threadID: "58",
         view: 1,
         maxView: 1,
@@ -1303,7 +1303,7 @@ private final class StubURLProtocol: URLProtocol {
 
 @Test func novelTextLayoutAssemblesDocumentPagesChaptersImagesAndViewportIndex() async throws {
     let imageURL = try #require(URL(string: "https://example.com/image.jpg"))
-    let document = ReaderPageDocument(
+    let document = NovelReaderProjection(
         threadID: "99",
         view: 1,
         maxView: 1,
@@ -1348,7 +1348,7 @@ private final class StubURLProtocol: URLProtocol {
 }
 
 @Test func novelTextLayoutGroupsSameTitleChaptersBySemanticIdentity() throws {
-    let document = ReaderPageDocument(
+    let document = NovelReaderProjection(
         threadID: "100",
         view: 1,
         maxView: 1,
@@ -1385,7 +1385,7 @@ private final class StubURLProtocol: URLProtocol {
 }
 
 @Test func novelTextLayoutPublishesNovelTextViewportIndexForRenderedPages() async throws {
-    let document = ReaderPageDocument(
+    let document = NovelReaderProjection(
         threadID: "100",
         view: 2,
         maxView: 3,
@@ -1435,7 +1435,7 @@ private final class StubURLProtocol: URLProtocol {
 }
 
 @Test func novelTextLayoutPublishesNovelTextViewportIndexForVerticalChunks() async throws {
-    let document = ReaderPageDocument(
+    let document = NovelReaderProjection(
         threadID: "101",
         view: 1,
         maxView: 1,
@@ -1468,7 +1468,7 @@ private final class StubURLProtocol: URLProtocol {
 
 @Test func novelTextLayoutBuildsCurrentWebpageViewportContextBeforePublishingReadablePages() async throws {
     let imageURL = try #require(URL(string: "https://example.com/inline.jpg"))
-    let document = ReaderPageDocument(
+    let document = NovelReaderProjection(
         threadID: "146",
         view: 3,
         maxView: 4,
@@ -1525,7 +1525,7 @@ private final class StubURLProtocol: URLProtocol {
 }
 
 @Test func novelTextLayoutResultIsViewportFirstWithoutRenderedPageCompatibility() async throws {
-    let document = ReaderPageDocument(
+    let document = NovelReaderProjection(
         threadID: "163",
         view: 1,
         maxView: 1,
@@ -1560,7 +1560,7 @@ private final class StubURLProtocol: URLProtocol {
 }
 
 @Test func novelTextLayoutCreatesAndUpdatesNovelTextViewportThroughHighLevelInterface() throws {
-    let document = ReaderPageDocument(
+    let document = NovelReaderProjection(
         threadID: "62",
         view: 1,
         maxView: 1,
@@ -1593,7 +1593,7 @@ private final class StubURLProtocol: URLProtocol {
 @Test func novelTextViewportUpdatePublishesPageLayoutMetrics() throws {
     let repetitionCount = 400
     let layout = ReaderContainerLayout(width: 320, height: 568, readingMode: .vertical)
-    let document = ReaderPageDocument(
+    let document = NovelReaderProjection(
         threadID: "63",
         view: 1,
         maxView: 1,
@@ -1631,7 +1631,7 @@ private final class StubURLProtocol: URLProtocol {
 }
 
 @Test func novelTextLayoutConvertsDisplayOffsetsUsingSwiftCharacterRanges() throws {
-    let document = ReaderPageDocument(
+    let document = NovelReaderProjection(
         threadID: "412",
         view: 3,
         maxView: 3,
@@ -1671,7 +1671,7 @@ private final class StubURLProtocol: URLProtocol {
 
 @Test func novelTextViewportIndexPagePublishesImageExternalBlockPlacement() async throws {
     let imageURL = try #require(URL(string: "https://example.com/viewport-image.jpg"))
-    let document = ReaderPageDocument(
+    let document = NovelReaderProjection(
         threadID: "164",
         view: 2,
         maxView: 2,
@@ -1720,7 +1720,7 @@ private final class StubURLProtocol: URLProtocol {
 }
 
 @Test func novelTextLayoutDerivesPageRangesFromComposedViewportDocument() async throws {
-    let document = ReaderPageDocument(
+    let document = NovelReaderProjection(
         threadID: "165",
         view: 1,
         maxView: 1,
@@ -1863,7 +1863,7 @@ private final class StubURLProtocol: URLProtocol {
 }
 
 @Test func novelTextLayoutDoesNotReuseCachedNovelTextViewportIndexForMatchingInputs() async throws {
-    let document = ReaderPageDocument(
+    let document = NovelReaderProjection(
         threadID: "102",
         view: 1,
         maxView: 1,
@@ -1897,7 +1897,7 @@ private final class StubURLProtocol: URLProtocol {
 }
 
 @Test func novelTextLayoutInvalidatesCachedNovelTextViewportIndexForSettingsAndLayoutChanges() async throws {
-    let document = ReaderPageDocument(
+    let document = NovelReaderProjection(
         threadID: "103",
         view: 1,
         maxView: 1,
@@ -1933,7 +1933,7 @@ private final class StubURLProtocol: URLProtocol {
 }
 
 @Test func novelTextLayoutDoesNotCacheFailedNovelTextViewportIndexBuilds() async throws {
-    let document = ReaderPageDocument(
+    let document = NovelReaderProjection(
         threadID: "104",
         view: 1,
         maxView: 1,
@@ -1967,7 +1967,7 @@ private final class StubURLProtocol: URLProtocol {
 #if canImport(UIKit)
 @Test func novelTextLayoutPreservesSingleTextSegmentRanges() async throws {
     let text = String(repeating: "分页边界应来自 Novel Text Layout。", count: 100)
-    let document = ReaderPageDocument(
+    let document = NovelReaderProjection(
         threadID: "58",
         view: 1,
         maxView: 1,
@@ -1990,7 +1990,7 @@ private final class StubURLProtocol: URLProtocol {
 @Test func novelTextLayoutFreezesPagedSurfaceGeometryFromTextKitDocument() async throws {
     let text = String(repeating: "Frozen paged geometry must be committed with the surface. ", count: 160)
     let layout = ReaderContainerLayout(width: 320, height: 568)
-    let document = ReaderPageDocument(
+    let document = NovelReaderProjection(
         threadID: "189",
         view: 1,
         maxView: 1,
@@ -2027,7 +2027,7 @@ private final class StubURLProtocol: URLProtocol {
 #if canImport(UIKit)
     let paragraph = "    页首空白不应使 TextKit 重新物化后的片段几何校验失败。"
     let text = Array(repeating: paragraph, count: 180).joined(separator: "\n\n")
-    let document = ReaderPageDocument(
+    let document = NovelReaderProjection(
         threadID: "190",
         view: 1,
         maxView: 1,
@@ -2146,7 +2146,7 @@ private final class StubURLProtocol: URLProtocol {
         repeating: "围绕着王位继承权的争夺，距离那场内战的落幕已过去半个月的时间，而今天，是女王陛下的王位继承仪式。",
         count: 260
     ).joined(separator: "\n\n")
-    let document = ReaderPageDocument(
+    let document = NovelReaderProjection(
         threadID: "191",
         view: 1,
         maxView: 4,
@@ -2232,7 +2232,7 @@ private final class StubURLProtocol: URLProtocol {
         repeating: "库莉茜耶把听到的话认真记在心里，然后继续望向远方闪闪发亮的雪原和村庄。 ",
         count: 220
     )
-    let document = ReaderPageDocument(
+    let document = NovelReaderProjection(
         threadID: "192",
         view: 1,
         maxView: 1,
@@ -2298,7 +2298,7 @@ private final class StubURLProtocol: URLProtocol {
 
 @Test func novelTextLayoutPagedViewportSurfaceRangeFailureDoesNotUseEstimatedFallback() async throws {
     let text = String(repeating: "TextKit 2 failure should not fall back. ", count: 40)
-    let document = ReaderPageDocument(
+    let document = NovelReaderProjection(
         threadID: "65",
         view: 1,
         maxView: 1,
@@ -2316,7 +2316,7 @@ private final class StubURLProtocol: URLProtocol {
 }
 
 @Test func novelTextLayoutPagedFailureThrowsInsteadOfPublishingFallbackPage() async throws {
-    let document = ReaderPageDocument(
+    let document = NovelReaderProjection(
         threadID: "59",
         view: 1,
         maxView: 1,
@@ -2337,7 +2337,7 @@ private final class StubURLProtocol: URLProtocol {
 
 @Test func novelTextLayoutVerticalViewportPageRangeFailureDoesNotUseEstimatedFallback() async throws {
     let text = String(repeating: "Vertical TextKit 2 failure should not fall back. ", count: 40)
-    let document = ReaderPageDocument(
+    let document = NovelReaderProjection(
         threadID: "66",
         view: 1,
         maxView: 1,
@@ -2355,7 +2355,7 @@ private final class StubURLProtocol: URLProtocol {
 }
 
 @Test func novelTextLayoutVerticalFailureThrowsInsteadOfPublishingFallbackPage() async throws {
-    let document = ReaderPageDocument(
+    let document = NovelReaderProjection(
         threadID: "60",
         view: 1,
         maxView: 1,
@@ -2477,7 +2477,7 @@ private final class StubURLProtocol: URLProtocol {
 }
 
 @Test func novelAttributedDocumentUsesPreparedSemanticRunsAndMatchesViewportText() throws {
-    let document = ReaderPageDocument(
+    let document = NovelReaderProjection(
         threadID: "301",
         view: 1,
         maxView: 1,
@@ -2511,7 +2511,7 @@ private final class StubURLProtocol: URLProtocol {
 }
 
 @Test func novelAttributedDocumentStylesChapterTitleFromSemanticRangeOnly() throws {
-    let document = ReaderPageDocument(
+    let document = NovelReaderProjection(
         threadID: "303",
         view: 1,
         maxView: 1,
@@ -2551,7 +2551,7 @@ private final class StubURLProtocol: URLProtocol {
 }
 
 @Test func novelTextLayoutTransformsInlineBoldRangesWithDisplayedText() throws {
-    let document = ReaderPageDocument(
+    let document = NovelReaderProjection(
         threadID: "304",
         view: 1,
         maxView: 1,
@@ -2583,7 +2583,7 @@ private final class StubURLProtocol: URLProtocol {
 }
 
 @Test func novelTextLayoutTransformsQuoteRangesAndProjectsDocumentOffsets() throws {
-    let document = ReaderPageDocument(
+    let document = NovelReaderProjection(
         threadID: "307",
         view: 1,
         maxView: 1,
@@ -2625,7 +2625,7 @@ private final class StubURLProtocol: URLProtocol {
 }
 
 @Test func readerAttributedTextFactoryAppliesInlineBoldWithoutChangingNormalBody() throws {
-    let document = ReaderPageDocument(
+    let document = NovelReaderProjection(
         threadID: "305",
         view: 1,
         maxView: 1,
@@ -2656,7 +2656,7 @@ private final class StubURLProtocol: URLProtocol {
 @MainActor
 @Test func novelTextRuntimeRebuildsSemanticDocumentWhenOnlyInlineStylesChange() throws {
     let runtime = NovelTextViewportRuntimeOwner()
-    let plain = ReaderPageDocument(
+    let plain = NovelReaderProjection(
         threadID: "306",
         view: 1,
         maxView: 1,
@@ -2668,7 +2668,7 @@ private final class StubURLProtocol: URLProtocol {
             )
         ]
     )
-    let styled = ReaderPageDocument(
+    let styled = NovelReaderProjection(
         threadID: "306",
         view: 1,
         maxView: 1,
@@ -2702,7 +2702,7 @@ private final class StubURLProtocol: URLProtocol {
 @MainActor
 @Test func novelTextRuntimeRebuildsSemanticDocumentWhenOnlyBlockStylesChange() throws {
     let runtime = NovelTextViewportRuntimeOwner()
-    let plain = ReaderPageDocument(
+    let plain = NovelReaderProjection(
         threadID: "308",
         view: 1,
         maxView: 1,
@@ -2714,7 +2714,7 @@ private final class StubURLProtocol: URLProtocol {
             )
         ]
     )
-    let styled = ReaderPageDocument(
+    let styled = NovelReaderProjection(
         threadID: "308",
         view: 1,
         maxView: 1,
@@ -2747,7 +2747,7 @@ private final class StubURLProtocol: URLProtocol {
 #endif
 
 @Test func novelTextLayoutRejectsEmptySemanticDocumentBeforeRuntimeAllocation() throws {
-    let document = ReaderPageDocument(
+    let document = NovelReaderProjection(
         threadID: "302",
         view: 1,
         maxView: 1,
@@ -2765,7 +2765,7 @@ private final class StubURLProtocol: URLProtocol {
 
 #if canImport(UIKit)
 @Test func novelTextLayoutCommitsSemanticLayoutFontPlatformAndTextKitFingerprints() throws {
-    let document = ReaderPageDocument(
+    let document = NovelReaderProjection(
         threadID: "303",
         view: 1,
         maxView: 1,
@@ -2789,8 +2789,8 @@ private final class StubURLProtocol: URLProtocol {
 @Test func readerCacheStorePersistsAndDeletesPages() async throws {
     let directory = URL(fileURLWithPath: NSTemporaryDirectory())
         .appendingPathComponent(UUID().uuidString, isDirectory: true)
-    let store = ReaderCacheStore(baseDirectory: directory)
-    let document = ReaderPageDocument(
+    let store = NovelReaderProjectionStore(baseDirectory: directory)
+    let document = NovelReaderProjection(
         threadID: "10",
         view: 3,
         maxView: 5,
@@ -2801,12 +2801,12 @@ private final class StubURLProtocol: URLProtocol {
     )
 
     try await store.save(document)
-    let loaded = await store.loadDocument(for: ReaderPageRequest(threadID: "10", view: 3, authorID: "12"))
+    let loaded = await store.loadProjection(for: ReaderPageRequest(threadID: "10", view: 3, authorID: "12"))
     #expect(loaded == document)
     #expect(await store.cachedViews(for: "10", authorID: "12", contentSource: .authorFilteredPage) == [3])
 
     try await store.deleteViews([3], for: "10", authorID: "12", contentSource: .authorFilteredPage)
-    let deleted = await store.loadDocument(for: ReaderPageRequest(threadID: "10", view: 3, authorID: "12"))
+    let deleted = await store.loadProjection(for: ReaderPageRequest(threadID: "10", view: 3, authorID: "12"))
     #expect(deleted == nil)
 }
 
@@ -2814,8 +2814,8 @@ private final class StubURLProtocol: URLProtocol {
     let directory = URL(fileURLWithPath: NSTemporaryDirectory())
         .appendingPathComponent(UUID().uuidString, isDirectory: true)
     let database = try YamiboDatabase.openPool(rootDirectory: directory.appendingPathComponent("grdb", isDirectory: true))
-    let store = ReaderCacheStore(databasePool: database, baseDirectory: directory)
-    let document = ReaderPageDocument(
+    let store = NovelReaderProjectionStore(databasePool: database, baseDirectory: directory)
+    let document = NovelReaderProjection(
         threadID: "18610",
         view: 4,
         maxView: 5,
@@ -2850,13 +2850,13 @@ private final class StubURLProtocol: URLProtocol {
     try legacyIndexData.write(to: legacyIndexURL, options: [.atomic])
     try Data(#"{"legacy":true}"#.utf8).write(to: legacyFileURL, options: [.atomic])
 
-    let store = ReaderCacheStore(databasePool: database, baseDirectory: directory)
-    let legacyLoaded = await store.loadDocument(
+    let store = NovelReaderProjectionStore(databasePool: database, baseDirectory: directory)
+    let legacyLoaded = await store.loadProjection(
         for: ReaderPageRequest(threadID: "18611", view: 1),
         contentSource: .fallbackUnfilteredPage
     )
     try await store.save(
-        ReaderPageDocument(
+        NovelReaderProjection(
             threadID: "18612",
             view: 1,
             maxView: 1,
@@ -2872,8 +2872,8 @@ private final class StubURLProtocol: URLProtocol {
 @Test func readerCacheStoreWritesDocumentSchemaVersionAndSemanticIdentities() async throws {
     let directory = URL(fileURLWithPath: NSTemporaryDirectory())
         .appendingPathComponent(UUID().uuidString, isDirectory: true)
-    let store = ReaderCacheStore(baseDirectory: directory)
-    let document = ReaderPageDocument(
+    let store = NovelReaderProjectionStore(baseDirectory: directory)
+    let document = NovelReaderProjection(
         threadID: "18601",
         view: 1,
         maxView: 1,
@@ -2911,7 +2911,7 @@ private final class StubURLProtocol: URLProtocol {
     let firstBlockStyle = try #require(blockTextStyles.first)
     let firstBlockRange = try #require(firstBlockStyle["range"] as? [String: Any])
 
-    #expect(object["schemaVersion"] as? Int == ReaderPageDocument.schemaVersion)
+    #expect(object["schemaVersion"] as? Int == NovelReaderProjection.schemaVersion)
     #expect(object["threadID"] as? String == "18601")
     #expect(chapterIdentity["rawValue"] as? String != nil)
     #expect(textSegmentIdentity["rawValue"] as? String != nil)
@@ -2952,7 +2952,7 @@ private final class StubURLProtocol: URLProtocol {
     let decoder = JSONDecoder()
     decoder.dateDecodingStrategy = .iso8601
 
-    let document = try decoder.decode(ReaderPageDocument.self, from: json)
+    let document = try decoder.decode(NovelReaderProjection.self, from: json)
 
     #expect(document.segmentSemantics.first??.inlineTextStyles == [])
     #expect(document.segmentSemantics.first??.blockTextStyles == [])
@@ -2978,7 +2978,7 @@ private final class StubURLProtocol: URLProtocol {
     let decoder = JSONDecoder()
     decoder.dateDecodingStrategy = .iso8601
 
-    let document = try decoder.decode(ReaderPageDocument.self, from: json)
+    let document = try decoder.decode(NovelReaderProjection.self, from: json)
     let first = try #require(document.semantics(forSegmentIndex: 0))
     let second = try #require(document.semantics(forSegmentIndex: 1))
 
@@ -3007,7 +3007,7 @@ private final class StubURLProtocol: URLProtocol {
     let decoder = JSONDecoder()
     decoder.dateDecodingStrategy = .iso8601
 
-    let document = try decoder.decode(ReaderPageDocument.self, from: json)
+    let document = try decoder.decode(NovelReaderProjection.self, from: json)
     let semantics = try #require(document.semantics(forSegmentIndex: 0))
 
     #expect(document.segments == [.text("正文里才出现同名章", chapterTitle: "同名章")])
@@ -3020,7 +3020,7 @@ private final class StubURLProtocol: URLProtocol {
     let directory = URL(fileURLWithPath: NSTemporaryDirectory())
         .appendingPathComponent(UUID().uuidString, isDirectory: true)
     let database = try YamiboDatabase.openPool(rootDirectory: directory.appendingPathComponent("grdb", isDirectory: true))
-    let store = ReaderCacheStore(databasePool: database, baseDirectory: directory)
+    let store = NovelReaderProjectionStore(databasePool: database, baseDirectory: directory)
     let document = #"""
     {
       "schemaVersion": 3,
@@ -3045,7 +3045,7 @@ private final class StubURLProtocol: URLProtocol {
     }
     """#
     try await store.save(
-        ReaderPageDocument(
+        NovelReaderProjection(
             threadID: "18604",
             view: 1,
             maxView: 1,
@@ -3057,8 +3057,8 @@ private final class StubURLProtocol: URLProtocol {
     let fileURL = readerProjectionCacheFile(rootDirectory: directory, key: metadata.key)
     try Data(document.utf8).write(to: fileURL, options: [.atomic])
 
-    let verifyingStore = ReaderCacheStore(databasePool: database, baseDirectory: directory)
-    let loaded = await verifyingStore.loadDocument(
+    let verifyingStore = NovelReaderProjectionStore(databasePool: database, baseDirectory: directory)
+    let loaded = await verifyingStore.loadProjection(
         for: ReaderPageRequest(threadID: "18604", view: 1),
         contentSource: .fallbackUnfilteredPage
     )
@@ -3072,7 +3072,7 @@ private final class StubURLProtocol: URLProtocol {
     let directory = URL(fileURLWithPath: NSTemporaryDirectory())
         .appendingPathComponent(UUID().uuidString, isDirectory: true)
     let database = try YamiboDatabase.openPool(rootDirectory: directory.appendingPathComponent("grdb", isDirectory: true))
-    let store = ReaderCacheStore(databasePool: database, baseDirectory: directory)
+    let store = NovelReaderProjectionStore(databasePool: database, baseDirectory: directory)
     let document = #"""
     {
       "schemaVersion": 3,
@@ -3100,7 +3100,7 @@ private final class StubURLProtocol: URLProtocol {
     }
     """#
     try await store.save(
-        ReaderPageDocument(
+        NovelReaderProjection(
             threadID: "18606",
             view: 1,
             maxView: 1,
@@ -3112,8 +3112,8 @@ private final class StubURLProtocol: URLProtocol {
     let fileURL = readerProjectionCacheFile(rootDirectory: directory, key: metadata.key)
     try Data(document.utf8).write(to: fileURL, options: [.atomic])
 
-    let verifyingStore = ReaderCacheStore(databasePool: database, baseDirectory: directory)
-    let loaded = await verifyingStore.loadDocument(
+    let verifyingStore = NovelReaderProjectionStore(databasePool: database, baseDirectory: directory)
+    let loaded = await verifyingStore.loadProjection(
         for: ReaderPageRequest(threadID: "18606", view: 1),
         contentSource: .fallbackUnfilteredPage
     )
@@ -3126,15 +3126,15 @@ private final class StubURLProtocol: URLProtocol {
 @Test func readerCacheStoreSeparatesAuthorFilteredAndUnfilteredVariants() async throws {
     let directory = URL(fileURLWithPath: NSTemporaryDirectory())
         .appendingPathComponent(UUID().uuidString, isDirectory: true)
-    let store = ReaderCacheStore(baseDirectory: directory)
-    let unfiltered = ReaderPageDocument(
+    let store = NovelReaderProjectionStore(baseDirectory: directory)
+    let unfiltered = NovelReaderProjection(
         threadID: "21",
         view: 1,
         maxView: 3,
         contentSource: .fallbackUnfilteredPage,
         segments: [.text("全部回复正文", chapterTitle: "第一章")]
     )
-    let authorFiltered = ReaderPageDocument(
+    let authorFiltered = NovelReaderProjection(
         threadID: "21",
         view: 1,
         maxView: 3,
@@ -3146,11 +3146,11 @@ private final class StubURLProtocol: URLProtocol {
     try await store.save(unfiltered)
     try await store.save(authorFiltered)
 
-    let loadedUnfiltered = await store.loadDocument(
+    let loadedUnfiltered = await store.loadProjection(
         for: ReaderPageRequest(threadID: "21", view: 1),
         contentSource: .fallbackUnfilteredPage
     )
-    let loadedAuthorFiltered = await store.loadDocument(
+    let loadedAuthorFiltered = await store.loadProjection(
         for: ReaderPageRequest(threadID: "21", view: 1, authorID: "42"),
         contentSource: .authorFilteredPage
     )
@@ -3162,11 +3162,11 @@ private final class StubURLProtocol: URLProtocol {
 
     try await store.deleteViews([1], for: "21", authorID: "42", contentSource: .authorFilteredPage)
 
-    let deletedAuthorFiltered = await store.loadDocument(
+    let deletedAuthorFiltered = await store.loadProjection(
         for: ReaderPageRequest(threadID: "21", view: 1, authorID: "42"),
         contentSource: .authorFilteredPage
     )
-    let preservedUnfiltered = await store.loadDocument(
+    let preservedUnfiltered = await store.loadProjection(
         for: ReaderPageRequest(threadID: "21", view: 1),
         contentSource: .fallbackUnfilteredPage
     )
@@ -3181,14 +3181,14 @@ private final class StubURLProtocol: URLProtocol {
     let session = URLSession(configuration: configuration)
     let directory = URL(fileURLWithPath: NSTemporaryDirectory())
         .appendingPathComponent(UUID().uuidString, isDirectory: true)
-    let cacheStore = ReaderCacheStore(baseDirectory: directory.appendingPathComponent("reader", isDirectory: true))
+    let cacheStore = NovelReaderProjectionStore(baseDirectory: directory.appendingPathComponent("reader", isDirectory: true))
     let forumCacheStore = ForumCacheStore(baseDirectory: directory.appendingPathComponent("forum", isDirectory: true))
     let repository = NovelReaderRepository(
         client: YamiboClient(session: session, cookie: "sid=reader", userAgent: "Test-UA"),
         cacheStore: cacheStore,
         forumCacheStore: forumCacheStore
     )
-    let authorFiltered = ReaderPageDocument(
+    let authorFiltered = NovelReaderProjection(
         threadID: "22",
         view: 1,
         maxView: 2,
@@ -3213,7 +3213,7 @@ private final class StubURLProtocol: URLProtocol {
     let session = URLSession(configuration: configuration)
     let directory = URL(fileURLWithPath: NSTemporaryDirectory())
         .appendingPathComponent(UUID().uuidString, isDirectory: true)
-    let readerCacheStore = ReaderCacheStore(baseDirectory: directory.appendingPathComponent("reader", isDirectory: true))
+    let readerCacheStore = NovelReaderProjectionStore(baseDirectory: directory.appendingPathComponent("reader", isDirectory: true))
     let forumCacheStore = ForumCacheStore(baseDirectory: directory.appendingPathComponent("forum", isDirectory: true))
     let thread = ThreadIdentity(tid: "32")
     try await forumCacheStore.saveThreadPage(
@@ -3250,7 +3250,7 @@ private final class StubURLProtocol: URLProtocol {
     let directory = URL(fileURLWithPath: NSTemporaryDirectory())
         .appendingPathComponent(UUID().uuidString, isDirectory: true)
     let readerCacheDirectory = directory.appendingPathComponent("reader", isDirectory: true)
-    let readerCacheStore = ReaderCacheStore(baseDirectory: readerCacheDirectory)
+    let readerCacheStore = NovelReaderProjectionStore(baseDirectory: readerCacheDirectory)
     let forumCacheStore = ForumCacheStore(baseDirectory: directory.appendingPathComponent("forum", isDirectory: true))
     let thread = ThreadIdentity(tid: "3201")
     try await forumCacheStore.saveThreadPage(
@@ -3272,7 +3272,7 @@ private final class StubURLProtocol: URLProtocol {
     )
 
     let document = try await repository.loadPage(ReaderPageRequest(threadID: "3201", view: 1, authorID: "42"))
-    let persisted = await ReaderCacheStore(baseDirectory: readerCacheDirectory).loadDocument(
+    let persisted = await NovelReaderProjectionStore(baseDirectory: readerCacheDirectory).loadProjection(
         for: ReaderPageRequest(threadID: "3201", view: 1, authorID: "42"),
         contentSource: .authorFilteredPage
     )
@@ -3295,7 +3295,7 @@ private final class StubURLProtocol: URLProtocol {
     let directory = URL(fileURLWithPath: NSTemporaryDirectory())
         .appendingPathComponent(UUID().uuidString, isDirectory: true)
     let readerCacheDirectory = directory.appendingPathComponent("reader", isDirectory: true)
-    let readerCacheStore = ReaderCacheStore(baseDirectory: readerCacheDirectory)
+    let readerCacheStore = NovelReaderProjectionStore(baseDirectory: readerCacheDirectory)
     let forumCacheStore = ForumCacheStore(baseDirectory: directory.appendingPathComponent("forum", isDirectory: true))
     let thread = ThreadIdentity(tid: "3202")
     try await forumCacheStore.saveThreadPage(
@@ -3319,10 +3319,10 @@ private final class StubURLProtocol: URLProtocol {
     _ = try await repository.loadPage(ReaderPageRequest(threadID: "3202", view: 1, authorID: "42"))
     try FileManager.default.removeItem(
         at: YamiboDatabase.cacheDirectoryURL(rootDirectory: readerCacheDirectory)
-            .appendingPathComponent(ReaderCacheStore.projectionNamespace, isDirectory: true)
+            .appendingPathComponent(NovelReaderProjectionStore.projectionNamespace, isDirectory: true)
     )
     let document = try await repository.loadPage(ReaderPageRequest(threadID: "3202", view: 1, authorID: "42"))
-    let persisted = await ReaderCacheStore(baseDirectory: readerCacheDirectory).loadDocument(
+    let persisted = await NovelReaderProjectionStore(baseDirectory: readerCacheDirectory).loadProjection(
         for: ReaderPageRequest(threadID: "3202", view: 1, authorID: "42"),
         contentSource: .authorFilteredPage
     )
@@ -3337,10 +3337,10 @@ private final class StubURLProtocol: URLProtocol {
     let session = URLSession(configuration: configuration)
     let directory = URL(fileURLWithPath: NSTemporaryDirectory())
         .appendingPathComponent(UUID().uuidString, isDirectory: true)
-    let readerCacheStore = ReaderCacheStore(baseDirectory: directory.appendingPathComponent("reader", isDirectory: true))
+    let readerCacheStore = NovelReaderProjectionStore(baseDirectory: directory.appendingPathComponent("reader", isDirectory: true))
     let forumCacheStore = ForumCacheStore(baseDirectory: directory.appendingPathComponent("forum", isDirectory: true))
     try await readerCacheStore.save(
-        ReaderPageDocument(
+        NovelReaderProjection(
             threadID: "33",
             view: 1,
             maxView: 1,
@@ -3392,21 +3392,21 @@ private func makeReaderRepositoryThreadPage(
     let session = URLSession(configuration: configuration)
     let directory = URL(fileURLWithPath: NSTemporaryDirectory())
         .appendingPathComponent(UUID().uuidString, isDirectory: true)
-    let cacheStore = ReaderCacheStore(baseDirectory: directory.appendingPathComponent("reader", isDirectory: true))
+    let cacheStore = NovelReaderProjectionStore(baseDirectory: directory.appendingPathComponent("reader", isDirectory: true))
     let forumCacheStore = ForumCacheStore(baseDirectory: directory.appendingPathComponent("forum", isDirectory: true))
     let repository = NovelReaderRepository(
         client: YamiboClient(session: session, cookie: "sid=reader", userAgent: "Test-UA"),
         cacheStore: cacheStore,
         forumCacheStore: forumCacheStore
     )
-    let unfiltered = ReaderPageDocument(
+    let unfiltered = NovelReaderProjection(
         threadID: "23",
         view: 1,
         maxView: 2,
         contentSource: .fallbackUnfilteredPage,
         segments: [.text("全部回复旧缓存", chapterTitle: "第一章")]
     )
-    let authorFiltered = ReaderPageDocument(
+    let authorFiltered = NovelReaderProjection(
         threadID: "23",
         view: 1,
         maxView: 2,
@@ -3424,11 +3424,11 @@ private func makeReaderRepositoryThreadPage(
         contentSource: .authorFilteredPage
     )
 
-    let refreshedAuthorFiltered = await cacheStore.loadDocument(
+    let refreshedAuthorFiltered = await cacheStore.loadProjection(
         for: ReaderPageRequest(threadID: "23", view: 1, authorID: "42"),
         contentSource: .authorFilteredPage
     )
-    let preservedUnfiltered = await cacheStore.loadDocument(
+    let preservedUnfiltered = await cacheStore.loadProjection(
         for: ReaderPageRequest(threadID: "23", view: 1),
         contentSource: .fallbackUnfilteredPage
     )
@@ -3453,10 +3453,10 @@ private func makeReaderRepositoryThreadPage(
     let directory = URL(fileURLWithPath: NSTemporaryDirectory())
         .appendingPathComponent(UUID().uuidString, isDirectory: true)
     let cacheStoreDirectory = directory.appendingPathComponent("reader", isDirectory: true)
-    let cacheStore = ReaderCacheStore(baseDirectory: cacheStoreDirectory)
+    let cacheStore = NovelReaderProjectionStore(baseDirectory: cacheStoreDirectory)
     let forumCacheStore = ForumCacheStore(baseDirectory: directory.appendingPathComponent("forum", isDirectory: true))
     try await cacheStore.save(
-        ReaderPageDocument(
+        NovelReaderProjection(
             threadID: "30",
             view: 1,
             maxView: 1,
@@ -3468,7 +3468,7 @@ private func makeReaderRepositoryThreadPage(
     try rewriteCachedReaderDocumentSchemaVersion(in: cacheStoreDirectory, to: 3)
     let repository = NovelReaderRepository(
         client: YamiboClient(session: session, cookie: "sid=reader", userAgent: "Test-UA"),
-        cacheStore: ReaderCacheStore(baseDirectory: cacheStoreDirectory),
+        cacheStore: NovelReaderProjectionStore(baseDirectory: cacheStoreDirectory),
         forumCacheStore: forumCacheStore
     )
 
@@ -3479,7 +3479,7 @@ private func makeReaderRepositoryThreadPage(
     }.first
 
     #expect(text == "新 schema 缓存刷新正文")
-    #expect(document.decodedSchemaVersion == ReaderPageDocument.schemaVersion)
+    #expect(document.decodedSchemaVersion == NovelReaderProjection.schemaVersion)
 }
 
 @Test func readerRepositoryDoesNotFallBackToOldSchemaProjectionWhenThreadPageRefreshIsOffline() async throws {
@@ -3489,10 +3489,10 @@ private func makeReaderRepositoryThreadPage(
     let directory = URL(fileURLWithPath: NSTemporaryDirectory())
         .appendingPathComponent(UUID().uuidString, isDirectory: true)
     let cacheStoreDirectory = directory.appendingPathComponent("reader", isDirectory: true)
-    let cacheStore = ReaderCacheStore(baseDirectory: cacheStoreDirectory)
+    let cacheStore = NovelReaderProjectionStore(baseDirectory: cacheStoreDirectory)
     let forumCacheStore = ForumCacheStore(baseDirectory: directory.appendingPathComponent("forum", isDirectory: true))
     try await cacheStore.save(
-        ReaderPageDocument(
+        NovelReaderProjection(
             threadID: "31",
             view: 1,
             maxView: 1,
@@ -3504,7 +3504,7 @@ private func makeReaderRepositoryThreadPage(
     try rewriteCachedReaderDocumentSchemaVersion(in: cacheStoreDirectory, to: 3)
     let repository = NovelReaderRepository(
         client: YamiboClient(session: session, cookie: "sid=reader", userAgent: "Test-UA"),
-        cacheStore: ReaderCacheStore(baseDirectory: cacheStoreDirectory),
+        cacheStore: NovelReaderProjectionStore(baseDirectory: cacheStoreDirectory),
         forumCacheStore: forumCacheStore
     )
 
@@ -3520,7 +3520,7 @@ private func makeReaderRepositoryThreadPage(
     let directory = URL(fileURLWithPath: NSTemporaryDirectory())
         .appendingPathComponent(UUID().uuidString, isDirectory: true)
     let offlineStore = try makeTestOfflineCacheStore(rootDirectory: directory)
-    let readerCacheStore = ReaderCacheStore(baseDirectory: directory.appendingPathComponent("reader", isDirectory: true))
+    let readerCacheStore = NovelReaderProjectionStore(baseDirectory: directory.appendingPathComponent("reader", isDirectory: true))
     let forumCacheStore = ForumCacheStore(baseDirectory: directory.appendingPathComponent("forum", isDirectory: true))
     let thread = ThreadIdentity(tid: "34")
     let sourcePage = makeReaderRepositoryThreadPage(
@@ -3551,16 +3551,16 @@ private func makeReaderRepositoryThreadPage(
     )
 
     let load = try await repository.loadPageResult(ReaderPageRequest(threadID: "34", view: 1, authorID: "42"))
-    let prewarm = await readerCacheStore.loadDocument(
+    let prewarm = await readerCacheStore.loadProjection(
         for: ReaderPageRequest(threadID: "34", view: 1, authorID: "42"),
         contentSource: .authorFilteredPage
     )
 
     #expect(load.source == .offlineFallback(updatedAt: updatedAt))
-    #expect(load.document.segments.contains(.text("离线章节\n离线正文", chapterTitle: "离线章节")))
-    #expect(load.document.projectionSourceFingerprint != nil)
-    #expect(load.document.projectionSchemaVersion == 1)
-    #expect(prewarm?.segments == load.document.segments)
+    #expect(load.projection.segments.contains(.text("离线章节\n离线正文", chapterTitle: "离线章节")))
+    #expect(load.projection.projectionSourceFingerprint != nil)
+    #expect(load.projection.projectionSchemaVersion == 1)
+    #expect(prewarm?.segments == load.projection.segments)
 }
 
 @Test func readerRepositoryOfflineFallbackReusesValidTransparentProjectionCache() async throws {
@@ -3570,7 +3570,7 @@ private func makeReaderRepositoryThreadPage(
     let directory = URL(fileURLWithPath: NSTemporaryDirectory())
         .appendingPathComponent(UUID().uuidString, isDirectory: true)
     let offlineStore = try makeTestOfflineCacheStore(rootDirectory: directory)
-    let readerCacheStore = ReaderCacheStore(baseDirectory: directory.appendingPathComponent("reader", isDirectory: true))
+    let readerCacheStore = NovelReaderProjectionStore(baseDirectory: directory.appendingPathComponent("reader", isDirectory: true))
     let forumCacheStore = ForumCacheStore(baseDirectory: directory.appendingPathComponent("forum", isDirectory: true))
     let thread = ThreadIdentity(tid: "341")
     let sourcePage = makeReaderRepositoryThreadPage(
@@ -3600,23 +3600,23 @@ private func makeReaderRepositoryThreadPage(
         offlineCacheStore: offlineStore
     )
     let parsedLoad = try await repository.loadPageResult(ReaderPageRequest(threadID: "341", view: 1, authorID: "42"))
-    let fingerprint = try #require(parsedLoad.document.projectionSourceFingerprint)
-    let cachedProjection = ReaderPageDocument(
-        threadID: parsedLoad.document.threadID,
+    let fingerprint = try #require(parsedLoad.projection.projectionSourceFingerprint)
+    let cachedProjection = NovelReaderProjection(
+        threadID: parsedLoad.projection.threadID,
         view: 1,
-        maxView: parsedLoad.document.maxView,
+        maxView: parsedLoad.projection.maxView,
         resolvedAuthorID: "42",
         contentSource: .authorFilteredPage,
         segments: [.text("透明缓存正文", chapterTitle: "透明缓存章节")],
         projectionSourceFingerprint: fingerprint,
-        projectionSchemaVersion: parsedLoad.document.projectionSchemaVersion
+        projectionSchemaVersion: parsedLoad.projection.projectionSchemaVersion
     )
     try await readerCacheStore.save(cachedProjection)
 
     let cachedLoad = try await repository.loadPageResult(ReaderPageRequest(threadID: "341", view: 1, authorID: "42"))
 
     #expect(cachedLoad.source == .offlineFallback(updatedAt: updatedAt))
-    #expect(cachedLoad.document.segments == cachedProjection.segments)
+    #expect(cachedLoad.projection.segments == cachedProjection.segments)
 }
 
 @Test func readerRepositoryDoesNotUseOfflineFallbackForParserFailures() async throws {
@@ -3648,7 +3648,7 @@ private func makeReaderRepositoryThreadPage(
     )
     let repository = NovelReaderRepository(
         client: YamiboClient(session: session, cookie: "sid=reader", userAgent: "Test-UA"),
-        cacheStore: ReaderCacheStore(baseDirectory: directory.appendingPathComponent("reader", isDirectory: true)),
+        cacheStore: NovelReaderProjectionStore(baseDirectory: directory.appendingPathComponent("reader", isDirectory: true)),
         forumCacheStore: ForumCacheStore(baseDirectory: directory.appendingPathComponent("forum", isDirectory: true)),
         offlineCacheStore: offlineStore
     )
@@ -3688,7 +3688,7 @@ private func makeReaderRepositoryThreadPage(
     )
     let repository = NovelReaderRepository(
         client: YamiboClient(session: session, cookie: "sid=reader", userAgent: "Test-UA"),
-        cacheStore: ReaderCacheStore(baseDirectory: directory.appendingPathComponent("reader", isDirectory: true)),
+        cacheStore: NovelReaderProjectionStore(baseDirectory: directory.appendingPathComponent("reader", isDirectory: true)),
         forumCacheStore: ForumCacheStore(baseDirectory: directory.appendingPathComponent("forum", isDirectory: true)),
         offlineCacheStore: offlineStore,
         novelOfflineAutoRefreshEnabled: { true }
@@ -3710,7 +3710,7 @@ private func makeReaderRepositoryThreadPage(
     )
 
     #expect(load.source == .online)
-    #expect(load.document.segments.contains(.text("在线章节\n在线新正文", chapterTitle: "在线章节")))
+    #expect(load.projection.segments.contains(.text("在线章节\n在线新正文", chapterTitle: "在线章节")))
     #expect(refreshedSource?.posts.first?.contentHTML.contains("在线新正文") == true)
     #expect((snapshot.updateTimesByView[1] ?? oldUpdatedAt) > oldUpdatedAt)
 }
@@ -3724,7 +3724,7 @@ private func makeReaderRepositoryThreadPage(
     let offlineStore = try makeTestOfflineCacheStore(rootDirectory: directory)
     let repository = NovelReaderRepository(
         client: YamiboClient(session: session, cookie: "sid=reader", userAgent: "Test-UA"),
-        cacheStore: ReaderCacheStore(baseDirectory: directory.appendingPathComponent("reader", isDirectory: true)),
+        cacheStore: NovelReaderProjectionStore(baseDirectory: directory.appendingPathComponent("reader", isDirectory: true)),
         forumCacheStore: ForumCacheStore(baseDirectory: directory.appendingPathComponent("forum", isDirectory: true)),
         offlineCacheStore: offlineStore,
         novelOfflineAutoRefreshEnabled: { true }
@@ -3748,7 +3748,7 @@ private func makeReaderRepositoryThreadPage(
     let session = URLSession(configuration: configuration)
     let directory = URL(fileURLWithPath: NSTemporaryDirectory())
         .appendingPathComponent(UUID().uuidString, isDirectory: true)
-    let cacheStore = ReaderCacheStore(baseDirectory: directory.appendingPathComponent("reader", isDirectory: true))
+    let cacheStore = NovelReaderProjectionStore(baseDirectory: directory.appendingPathComponent("reader", isDirectory: true))
     let forumCacheStore = ForumCacheStore(baseDirectory: directory.appendingPathComponent("forum", isDirectory: true))
     let repository = NovelReaderRepository(
         client: YamiboClient(session: session, cookie: "sid=reader", userAgent: "Test-UA"),
@@ -3775,14 +3775,14 @@ private func makeReaderRepositoryThreadPage(
     let session = URLSession(configuration: configuration)
     let directory = URL(fileURLWithPath: NSTemporaryDirectory())
         .appendingPathComponent(UUID().uuidString, isDirectory: true)
-    let cacheStore = ReaderCacheStore(baseDirectory: directory.appendingPathComponent("reader", isDirectory: true))
+    let cacheStore = NovelReaderProjectionStore(baseDirectory: directory.appendingPathComponent("reader", isDirectory: true))
     let forumCacheStore = ForumCacheStore(baseDirectory: directory.appendingPathComponent("forum", isDirectory: true))
     let repository = NovelReaderRepository(
         client: YamiboClient(session: session, cookie: "sid=reader", userAgent: "Test-UA"),
         cacheStore: cacheStore,
         forumCacheStore: forumCacheStore
     )
-    let legacyDocument = ReaderPageDocument(
+    let legacyDocument = NovelReaderProjection(
         threadID: "25",
         view: 1,
         maxView: 1,
@@ -3975,7 +3975,7 @@ final class FavoriteRepositoryThreadFavoriteTests: XCTestCase {
 
 @MainActor
 @Test func novelTextSelectionCopiesDisplayedTextFromCommittedGeneration() throws {
-    let document = ReaderPageDocument(
+    let document = NovelReaderProjection(
         threadID: "197",
         view: 1,
         maxView: 1,
@@ -4017,7 +4017,7 @@ final class FavoriteRepositoryThreadFavoriteTests: XCTestCase {
         repeating: "Selection can cross a vertical TextKit chunk while staying in the current runtime generation. ",
         count: 80
     )
-    let document = ReaderPageDocument(
+    let document = NovelReaderProjection(
         threadID: "198",
         view: 1,
         maxView: 1,
@@ -4071,7 +4071,7 @@ final class FavoriteRepositoryThreadFavoriteTests: XCTestCase {
 @MainActor
 @Test func novelTextSelectionRejectsStaleGeneration() throws {
 #if canImport(UIKit)
-    let document = ReaderPageDocument(
+    let document = NovelReaderProjection(
         threadID: "199",
         view: 1,
         maxView: 1,
@@ -4159,7 +4159,7 @@ private func readerProjectionCacheRows(in database: DatabasePool) async throws -
             WHERE namespace = ?
             ORDER BY cache_key
             """,
-            arguments: [ReaderCacheStore.projectionNamespace]
+            arguments: [NovelReaderProjectionStore.projectionNamespace]
         ).map { row in
             ReaderProjectionCacheRow(
                 namespace: row["namespace"],
@@ -4171,13 +4171,13 @@ private func readerProjectionCacheRows(in database: DatabasePool) async throws -
 
 private func readerProjectionCacheFile(rootDirectory: URL, key: String) -> URL {
     YamiboDatabase.cacheDirectoryURL(rootDirectory: rootDirectory)
-        .appendingPathComponent(ReaderCacheStore.projectionNamespace, isDirectory: true)
+        .appendingPathComponent(NovelReaderProjectionStore.projectionNamespace, isDirectory: true)
         .appendingPathComponent("\(key).json", isDirectory: false)
 }
 
 private func readerProjectionCacheFiles(rootDirectory: URL) throws -> [URL] {
     let directory = YamiboDatabase.cacheDirectoryURL(rootDirectory: rootDirectory)
-        .appendingPathComponent(ReaderCacheStore.projectionNamespace, isDirectory: true)
+        .appendingPathComponent(NovelReaderProjectionStore.projectionNamespace, isDirectory: true)
     guard FileManager.default.fileExists(atPath: directory.path) else {
         return []
     }

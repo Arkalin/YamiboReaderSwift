@@ -19,7 +19,7 @@ private struct NovelReaderLinearReadingPageKey: Equatable, Sendable {
 @MainActor
 public final class ReaderContainerModel: ObservableObject {
     @Published public private(set) var isLoading = false
-    @Published public private(set) var isNavigatingReaderPageDocument = false
+    @Published public private(set) var isNavigatingNovelReaderProjection = false
     @Published public private(set) var isApplyingAppearanceSettings = false
     @Published public private(set) var errorMessage: String?
     @Published public private(set) var cachedViews: Set<Int> = []
@@ -572,7 +572,7 @@ public final class ReaderContainerModel: ObservableObject {
             await promotePrefetchedDocument(
                 startingAt: 0,
                 preferredResumePoint: nil,
-                showsReaderPageDocumentNavigationOverlay: true
+                showsNovelReaderProjectionNavigationOverlay: true
             )
             return
         }
@@ -582,7 +582,7 @@ public final class ReaderContainerModel: ObservableObject {
             preferredSurfaceOrdinal: 0,
             preferredResumePoint: nil,
             forceRefresh: false,
-            showsReaderPageDocumentNavigationOverlay: true
+            showsNovelReaderProjectionNavigationOverlay: true
         )
     }
 
@@ -799,7 +799,7 @@ public final class ReaderContainerModel: ObservableObject {
                 preferredSurfaceOrdinal: preferredSurfaceOrdinal,
                 preferredResumePoint: resumePoint,
                 forceRefresh: false,
-                showsReaderPageDocumentNavigationOverlay: true
+                showsNovelReaderProjectionNavigationOverlay: true
             )
             if didLoad {
                 recordLinearReadingForNavigationHistory()
@@ -808,7 +808,7 @@ public final class ReaderContainerModel: ObservableObject {
             let didPromote = await promotePrefetchedDocument(
                 startingAt: preferredSurfaceOrdinal,
                 preferredResumePoint: resumePoint,
-                showsReaderPageDocumentNavigationOverlay: true
+                showsNovelReaderProjectionNavigationOverlay: true
             )
             if didPromote {
                 recordLinearReadingForNavigationHistory()
@@ -836,7 +836,7 @@ public final class ReaderContainerModel: ObservableObject {
             let didPromote = await promotePrefetchedDocument(
                 startingAt: preferredSurfaceOrdinal,
                 preferredResumePoint: nil,
-                showsReaderPageDocumentNavigationOverlay: true
+                showsNovelReaderProjectionNavigationOverlay: true
             )
             if didPromote, isCurrentNavigationRequest(navigationSequence) {
                 recordSuccessfulNonlinearNavigation(from: sourceResumePoint, to: currentStableResumePoint)
@@ -854,7 +854,7 @@ public final class ReaderContainerModel: ObservableObject {
             preferredSurfaceOrdinal: preferredSurfaceOrdinal,
             preferredResumePoint: nil,
             forceRefresh: false,
-            showsReaderPageDocumentNavigationOverlay: true
+            showsNovelReaderProjectionNavigationOverlay: true
         )
         if didLoad, isCurrentNavigationRequest(navigationSequence) {
             recordSuccessfulNonlinearNavigation(from: sourceResumePoint, to: currentStableResumePoint)
@@ -918,15 +918,15 @@ public final class ReaderContainerModel: ObservableObject {
                 preferredSurfaceOrdinal: 0,
                 preferredResumePoint: nil,
                 forceRefresh: false,
-                showsReaderPageDocumentNavigationOverlay: true
+                showsNovelReaderProjectionNavigationOverlay: true
             )
             if didLoad, isCurrentNavigationRequest(navigationSequence) {
                 recordSuccessfulNonlinearNavigation(from: sourceResumePoint, to: currentStableResumePoint)
             }
             return
         }
-        await beginReaderPageDocumentNavigation()
-        defer { setReaderPageDocumentNavigation(false) }
+        await beginNovelReaderProjectionNavigation()
+        defer { setNovelReaderProjectionNavigation(false) }
         isLoading = true
         errorMessage = nil
         do {
@@ -1085,16 +1085,16 @@ public final class ReaderContainerModel: ObservableObject {
         preferredSurfaceOrdinal: Int,
         preferredResumePoint: ReaderResumePoint?,
         forceRefresh: Bool,
-        showsReaderPageDocumentNavigationOverlay: Bool = false,
+        showsNovelReaderProjectionNavigationOverlay: Bool = false,
         reportsError: Bool = true
     ) async -> Bool {
         guard let workflow = await ensureReadingWorkflow() else { return false }
-        if showsReaderPageDocumentNavigationOverlay {
-            await beginReaderPageDocumentNavigation()
+        if showsNovelReaderProjectionNavigationOverlay {
+            await beginNovelReaderProjectionNavigation()
         }
         defer {
-            if showsReaderPageDocumentNavigationOverlay {
-                setReaderPageDocumentNavigation(false)
+            if showsNovelReaderProjectionNavigationOverlay {
+                setNovelReaderProjectionNavigation(false)
             }
         }
         isLoading = true
@@ -1268,7 +1268,7 @@ public final class ReaderContainerModel: ObservableObject {
             return await promotePrefetchedDocument(
                 startingAt: 0,
                 preferredResumePoint: resumePoint,
-                showsReaderPageDocumentNavigationOverlay: true,
+                showsNovelReaderProjectionNavigationOverlay: true,
                 reportsError: false
             )
         }
@@ -1278,7 +1278,7 @@ public final class ReaderContainerModel: ObservableObject {
             preferredSurfaceOrdinal: 0,
             preferredResumePoint: resumePoint,
             forceRefresh: false,
-            showsReaderPageDocumentNavigationOverlay: true,
+            showsNovelReaderProjectionNavigationOverlay: true,
             reportsError: false
         )
     }
@@ -1359,14 +1359,14 @@ public final class ReaderContainerModel: ObservableObject {
         return NovelReaderLinearReadingPageKey(view: currentView, surfaceIndex: selectedSurfaceIndex)
     }
 
-    private func beginReaderPageDocumentNavigation() async {
-        setReaderPageDocumentNavigation(true)
+    private func beginNovelReaderProjectionNavigation() async {
+        setNovelReaderProjectionNavigation(true)
         await readerPageDocumentNavigationOverlayPreparation()
     }
 
-    private func setReaderPageDocumentNavigation(_ isNavigating: Bool) {
-        guard isNavigatingReaderPageDocument != isNavigating else { return }
-        isNavigatingReaderPageDocument = isNavigating
+    private func setNovelReaderProjectionNavigation(_ isNavigating: Bool) {
+        guard isNavigatingNovelReaderProjection != isNavigating else { return }
+        isNavigatingNovelReaderProjection = isNavigating
         readerPageDocumentNavigationStateDidChange?(isNavigating)
     }
 
@@ -1436,7 +1436,7 @@ public final class ReaderContainerModel: ObservableObject {
                 await promotePrefetchedDocument(
                     startingAt: 0,
                     preferredResumePoint: nil,
-                    showsReaderPageDocumentNavigationOverlay: true
+                    showsNovelReaderProjectionNavigationOverlay: true
                 )
             }
         }
@@ -1591,15 +1591,15 @@ public final class ReaderContainerModel: ObservableObject {
     private func promotePrefetchedDocument(
         startingAt preferredSurfaceOrdinal: Int,
         preferredResumePoint: ReaderResumePoint?,
-        showsReaderPageDocumentNavigationOverlay: Bool = false,
+        showsNovelReaderProjectionNavigationOverlay: Bool = false,
         reportsError: Bool = true
     ) async -> Bool {
-        if showsReaderPageDocumentNavigationOverlay {
-            await beginReaderPageDocumentNavigation()
+        if showsNovelReaderProjectionNavigationOverlay {
+            await beginNovelReaderProjectionNavigation()
         }
         defer {
-            if showsReaderPageDocumentNavigationOverlay {
-                setReaderPageDocumentNavigation(false)
+            if showsNovelReaderProjectionNavigationOverlay {
+                setNovelReaderProjectionNavigation(false)
             }
         }
         do {

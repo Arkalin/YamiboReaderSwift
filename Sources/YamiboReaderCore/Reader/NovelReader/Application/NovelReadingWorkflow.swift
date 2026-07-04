@@ -1,10 +1,10 @@
 import Foundation
 
 public protocol NovelReadingPageRepository: Sendable {
-    func loadPage(_ request: ReaderPageRequest) async throws -> ReaderPageDocument
-    func loadPageIgnoringCache(_ request: ReaderPageRequest) async throws -> ReaderPageDocument
-    func loadPageResult(_ request: ReaderPageRequest) async throws -> NovelReaderPageLoad
-    func loadPageIgnoringCacheResult(_ request: ReaderPageRequest) async throws -> NovelReaderPageLoad
+    func loadPage(_ request: ReaderPageRequest) async throws -> NovelReaderProjection
+    func loadPageIgnoringCache(_ request: ReaderPageRequest) async throws -> NovelReaderProjection
+    func loadPageResult(_ request: ReaderPageRequest) async throws -> NovelReaderProjectionLoad
+    func loadPageIgnoringCacheResult(_ request: ReaderPageRequest) async throws -> NovelReaderProjectionLoad
     func cachedViews(
         for threadID: String,
         authorID: String?,
@@ -19,12 +19,12 @@ public protocol NovelReadingPageRepository: Sendable {
 }
 
 public extension NovelReadingPageRepository {
-    func loadPageResult(_ request: ReaderPageRequest) async throws -> NovelReaderPageLoad {
-        NovelReaderPageLoad(document: try await loadPage(request), source: .online)
+    func loadPageResult(_ request: ReaderPageRequest) async throws -> NovelReaderProjectionLoad {
+        NovelReaderProjectionLoad(projection: try await loadPage(request), source: .online)
     }
 
-    func loadPageIgnoringCacheResult(_ request: ReaderPageRequest) async throws -> NovelReaderPageLoad {
-        NovelReaderPageLoad(document: try await loadPageIgnoringCache(request), source: .online)
+    func loadPageIgnoringCacheResult(_ request: ReaderPageRequest) async throws -> NovelReaderProjectionLoad {
+        NovelReaderProjectionLoad(projection: try await loadPageIgnoringCache(request), source: .online)
     }
 }
 
@@ -101,10 +101,10 @@ private struct NovelReadingPreparedTransaction {
     let settings: ReaderAppearanceSettings
     let layout: ReaderContainerLayout
     let usesPadPresentation: Bool
-    let currentDocument: ReaderPageDocument
-    let prefetchedDocument: ReaderPageDocument?
-    let currentLoadSource: NovelReaderPageLoadSource
-    let prefetchedLoadSource: NovelReaderPageLoadSource?
+    let currentDocument: NovelReaderProjection
+    let prefetchedDocument: NovelReaderProjection?
+    let currentLoadSource: NovelReaderProjectionLoadSource
+    let prefetchedLoadSource: NovelReaderProjectionLoadSource?
     let currentAuthorID: String?
     let currentDocumentSurfaceCount: Int
 }
@@ -119,10 +119,10 @@ public final class NovelReadingWorkflow {
     private var layout: ReaderContainerLayout
     private let repository: any NovelReadingPageRepository
     private var session: NovelReadingSession?
-    private var currentDocument: ReaderPageDocument?
-    private var prefetchedDocument: ReaderPageDocument?
-    private var currentLoadSource: NovelReaderPageLoadSource = .online
-    private var prefetchedLoadSource: NovelReaderPageLoadSource?
+    private var currentDocument: NovelReaderProjection?
+    private var prefetchedDocument: NovelReaderProjection?
+    private var currentLoadSource: NovelReaderProjectionLoadSource = .online
+    private var prefetchedLoadSource: NovelReaderProjectionLoadSource?
     private var currentAuthorID: String?
     private var currentDocumentSurfaceCount = 0
     private var usesPadPresentation: Bool
@@ -417,10 +417,10 @@ public final class NovelReadingWorkflow {
         settings: ReaderAppearanceSettings,
         layout: ReaderContainerLayout,
         usesPadPresentation: Bool,
-        currentDocument: ReaderPageDocument,
-        prefetchedDocument: ReaderPageDocument?,
-        currentLoadSource: NovelReaderPageLoadSource,
-        prefetchedLoadSource: NovelReaderPageLoadSource?,
+        currentDocument: NovelReaderProjection,
+        prefetchedDocument: NovelReaderProjection?,
+        currentLoadSource: NovelReaderProjectionLoadSource,
+        prefetchedLoadSource: NovelReaderProjectionLoadSource?,
         currentAuthorID: String?,
         cachedViews: Set<Int>
     ) throws -> NovelReadingPreparedTransaction {
@@ -624,7 +624,7 @@ public final class NovelReadingWorkflow {
         state = nil
     }
 
-    private func cacheContext(for document: ReaderPageDocument) -> NovelReadingCacheContext {
+    private func cacheContext(for document: NovelReaderProjection) -> NovelReadingCacheContext {
         switch document.contentSource {
         case .authorFilteredPage:
             let authorID = document.resolvedAuthorID ?? currentAuthorID ?? context.authorID
@@ -682,7 +682,7 @@ public final class NovelReadingWorkflow {
         )
         guard let nextLoad = try? await repository.loadPageResult(nextRequest) else { return nil }
 
-        let nextDocument = nextLoad.document
+        let nextDocument = nextLoad.projection
         prefetchedDocument = nextDocument
         prefetchedLoadSource = nextLoad.source
         if nextDocument.maxView > (session?.snapshot.maxView ?? 0) {
@@ -761,7 +761,7 @@ public final class NovelReadingWorkflow {
         let pageLoad = forceRefresh
             ? try await repository.loadPageIgnoringCacheResult(request)
             : try await repository.loadPageResult(request)
-        let document = pageLoad.document
+        let document = pageLoad.projection
         let preservedResumePoint = preferredResumePoint ?? captureNovelReadingPosition()
         let nextAuthorID = document.resolvedAuthorID ?? currentAuthorID ?? context.authorID
         let transaction = try prepareRuntimeTransaction(
@@ -869,7 +869,7 @@ public final class NovelReadingWorkflow {
         revision: UInt64,
         settings: ReaderAppearanceSettings,
         usesTwoPageSpread: Bool,
-        pageLoadSource: NovelReaderPageLoadSource
+        pageLoadSource: NovelReaderProjectionLoadSource
     ) -> NovelReaderPresentation {
         let readableSize = layoutResult?.viewportContext.identity.layout.readableFrame.size ?? layout.readableFrame.size
         let indexSurfaces = (layoutResult?.viewportIndex.surfaces ?? []).sorted { lhs, rhs in
@@ -990,7 +990,7 @@ public final class NovelReadingWorkflow {
     }
 
     private func prepareRuntimeTransaction(
-        document: ReaderPageDocument,
+        document: NovelReaderProjection,
         settings: ReaderAppearanceSettings,
         layout: ReaderContainerLayout,
         usesPadPresentation: Bool

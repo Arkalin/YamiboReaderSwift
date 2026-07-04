@@ -292,7 +292,7 @@ public actor OfflineCacheQueueExecutor {
         let request = try novelWorkRequest(from: work)
         let prepared = try await novelSourcePageLoader.loadNovelOfflineCacheSourcePage(request)
         let targetImageURLs = work.retainsInlineImages
-            ? Self.inlineImageURLs(in: prepared.document)
+            ? Self.inlineImageURLs(in: prepared.projection)
             : work.targetImageURLs
         var sourcePageRequest = request
         sourcePageRequest.targetImageURLs = targetImageURLs
@@ -446,7 +446,7 @@ public actor OfflineCacheQueueExecutor {
         )
     }
 
-    private static func inlineImageURLs(in document: ReaderPageDocument) -> [URL] {
+    private static func inlineImageURLs(in document: NovelReaderProjection) -> [URL] {
         var seen: Set<String> = []
         var urls: [URL] = []
         for segment in document.segments {

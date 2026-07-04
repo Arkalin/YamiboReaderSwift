@@ -971,7 +971,7 @@ private func makeNovelExecutorPreparedSourcePage(
         ],
         pageNavigation: ForumPageNavigation(currentPage: view, totalPages: max(2, view))
     )
-    let document = ReaderPageDocument(
+    let document = NovelReaderProjection(
         threadID: tid,
         view: view,
         maxView: max(2, view),
@@ -981,7 +981,7 @@ private func makeNovelExecutorPreparedSourcePage(
         projectionSourceFingerprint: "novel-\(tid)-\(view)",
         projectionSchemaVersion: 1
     )
-    return NovelOfflineCachePreparedSourcePage(sourcePage: sourcePage, document: document)
+    return NovelOfflineCachePreparedSourcePage(sourcePage: sourcePage, projection: document)
 }
 
 private func makeDocument(tid: String, imageURLs: [URL]) throws -> MangaReaderProjection {

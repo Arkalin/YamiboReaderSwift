@@ -1,11 +1,11 @@
 import Foundation
 
 public enum ReaderHTMLParser {
-    public static func parseDocument(
+    public static func parseProjection(
         html: String,
         request: ReaderPageRequest,
         contentSource: ReaderContentSource = .allPostsPage
-    ) throws -> ReaderPageDocument {
+    ) throws -> NovelReaderProjection {
         if isNotAuthenticated(html) {
             throw YamiboError.notAuthenticated
         }
@@ -25,7 +25,7 @@ public enum ReaderHTMLParser {
             throw YamiboError.parsingFailed(context: L10n.string("context.novel_body"))
         }
 
-        return ReaderPageDocument(
+        return NovelReaderProjection(
             threadID: request.threadID,
             view: request.view,
             maxView: (try? ReaderHTMLDOMParser.parseMaxView(in: context, request: request)) ?? max(1, request.view),
@@ -39,12 +39,12 @@ public enum ReaderHTMLParser {
         )
     }
 
-    public static func parseDocument(
+    public static func parseProjection(
         threadPage: ForumThreadPage,
         request: ReaderPageRequest,
         authorID: String
-    ) throws -> ReaderPageDocument {
-        try parseDocument(
+    ) throws -> NovelReaderProjection {
+        try parseProjection(
             threadPage: threadPage,
             request: request,
             authorID: authorID,
@@ -53,13 +53,13 @@ public enum ReaderHTMLParser {
         )
     }
 
-    public static func parseDocument(
+    public static func parseProjection(
         threadPage: ForumThreadPage,
         request: ReaderPageRequest,
         authorID: String,
         projectionSourceFingerprint: String,
         projectionSchemaVersion: Int
-    ) throws -> ReaderPageDocument {
+    ) throws -> NovelReaderProjection {
         let normalizedAuthorID = authorID.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !normalizedAuthorID.isEmpty else {
             throw YamiboError.parsingFailed(context: "小说作者范围")
@@ -77,7 +77,7 @@ public enum ReaderHTMLParser {
             throw YamiboError.parsingFailed(context: L10n.string("context.novel_body"))
         }
 
-        return ReaderPageDocument(
+        return NovelReaderProjection(
             threadID: request.threadID,
             view: request.view,
             maxView: max(

@@ -51,12 +51,12 @@ final class ReaderLoadingOverlayPresentationTests: XCTestCase {
         XCTAssertEqual(presentation.reason, .verticalRestore)
     }
 
-    func testReaderPageDocumentNavigationPresentsOverlayOverExistingSurfaces() {
+    func testNovelReaderProjectionNavigationPresentsOverlayOverExistingSurfaces() {
         let presentation = ReaderLoadingOverlayPresentation(
             isLoading: true,
             hasSurfaces: true,
             isApplyingAppearanceSettings: false,
-            isNavigatingReaderPageDocument: true,
+            isNavigatingNovelReaderProjection: true,
             shouldConcealViewportContent: false
         )
 
@@ -65,12 +65,12 @@ final class ReaderLoadingOverlayPresentationTests: XCTestCase {
         XCTAssertFalse(presentation.allowsChrome)
     }
 
-    func testVerticalRestoreTakesPriorityOverReaderPageDocumentNavigation() {
+    func testVerticalRestoreTakesPriorityOverNovelReaderProjectionNavigation() {
         let presentation = ReaderLoadingOverlayPresentation(
             isLoading: true,
             hasSurfaces: true,
             isApplyingAppearanceSettings: false,
-            isNavigatingReaderPageDocument: true,
+            isNavigatingNovelReaderProjection: true,
             shouldConcealViewportContent: true
         )
 

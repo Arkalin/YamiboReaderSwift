@@ -15,14 +15,14 @@ struct ReaderLoadingOverlayPresentation: Equatable, Sendable {
         hasSurfaces: Bool,
         hasInitialLoadError: Bool = false,
         isApplyingAppearanceSettings: Bool,
-        isNavigatingReaderPageDocument: Bool = false,
+        isNavigatingNovelReaderProjection: Bool = false,
         shouldConcealViewportContent: Bool
     ) {
         if isApplyingAppearanceSettings {
             reason = .appearanceSettingsApply
         } else if shouldConcealViewportContent {
             reason = .verticalRestore
-        } else if isNavigatingReaderPageDocument {
+        } else if isNavigatingNovelReaderProjection {
             reason = .readerPageDocumentNavigation
         } else if isLoading && !hasSurfaces && !hasInitialLoadError {
             reason = .initialContentLoad

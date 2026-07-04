@@ -58,7 +58,7 @@ package enum NovelReadingNavigationRequest: Equatable, Sendable {
 package struct NovelReadingSession: Sendable {
     public private(set) var snapshot: NovelReadingSnapshot
 
-    private var currentDocument: ReaderPageDocument
+    private var currentDocument: NovelReaderProjection
     private var layoutResult: NovelTextLayoutResult?
     private var surfaces: [NovelTextViewportIndexSurface]
     private var chapters: [ReaderChapter]
@@ -69,7 +69,7 @@ package struct NovelReadingSession: Sendable {
     private var preservedTextResumePoint: ReaderResumePoint?
 
     init(
-        document: ReaderPageDocument,
+        document: NovelReaderProjection,
         layoutResult: NovelTextLayoutResult,
         preferredSurfaceOrdinal: Int = 0,
         resumePoint: ReaderResumePoint? = nil,
@@ -93,7 +93,7 @@ package struct NovelReadingSession: Sendable {
     }
 
     public init(
-        validating document: ReaderPageDocument,
+        validating document: NovelReaderProjection,
         layoutResult: NovelTextLayoutResult,
         preferredSurfaceOrdinal: Int = 0,
         resumePoint: ReaderResumePoint? = nil,
@@ -118,7 +118,7 @@ package struct NovelReadingSession: Sendable {
     }
 
     private init(
-        unpaginatedDocument document: ReaderPageDocument,
+        unpaginatedDocument document: NovelReaderProjection,
         currentAuthorID: String?,
         usesPagedSpread: Bool,
         pageTurnDirection: ReaderPageTurnDirection
@@ -168,7 +168,7 @@ package struct NovelReadingSession: Sendable {
 
     public mutating func consumeCommittedLayoutResult(
         _ layoutResult: NovelTextLayoutResult,
-        for document: ReaderPageDocument,
+        for document: NovelReaderProjection,
         preferredSurfaceOrdinal: Int,
         preferredResumePoint: ReaderResumePoint?,
         usesPagedSpread: Bool? = nil,
@@ -277,7 +277,7 @@ package struct NovelReadingSession: Sendable {
     }
 
     public mutating func promotePrefetchedDocument(
-        document nextDocument: ReaderPageDocument,
+        document nextDocument: NovelReaderProjection,
         layoutResult: NovelTextLayoutResult,
         preferredSurfaceOrdinal: Int = 0,
         resumePoint: ReaderResumePoint? = nil,
@@ -361,7 +361,7 @@ package struct NovelReadingSession: Sendable {
         return surfaces[normalizedIndex]
     }
 
-    private func document(for view: Int) -> ReaderPageDocument? {
+    private func document(for view: Int) -> NovelReaderProjection? {
         if view == currentDocument.view {
             return currentDocument
         }
@@ -399,7 +399,7 @@ package struct NovelReadingSession: Sendable {
 
     private func validateCommittedLayoutResult(
         _ layoutResult: NovelTextLayoutResult,
-        for document: ReaderPageDocument
+        for document: NovelReaderProjection
     ) throws {
         guard layoutResult.viewportIndex.documentView == document.view,
               layoutResult.viewportContext.identity.documentView == document.view else {
@@ -409,7 +409,7 @@ package struct NovelReadingSession: Sendable {
 
     private mutating func applyCommittedLayoutResult(
         _ layoutResult: NovelTextLayoutResult,
-        for document: ReaderPageDocument,
+        for document: NovelReaderProjection,
         preferredSurfaceOrdinal: Int,
         preferredResumePoint: ReaderResumePoint?
     ) {

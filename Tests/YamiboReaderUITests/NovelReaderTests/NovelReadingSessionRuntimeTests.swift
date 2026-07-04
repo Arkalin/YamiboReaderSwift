@@ -4,7 +4,7 @@ import XCTest
 
 #if canImport(UIKit)
 private typealias NovelTextLayoutFixture = (
-    ReaderPageDocument,
+    NovelReaderProjection,
     ReaderAppearanceSettings,
     ReaderContainerLayout
 ) throws -> NovelTextLayoutResult
@@ -54,7 +54,7 @@ final class NovelReadingSessionRuntimeTests: XCTestCase {
     }
 
     func testHidingAuthorReplyToOtherFallbacksToPreviousVisibleText() throws {
-        let document = ReaderPageDocument(
+        let document = NovelReaderProjection(
             threadID: "9101",
             view: 1,
             maxView: 1,
@@ -100,7 +100,7 @@ final class NovelReadingSessionRuntimeTests: XCTestCase {
     }
 
     func testHidingAuthorReplyToOtherFallbacksToNextVisibleTextWhenNoPreviousTextExists() throws {
-        let document = ReaderPageDocument(
+        let document = NovelReaderProjection(
             threadID: "9102",
             view: 1,
             maxView: 1,
@@ -144,7 +144,7 @@ final class NovelReadingSessionRuntimeTests: XCTestCase {
     }
 
     func testLeftToRightTwoPageSpreadNormalizesSelectionToRightPage() throws {
-        let document = ReaderPageDocument(
+        let document = NovelReaderProjection(
             threadID: "9002",
             view: 1,
             maxView: 1,
@@ -173,7 +173,7 @@ final class NovelReadingSessionRuntimeTests: XCTestCase {
     }
 
     func testRightToLeftTwoPageSpreadNormalizesSelectionToLeftPage() throws {
-        let document = ReaderPageDocument(
+        let document = NovelReaderProjection(
             threadID: "9002",
             view: 1,
             maxView: 1,
@@ -203,7 +203,7 @@ final class NovelReadingSessionRuntimeTests: XCTestCase {
     }
 
     func testTwoPageSpreadRequestsNextWebViewPageAfterLastCompleteSpread() throws {
-        let document = ReaderPageDocument(
+        let document = NovelReaderProjection(
             threadID: "9002",
             view: 1,
             maxView: 2,
@@ -234,8 +234,8 @@ private func makeNovelDocument(
     view: Int,
     maxView: Int,
     segments: [(chapterTitle: String, text: String)]
-) -> ReaderPageDocument {
-    ReaderPageDocument(
+) -> NovelReaderProjection {
+    NovelReaderProjection(
         threadID: "9001",
         view: view,
         maxView: maxView,
@@ -246,7 +246,7 @@ private func makeNovelDocument(
 
 private extension NovelReadingSession {
     init(
-        document: ReaderPageDocument,
+        document: NovelReaderProjection,
         settings: ReaderAppearanceSettings,
         layout: ReaderContainerLayout,
         preferredSurfaceOrdinal: Int = 0,
@@ -278,7 +278,7 @@ private extension NovelReadingSession {
     }
 
     init(
-        validating document: ReaderPageDocument,
+        validating document: NovelReaderProjection,
         settings: ReaderAppearanceSettings,
         layout: ReaderContainerLayout,
         preferredSurfaceOrdinal: Int = 0,
@@ -311,7 +311,7 @@ private extension NovelReadingSession {
 }
 
 private func committedLayoutResult(
-    document: ReaderPageDocument,
+    document: NovelReaderProjection,
     settings: ReaderAppearanceSettings,
     layout: ReaderContainerLayout,
     usesPadPresentation: Bool = false,

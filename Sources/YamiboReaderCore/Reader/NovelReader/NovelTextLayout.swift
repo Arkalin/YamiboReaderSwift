@@ -9,7 +9,7 @@ typealias NovelTextViewportSurfaceLayout = @Sendable (
 ) -> [NovelTextViewportDocumentSurfaceRange]
 
 struct NovelTextLayoutPreparedInput: Sendable {
-    let document: ReaderPageDocument
+    let document: NovelReaderProjection
     let settings: ReaderAppearanceSettings
     let layout: ReaderContainerLayout
     let annotatedSegments: [NovelAnnotatedSegment]
@@ -64,7 +64,7 @@ public enum NovelTextLayoutFailure: LocalizedError, Equatable, Sendable {
 
 public enum NovelTextLayout {
     static func prepareInput(
-        document: ReaderPageDocument,
+        document: NovelReaderProjection,
         settings: ReaderAppearanceSettings,
         layout: ReaderContainerLayout
     ) throws -> NovelTextLayoutPreparedInput {
@@ -122,7 +122,7 @@ public enum NovelTextLayout {
     }
 
     package static func layout(
-        document: ReaderPageDocument,
+        document: NovelReaderProjection,
         settings: ReaderAppearanceSettings,
         layout: ReaderContainerLayout
     ) throws -> NovelTextLayoutResult {
@@ -130,7 +130,7 @@ public enum NovelTextLayout {
     }
 
     private static func standaloneRuntimeLayout(
-        document: ReaderPageDocument,
+        document: NovelReaderProjection,
         settings: ReaderAppearanceSettings,
         layout: ReaderContainerLayout
     ) throws -> NovelTextLayoutResult {
@@ -156,7 +156,7 @@ public enum NovelTextLayout {
     static func viewportSample(
         displayOffset: Int,
         ranges: [ReaderRenderedTextRange],
-        document: ReaderPageDocument,
+        document: NovelReaderProjection,
         surfaceOrdinal: Int
     ) -> NovelTextViewportSample? {
         NovelTextViewportIndexSurface(
@@ -173,7 +173,7 @@ public enum NovelTextLayout {
     static func displayOffset(
         for textSegmentIdentity: NovelTextSegmentIdentity,
         displayedTextOffset: Int,
-        in document: ReaderPageDocument,
+        in document: NovelReaderProjection,
         ranges: [ReaderRenderedTextRange]
     ) -> Int? {
         NovelTextViewportIndexSurface(
@@ -192,7 +192,7 @@ public enum NovelTextLayout {
     }
 
     static func layout(
-        document: ReaderPageDocument,
+        document: NovelReaderProjection,
         settings: ReaderAppearanceSettings,
         layout: ReaderContainerLayout,
         viewportSurfaceLayout: NovelTextViewportSurfaceLayout
@@ -223,7 +223,7 @@ public enum NovelTextLayout {
 
     private static func render(
         annotatedSegments: [NovelAnnotatedSegment],
-        document: ReaderPageDocument,
+        document: NovelReaderProjection,
         settings: ReaderAppearanceSettings,
         layout: ReaderContainerLayout,
         viewportContextSeed: NovelTextViewportContext,
@@ -522,7 +522,7 @@ public enum NovelTextLayout {
 
     private static func makeViewportContext(
         annotatedSegments: [NovelAnnotatedSegment],
-        document: ReaderPageDocument,
+        document: NovelReaderProjection,
         settings: ReaderAppearanceSettings,
         layout: ReaderContainerLayout
     ) -> NovelTextViewportContext {
@@ -638,7 +638,7 @@ public enum NovelTextLayout {
         _ ranges: [ReaderRenderedTextRange],
         aroundImageSegmentIndexes imageSegmentIndexes: Set<Int>,
         annotatedSegmentByIndex: [Int: NovelAnnotatedSegment],
-        document: ReaderPageDocument
+        document: NovelReaderProjection
     ) -> [[ReaderRenderedTextRange]] {
         guard !ranges.isEmpty else { return [] }
 
@@ -674,7 +674,7 @@ public enum NovelTextLayout {
         nextSegmentIndex: Int,
         imageSegmentIndexes: Set<Int>,
         annotatedSegmentByIndex: [Int: NovelAnnotatedSegment],
-        document: ReaderPageDocument
+        document: NovelReaderProjection
     ) -> Bool {
         if imageSegmentIndexes.contains(where: { imageSegmentIndex in
             imageSegmentIndex > previousSegmentIndex && imageSegmentIndex < nextSegmentIndex
@@ -711,7 +711,7 @@ public enum NovelTextLayout {
     }
 
     private static func annotatedSegments(
-        from document: ReaderPageDocument,
+        from document: NovelReaderProjection,
         settings: ReaderAppearanceSettings
     ) -> [NovelAnnotatedSegment] {
         var results: [NovelAnnotatedSegment] = []
@@ -913,7 +913,7 @@ public enum NovelTextLayout {
 
     private static func chapterCommentTarget(
         for annotatedSegment: NovelAnnotatedSegment,
-        document: ReaderPageDocument
+        document: NovelReaderProjection
     ) -> ReaderChapterCommentTarget? {
         guard let ownerPostID = annotatedSegment.source?.ownerPostID,
               !ownerPostID.isEmpty else {

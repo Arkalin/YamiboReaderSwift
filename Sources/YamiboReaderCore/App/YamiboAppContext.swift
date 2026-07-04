@@ -26,7 +26,7 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
     public let favoriteUpdateStore: FavoriteUpdateStore
     public let readingProgressStore: ReadingProgressStore
     public let contentCoverStore: ContentCoverStore
-    public let readerCacheStore: ReaderCacheStore
+    public let readerCacheStore: NovelReaderProjectionStore
     public let favoriteBackgroundImageStore: FavoriteBackgroundImageStore
     public let mangaDirectoryStore: any MangaDirectoryPersisting & MangaDirectoryStorageReporting & MangaDirectoryClearing
     public let mangaDirectorySearchCooldownState: MangaDirectorySearchCooldownState
@@ -53,7 +53,7 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
         favoriteUpdateStore: FavoriteUpdateStore = FavoriteUpdateStore(),
         readingProgressStore: ReadingProgressStore? = nil,
         contentCoverStore: ContentCoverStore = ContentCoverStore(),
-        readerCacheStore: ReaderCacheStore? = nil,
+        readerCacheStore: NovelReaderProjectionStore? = nil,
         favoriteBackgroundImageStore: FavoriteBackgroundImageStore? = nil,
         mangaDirectoryStore: (any MangaDirectoryPersisting & MangaDirectoryStorageReporting & MangaDirectoryClearing)? = nil,
         mangaDirectorySearchCooldownState: MangaDirectorySearchCooldownState = MangaDirectorySearchCooldownState(),
@@ -91,7 +91,7 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
         self.favoriteUpdateStore = favoriteUpdateStore
         self.readingProgressStore = readingProgressStore ?? ReadingProgressStore(databasePool: resolvedGRDBDatabasePool)
         self.contentCoverStore = contentCoverStore
-        self.readerCacheStore = readerCacheStore ?? ReaderCacheStore(
+        self.readerCacheStore = readerCacheStore ?? NovelReaderProjectionStore(
             diskCacheStore: diskCacheStore
         )
         self.favoriteBackgroundImageStore = favoriteBackgroundImageStore ?? FavoriteBackgroundImageStore(
@@ -265,7 +265,7 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
             cookie: sessionState.cookie,
             userAgent: sessionState.userAgent
         )
-        return YamiboMangaReaderProjectionLoader(
+        return MangaReaderProjectionLoader(
             client: client,
             projectionStore: mangaReaderProjectionStore,
             forumCacheStore: forumCacheStore,

@@ -3,7 +3,7 @@ import Observation
 import YamiboReaderCore
 
 protocol ForumNovelDocumentLoading: Sendable {
-    func loadPage(_ request: ReaderPageRequest) async throws -> ReaderPageDocument
+    func loadPage(_ request: ReaderPageRequest) async throws -> NovelReaderProjection
 }
 
 extension NovelReaderRepository: ForumNovelDocumentLoading {}
@@ -58,7 +58,7 @@ struct ForumNovelDetailHeaderSummary: Equatable, Sendable {
 @MainActor
 @Observable
 final class ForumNovelDetailViewModel {
-    var document: ReaderPageDocument?
+    var document: NovelReaderProjection?
     var threadPage: ForumThreadPage?
     var chapters: [ForumNovelChapterSummary] = []
     var chapterSections: [ForumNovelChapterSection] = []
@@ -515,7 +515,7 @@ final class ForumNovelDetailViewModel {
             view: pageNumber,
             authorID: resolvedAuthorID
         )
-        guard let document = try? ReaderHTMLParser.parseDocument(
+        guard let document = try? ReaderHTMLParser.parseProjection(
             threadPage: page,
             request: request,
             authorID: resolvedAuthorID

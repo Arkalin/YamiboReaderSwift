@@ -1258,8 +1258,8 @@ private func makeNovelDetailThreadPage(
 }
 
 private struct FakeForumNovelDocumentLoader: ForumNovelDocumentLoading {
-    func loadPage(_ request: ReaderPageRequest) async throws -> ReaderPageDocument {
-        ReaderPageDocument(
+    func loadPage(_ request: ReaderPageRequest) async throws -> NovelReaderProjection {
+        NovelReaderProjection(
             threadID: request.threadID,
             view: request.view,
             maxView: 1,
@@ -1275,7 +1275,7 @@ private struct FakeForumNovelDocumentLoader: ForumNovelDocumentLoading {
 private struct FailingForumNovelDocumentLoader: ForumNovelDocumentLoading {
     let error: Error
 
-    func loadPage(_: ReaderPageRequest) async throws -> ReaderPageDocument {
+    func loadPage(_: ReaderPageRequest) async throws -> NovelReaderProjection {
         throw error
     }
 }

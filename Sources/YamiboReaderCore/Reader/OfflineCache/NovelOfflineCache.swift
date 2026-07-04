@@ -5,7 +5,7 @@ public struct NovelOfflineCacheEntry: Codable, Hashable, Identifiable, Sendable 
 
     public var ownerTitle: String
     public var title: String
-    public var document: ReaderPageDocument
+    public var document: NovelReaderProjection
     public var imageURLs: [URL]
     public var updatedAt: Date
 
@@ -20,7 +20,7 @@ public struct NovelOfflineCacheEntry: Codable, Hashable, Identifiable, Sendable 
     public init(
         ownerTitle: String,
         title: String? = nil,
-        document: ReaderPageDocument,
+        document: NovelReaderProjection,
         imageURLs: [URL] = [],
         updatedAt: Date = .now
     ) {
@@ -34,7 +34,7 @@ public struct NovelOfflineCacheEntry: Codable, Hashable, Identifiable, Sendable 
         self.updatedAt = updatedAt
     }
 
-    public static func entryKey(document: ReaderPageDocument) -> String {
+    public static func entryKey(document: NovelReaderProjection) -> String {
         entryKey(
             threadID: document.threadID,
             view: document.view,
@@ -43,7 +43,7 @@ public struct NovelOfflineCacheEntry: Codable, Hashable, Identifiable, Sendable 
         )
     }
 
-    public static func groupKey(document: ReaderPageDocument) -> String {
+    public static func groupKey(document: NovelReaderProjection) -> String {
         groupKey(
             threadID: document.threadID,
             authorID: document.resolvedAuthorID,
@@ -92,7 +92,7 @@ public struct NovelOfflineCacheEntry: Codable, Hashable, Identifiable, Sendable 
         ].joined(separator: "_")
     }
 
-    public static func defaultTitle(document: ReaderPageDocument) -> String {
+    public static func defaultTitle(document: NovelReaderProjection) -> String {
         L10n.string("reader.page_number_spaced", document.view)
     }
 
@@ -251,11 +251,11 @@ public struct NovelOfflineCacheViewsSnapshot: Codable, Hashable, Sendable {
 
 public struct NovelOfflineCachePreparedSourcePage: Sendable {
     public var sourcePage: ForumThreadPage
-    public var document: ReaderPageDocument
+    public var projection: NovelReaderProjection
 
-    public init(sourcePage: ForumThreadPage, document: ReaderPageDocument) {
+    public init(sourcePage: ForumThreadPage, projection: NovelReaderProjection) {
         self.sourcePage = sourcePage
-        self.document = document
+        self.projection = projection
     }
 }
 

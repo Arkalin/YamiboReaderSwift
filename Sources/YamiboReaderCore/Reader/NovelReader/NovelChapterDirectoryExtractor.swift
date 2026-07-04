@@ -26,7 +26,7 @@ package struct NovelChapterDirectoryEntry: Hashable, Sendable {
 
 package enum NovelChapterDirectoryExtractor {
     package static func entries(
-        from document: ReaderPageDocument,
+        from document: NovelReaderProjection,
         settings: ReaderAppearanceSettings
     ) -> [NovelChapterDirectoryEntry] {
         var seenIdentities: Set<NovelChapterIdentity> = []

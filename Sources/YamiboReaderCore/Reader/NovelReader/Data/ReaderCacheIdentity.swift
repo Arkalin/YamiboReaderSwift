@@ -46,12 +46,12 @@ public struct ReaderCacheIdentity: Hashable, Codable, Sendable {
         )
     }
 
-    public init(document: ReaderPageDocument) {
+    public init(projection: NovelReaderProjection) {
         self.init(
-            threadID: document.threadID,
-            view: document.view,
-            authorID: document.resolvedAuthorID,
-            contentSource: document.contentSource
+            threadID: projection.threadID,
+            view: projection.view,
+            authorID: projection.resolvedAuthorID,
+            contentSource: projection.contentSource
         )
     }
 

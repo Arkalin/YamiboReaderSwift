@@ -34,7 +34,7 @@ import Testing
 
     try await saveMigratedAppState(appContext: appContext, chapterTID: "7001", imageURL: imageURL)
     try await appContext.readerCacheStore.save(
-        ReaderPageDocument(
+        NovelReaderProjection(
             threadID: "7001",
             view: 1,
             maxView: 1,
@@ -100,7 +100,7 @@ import Testing
 
     try await saveMigratedAppState(appContext: appContext, chapterTID: "7002", imageURL: imageURL)
     try await appContext.readerCacheStore.save(
-        ReaderPageDocument(
+        NovelReaderProjection(
             threadID: "7002",
             view: 1,
             maxView: 1,

@@ -327,7 +327,7 @@ private final class NovelInlineImageRequestCounter: @unchecked Sendable {
 private func makeNovelInlineImageOfflineEntry(threadID: String, imageURLs: [URL]) -> NovelOfflineCacheEntry {
     NovelOfflineCacheEntry(
         ownerTitle: "测试小说",
-        document: ReaderPageDocument(
+        document: NovelReaderProjection(
             threadID: threadID,
             view: 1,
             maxView: 1,

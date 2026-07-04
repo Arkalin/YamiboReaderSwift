@@ -5,7 +5,7 @@ import XCTest
 
 #if canImport(UIKit)
 private typealias NovelTextLayoutFixture = (
-    ReaderPageDocument,
+    NovelReaderProjection,
     ReaderAppearanceSettings,
     ReaderContainerLayout
 ) throws -> NovelTextLayoutResult
@@ -207,7 +207,7 @@ final class NovelReadingWorkflowTests: XCTestCase {
     func testVerticalDisplayReferencePositionsLaterChunkStartNearSurfaceTop() async throws {
         let threadID = "9188"
         let text = String(repeating: "最终得出的结论，利用对方的体重来刺穿喉咙是最有效率的。", count: 160)
-        let document = ReaderPageDocument(
+        let document = NovelReaderProjection(
             threadID: threadID,
             view: 1,
             maxView: 1,
@@ -260,7 +260,7 @@ final class NovelReadingWorkflowTests: XCTestCase {
     func testVerticalPresentationUsesFrozenChunkHeightsAndOnlySpacesExternalBlocks() async throws {
         let threadID = "9196"
         let imageURL = URL(string: "https://example.com/image.jpg")!
-        let document = ReaderPageDocument(
+        let document = NovelReaderProjection(
             threadID: threadID,
             view: 1,
             maxView: 1,
@@ -336,7 +336,7 @@ final class NovelReadingWorkflowTests: XCTestCase {
 
     func testRuntimeDiagnosticsRecordCompactionAndSurfaceIdentityPreheat() async throws {
         let threadID = "9197"
-        let document = ReaderPageDocument(
+        let document = NovelReaderProjection(
             threadID: threadID,
             view: 1,
             maxView: 1,
@@ -421,7 +421,7 @@ final class NovelReadingWorkflowTests: XCTestCase {
 
     func testRepeatedVerticalViewportSampleDoesNotPublishPresentationRevision() async throws {
         let threadID = "9222"
-        let document = ReaderPageDocument(
+        let document = NovelReaderProjection(
             threadID: threadID,
             view: 1,
             maxView: 1,
@@ -471,7 +471,7 @@ final class NovelReadingWorkflowTests: XCTestCase {
 
     func testTwoPageSpreadReferencesShareRuntimeGeneration() async throws {
         let threadID = "9180"
-        let document = ReaderPageDocument(
+        let document = NovelReaderProjection(
             threadID: threadID,
             view: 1,
             maxView: 1,
@@ -875,7 +875,7 @@ final class NovelReadingWorkflowTests: XCTestCase {
     func testRuntimePreparedTransactionsAreSingleUseAndSupersededByNewerCandidates() throws {
         let runtimeAdapter = TestNovelTextLayoutRuntimeAdapter()
         let runtimeOwner = NovelTextViewportRuntimeOwner(adapter: runtimeAdapter)
-        let document = ReaderPageDocument(
+        let document = NovelReaderProjection(
             threadID: "9190",
             view: 1,
             maxView: 1,
@@ -1521,7 +1521,7 @@ final class NovelReadingWorkflowTests: XCTestCase {
 
     func testExternalBlockViewportMovementPreservesTextOnlyResumeUntilNextTextSample() async throws {
         let threadID = "9154"
-        let document = ReaderPageDocument(
+        let document = NovelReaderProjection(
             threadID: threadID,
             view: 1,
             maxView: 1,
@@ -1660,9 +1660,9 @@ final class NovelReadingWorkflowTests: XCTestCase {
         XCTAssertEqual(afterImage.displayedTextOffset, 64)
     }
 
-    func testNoTextReaderPageDocumentPreservesPreviousTextOnlyResumePoint() async throws {
+    func testNoTextNovelReaderProjectionPreservesPreviousTextOnlyResumePoint() async throws {
         let threadID = "9254"
-        let firstDocument = ReaderPageDocument(
+        let firstDocument = NovelReaderProjection(
             threadID: threadID,
             view: 1,
             maxView: 2,
@@ -1671,7 +1671,7 @@ final class NovelReadingWorkflowTests: XCTestCase {
                 .text("有正文的网页", chapterTitle: "第一章")
             ]
         )
-        let secondDocument = ReaderPageDocument(
+        let secondDocument = NovelReaderProjection(
             threadID: threadID,
             view: 2,
             maxView: 2,
@@ -1889,7 +1889,7 @@ final class NovelReadingWorkflowTests: XCTestCase {
     func testCurrentProgressPositionSurvivesNavigationSettingsAndLayoutChanges() async throws {
         let threadID = "9115"
         let repository = RecordingNovelReadingRepository(documents: [
-            1: ReaderPageDocument(
+            1: NovelReaderProjection(
                 threadID: threadID,
                 view: 1,
                 maxView: 1,
@@ -1946,7 +1946,7 @@ final class NovelReadingWorkflowTests: XCTestCase {
 
     func testPreviewSourceTextStartsAtRestoredNovelReadingPosition() async throws {
         let threadID = "9113"
-        let document = ReaderPageDocument(
+        let document = NovelReaderProjection(
             threadID: threadID,
             view: 1,
             maxView: 1,
@@ -1993,7 +1993,7 @@ final class NovelReadingWorkflowTests: XCTestCase {
 
     func testPreviewSourceTextFollowsVerticalViewportMovement() async throws {
         let threadID = "9114"
-        let document = ReaderPageDocument(
+        let document = NovelReaderProjection(
             threadID: threadID,
             view: 1,
             maxView: 1,
@@ -2081,7 +2081,7 @@ final class NovelReadingWorkflowTests: XCTestCase {
         let threadID = "9193"
         let imageURL = URL(string: "https://example.com/only-image.jpg")!
         let repository = RecordingNovelReadingRepository(documents: [
-            1: ReaderPageDocument(
+            1: NovelReaderProjection(
                 threadID: threadID,
                 view: 1,
                 maxView: 1,
@@ -2343,7 +2343,7 @@ final class NovelReadingWorkflowTests: XCTestCase {
     func testLongCurrentWebpageViewportPublishesExactIndexAndRestoresAcrossReaderChanges() async throws {
         let threadID = "1520"
         let chapterTitles = (1...6).map { "第\($0)章" }
-        let document = ReaderPageDocument(
+        let document = NovelReaderProjection(
             threadID: threadID,
             view: 1,
             maxView: 1,
@@ -2579,16 +2579,16 @@ private final class RecordingNovelReadingRepository: NovelReadingPageRepository,
         var contentSource: ReaderContentSource?
     }
 
-    private let documents: [Int: ReaderPageDocument]
-    private let loadSources: [Int: NovelReaderPageLoadSource]
+    private let documents: [Int: NovelReaderProjection]
+    private let loadSources: [Int: NovelReaderProjectionLoadSource]
     private let failingViews: Set<Int>
     private(set) var loadRequests: [ReaderPageRequest] = []
     private(set) var ignoringCacheRequests: [ReaderPageRequest] = []
     private(set) var deletedViews: [DeletedViews] = []
 
     init(
-        documents: [Int: ReaderPageDocument],
-        loadSources: [Int: NovelReaderPageLoadSource] = [:],
+        documents: [Int: NovelReaderProjection],
+        loadSources: [Int: NovelReaderProjectionLoadSource] = [:],
         failingViews: Set<Int> = []
     ) {
         self.documents = documents
@@ -2596,22 +2596,22 @@ private final class RecordingNovelReadingRepository: NovelReadingPageRepository,
         self.failingViews = failingViews
     }
 
-    func loadPage(_ request: ReaderPageRequest) async throws -> ReaderPageDocument {
+    func loadPage(_ request: ReaderPageRequest) async throws -> NovelReaderProjection {
         loadRequests.append(request)
         return try document(for: request)
     }
 
-    func loadPageIgnoringCache(_ request: ReaderPageRequest) async throws -> ReaderPageDocument {
+    func loadPageIgnoringCache(_ request: ReaderPageRequest) async throws -> NovelReaderProjection {
         ignoringCacheRequests.append(request)
         return try document(for: request)
     }
 
-    func loadPageResult(_ request: ReaderPageRequest) async throws -> NovelReaderPageLoad {
+    func loadPageResult(_ request: ReaderPageRequest) async throws -> NovelReaderProjectionLoad {
         loadRequests.append(request)
         return try load(for: request)
     }
 
-    func loadPageIgnoringCacheResult(_ request: ReaderPageRequest) async throws -> NovelReaderPageLoad {
+    func loadPageIgnoringCacheResult(_ request: ReaderPageRequest) async throws -> NovelReaderProjectionLoad {
         ignoringCacheRequests.append(request)
         return try load(for: request)
     }
@@ -2638,19 +2638,19 @@ private final class RecordingNovelReadingRepository: NovelReadingPageRepository,
         ))
     }
 
-    private func document(for request: ReaderPageRequest) throws -> ReaderPageDocument {
-        try load(for: request).document
+    private func document(for request: ReaderPageRequest) throws -> NovelReaderProjection {
+        try load(for: request).projection
     }
 
-    private func load(for request: ReaderPageRequest) throws -> NovelReaderPageLoad {
+    private func load(for request: ReaderPageRequest) throws -> NovelReaderProjectionLoad {
         if failingViews.contains(request.view) {
             throw URLError(.cannotLoadFromNetwork)
         }
         guard let document = documents[request.view] else {
             throw URLError(.badServerResponse)
         }
-        return NovelReaderPageLoad(
-            document: document,
+        return NovelReaderProjectionLoad(
+            projection: document,
             source: loadSources[request.view] ?? .online
         )
     }
@@ -2662,8 +2662,8 @@ private func makeNovelDocument(
     maxView: Int,
     authorID: String? = nil,
     contentSource: ReaderContentSource = .authorFilteredPage
-) -> ReaderPageDocument {
-    ReaderPageDocument(
+) -> NovelReaderProjection {
+    NovelReaderProjection(
         threadID: threadID,
         view: view,
         maxView: maxView,
@@ -2681,8 +2681,8 @@ private func makeSegmentedNovelDocument(
     maxView: Int,
     authorID: String? = nil,
     segmentCount: Int
-) -> ReaderPageDocument {
-    ReaderPageDocument(
+) -> NovelReaderProjection {
+    NovelReaderProjection(
         threadID: threadID,
         view: view,
         maxView: maxView,
@@ -2788,7 +2788,7 @@ private func viewportTestPage(
 }
 
 private func previewSourcePagination(
-    document: ReaderPageDocument,
+    document: NovelReaderProjection,
     settings: ReaderAppearanceSettings,
     layout: ReaderContainerLayout
 ) -> NovelTextLayoutResult {
@@ -2922,7 +2922,7 @@ private func workflowRepaginationRanges(
 }
 
 private func currentWebpageViewportPagination(
-    document: ReaderPageDocument,
+    document: NovelReaderProjection,
     settings: ReaderAppearanceSettings,
     layout: ReaderContainerLayout
 ) throws -> NovelTextLayoutResult {

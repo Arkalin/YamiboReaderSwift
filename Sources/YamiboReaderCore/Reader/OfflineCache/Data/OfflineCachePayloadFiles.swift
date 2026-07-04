@@ -271,11 +271,11 @@ extension OfflineCacheStore {
     private static func projectionDocument(
         from sourcePage: ForumThreadPage,
         request: NovelOfflineCacheWorkRequest
-    ) throws -> ReaderPageDocument {
+    ) throws -> NovelReaderProjection {
         let authorID = request.authorID
             ?? sourcePage.posts.first?.author.uid?.mangaReaderTrimmedNonEmpty
             ?? "offline"
-        return try ReaderHTMLParser.parseDocument(
+        return try ReaderHTMLParser.parseProjection(
             threadPage: sourcePage,
             request: ReaderPageRequest(
                 threadID: request.threadID,
@@ -288,7 +288,7 @@ extension OfflineCacheStore {
         )
     }
 
-    static func syntheticSourcePage(from document: ReaderPageDocument) -> ForumThreadPage {
+    static func syntheticSourcePage(from document: NovelReaderProjection) -> ForumThreadPage {
         let thread = ThreadIdentity(tid: document.threadID)
         let authorID = document.resolvedAuthorID?.mangaReaderTrimmedNonEmpty ?? "offline"
         let posts = document.segments.enumerated().map { index, segment in

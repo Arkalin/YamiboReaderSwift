@@ -678,7 +678,7 @@ final class SystemSettingsViewModelTests: XCTestCase {
 private struct SystemSettingsFixture {
     let appContext: YamiboAppContext
     let settingsStore: SettingsStore
-    let readerCacheStore: ReaderCacheStore
+    let readerCacheStore: NovelReaderProjectionStore
     let favoriteBackgroundImageStore: FavoriteBackgroundImageStore
     let mangaDirectoryStore: MangaDirectoryStore
     let mangaReaderProjectionStore: MangaReaderProjectionStore
@@ -694,7 +694,7 @@ private func makeFixture() throws -> SystemSettingsFixture {
         .appendingPathComponent("system-settings-view-model-\(UUID().uuidString)", isDirectory: true)
     let settingsStore = SettingsStore(defaults: try makeDefaults(suiteName: suiteName), key: "settings")
     let database = try YamiboDatabase.openPool(rootDirectory: root.appendingPathComponent("grdb", isDirectory: true))
-    let readerCacheStore = ReaderCacheStore(
+    let readerCacheStore = NovelReaderProjectionStore(
         databasePool: database,
         baseDirectory: root.appendingPathComponent("reader-cache", isDirectory: true)
     )
@@ -795,7 +795,7 @@ private func makeNovelOfflineCacheEntry(
     return NovelOfflineCacheEntry(
         ownerTitle: ownerTitle,
         title: "第\(view)页",
-        document: ReaderPageDocument(
+        document: NovelReaderProjection(
             threadID: tid,
             view: view,
             maxView: max(2, view),
@@ -809,7 +809,7 @@ private func makeNovelOfflineCacheEntry(
 
 private func seedNovelCache(_ fixture: SystemSettingsFixture) async throws {
     try await fixture.readerCacheStore.save(
-        ReaderPageDocument(
+        NovelReaderProjection(
             threadID: "900",
             view: 1,
             maxView: 1,
