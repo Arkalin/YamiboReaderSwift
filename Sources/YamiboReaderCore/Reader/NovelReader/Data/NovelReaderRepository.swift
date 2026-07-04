@@ -49,7 +49,7 @@ public actor NovelReaderRepository {
         guard current.view < current.maxView else { return }
 
         let nextRequest = ReaderPageRequest(
-            threadURL: request.threadURL,
+            threadID: request.threadID,
             view: current.view + 1,
             authorID: current.resolvedAuthorID ?? request.authorID
         )
@@ -57,62 +57,66 @@ public actor NovelReaderRepository {
     }
 
     public func cachedViews(
-        for threadURL: URL,
+        for threadID: String,
         authorID: String?,
         contentSource: ReaderContentSource?
     ) async -> Set<Int> {
-        let projectionViews = await cacheStore.cachedViews(for: threadURL, authorID: authorID, contentSource: contentSource)
+        let normalizedThreadID = Self.normalizedThreadID(threadID)
+        let projectionViews = await cacheStore.cachedViews(for: normalizedThreadID, authorID: authorID, contentSource: contentSource)
         guard (contentSource ?? (normalizedAuthorID(authorID) == nil ? .fallbackUnfilteredPage : .authorFilteredPage)) == .authorFilteredPage,
-              let normalizedAuthorID = normalizedAuthorID(authorID),
-              let thread = threadIdentity(from: threadURL) else {
+              let normalizedAuthorID = normalizedAuthorID(authorID) else {
             return projectionViews
         }
+        let thread = ThreadIdentity(tid: normalizedThreadID)
         let sourceViews = await forumCacheStore.cachedThreadPageViews(thread: thread, authorID: normalizedAuthorID)
         return projectionViews.intersection(sourceViews)
     }
 
     public func deleteCachedViews(
         _ views: Set<Int>,
-        for threadURL: URL,
+        for threadID: String,
         authorID: String?,
         contentSource: ReaderContentSource?
     ) async throws {
+        let normalizedThreadID = Self.normalizedThreadID(threadID)
         let source = contentSource ?? (normalizedAuthorID(authorID) == nil ? .fallbackUnfilteredPage : .authorFilteredPage)
-        try await cacheStore.deleteViews(views, for: threadURL, authorID: authorID, contentSource: source)
+        try await cacheStore.deleteViews(views, for: normalizedThreadID, authorID: authorID, contentSource: source)
         if source == .authorFilteredPage,
-           let normalizedAuthorID = normalizedAuthorID(authorID),
-           let thread = threadIdentity(from: threadURL) {
+           let normalizedAuthorID = normalizedAuthorID(authorID) {
+            let thread = ThreadIdentity(tid: normalizedThreadID)
             try await forumCacheStore.deleteThreadPages(views, thread: thread, authorID: normalizedAuthorID)
         }
     }
 
     public func refreshCachedViews(
         _ views: Set<Int>,
-        for threadURL: URL,
+        for threadID: String,
         authorID: String?,
         contentSource: ReaderContentSource?
     ) async throws {
+        let normalizedThreadID = Self.normalizedThreadID(threadID)
         let targets = views.isEmpty
-            ? await cachedViews(for: threadURL, authorID: authorID, contentSource: contentSource)
+            ? await cachedViews(for: normalizedThreadID, authorID: authorID, contentSource: contentSource)
             : views
-        try await cacheStore.deleteViews(targets, for: threadURL, authorID: authorID, contentSource: .authorFilteredPage)
-        if let authorID = normalizedAuthorID(authorID),
-           let thread = threadIdentity(from: threadURL) {
+        try await cacheStore.deleteViews(targets, for: normalizedThreadID, authorID: authorID, contentSource: .authorFilteredPage)
+        if let authorID = normalizedAuthorID(authorID) {
+            let thread = ThreadIdentity(tid: normalizedThreadID)
             try await forumCacheStore.deleteThreadPages(targets, thread: thread, authorID: authorID)
         }
         for view in targets.sorted() {
-            let request = ReaderPageRequest(threadURL: threadURL, view: view, authorID: authorID)
+            let request = ReaderPageRequest(threadID: normalizedThreadID, view: view, authorID: authorID)
             _ = try await loadPage(request, ignoresCache: true)
         }
     }
 
     public func cacheViews(
         _ views: Set<Int>,
-        for threadURL: URL,
+        for threadID: String,
         authorID: String?,
         contentSource: ReaderContentSource?,
         progress: (@Sendable (ReaderCacheBatchProgress) async -> Void)? = nil
     ) async -> ReaderCacheBatchResult {
+        let normalizedThreadID = Self.normalizedThreadID(threadID)
         let targets = views.sorted()
         guard !targets.isEmpty else {
             let result = ReaderCacheBatchResult(totalCount: 0, completedViews: [], failedViews: [], wasCancelled: false)
@@ -137,7 +141,7 @@ public actor NovelReaderRepository {
                 break
             }
 
-            let request = ReaderPageRequest(threadURL: threadURL, view: view, authorID: authorID)
+            let request = ReaderPageRequest(threadID: normalizedThreadID, view: view, authorID: authorID)
             do {
                 _ = try await loadPageIgnoringCache(request)
                 completedViews.append(view)
@@ -195,21 +199,16 @@ public actor NovelReaderRepository {
         _ request: NovelOfflineCacheWorkRequest
     ) async throws -> NovelOfflineCachePreparedSourcePage {
         let readerRequest = ReaderPageRequest(
-            threadURL: request.threadURL,
+            threadID: request.threadID,
             view: request.view,
             authorID: request.authorID
         )
-        let thread = try requireThreadIdentity(from: request.threadURL)
+        let thread = ThreadIdentity(tid: request.threadID)
         let onlinePage = try await loadOnlinePage(readerRequest, thread: thread, ignoresCache: true)
         return NovelOfflineCachePreparedSourcePage(
             sourcePage: onlinePage.sourcePage,
             document: onlinePage.document
         )
-    }
-
-    public func fetchThreadDisplayTitle(for threadURL: URL, authorID: String? = nil) async throws -> String {
-        let thread = try requireThreadIdentity(from: threadURL)
-        return try await fetchThreadDisplayTitle(threadID: thread.tid, authorID: authorID)
     }
 
     public func fetchThreadDisplayTitle(threadID: String, authorID: String? = nil) async throws -> String {
@@ -221,7 +220,7 @@ public actor NovelReaderRepository {
     }
 
     private func loadPage(_ request: ReaderPageRequest, ignoresCache: Bool) async throws -> NovelReaderPageLoad {
-        let thread = try requireThreadIdentity(from: request.threadURL)
+        let thread = ThreadIdentity(tid: request.threadID)
         do {
             let onlinePage = try await loadOnlinePage(request, thread: thread, ignoresCache: ignoresCache)
             await autoRefreshNovelOfflineCacheIfNeeded(onlinePage)
@@ -254,11 +253,11 @@ public actor NovelReaderRepository {
         )
         let fingerprint = Self.projectionFingerprint(
             page: sourceLoad.page,
-            threadURL: thread.canonicalURL,
+            threadID: thread.tid,
             view: request.view,
             authorID: authorID
         )
-        let projectedRequest = ReaderPageRequest(threadURL: request.threadURL, view: request.view, authorID: authorID)
+        let projectedRequest = ReaderPageRequest(threadID: request.threadID, view: request.view, authorID: authorID)
 
         if !ignoresCache,
            let cached = await cacheStore.loadDocument(for: projectedRequest, contentSource: .authorFilteredPage),
@@ -333,7 +332,7 @@ public actor NovelReaderRepository {
             try? await forumCacheStore.saveThreadPage(discoveryPage, thread: thread, pageNumber: 1, authorID: nil)
             if let onlyAuthorID = ReaderHTMLParser.extractOnlyAuthorID(
                 from: html,
-                request: ReaderPageRequest(threadURL: thread.canonicalURL, view: 1)
+                request: ReaderPageRequest(threadID: thread.tid, view: 1)
             ) {
                 return onlyAuthorID
             }
@@ -382,7 +381,7 @@ public actor NovelReaderRepository {
         let normalizedRequestAuthorID = normalizedAuthorID(authorID)
         let contentSource: ReaderContentSource = normalizedRequestAuthorID == nil ? .fallbackUnfilteredPage : .authorFilteredPage
         guard let sourceSnapshot = await offlineCacheStore.novelOfflineSourcePageSnapshot(
-            threadURL: thread.canonicalURL,
+            threadID: thread.tid,
             view: request.view,
             authorID: normalizedRequestAuthorID,
             contentSource: contentSource
@@ -395,12 +394,12 @@ public actor NovelReaderRepository {
 
         let fingerprint = Self.projectionFingerprint(
             page: sourceSnapshot.sourcePage,
-            threadURL: thread.canonicalURL,
+            threadID: thread.tid,
             view: request.view,
             authorID: effectiveAuthorID
         )
         let projectedRequest = ReaderPageRequest(
-            threadURL: request.threadURL,
+            threadID: request.threadID,
             view: request.view,
             authorID: effectiveAuthorID
         )
@@ -438,7 +437,7 @@ public actor NovelReaderRepository {
             return
         }
         guard let existing = await offlineCacheStore.novelOfflineSourcePageSnapshot(
-            threadURL: onlinePage.thread.canonicalURL,
+            threadID: onlinePage.thread.tid,
             view: onlinePage.document.view,
             authorID: onlinePage.authorID,
             contentSource: .authorFilteredPage
@@ -450,7 +449,7 @@ public actor NovelReaderRepository {
         let request = NovelOfflineCacheWorkRequest(
             ownerTitle: existing.ownerTitle,
             title: NovelOfflineCacheEntry.defaultTitle(document: onlinePage.document),
-            threadURL: onlinePage.thread.canonicalURL,
+            threadID: onlinePage.thread.tid,
             view: onlinePage.document.view,
             authorID: onlinePage.authorID,
             contentSource: .authorFilteredPage,
@@ -515,32 +514,25 @@ public actor NovelReaderRepository {
         return urls
     }
 
-    private func requireThreadIdentity(from threadURL: URL) throws -> ThreadIdentity {
-        guard let thread = threadIdentity(from: threadURL) else {
-            throw YamiboError.parsingFailed(context: L10n.string("context.thread_page"))
-        }
-        return thread
-    }
-
-    private func threadIdentity(from threadURL: URL) -> ThreadIdentity? {
-        let canonicalURL = ReaderCacheIdentity.canonicalThreadURL(from: threadURL)
-        guard let tid = ReaderHTMLParser.extractThreadID(from: canonicalURL) else { return nil }
-        return ThreadIdentity(tid: tid, canonicalURL: canonicalURL)
-    }
-
     private func normalizedAuthorID(_ authorID: String?) -> String? {
         let value = authorID?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return value.isEmpty ? nil : value
     }
 
+    private static func normalizedThreadID(_ threadID: String) -> String {
+        let value = threadID.trimmingCharacters(in: .whitespacesAndNewlines)
+        precondition(!value.isEmpty, "NovelReaderRepository requires a Yamibo thread tid")
+        return value
+    }
+
     private static func projectionFingerprint(
         page: ForumThreadPage,
-        threadURL: URL,
+        threadID: String,
         view: Int,
         authorID: String
     ) -> String {
         let value = [
-            threadURL.absoluteString,
+            threadID.trimmingCharacters(in: .whitespacesAndNewlines),
             String(max(1, view)),
             authorID,
             page.posts.map { post in

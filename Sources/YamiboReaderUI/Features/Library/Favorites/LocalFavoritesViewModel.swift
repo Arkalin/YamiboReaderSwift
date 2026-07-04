@@ -1233,7 +1233,7 @@ final class LocalFavoritesViewModel: ObservableObject {
 
     private func favoriteUpdateCandidates(in document: FavoriteLibraryDocument) -> [FavoriteItem] {
         document.items.filter { item in
-            item.target.canonicalURL != nil && (item.target.kind == .normalThread || item.target.kind == .novelThread)
+            item.target.threadID != nil && (item.target.kind == .normalThread || item.target.kind == .novelThread)
         }
     }
 
@@ -1370,8 +1370,8 @@ final class LocalFavoritesViewModel: ObservableObject {
             if let favoriteUpdatePageFetcher {
                 return try await favoriteUpdatePageFetcher(item)
             }
-            guard let url = item.target.canonicalURL,
-                  let tid = item.target.threadID else {
+            guard let tid = item.target.threadID,
+                  let url = threadURL(for: item.target) else {
                 return nil
             }
             let repository = await appContext.makeForumThreadReaderRepository()
@@ -1483,13 +1483,12 @@ final class LocalFavoritesViewModel: ObservableObject {
 
         let progress = await progressRecord(for: latestItem)
         switch latestItem.target {
-        case .novelThread:
-            guard let canonicalURL = latestItem.target.canonicalURL else { return nil }
+        case let .novelThread(threadID):
             let novel = progress?.novel
             let resumePoint = mode == .start ? nil : novel?.novelResumePoint
             return .reader(
                 ReaderLaunchContext(
-                    threadURL: canonicalURL,
+                    threadID: threadID,
                     threadTitle: latestItem.resolvedDisplayTitle,
                     source: .favorites,
                     initialView: mode == .start ? 1 : (resumePoint?.view ?? novel?.lastView),
@@ -1498,8 +1497,8 @@ final class LocalFavoritesViewModel: ObservableObject {
                 )
             )
         case .normalThread:
-            guard let canonicalURL = latestItem.target.canonicalURL else { return nil }
-            return .nativeThread(url: canonicalURL, title: latestItem.resolvedDisplayTitle)
+            guard let url = threadURL(for: latestItem.target) else { return nil }
+            return .nativeThread(url: url, title: latestItem.resolvedDisplayTitle)
         case let .mangaTitle(_, cleanBookName):
             guard let chapterURL = mode == .start
                 ? latestItem.mangaChapterMetadata?.chapterURL
@@ -1526,16 +1525,19 @@ final class LocalFavoritesViewModel: ObservableObject {
     }
 
     private func progressRecord(for item: FavoriteItem) async -> ReadingProgressRecord? {
-        if let progress = await appContext.readingProgressStore.load(for: item.target) {
-            return progress
+        switch item.target {
+        case let .normalThread(threadID), let .novelThread(threadID):
+            return await appContext.readingProgressStore.load(threadID: threadID)
+        case .mangaTitle:
+            if let progress = await appContext.readingProgressStore.load(for: item.target) {
+                return progress
+            }
+            if let url = item.mangaChapterMetadata?.chapterURL {
+                guard let threadID = YamiboThreadURLCanonicalizer.threadID(from: url) else { return nil }
+                return await appContext.readingProgressStore.load(threadID: threadID)
+            }
+            return nil
         }
-        if let url = item.target.canonicalURL {
-            return await appContext.readingProgressStore.load(for: url)
-        }
-        if let url = item.mangaChapterMetadata?.chapterURL {
-            return await appContext.readingProgressStore.load(for: url)
-        }
-        return nil
     }
 
     private func rebuildCards() {
@@ -1611,7 +1613,7 @@ final class LocalFavoritesViewModel: ObservableObject {
                !remoteFavoriteID.isEmpty {
                 return true
             }
-            return item.remoteMapping != nil && item.target.canonicalURL != nil
+            return item.remoteMapping != nil && item.target.threadID != nil
         }
         guard !remoteItems.isEmpty else { return }
         let repository = await appContext.makeFavoriteRepository()
@@ -1626,7 +1628,7 @@ final class LocalFavoritesViewModel: ObservableObject {
            !remoteFavoriteID.isEmpty {
             return remoteFavoriteID
         }
-        guard let threadURL = item.target.canonicalURL else {
+        guard let threadURL = threadURL(for: item.target) else {
             throw YamiboError.missingFavoriteDeleteID
         }
         if let remoteFavorite = try await repository.remoteFavorite(for: threadURL, maxPages: 30),
@@ -1635,6 +1637,11 @@ final class LocalFavoritesViewModel: ObservableObject {
             return remoteFavoriteID
         }
         throw YamiboError.missingFavoriteDeleteID
+    }
+
+    private func threadURL(for target: FavoriteContentTarget) -> URL? {
+        guard let threadID = target.threadID else { return nil }
+        return YamiboRoute.threadByID(tid: threadID, page: 1, authorID: nil, reverse: false).url
     }
 
     private func contentCoverURLs(for items: [FavoriteItem]) async -> [String: URL] {
@@ -1889,12 +1896,12 @@ final class LocalFavoritesViewModel: ObservableObject {
         switch try await resolver.resolve(threadURL: url, title: title) {
         case let .novel(context):
             let metadata = await threadMetadata(
-                for: context.threadURL,
+                forThreadID: context.threadID,
                 title: context.threadTitle,
                 repository: coverRepository
             )
             return FavoriteThreadProbeResult(
-                target: FavoriteContentTarget(kind: .novelThread, threadURL: context.threadURL),
+                target: .novelThread(threadID: context.threadID),
                 title: context.threadTitle,
                 sourceGroup: metadata.sourceGroup,
                 coverURL: metadata.coverURL,
@@ -1913,13 +1920,17 @@ final class LocalFavoritesViewModel: ObservableObject {
             )
         case let .web(url):
             let resolvedTitle = title ?? L10n.string("forum.default_title")
+            let canonicalURL = ReaderModeDetector.canonicalThreadURL(from: url) ?? url
+            guard let threadID = YamiboThreadURLCanonicalizer.threadID(from: canonicalURL) else {
+                throw YamiboError.missingFavoriteThreadID
+            }
             let metadata = await threadMetadata(
-                for: url,
+                for: canonicalURL,
                 title: resolvedTitle,
                 repository: coverRepository
             )
             return FavoriteThreadProbeResult(
-                target: FavoriteContentTarget(kind: .normalThread, threadURL: url),
+                target: .normalThread(threadID: threadID),
                 title: resolvedTitle,
                 sourceGroup: metadata.sourceGroup,
                 coverURL: metadata.coverURL,
@@ -1938,7 +1949,30 @@ final class LocalFavoritesViewModel: ObservableObject {
             ?? MangaTitleCleaner.extractTid(from: canonicalURL.absoluteString) else {
             return (nil, .unknown, nil)
         }
-        let thread = ThreadIdentity(tid: threadID, canonicalURL: canonicalURL)
+        return await threadMetadata(
+            thread: ThreadIdentity(tid: threadID, canonicalURL: canonicalURL),
+            title: title,
+            repository: repository
+        )
+    }
+
+    private static func threadMetadata(
+        forThreadID threadID: String,
+        title: String,
+        repository: ForumThreadReaderRepository
+    ) async -> (coverURL: URL?, sourceGroup: FavoriteSourceGroup, contentUpdatedAt: Date?) {
+        await threadMetadata(
+            thread: ThreadIdentity(tid: threadID),
+            title: title,
+            repository: repository
+        )
+    }
+
+    private static func threadMetadata(
+        thread: ThreadIdentity,
+        title: String,
+        repository: ForumThreadReaderRepository
+    ) async -> (coverURL: URL?, sourceGroup: FavoriteSourceGroup, contentUpdatedAt: Date?) {
         let cachedFirstPage = await repository.cachedThreadPage(thread: thread, title: title, authorID: nil, page: 1)
         let firstPage: ForumThreadPage?
         if let cachedFirstPage {

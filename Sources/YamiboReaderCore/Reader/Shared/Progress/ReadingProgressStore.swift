@@ -65,21 +65,23 @@ public struct MangaReadingProgressRecord: Codable, Hashable, Sendable {
 
 public struct ReadingProgressRecord: Codable, Hashable, Identifiable, Sendable {
     public var contentTarget: FavoriteContentTarget?
-    public var threadURL: URL
+    public var threadID: String?
     public var kind: ReadingProgressKind
     public var updatedAt: Date
     public var lastReadAt: Date?
     public var novel: NovelReadingProgressRecord?
     public var manga: MangaReadingProgressRecord?
 
-    public var id: String { contentTarget?.id ?? threadURL.absoluteString }
-    public var threadID: String? {
-        contentTarget?.threadID ?? YamiboThreadURLCanonicalizer.threadID(from: threadURL)
+    public var id: String {
+        contentTarget?.id
+            ?? threadID.map { "thread:\($0)" }
+            ?? manga?.chapterThreadID.map { "manga-chapter:\($0)" }
+            ?? "\(kind.rawValue):unidentified"
     }
 
     public init(
         contentTarget: FavoriteContentTarget? = nil,
-        threadURL: URL,
+        threadID: String? = nil,
         kind: ReadingProgressKind,
         updatedAt: Date = .now,
         lastReadAt: Date? = nil,
@@ -87,12 +89,17 @@ public struct ReadingProgressRecord: Codable, Hashable, Identifiable, Sendable {
         manga: MangaReadingProgressRecord? = nil
     ) {
         self.contentTarget = contentTarget
-        self.threadURL = FavoriteLibraryURLIdentity.canonicalThreadURL(from: threadURL)
+        self.threadID = Self.normalizedThreadID(threadID) ?? contentTarget?.threadID
         self.kind = kind
         self.updatedAt = updatedAt
         self.lastReadAt = lastReadAt
         self.novel = novel
         self.manga = manga
+    }
+
+    private static func normalizedThreadID(_ value: String?) -> String? {
+        let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? nil : trimmed
     }
 }
 
@@ -127,10 +134,8 @@ public actor ReadingProgressStore {
         self.database = databasePool
     }
 
-    public func load(for url: URL) async -> ReadingProgressRecord? {
-        guard let threadID = YamiboThreadURLCanonicalizer.threadID(from: Self.canonicalThreadURL(for: url)) else {
-            return nil
-        }
+    public func load(threadID: String) async -> ReadingProgressRecord? {
+        guard let threadID = Self.trimmedNonEmpty(threadID) else { return nil }
         return try? await database.read { db in
             try Self.fetchRecord(
                 in: db,
@@ -188,10 +193,8 @@ public actor ReadingProgressStore {
         try await replaceAll(Array(recordsByKey.values))
     }
 
-    public func delete(for url: URL) async throws {
-        guard let threadID = YamiboThreadURLCanonicalizer.threadID(from: Self.canonicalThreadURL(for: url)) else {
-            return
-        }
+    public func delete(threadID: String) async throws {
+        guard let threadID = Self.trimmedNonEmpty(threadID) else { return }
         try await database.write { db in
             try db.execute(
                 sql: "DELETE FROM reading_progress WHERE thread_id = ? OR manga_chapter_thread_id = ?",
@@ -232,11 +235,10 @@ public actor ReadingProgressStore {
 
     @discardableResult
     public func saveNovel(_ position: NovelReadingPosition, date: Date = .now) async throws -> ReadingProgressRecord {
-        let canonicalURL = Self.canonicalThreadURL(for: position.threadURL)
-        let target = FavoriteContentTarget(kind: .novelThread, threadURL: canonicalURL)
+        let target = FavoriteContentTarget.novelThread(threadID: position.threadID)
         let record = ReadingProgressRecord(
             contentTarget: target,
-            threadURL: canonicalURL,
+            threadID: position.threadID,
             kind: .novel,
             updatedAt: date,
             lastReadAt: date,
@@ -273,14 +275,15 @@ public actor ReadingProgressStore {
         let canonicalURL = Self.canonicalThreadURL(for: position.threadURL)
         let threadID = YamiboThreadURLCanonicalizer.threadID(from: canonicalURL)
             ?? YamiboThreadURLCanonicalizer.threadID(from: position.chapterURL)
-            ?? canonicalURL.absoluteString
+            ?? position.mangaID
+            ?? position.chapterTitle
         let target = FavoriteContentTarget(
             mangaID: "thread:\(threadID)",
             mangaCleanBookName: position.chapterTitle
         )
         let record = ReadingProgressRecord(
             contentTarget: target,
-            threadURL: canonicalURL,
+            threadID: threadID,
             kind: .manga,
             updatedAt: date,
             lastReadAt: date,
@@ -314,7 +317,7 @@ public actor ReadingProgressStore {
         let chapterTID = YamiboThreadURLCanonicalizer.threadID(from: chapterURL)
         let record = ReadingProgressRecord(
             contentTarget: target,
-            threadURL: canonicalThreadURL,
+            threadID: YamiboThreadURLCanonicalizer.threadID(from: canonicalThreadURL) ?? chapterTID,
             kind: .manga,
             updatedAt: date,
             lastReadAt: date,
@@ -403,15 +406,11 @@ public actor ReadingProgressStore {
             mangaID: row["manga_id"] as String?,
             cleanBookName: row["clean_book_name"] as String?
         )
-        let threadURL = target?.canonicalURL
-            ?? threadURL(for: row["thread_id"] as String?)
-            ?? threadURL(for: row["manga_chapter_thread_id"] as String?)
-            ?? URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=0")!
         let novel = try novelRecord(from: row)
         let manga = mangaRecord(from: row)
         return ReadingProgressRecord(
             contentTarget: target,
-            threadURL: threadURL,
+            threadID: row["thread_id"] as String?,
             kind: kind,
             updatedAt: date(from: row["updated_at"]),
             lastReadAt: optionalDate(from: row["last_read_at"] as Double?),
@@ -466,9 +465,10 @@ public actor ReadingProgressStore {
             return nil
         }
         let chapterThreadID = row["manga_chapter_thread_id"] as String?
-        let chapterURL = threadURL(for: chapterThreadID)
-            ?? threadURL(for: row["thread_id"] as String?)
-            ?? URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=0")!
+        guard let chapterURL = threadURL(for: chapterThreadID)
+            ?? threadURL(for: row["thread_id"] as String?) else {
+            return nil
+        }
         return MangaReadingProgressRecord(
             lastMangaURL: chapterURL,
             chapterThreadID: chapterThreadID,
@@ -538,16 +538,21 @@ public actor ReadingProgressStore {
     }
 
     private static func normalizedRecord(_ record: ReadingProgressRecord) -> ReadingProgressRecord {
-        let canonicalURL = canonicalThreadURL(for: record.threadURL)
         let contentTarget: FavoriteContentTarget?
         if record.kind == .novel {
-            contentTarget = record.contentTarget ?? FavoriteContentTarget(kind: .novelThread, threadURL: canonicalURL)
+            if let existing = record.contentTarget {
+                contentTarget = existing
+            } else if let threadID = trimmedNonEmpty(record.threadID) {
+                contentTarget = .novelThread(threadID: threadID)
+            } else {
+                contentTarget = nil
+            }
         } else {
-            contentTarget = record.contentTarget ?? fallbackMangaTarget(for: record, canonicalURL: canonicalURL)
+            contentTarget = record.contentTarget ?? fallbackMangaTarget(for: record)
         }
         return ReadingProgressRecord(
             contentTarget: contentTarget,
-            threadURL: contentTarget?.canonicalURL ?? canonicalURL,
+            threadID: contentTarget?.threadID ?? record.threadID,
             kind: record.kind,
             updatedAt: record.updatedAt,
             lastReadAt: record.lastReadAt,
@@ -556,11 +561,10 @@ public actor ReadingProgressStore {
         )
     }
 
-    private static func fallbackMangaTarget(for record: ReadingProgressRecord, canonicalURL: URL) -> FavoriteContentTarget? {
+    private static func fallbackMangaTarget(for record: ReadingProgressRecord) -> FavoriteContentTarget? {
         guard record.kind == .manga else { return nil }
-        let threadID = YamiboThreadURLCanonicalizer.threadID(from: canonicalURL)
+        let threadID = trimmedNonEmpty(record.threadID)
             ?? record.manga?.chapterThreadID
-            ?? record.manga.flatMap { YamiboThreadURLCanonicalizer.threadID(from: $0.lastMangaURL) }
         guard let threadID else { return nil }
         let name = trimmedNonEmpty(record.manga?.lastChapter) ?? threadID
         return FavoriteContentTarget(mangaID: "thread:\(threadID)", mangaCleanBookName: name)

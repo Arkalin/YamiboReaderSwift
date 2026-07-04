@@ -14,10 +14,9 @@ public enum ReaderHTMLParser {
         }
 
         let context = try ReaderHTMLDOMParser.parse(html: html)
-        let canonicalThreadURL = canonicalThreadURL(from: request.threadURL)
         let parsed = parseSegments(
             from: context,
-            threadURL: canonicalThreadURL,
+            threadID: request.threadID,
             view: request.view,
             contentSource: contentSource
         )
@@ -27,7 +26,7 @@ public enum ReaderHTMLParser {
         }
 
         return ReaderPageDocument(
-            threadURL: canonicalThreadURL,
+            threadID: request.threadID,
             view: request.view,
             maxView: (try? ReaderHTMLDOMParser.parseMaxView(in: context, request: request)) ?? max(1, request.view),
             resolvedAuthorID: extractAuthorID(from: html) ?? request.authorID,
@@ -66,12 +65,11 @@ public enum ReaderHTMLParser {
             throw YamiboError.parsingFailed(context: "小说作者范围")
         }
 
-        let canonicalThreadURL = canonicalThreadURL(from: request.threadURL)
         let html = syntheticReaderHTML(from: threadPage)
         let context = try ReaderHTMLDOMParser.parse(html: html)
         let parsed = parseSegments(
             from: context,
-            threadURL: canonicalThreadURL,
+            threadID: request.threadID,
             view: request.view,
             contentSource: .authorFilteredPage
         )
@@ -80,7 +78,7 @@ public enum ReaderHTMLParser {
         }
 
         return ReaderPageDocument(
-            threadURL: canonicalThreadURL,
+            threadID: request.threadID,
             view: request.view,
             maxView: max(
                 request.view,
@@ -98,13 +96,13 @@ public enum ReaderHTMLParser {
         )
     }
 
-    public static func parseSegments(from html: String) -> ReaderParsedContent {
+    public static func parseSegments(from html: String, threadID: String) -> ReaderParsedContent {
         guard let context = try? ReaderHTMLDOMParser.parse(html: html) else {
             return ReaderParsedContent()
         }
         return parseSegments(
             from: context,
-            threadURL: URL(string: "yamibo-reader://parsed-content")!,
+            threadID: threadID,
             view: 1,
             contentSource: .allPostsPage
         )
@@ -180,7 +178,7 @@ public enum ReaderHTMLParser {
 
     private static func parseSegments(
         from context: ReaderHTMLDOMParser.Context,
-        threadURL: URL,
+        threadID: String,
         view: Int,
         contentSource: ReaderContentSource
     ) -> ReaderParsedContent {
@@ -190,7 +188,7 @@ public enum ReaderHTMLParser {
         return messages.reduce(into: ReaderParsedContent()) { partial, message in
             let chapterIdentity = chapterIdentity(
                 message: message,
-                threadURL: threadURL,
+                threadID: threadID,
                 view: view,
                 contentSource: contentSource,
                 sourceOccurrence: sourceOccurrence
@@ -226,7 +224,7 @@ public enum ReaderHTMLParser {
 
     private static func chapterIdentity(
         message: ReaderHTMLDOMParser.ParsedMessage,
-        threadURL: URL,
+        threadID: String,
         view: Int,
         contentSource: ReaderContentSource,
         sourceOccurrence: Int
@@ -236,7 +234,7 @@ public enum ReaderHTMLParser {
             return NovelChapterIdentity(rawValue: "post:\(ownerPostID)#chapter:0")
         }
         return NovelChapterIdentity(
-            rawValue: "document:\(threadURL.absoluteString)#view:\(max(1, view))#source:\(contentSource.rawValue)#chapter:\(sourceOccurrence)"
+            rawValue: "thread:\(threadID)#view:\(max(1, view))#source:\(contentSource.rawValue)#chapter:\(sourceOccurrence)"
         )
     }
 
@@ -333,10 +331,6 @@ public enum ReaderHTMLParser {
             return nil
         }
         return ReaderCharacterRange(location: 0, length: chapterTitle.count)
-    }
-
-    private static func canonicalThreadURL(from url: URL) -> URL {
-        YamiboThreadURLCanonicalizer.canonicalThreadURL(from: url)
     }
 
     static func extractThreadID(from url: URL) -> String? {

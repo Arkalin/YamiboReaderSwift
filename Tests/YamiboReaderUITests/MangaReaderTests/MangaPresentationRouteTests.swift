@@ -8,7 +8,7 @@ final class MangaPresentationRouteTests: XCTestCase {
         let (appModel, store) = try await makeAppModelWithReaderResumeRouteStore()
         let originalURL = try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=720&mobile=2"))
         let context = ReaderLaunchContext(
-            threadURL: originalURL,
+            threadID: "720",
             threadTitle: "测试小说",
             source: .resume,
             initialView: 3
@@ -56,7 +56,7 @@ final class MangaPresentationRouteTests: XCTestCase {
             readingModeHint: .paged
         )
         let staleContext = ReaderLaunchContext(
-            threadURL: threadURL,
+            threadID: "730",
             threadTitle: "本地小说",
             source: .resume,
             initialView: 1,
@@ -75,8 +75,8 @@ final class MangaPresentationRouteTests: XCTestCase {
             updatedAt: Date(timeIntervalSince1970: 2_000),
             records: [
                 ReadingProgressRecord(
-                    contentTarget: FavoriteContentTarget(kind: .novelThread, threadURL: threadURL),
-                    threadURL: threadURL,
+                    contentTarget: FavoriteContentTarget(kind: .novelThread, threadID: "730"),
+                    threadID: "730",
                     kind: .novel,
                     updatedAt: Date(timeIntervalSince1970: 2_000),
                     lastReadAt: Date(timeIntervalSince1970: 2_000),
@@ -130,7 +130,7 @@ final class MangaPresentationRouteTests: XCTestCase {
         await appModel.bootstrapIfNeeded()
 
         let expectedContext = ReaderLaunchContext(
-            threadURL: threadURL,
+            threadID: "730",
             threadTitle: "本地小说",
             source: .resume,
             initialView: 5,
@@ -163,7 +163,7 @@ final class MangaPresentationRouteTests: XCTestCase {
             records: [
                 ReadingProgressRecord(
                     contentTarget: FavoriteContentTarget(mangaCleanBookName: "本地目录"),
-                    threadURL: originalURL,
+                    threadID: "731",
                     kind: .manga,
                     updatedAt: Date(timeIntervalSince1970: 2_000),
                     lastReadAt: Date(timeIntervalSince1970: 2_000),
@@ -241,7 +241,7 @@ final class MangaPresentationRouteTests: XCTestCase {
             readingModeHint: .vertical
         )
         let localContext = ReaderLaunchContext(
-            threadURL: threadURL,
+            threadID: "734",
             threadTitle: "本地小说",
             source: .resume,
             initialView: 6,
@@ -269,7 +269,7 @@ final class MangaPresentationRouteTests: XCTestCase {
         let (appModel, store) = try await makeAppModelWithReaderResumeRouteStore()
         let originalURL = try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=723&mobile=2"))
         let readerContext = ReaderLaunchContext(
-            threadURL: originalURL,
+            threadID: "723",
             threadTitle: "测试小说",
             source: .favorites,
             initialView: 2
@@ -533,7 +533,7 @@ final class MangaPresentationRouteTests: XCTestCase {
         let appModel = makeIsolatedAppModel(initialTab: .mine)
         let originalURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=703&mobile=2")!
         let context = ReaderLaunchContext(
-            threadURL: originalURL,
+            threadID: "703",
             threadTitle: "测试小说",
             source: .forum
         )
@@ -553,7 +553,7 @@ final class MangaPresentationRouteTests: XCTestCase {
         let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=703&mobile=2")!
         let clipboardURL = URL(string: "https://bbs.yamibo.com/thread-900-1-1.html")!
         let context = ReaderLaunchContext(
-            threadURL: threadURL,
+            threadID: "703",
             threadTitle: "测试小说",
             source: .forum
         )
@@ -573,7 +573,7 @@ final class MangaPresentationRouteTests: XCTestCase {
         let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=703&mobile=2")!
         let clipboardURL = URL(string: "https://bbs.yamibo.com/thread-902-1-1.html")!
         let context = ReaderLaunchContext(
-            threadURL: threadURL,
+            threadID: "703",
             threadTitle: "测试小说",
             source: .forum
         )
@@ -642,7 +642,7 @@ final class MangaPresentationRouteTests: XCTestCase {
         let appModel = makeIsolatedAppModel(initialTab: .mine)
         let originalURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=703&mobile=2")!
         let staleContext = ReaderLaunchContext(
-            threadURL: originalURL,
+            threadID: "703",
             threadTitle: "测试小说",
             source: .favorites,
             initialView: 2
@@ -656,7 +656,7 @@ final class MangaPresentationRouteTests: XCTestCase {
             readingModeHint: .vertical
         )
         let latestContext = ReaderLaunchContext(
-            threadURL: originalURL,
+            threadID: "703",
             threadTitle: "测试小说",
             source: .resume,
             initialView: 4,
@@ -677,7 +677,7 @@ final class MangaPresentationRouteTests: XCTestCase {
         let appModel = makeIsolatedAppModel(initialTab: .favorites)
         let originalURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=703&mobile=2")!
         let staleContext = ReaderLaunchContext(
-            threadURL: originalURL,
+            threadID: "703",
             threadTitle: "测试小说",
             source: .favorites,
             initialView: 2
@@ -691,7 +691,7 @@ final class MangaPresentationRouteTests: XCTestCase {
             readingModeHint: .paged
         )
         let latestContext = ReaderLaunchContext(
-            threadURL: originalURL,
+            threadID: "703",
             threadTitle: "测试小说",
             source: .resume,
             initialView: 5,

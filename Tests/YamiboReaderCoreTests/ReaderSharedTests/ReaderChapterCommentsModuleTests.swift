@@ -266,7 +266,7 @@ private func makeTarget(
     authorID: String? = nil
 ) -> ReaderChapterCommentTarget {
     ReaderChapterCommentTarget(
-        threadURL: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9001&mobile=2")!,
+        threadID: "9001",
         view: 1,
         ownerPostID: ownerPostID,
         title: title,

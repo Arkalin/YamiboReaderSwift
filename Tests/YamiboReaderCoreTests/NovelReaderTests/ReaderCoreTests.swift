@@ -489,7 +489,7 @@ private final class StubURLProtocol: URLProtocol {
     """#
 
     let request = ReaderPageRequest(
-        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=1&mobile=2")),
+        threadID: "1",
         view: 2
     )
     let document = try ReaderHTMLParser.parseDocument(html: html, request: request)
@@ -516,7 +516,7 @@ private final class StubURLProtocol: URLProtocol {
     </html>
     """#
     let request = ReaderPageRequest(
-        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=186&mobile=2")),
+        threadID: "186",
         view: 1
     )
 
@@ -558,7 +558,7 @@ private final class StubURLProtocol: URLProtocol {
     </html>
     """#
     let request = ReaderPageRequest(
-        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=187&mobile=2")),
+        threadID: "187",
         view: 1,
         authorID: "42"
     )
@@ -632,7 +632,7 @@ private final class StubURLProtocol: URLProtocol {
     </html>
     """#
     let request = ReaderPageRequest(
-        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=514442&mobile=2")),
+        threadID: "514442",
         view: 5
     )
 
@@ -676,7 +676,7 @@ private final class StubURLProtocol: URLProtocol {
     </html>
     """#
     let request = ReaderPageRequest(
-        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=201&mobile=2")),
+        threadID: "201",
         view: 1
     )
 
@@ -701,7 +701,7 @@ private final class StubURLProtocol: URLProtocol {
     </html>
     """#
     let request = ReaderPageRequest(
-        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=187&mobile=2")),
+        threadID: "187",
         view: 2
     )
 
@@ -725,7 +725,7 @@ private final class StubURLProtocol: URLProtocol {
     </html>
     """#
 
-    let parsed = ReaderHTMLParser.parseSegments(from: html)
+    let parsed = ReaderHTMLParser.parseSegments(from: html, threadID: "557752")
 
     #expect(parsed.segments == [
         .text("序章\n前文", chapterTitle: "序章"),
@@ -752,7 +752,7 @@ private final class StubURLProtocol: URLProtocol {
     </html>
     """#
 
-    let parsed = ReaderHTMLParser.parseSegments(from: html)
+    let parsed = ReaderHTMLParser.parseSegments(from: html, threadID: "557752")
 
     #expect(parsed.segments == [
         .text("序章\n前文", chapterTitle: "序章"),
@@ -787,7 +787,7 @@ private final class StubURLProtocol: URLProtocol {
     </html>
     """#
 
-    let parsed = ReaderHTMLParser.parseSegments(from: html)
+    let parsed = ReaderHTMLParser.parseSegments(from: html, threadID: "557752")
 
     #expect(parsed.segments == [
         .text("第一章 相遇\n这里是前文。", chapterTitle: "第一章 相遇"),
@@ -816,7 +816,7 @@ private final class StubURLProtocol: URLProtocol {
     """#
 
     let request = ReaderPageRequest(
-        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=2&mobile=2")),
+        threadID: "2",
         view: 1
     )
     let document = try ReaderHTMLParser.parseDocument(html: html, request: request)
@@ -844,7 +844,7 @@ private final class StubURLProtocol: URLProtocol {
     </html>
     """#
 
-    let parsed = ReaderHTMLParser.parseSegments(from: html)
+    let parsed = ReaderHTMLParser.parseSegments(from: html, threadID: "557752")
 
     #expect(parsed.segments.count == 2)
     #expect(parsed.segments[0] == .text("第一章\n正文一", chapterTitle: "第一章"))
@@ -860,7 +860,7 @@ private final class StubURLProtocol: URLProtocol {
     </html>
     """#
 
-    let parsed = ReaderHTMLParser.parseSegments(from: html)
+    let parsed = ReaderHTMLParser.parseSegments(from: html, threadID: "557752")
 
     #expect(parsed.segments == [.text("尾声\n只有 postmessage 也要解析", chapterTitle: "尾声")])
 }
@@ -880,7 +880,7 @@ private final class StubURLProtocol: URLProtocol {
     </html>
     """#
 
-    let parsed = ReaderHTMLParser.parseSegments(from: html)
+    let parsed = ReaderHTMLParser.parseSegments(from: html, threadID: "557752")
 
     #expect(parsed.segments.count == 4)
     #expect(parsed.segments[0] == .text("插图回", chapterTitle: "插图回"))
@@ -905,7 +905,7 @@ private final class StubURLProtocol: URLProtocol {
     </html>
     """#
     let request = ReaderPageRequest(
-        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=557752&mobile=2")),
+        threadID: "557752",
         view: 1
     )
 
@@ -927,7 +927,7 @@ private final class StubURLProtocol: URLProtocol {
     </html>
     """#
     let request = ReaderPageRequest(
-        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=557752&mobile=2")),
+        threadID: "557752",
         view: 1
     )
 
@@ -943,7 +943,7 @@ private final class StubURLProtocol: URLProtocol {
     </html>
     """#
 
-    let parsed = ReaderHTMLParser.parseSegments(from: html)
+    let parsed = ReaderHTMLParser.parseSegments(from: html, threadID: "557752")
 
     #expect(parsed.segments == [.text("序章\n这段 HTML 没有正常闭合", chapterTitle: "序章")])
 }
@@ -970,7 +970,7 @@ private final class StubURLProtocol: URLProtocol {
     </html>
     """#
     let request = ReaderPageRequest(
-        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=11&mobile=2")),
+        threadID: "11",
         view: 1
     )
     let document = try ReaderHTMLParser.parseDocument(html: html, request: request, contentSource: .authorFilteredPage)
@@ -1021,7 +1021,7 @@ private final class StubURLProtocol: URLProtocol {
     """#
 
     let request = ReaderPageRequest(
-        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=557752&mobile=2")),
+        threadID: "557752",
         view: 1
     )
     let document = try ReaderHTMLParser.parseDocument(html: html, request: request)
@@ -1064,7 +1064,7 @@ private final class StubURLProtocol: URLProtocol {
 #if canImport(UIKit)
 @Test func novelTextLayoutProducesChaptersForBothModes() async throws {
     let document = ReaderPageDocument(
-        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=1&mobile=2")),
+        threadID: "1",
         view: 1,
         maxView: 2,
         segments: [
@@ -1096,7 +1096,7 @@ private final class StubURLProtocol: URLProtocol {
 
 @Test func novelTextLayoutFiltersAuthorRepliesToOthersWhenSettingIsDisabled() throws {
     let document = ReaderPageDocument(
-        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=188&mobile=2")),
+        threadID: "188",
         view: 1,
         maxView: 1,
         contentSource: .authorFilteredPage,
@@ -1134,7 +1134,7 @@ private final class StubURLProtocol: URLProtocol {
 
 @Test func novelChapterDirectoryExtractorMatchesReaderPreviewDirectoryRules() throws {
     let document = ReaderPageDocument(
-        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=99&mobile=2")),
+        threadID: "99",
         view: 2,
         maxView: 3,
         resolvedAuthorID: "42",
@@ -1181,7 +1181,7 @@ private final class StubURLProtocol: URLProtocol {
 
 @Test func novelChapterDirectoryExtractorUsesReaderAuthorReplyVisibilitySetting() throws {
     let document = ReaderPageDocument(
-        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=100&mobile=2")),
+        threadID: "100",
         view: 1,
         maxView: 1,
         resolvedAuthorID: "42",
@@ -1265,7 +1265,7 @@ private final class StubURLProtocol: URLProtocol {
 @Test func novelTextLayoutProducesPagedAndVerticalPagesAtModuleSeam() throws {
     let text = String(repeating: "这是用于模块边界测试的正文。", count: 120)
     let document = ReaderPageDocument(
-        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=58&mobile=2")),
+        threadID: "58",
         view: 1,
         maxView: 1,
         segments: [.text(text, chapterTitle: "第一章")]
@@ -1304,7 +1304,7 @@ private final class StubURLProtocol: URLProtocol {
 @Test func novelTextLayoutAssemblesDocumentPagesChaptersImagesAndViewportIndex() async throws {
     let imageURL = try #require(URL(string: "https://example.com/image.jpg"))
     let document = ReaderPageDocument(
-        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=99&mobile=2")),
+        threadID: "99",
         view: 1,
         maxView: 1,
         segments: [
@@ -1349,7 +1349,7 @@ private final class StubURLProtocol: URLProtocol {
 
 @Test func novelTextLayoutGroupsSameTitleChaptersBySemanticIdentity() throws {
     let document = ReaderPageDocument(
-        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=100&mobile=2")),
+        threadID: "100",
         view: 1,
         maxView: 1,
         segments: [
@@ -1386,7 +1386,7 @@ private final class StubURLProtocol: URLProtocol {
 
 @Test func novelTextLayoutPublishesNovelTextViewportIndexForRenderedPages() async throws {
     let document = ReaderPageDocument(
-        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=100&mobile=2")),
+        threadID: "100",
         view: 2,
         maxView: 3,
         segments: [
@@ -1436,7 +1436,7 @@ private final class StubURLProtocol: URLProtocol {
 
 @Test func novelTextLayoutPublishesNovelTextViewportIndexForVerticalChunks() async throws {
     let document = ReaderPageDocument(
-        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=101&mobile=2")),
+        threadID: "101",
         view: 1,
         maxView: 1,
         segments: [
@@ -1469,7 +1469,7 @@ private final class StubURLProtocol: URLProtocol {
 @Test func novelTextLayoutBuildsCurrentWebpageViewportContextBeforePublishingReadablePages() async throws {
     let imageURL = try #require(URL(string: "https://example.com/inline.jpg"))
     let document = ReaderPageDocument(
-        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=146&mobile=2")),
+        threadID: "146",
         view: 3,
         maxView: 4,
         segments: [
@@ -1506,7 +1506,7 @@ private final class StubURLProtocol: URLProtocol {
     let index = pagination.viewportIndex
 
     #expect(context.identity.documentView == 3)
-    #expect(context.identity.threadURL == document.threadURL)
+    #expect(context.identity.threadID == document.threadID)
     #expect(context.identity.fetchedAt == document.fetchedAt)
     #expect(context.document.text == "第一章正文\n\n第二段正文\n\n第二章正文")
     #expect(context.document.textRangesBySegment[0] == ReaderRenderedTextRange(segmentIndex: 0, startOffset: 0, endOffset: 5))
@@ -1526,7 +1526,7 @@ private final class StubURLProtocol: URLProtocol {
 
 @Test func novelTextLayoutResultIsViewportFirstWithoutRenderedPageCompatibility() async throws {
     let document = ReaderPageDocument(
-        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=163&mobile=2")),
+        threadID: "163",
         view: 1,
         maxView: 1,
         segments: [
@@ -1561,7 +1561,7 @@ private final class StubURLProtocol: URLProtocol {
 
 @Test func novelTextLayoutCreatesAndUpdatesNovelTextViewportThroughHighLevelInterface() throws {
     let document = ReaderPageDocument(
-        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=62&mobile=2")),
+        threadID: "62",
         view: 1,
         maxView: 1,
         segments: [
@@ -1594,7 +1594,7 @@ private final class StubURLProtocol: URLProtocol {
     let repetitionCount = 400
     let layout = ReaderContainerLayout(width: 320, height: 568, readingMode: .vertical)
     let document = ReaderPageDocument(
-        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=63&mobile=2")),
+        threadID: "63",
         view: 1,
         maxView: 1,
         segments: [
@@ -1632,7 +1632,7 @@ private final class StubURLProtocol: URLProtocol {
 
 @Test func novelTextLayoutConvertsDisplayOffsetsUsingSwiftCharacterRanges() throws {
     let document = ReaderPageDocument(
-        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=412&mobile=2")),
+        threadID: "412",
         view: 3,
         maxView: 3,
         segments: [
@@ -1672,7 +1672,7 @@ private final class StubURLProtocol: URLProtocol {
 @Test func novelTextViewportIndexPagePublishesImageExternalBlockPlacement() async throws {
     let imageURL = try #require(URL(string: "https://example.com/viewport-image.jpg"))
     let document = ReaderPageDocument(
-        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=164&mobile=2")),
+        threadID: "164",
         view: 2,
         maxView: 2,
         segments: [
@@ -1709,7 +1709,7 @@ private final class StubURLProtocol: URLProtocol {
                 height: 253.5
             ),
             chapterCommentTarget: ReaderChapterCommentTarget(
-                threadURL: document.threadURL,
+                threadID: document.threadID,
                 view: 2,
                 ownerPostID: "image-post",
                 title: "第一章"
@@ -1721,7 +1721,7 @@ private final class StubURLProtocol: URLProtocol {
 
 @Test func novelTextLayoutDerivesPageRangesFromComposedViewportDocument() async throws {
     let document = ReaderPageDocument(
-        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=165&mobile=2")),
+        threadID: "165",
         view: 1,
         maxView: 1,
         segments: [
@@ -1772,7 +1772,7 @@ private final class StubURLProtocol: URLProtocol {
     )
     let context = NovelTextViewportContext(
         identity: NovelTextViewportIdentity(
-            threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=159&mobile=2")),
+            threadID: "159",
             documentView: 2,
             maxView: 3,
             fetchedAt: Date(timeIntervalSince1970: 159),
@@ -1824,7 +1824,7 @@ private final class StubURLProtocol: URLProtocol {
     let settings = ReaderAppearanceSettings(readingMode: .paged)
     let context = NovelTextViewportContext(
         identity: NovelTextViewportIdentity(
-            threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=159-missing&mobile=2")),
+            threadID: "159-missing",
             documentView: 1,
             maxView: 1,
             fetchedAt: Date(timeIntervalSince1970: 159),
@@ -1864,7 +1864,7 @@ private final class StubURLProtocol: URLProtocol {
 
 @Test func novelTextLayoutDoesNotReuseCachedNovelTextViewportIndexForMatchingInputs() async throws {
     let document = ReaderPageDocument(
-        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=102&mobile=2")),
+        threadID: "102",
         view: 1,
         maxView: 1,
         segments: [.text("重复打开时应该复用精确索引", chapterTitle: "第一章")],
@@ -1898,7 +1898,7 @@ private final class StubURLProtocol: URLProtocol {
 
 @Test func novelTextLayoutInvalidatesCachedNovelTextViewportIndexForSettingsAndLayoutChanges() async throws {
     let document = ReaderPageDocument(
-        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=103&mobile=2")),
+        threadID: "103",
         view: 1,
         maxView: 1,
         segments: [.text("设置和布局改变必须重建索引", chapterTitle: "第一章")],
@@ -1934,7 +1934,7 @@ private final class StubURLProtocol: URLProtocol {
 
 @Test func novelTextLayoutDoesNotCacheFailedNovelTextViewportIndexBuilds() async throws {
     let document = ReaderPageDocument(
-        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=104&mobile=2")),
+        threadID: "104",
         view: 1,
         maxView: 1,
         segments: [.text("失败的索引构建不能污染缓存", chapterTitle: "第一章")],
@@ -1968,7 +1968,7 @@ private final class StubURLProtocol: URLProtocol {
 @Test func novelTextLayoutPreservesSingleTextSegmentRanges() async throws {
     let text = String(repeating: "分页边界应来自 Novel Text Layout。", count: 100)
     let document = ReaderPageDocument(
-        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=58&mobile=2")),
+        threadID: "58",
         view: 1,
         maxView: 1,
         segments: [.text(text, chapterTitle: "第一章")]
@@ -1991,7 +1991,7 @@ private final class StubURLProtocol: URLProtocol {
     let text = String(repeating: "Frozen paged geometry must be committed with the surface. ", count: 160)
     let layout = ReaderContainerLayout(width: 320, height: 568)
     let document = ReaderPageDocument(
-        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=189&mobile=2")),
+        threadID: "189",
         view: 1,
         maxView: 1,
         segments: [.text(text, chapterTitle: "第一章")]
@@ -2028,7 +2028,7 @@ private final class StubURLProtocol: URLProtocol {
     let paragraph = "    页首空白不应使 TextKit 重新物化后的片段几何校验失败。"
     let text = Array(repeating: paragraph, count: 180).joined(separator: "\n\n")
     let document = ReaderPageDocument(
-        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=190&mobile=2")),
+        threadID: "190",
         view: 1,
         maxView: 1,
         segments: [.text(text, chapterTitle: "第一章")]
@@ -2147,7 +2147,7 @@ private final class StubURLProtocol: URLProtocol {
         count: 260
     ).joined(separator: "\n\n")
     let document = ReaderPageDocument(
-        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=191&mobile=2")),
+        threadID: "191",
         view: 1,
         maxView: 4,
         segments: [.text(text, chapterTitle: "第六章 贵穿之物")]
@@ -2233,7 +2233,7 @@ private final class StubURLProtocol: URLProtocol {
         count: 220
     )
     let document = ReaderPageDocument(
-        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=192&mobile=2")),
+        threadID: "192",
         view: 1,
         maxView: 1,
         segments: [.text(text, chapterTitle: "长段落")]
@@ -2299,7 +2299,7 @@ private final class StubURLProtocol: URLProtocol {
 @Test func novelTextLayoutPagedViewportSurfaceRangeFailureDoesNotUseEstimatedFallback() async throws {
     let text = String(repeating: "TextKit 2 failure should not fall back. ", count: 40)
     let document = ReaderPageDocument(
-        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=65&mobile=2")),
+        threadID: "65",
         view: 1,
         maxView: 1,
         segments: [.text(text, chapterTitle: "第一章")]
@@ -2317,7 +2317,7 @@ private final class StubURLProtocol: URLProtocol {
 
 @Test func novelTextLayoutPagedFailureThrowsInsteadOfPublishingFallbackPage() async throws {
     let document = ReaderPageDocument(
-        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=59&mobile=2")),
+        threadID: "59",
         view: 1,
         maxView: 1,
         segments: [
@@ -2338,7 +2338,7 @@ private final class StubURLProtocol: URLProtocol {
 @Test func novelTextLayoutVerticalViewportPageRangeFailureDoesNotUseEstimatedFallback() async throws {
     let text = String(repeating: "Vertical TextKit 2 failure should not fall back. ", count: 40)
     let document = ReaderPageDocument(
-        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=66&mobile=2")),
+        threadID: "66",
         view: 1,
         maxView: 1,
         segments: [.text(text, chapterTitle: "第一章")]
@@ -2356,7 +2356,7 @@ private final class StubURLProtocol: URLProtocol {
 
 @Test func novelTextLayoutVerticalFailureThrowsInsteadOfPublishingFallbackPage() async throws {
     let document = ReaderPageDocument(
-        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=60&mobile=2")),
+        threadID: "60",
         view: 1,
         maxView: 1,
         segments: [
@@ -2478,7 +2478,7 @@ private final class StubURLProtocol: URLProtocol {
 
 @Test func novelAttributedDocumentUsesPreparedSemanticRunsAndMatchesViewportText() throws {
     let document = ReaderPageDocument(
-        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=301&mobile=2")),
+        threadID: "301",
         view: 1,
         maxView: 1,
         segments: [
@@ -2512,7 +2512,7 @@ private final class StubURLProtocol: URLProtocol {
 
 @Test func novelAttributedDocumentStylesChapterTitleFromSemanticRangeOnly() throws {
     let document = ReaderPageDocument(
-        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=303&mobile=2")),
+        threadID: "303",
         view: 1,
         maxView: 1,
         segments: [
@@ -2552,7 +2552,7 @@ private final class StubURLProtocol: URLProtocol {
 
 @Test func novelTextLayoutTransformsInlineBoldRangesWithDisplayedText() throws {
     let document = ReaderPageDocument(
-        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=304&mobile=2")),
+        threadID: "304",
         view: 1,
         maxView: 1,
         segments: [.text("繁體粗體結束", chapterTitle: nil)],
@@ -2584,7 +2584,7 @@ private final class StubURLProtocol: URLProtocol {
 
 @Test func novelTextLayoutTransformsQuoteRangesAndProjectsDocumentOffsets() throws {
     let document = ReaderPageDocument(
-        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=307&mobile=2")),
+        threadID: "307",
         view: 1,
         maxView: 1,
         segments: [
@@ -2626,7 +2626,7 @@ private final class StubURLProtocol: URLProtocol {
 
 @Test func readerAttributedTextFactoryAppliesInlineBoldWithoutChangingNormalBody() throws {
     let document = ReaderPageDocument(
-        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=305&mobile=2")),
+        threadID: "305",
         view: 1,
         maxView: 1,
         segments: [.text("普通粗体普通", chapterTitle: nil)],
@@ -2656,9 +2656,8 @@ private final class StubURLProtocol: URLProtocol {
 @MainActor
 @Test func novelTextRuntimeRebuildsSemanticDocumentWhenOnlyInlineStylesChange() throws {
     let runtime = NovelTextViewportRuntimeOwner()
-    let threadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=306&mobile=2"))
     let plain = ReaderPageDocument(
-        threadURL: threadURL,
+        threadID: "306",
         view: 1,
         maxView: 1,
         segments: [.text("同一段正文", chapterTitle: nil)],
@@ -2670,7 +2669,7 @@ private final class StubURLProtocol: URLProtocol {
         ]
     )
     let styled = ReaderPageDocument(
-        threadURL: threadURL,
+        threadID: "306",
         view: 1,
         maxView: 1,
         segments: [.text("同一段正文", chapterTitle: nil)],
@@ -2703,9 +2702,8 @@ private final class StubURLProtocol: URLProtocol {
 @MainActor
 @Test func novelTextRuntimeRebuildsSemanticDocumentWhenOnlyBlockStylesChange() throws {
     let runtime = NovelTextViewportRuntimeOwner()
-    let threadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=308&mobile=2"))
     let plain = ReaderPageDocument(
-        threadURL: threadURL,
+        threadID: "308",
         view: 1,
         maxView: 1,
         segments: [.text("同一段正文", chapterTitle: nil)],
@@ -2717,7 +2715,7 @@ private final class StubURLProtocol: URLProtocol {
         ]
     )
     let styled = ReaderPageDocument(
-        threadURL: threadURL,
+        threadID: "308",
         view: 1,
         maxView: 1,
         segments: [.text("同一段正文", chapterTitle: nil)],
@@ -2750,7 +2748,7 @@ private final class StubURLProtocol: URLProtocol {
 
 @Test func novelTextLayoutRejectsEmptySemanticDocumentBeforeRuntimeAllocation() throws {
     let document = ReaderPageDocument(
-        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=302&mobile=2")),
+        threadID: "302",
         view: 1,
         maxView: 1,
         segments: [.text(" \n ", chapterTitle: nil)]
@@ -2768,7 +2766,7 @@ private final class StubURLProtocol: URLProtocol {
 #if canImport(UIKit)
 @Test func novelTextLayoutCommitsSemanticLayoutFontPlatformAndTextKitFingerprints() throws {
     let document = ReaderPageDocument(
-        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=303&mobile=2")),
+        threadID: "303",
         view: 1,
         maxView: 1,
         segments: [.text("第一章\n指纹正文。", chapterTitle: "第一章")]
@@ -2792,9 +2790,8 @@ private final class StubURLProtocol: URLProtocol {
     let directory = URL(fileURLWithPath: NSTemporaryDirectory())
         .appendingPathComponent(UUID().uuidString, isDirectory: true)
     let store = ReaderCacheStore(baseDirectory: directory)
-    let threadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=10&mobile=2"))
     let document = ReaderPageDocument(
-        threadURL: threadURL,
+        threadID: "10",
         view: 3,
         maxView: 5,
         resolvedAuthorID: "12",
@@ -2804,12 +2801,12 @@ private final class StubURLProtocol: URLProtocol {
     )
 
     try await store.save(document)
-    let loaded = await store.loadDocument(for: ReaderPageRequest(threadURL: threadURL, view: 3, authorID: "12"))
+    let loaded = await store.loadDocument(for: ReaderPageRequest(threadID: "10", view: 3, authorID: "12"))
     #expect(loaded == document)
-    #expect(await store.cachedViews(for: threadURL, authorID: "12", contentSource: .authorFilteredPage) == [3])
+    #expect(await store.cachedViews(for: "10", authorID: "12", contentSource: .authorFilteredPage) == [3])
 
-    try await store.deleteViews([3], for: threadURL, authorID: "12", contentSource: .authorFilteredPage)
-    let deleted = await store.loadDocument(for: ReaderPageRequest(threadURL: threadURL, view: 3, authorID: "12"))
+    try await store.deleteViews([3], for: "10", authorID: "12", contentSource: .authorFilteredPage)
+    let deleted = await store.loadDocument(for: ReaderPageRequest(threadID: "10", view: 3, authorID: "12"))
     #expect(deleted == nil)
 }
 
@@ -2818,9 +2815,8 @@ private final class StubURLProtocol: URLProtocol {
         .appendingPathComponent(UUID().uuidString, isDirectory: true)
     let database = try YamiboDatabase.openPool(rootDirectory: directory.appendingPathComponent("grdb", isDirectory: true))
     let store = ReaderCacheStore(databasePool: database, baseDirectory: directory)
-    let threadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=18610&mobile=2&page=4&authorid=12"))
     let document = ReaderPageDocument(
-        threadURL: threadURL,
+        threadID: "18610",
         view: 4,
         maxView: 5,
         resolvedAuthorID: "12",
@@ -2855,15 +2851,13 @@ private final class StubURLProtocol: URLProtocol {
     try Data(#"{"legacy":true}"#.utf8).write(to: legacyFileURL, options: [.atomic])
 
     let store = ReaderCacheStore(databasePool: database, baseDirectory: directory)
-    let legacyThreadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=18611&mobile=2"))
-    let newThreadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=18612&mobile=2"))
     let legacyLoaded = await store.loadDocument(
-        for: ReaderPageRequest(threadURL: legacyThreadURL, view: 1),
+        for: ReaderPageRequest(threadID: "18611", view: 1),
         contentSource: .fallbackUnfilteredPage
     )
     try await store.save(
         ReaderPageDocument(
-            threadURL: newThreadURL,
+            threadID: "18612",
             view: 1,
             maxView: 1,
             segments: [.text("新缓存正文", chapterTitle: "新章")]
@@ -2879,9 +2873,8 @@ private final class StubURLProtocol: URLProtocol {
     let directory = URL(fileURLWithPath: NSTemporaryDirectory())
         .appendingPathComponent(UUID().uuidString, isDirectory: true)
     let store = ReaderCacheStore(baseDirectory: directory)
-    let threadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=18601&mobile=2"))
     let document = ReaderPageDocument(
-        threadURL: threadURL,
+        threadID: "18601",
         view: 1,
         maxView: 1,
         segments: [.text("第一章\n正文", chapterTitle: "第一章")],
@@ -2919,6 +2912,8 @@ private final class StubURLProtocol: URLProtocol {
     let firstBlockRange = try #require(firstBlockStyle["range"] as? [String: Any])
 
     #expect(object["schemaVersion"] as? Int == ReaderPageDocument.schemaVersion)
+    #expect(object["threadID"] as? String == "18601")
+    #expect(object["threadURL"] == nil)
     #expect(chapterIdentity["rawValue"] as? String != nil)
     #expect(textSegmentIdentity["rawValue"] as? String != nil)
     #expect(titleRange["location"] as? Int == 0)
@@ -2935,7 +2930,7 @@ private final class StubURLProtocol: URLProtocol {
     let json = #"""
     {
       "schemaVersion": 3,
-      "threadURL": "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=18605",
+      "threadID": "18605",
       "view": 1,
       "maxView": 1,
       "contentSource": "fallbackUnfilteredPage",
@@ -2967,7 +2962,7 @@ private final class StubURLProtocol: URLProtocol {
 @Test func readerPageDocumentLegacyDecodeSynthesizesIdentitiesWithoutGroupingEqualTitles() async throws {
     let json = #"""
     {
-      "threadURL": "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=18602",
+      "threadID": "18602",
       "view": 1,
       "maxView": 1,
       "contentSource": "allPostsPage",
@@ -2997,7 +2992,7 @@ private final class StubURLProtocol: URLProtocol {
 @Test func readerPageDocumentLegacyDecodePreservesAmbiguousTitleTextWithoutStylingRange() async throws {
     let json = #"""
     {
-      "threadURL": "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=18603",
+      "threadID": "18603",
       "view": 1,
       "maxView": 1,
       "contentSource": "allPostsPage",
@@ -3027,11 +3022,10 @@ private final class StubURLProtocol: URLProtocol {
         .appendingPathComponent(UUID().uuidString, isDirectory: true)
     let database = try YamiboDatabase.openPool(rootDirectory: directory.appendingPathComponent("grdb", isDirectory: true))
     let store = ReaderCacheStore(databasePool: database, baseDirectory: directory)
-    let threadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=18604&mobile=2"))
     let document = #"""
     {
       "schemaVersion": 3,
-      "threadURL": "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=18604",
+      "threadID": "18604",
       "view": 1,
       "maxView": 1,
       "contentSource": "fallbackUnfilteredPage",
@@ -3053,7 +3047,7 @@ private final class StubURLProtocol: URLProtocol {
     """#
     try await store.save(
         ReaderPageDocument(
-            threadURL: threadURL,
+            threadID: "18604",
             view: 1,
             maxView: 1,
             contentSource: .fallbackUnfilteredPage,
@@ -3066,7 +3060,7 @@ private final class StubURLProtocol: URLProtocol {
 
     let verifyingStore = ReaderCacheStore(databasePool: database, baseDirectory: directory)
     let loaded = await verifyingStore.loadDocument(
-        for: ReaderPageRequest(threadURL: threadURL, view: 1),
+        for: ReaderPageRequest(threadID: "18604", view: 1),
         contentSource: .fallbackUnfilteredPage
     )
 
@@ -3080,11 +3074,10 @@ private final class StubURLProtocol: URLProtocol {
         .appendingPathComponent(UUID().uuidString, isDirectory: true)
     let database = try YamiboDatabase.openPool(rootDirectory: directory.appendingPathComponent("grdb", isDirectory: true))
     let store = ReaderCacheStore(databasePool: database, baseDirectory: directory)
-    let threadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=18606&mobile=2"))
     let document = #"""
     {
       "schemaVersion": 3,
-      "threadURL": "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=18606",
+      "threadID": "18606",
       "view": 1,
       "maxView": 1,
       "contentSource": "fallbackUnfilteredPage",
@@ -3109,7 +3102,7 @@ private final class StubURLProtocol: URLProtocol {
     """#
     try await store.save(
         ReaderPageDocument(
-            threadURL: threadURL,
+            threadID: "18606",
             view: 1,
             maxView: 1,
             contentSource: .fallbackUnfilteredPage,
@@ -3122,7 +3115,7 @@ private final class StubURLProtocol: URLProtocol {
 
     let verifyingStore = ReaderCacheStore(databasePool: database, baseDirectory: directory)
     let loaded = await verifyingStore.loadDocument(
-        for: ReaderPageRequest(threadURL: threadURL, view: 1),
+        for: ReaderPageRequest(threadID: "18606", view: 1),
         contentSource: .fallbackUnfilteredPage
     )
 
@@ -3135,16 +3128,15 @@ private final class StubURLProtocol: URLProtocol {
     let directory = URL(fileURLWithPath: NSTemporaryDirectory())
         .appendingPathComponent(UUID().uuidString, isDirectory: true)
     let store = ReaderCacheStore(baseDirectory: directory)
-    let threadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=21&mobile=2"))
     let unfiltered = ReaderPageDocument(
-        threadURL: threadURL,
+        threadID: "21",
         view: 1,
         maxView: 3,
         contentSource: .fallbackUnfilteredPage,
         segments: [.text("全部回复正文", chapterTitle: "第一章")]
     )
     let authorFiltered = ReaderPageDocument(
-        threadURL: threadURL,
+        threadID: "21",
         view: 1,
         maxView: 3,
         resolvedAuthorID: "42",
@@ -3156,27 +3148,27 @@ private final class StubURLProtocol: URLProtocol {
     try await store.save(authorFiltered)
 
     let loadedUnfiltered = await store.loadDocument(
-        for: ReaderPageRequest(threadURL: threadURL, view: 1),
+        for: ReaderPageRequest(threadID: "21", view: 1),
         contentSource: .fallbackUnfilteredPage
     )
     let loadedAuthorFiltered = await store.loadDocument(
-        for: ReaderPageRequest(threadURL: threadURL, view: 1, authorID: "42"),
+        for: ReaderPageRequest(threadID: "21", view: 1, authorID: "42"),
         contentSource: .authorFilteredPage
     )
 
     #expect(loadedUnfiltered?.segments == unfiltered.segments)
     #expect(loadedAuthorFiltered?.segments == authorFiltered.segments)
-    #expect(await store.cachedViews(for: threadURL, authorID: nil, contentSource: .fallbackUnfilteredPage) == [1])
-    #expect(await store.cachedViews(for: threadURL, authorID: "42", contentSource: .authorFilteredPage) == [1])
+    #expect(await store.cachedViews(for: "21", authorID: nil, contentSource: .fallbackUnfilteredPage) == [1])
+    #expect(await store.cachedViews(for: "21", authorID: "42", contentSource: .authorFilteredPage) == [1])
 
-    try await store.deleteViews([1], for: threadURL, authorID: "42", contentSource: .authorFilteredPage)
+    try await store.deleteViews([1], for: "21", authorID: "42", contentSource: .authorFilteredPage)
 
     let deletedAuthorFiltered = await store.loadDocument(
-        for: ReaderPageRequest(threadURL: threadURL, view: 1, authorID: "42"),
+        for: ReaderPageRequest(threadID: "21", view: 1, authorID: "42"),
         contentSource: .authorFilteredPage
     )
     let preservedUnfiltered = await store.loadDocument(
-        for: ReaderPageRequest(threadURL: threadURL, view: 1),
+        for: ReaderPageRequest(threadID: "21", view: 1),
         contentSource: .fallbackUnfilteredPage
     )
 
@@ -3197,9 +3189,8 @@ private final class StubURLProtocol: URLProtocol {
         cacheStore: cacheStore,
         forumCacheStore: forumCacheStore
     )
-    let threadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=22&mobile=2"))
     let authorFiltered = ReaderPageDocument(
-        threadURL: threadURL,
+        threadID: "22",
         view: 1,
         maxView: 2,
         resolvedAuthorID: "42",
@@ -3209,11 +3200,11 @@ private final class StubURLProtocol: URLProtocol {
     try await cacheStore.save(authorFiltered)
 
     await #expect(throws: YamiboError.offline) {
-        _ = try await repository.loadPage(ReaderPageRequest(threadURL: threadURL, view: 1))
+        _ = try await repository.loadPage(ReaderPageRequest(threadID: "22", view: 1))
     }
 
     await #expect(throws: YamiboError.offline) {
-        _ = try await repository.loadPage(ReaderPageRequest(threadURL: threadURL, view: 1, authorID: "42"))
+        _ = try await repository.loadPage(ReaderPageRequest(threadID: "22", view: 1, authorID: "42"))
     }
 }
 
@@ -3225,8 +3216,7 @@ private final class StubURLProtocol: URLProtocol {
         .appendingPathComponent(UUID().uuidString, isDirectory: true)
     let readerCacheStore = ReaderCacheStore(baseDirectory: directory.appendingPathComponent("reader", isDirectory: true))
     let forumCacheStore = ForumCacheStore(baseDirectory: directory.appendingPathComponent("forum", isDirectory: true))
-    let threadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=32&mobile=2"))
-    let thread = ThreadIdentity(tid: "32", canonicalURL: ReaderCacheIdentity.canonicalThreadURL(from: threadURL))
+    let thread = ThreadIdentity(tid: "32")
     try await forumCacheStore.saveThreadPage(
         makeReaderRepositoryThreadPage(
             thread: thread,
@@ -3245,13 +3235,13 @@ private final class StubURLProtocol: URLProtocol {
         forumCacheStore: forumCacheStore
     )
 
-    let document = try await repository.loadPage(ReaderPageRequest(threadURL: threadURL, view: 1, authorID: "42"))
+    let document = try await repository.loadPage(ReaderPageRequest(threadID: "32", view: 1, authorID: "42"))
 
     #expect(document.resolvedAuthorID == "42")
     #expect(document.contentSource == .authorFilteredPage)
     #expect(document.segments.contains(.text("第一章\n缓存正文", chapterTitle: "第一章")))
     #expect(document.projectionSourceFingerprint != nil)
-    #expect(await repository.cachedViews(for: threadURL, authorID: "42", contentSource: .authorFilteredPage) == [1])
+    #expect(await repository.cachedViews(for: "32", authorID: "42", contentSource: .authorFilteredPage) == [1])
 }
 
 @Test func readerRepositoryPersistsProjectionDerivedFromCachedAuthorScopedThreadPage() async throws {
@@ -3263,8 +3253,7 @@ private final class StubURLProtocol: URLProtocol {
     let readerCacheDirectory = directory.appendingPathComponent("reader", isDirectory: true)
     let readerCacheStore = ReaderCacheStore(baseDirectory: readerCacheDirectory)
     let forumCacheStore = ForumCacheStore(baseDirectory: directory.appendingPathComponent("forum", isDirectory: true))
-    let threadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=3201&mobile=2"))
-    let thread = ThreadIdentity(tid: "3201", canonicalURL: ReaderCacheIdentity.canonicalThreadURL(from: threadURL))
+    let thread = ThreadIdentity(tid: "3201")
     try await forumCacheStore.saveThreadPage(
         makeReaderRepositoryThreadPage(
             thread: thread,
@@ -3283,13 +3272,13 @@ private final class StubURLProtocol: URLProtocol {
         forumCacheStore: forumCacheStore
     )
 
-    let document = try await repository.loadPage(ReaderPageRequest(threadURL: threadURL, view: 1, authorID: "42"))
+    let document = try await repository.loadPage(ReaderPageRequest(threadID: "3201", view: 1, authorID: "42"))
     let persisted = await ReaderCacheStore(baseDirectory: readerCacheDirectory).loadDocument(
-        for: ReaderPageRequest(threadURL: threadURL, view: 1, authorID: "42"),
+        for: ReaderPageRequest(threadID: "3201", view: 1, authorID: "42"),
         contentSource: .authorFilteredPage
     )
 
-    #expect(persisted?.threadURL == document.threadURL)
+    #expect(persisted?.threadID == document.threadID)
     #expect(persisted?.view == document.view)
     #expect(persisted?.resolvedAuthorID == document.resolvedAuthorID)
     #expect(persisted?.contentSource == document.contentSource)
@@ -3309,8 +3298,7 @@ private final class StubURLProtocol: URLProtocol {
     let readerCacheDirectory = directory.appendingPathComponent("reader", isDirectory: true)
     let readerCacheStore = ReaderCacheStore(baseDirectory: readerCacheDirectory)
     let forumCacheStore = ForumCacheStore(baseDirectory: directory.appendingPathComponent("forum", isDirectory: true))
-    let threadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=3202&mobile=2"))
-    let thread = ThreadIdentity(tid: "3202", canonicalURL: ReaderCacheIdentity.canonicalThreadURL(from: threadURL))
+    let thread = ThreadIdentity(tid: "3202")
     try await forumCacheStore.saveThreadPage(
         makeReaderRepositoryThreadPage(
             thread: thread,
@@ -3329,14 +3317,14 @@ private final class StubURLProtocol: URLProtocol {
         forumCacheStore: forumCacheStore
     )
 
-    _ = try await repository.loadPage(ReaderPageRequest(threadURL: threadURL, view: 1, authorID: "42"))
+    _ = try await repository.loadPage(ReaderPageRequest(threadID: "3202", view: 1, authorID: "42"))
     try FileManager.default.removeItem(
         at: YamiboDatabase.cacheDirectoryURL(rootDirectory: readerCacheDirectory)
             .appendingPathComponent(ReaderCacheStore.projectionNamespace, isDirectory: true)
     )
-    let document = try await repository.loadPage(ReaderPageRequest(threadURL: threadURL, view: 1, authorID: "42"))
+    let document = try await repository.loadPage(ReaderPageRequest(threadID: "3202", view: 1, authorID: "42"))
     let persisted = await ReaderCacheStore(baseDirectory: readerCacheDirectory).loadDocument(
-        for: ReaderPageRequest(threadURL: threadURL, view: 1, authorID: "42"),
+        for: ReaderPageRequest(threadID: "3202", view: 1, authorID: "42"),
         contentSource: .authorFilteredPage
     )
 
@@ -3352,10 +3340,9 @@ private final class StubURLProtocol: URLProtocol {
         .appendingPathComponent(UUID().uuidString, isDirectory: true)
     let readerCacheStore = ReaderCacheStore(baseDirectory: directory.appendingPathComponent("reader", isDirectory: true))
     let forumCacheStore = ForumCacheStore(baseDirectory: directory.appendingPathComponent("forum", isDirectory: true))
-    let threadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=33&mobile=2"))
     try await readerCacheStore.save(
         ReaderPageDocument(
-            threadURL: threadURL,
+            threadID: "33",
             view: 1,
             maxView: 1,
             resolvedAuthorID: "42",
@@ -3370,10 +3357,10 @@ private final class StubURLProtocol: URLProtocol {
     )
 
     await #expect(throws: (any Error).self) {
-        _ = try await repository.loadPage(ReaderPageRequest(threadURL: threadURL, view: 1, authorID: "42"))
+        _ = try await repository.loadPage(ReaderPageRequest(threadID: "33", view: 1, authorID: "42"))
     }
 
-    #expect(await repository.cachedViews(for: threadURL, authorID: "42", contentSource: .authorFilteredPage).isEmpty)
+    #expect(await repository.cachedViews(for: "33", authorID: "42", contentSource: .authorFilteredPage).isEmpty)
 }
 
 private func makeReaderRepositoryThreadPage(
@@ -3413,16 +3400,15 @@ private func makeReaderRepositoryThreadPage(
         cacheStore: cacheStore,
         forumCacheStore: forumCacheStore
     )
-    let threadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=23&mobile=2"))
     let unfiltered = ReaderPageDocument(
-        threadURL: threadURL,
+        threadID: "23",
         view: 1,
         maxView: 2,
         contentSource: .fallbackUnfilteredPage,
         segments: [.text("全部回复旧缓存", chapterTitle: "第一章")]
     )
     let authorFiltered = ReaderPageDocument(
-        threadURL: threadURL,
+        threadID: "23",
         view: 1,
         maxView: 2,
         resolvedAuthorID: "42",
@@ -3434,17 +3420,17 @@ private func makeReaderRepositoryThreadPage(
 
     try await repository.refreshCachedViews(
         [1],
-        for: threadURL,
+        for: "23",
         authorID: "42",
         contentSource: .authorFilteredPage
     )
 
     let refreshedAuthorFiltered = await cacheStore.loadDocument(
-        for: ReaderPageRequest(threadURL: threadURL, view: 1, authorID: "42"),
+        for: ReaderPageRequest(threadID: "23", view: 1, authorID: "42"),
         contentSource: .authorFilteredPage
     )
     let preservedUnfiltered = await cacheStore.loadDocument(
-        for: ReaderPageRequest(threadURL: threadURL, view: 1),
+        for: ReaderPageRequest(threadID: "23", view: 1),
         contentSource: .fallbackUnfilteredPage
     )
 
@@ -3470,10 +3456,9 @@ private func makeReaderRepositoryThreadPage(
     let cacheStoreDirectory = directory.appendingPathComponent("reader", isDirectory: true)
     let cacheStore = ReaderCacheStore(baseDirectory: cacheStoreDirectory)
     let forumCacheStore = ForumCacheStore(baseDirectory: directory.appendingPathComponent("forum", isDirectory: true))
-    let threadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=30&mobile=2"))
     try await cacheStore.save(
         ReaderPageDocument(
-            threadURL: threadURL,
+            threadID: "30",
             view: 1,
             maxView: 1,
             resolvedAuthorID: "42",
@@ -3488,7 +3473,7 @@ private func makeReaderRepositoryThreadPage(
         forumCacheStore: forumCacheStore
     )
 
-    let document = try await repository.loadPage(ReaderPageRequest(threadURL: threadURL, view: 1, authorID: "42"))
+    let document = try await repository.loadPage(ReaderPageRequest(threadID: "30", view: 1, authorID: "42"))
     let text = document.segments.compactMap { segment -> String? in
         if case let .text(text, _) = segment { return text }
         return nil
@@ -3507,10 +3492,9 @@ private func makeReaderRepositoryThreadPage(
     let cacheStoreDirectory = directory.appendingPathComponent("reader", isDirectory: true)
     let cacheStore = ReaderCacheStore(baseDirectory: cacheStoreDirectory)
     let forumCacheStore = ForumCacheStore(baseDirectory: directory.appendingPathComponent("forum", isDirectory: true))
-    let threadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=31&mobile=2"))
     try await cacheStore.save(
         ReaderPageDocument(
-            threadURL: threadURL,
+            threadID: "31",
             view: 1,
             maxView: 1,
             resolvedAuthorID: "42",
@@ -3526,7 +3510,7 @@ private func makeReaderRepositoryThreadPage(
     )
 
     await #expect(throws: YamiboError.offline) {
-        _ = try await repository.loadPage(ReaderPageRequest(threadURL: threadURL, view: 1, authorID: "42"))
+        _ = try await repository.loadPage(ReaderPageRequest(threadID: "31", view: 1, authorID: "42"))
     }
 }
 
@@ -3539,8 +3523,7 @@ private func makeReaderRepositoryThreadPage(
     let offlineStore = try makeTestOfflineCacheStore(rootDirectory: directory)
     let readerCacheStore = ReaderCacheStore(baseDirectory: directory.appendingPathComponent("reader", isDirectory: true))
     let forumCacheStore = ForumCacheStore(baseDirectory: directory.appendingPathComponent("forum", isDirectory: true))
-    let threadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=34&mobile=2"))
-    let thread = ThreadIdentity(tid: "34", canonicalURL: ReaderCacheIdentity.canonicalThreadURL(from: threadURL))
+    let thread = ThreadIdentity(tid: "34")
     let sourcePage = makeReaderRepositoryThreadPage(
         thread: thread,
         title: "离线小说",
@@ -3554,7 +3537,7 @@ private func makeReaderRepositoryThreadPage(
         request: NovelOfflineCacheWorkRequest(
             ownerTitle: "离线小说",
             title: "第一页",
-            threadURL: threadURL,
+            threadID: "34",
             view: 1,
             authorID: "42",
             contentSource: .authorFilteredPage
@@ -3568,9 +3551,9 @@ private func makeReaderRepositoryThreadPage(
         offlineCacheStore: offlineStore
     )
 
-    let load = try await repository.loadPageResult(ReaderPageRequest(threadURL: threadURL, view: 1, authorID: "42"))
+    let load = try await repository.loadPageResult(ReaderPageRequest(threadID: "34", view: 1, authorID: "42"))
     let prewarm = await readerCacheStore.loadDocument(
-        for: ReaderPageRequest(threadURL: threadURL, view: 1, authorID: "42"),
+        for: ReaderPageRequest(threadID: "34", view: 1, authorID: "42"),
         contentSource: .authorFilteredPage
     )
 
@@ -3590,8 +3573,7 @@ private func makeReaderRepositoryThreadPage(
     let offlineStore = try makeTestOfflineCacheStore(rootDirectory: directory)
     let readerCacheStore = ReaderCacheStore(baseDirectory: directory.appendingPathComponent("reader", isDirectory: true))
     let forumCacheStore = ForumCacheStore(baseDirectory: directory.appendingPathComponent("forum", isDirectory: true))
-    let threadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=341&mobile=2"))
-    let thread = ThreadIdentity(tid: "341", canonicalURL: ReaderCacheIdentity.canonicalThreadURL(from: threadURL))
+    let thread = ThreadIdentity(tid: "341")
     let sourcePage = makeReaderRepositoryThreadPage(
         thread: thread,
         title: "离线小说",
@@ -3605,7 +3587,7 @@ private func makeReaderRepositoryThreadPage(
         request: NovelOfflineCacheWorkRequest(
             ownerTitle: "离线小说",
             title: "第一页",
-            threadURL: threadURL,
+            threadID: "341",
             view: 1,
             authorID: "42",
             contentSource: .authorFilteredPage
@@ -3618,10 +3600,10 @@ private func makeReaderRepositoryThreadPage(
         forumCacheStore: forumCacheStore,
         offlineCacheStore: offlineStore
     )
-    let parsedLoad = try await repository.loadPageResult(ReaderPageRequest(threadURL: threadURL, view: 1, authorID: "42"))
+    let parsedLoad = try await repository.loadPageResult(ReaderPageRequest(threadID: "341", view: 1, authorID: "42"))
     let fingerprint = try #require(parsedLoad.document.projectionSourceFingerprint)
     let cachedProjection = ReaderPageDocument(
-        threadURL: parsedLoad.document.threadURL,
+        threadID: parsedLoad.document.threadID,
         view: 1,
         maxView: parsedLoad.document.maxView,
         resolvedAuthorID: "42",
@@ -3632,7 +3614,7 @@ private func makeReaderRepositoryThreadPage(
     )
     try await readerCacheStore.save(cachedProjection)
 
-    let cachedLoad = try await repository.loadPageResult(ReaderPageRequest(threadURL: threadURL, view: 1, authorID: "42"))
+    let cachedLoad = try await repository.loadPageResult(ReaderPageRequest(threadID: "341", view: 1, authorID: "42"))
 
     #expect(cachedLoad.source == .offlineFallback(updatedAt: updatedAt))
     #expect(cachedLoad.document.segments == cachedProjection.segments)
@@ -3645,8 +3627,7 @@ private func makeReaderRepositoryThreadPage(
     let directory = URL(fileURLWithPath: NSTemporaryDirectory())
         .appendingPathComponent(UUID().uuidString, isDirectory: true)
     let offlineStore = try makeTestOfflineCacheStore(rootDirectory: directory)
-    let threadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=35&mobile=2"))
-    let thread = ThreadIdentity(tid: "35", canonicalURL: ReaderCacheIdentity.canonicalThreadURL(from: threadURL))
+    let thread = ThreadIdentity(tid: "35")
     let sourcePage = makeReaderRepositoryThreadPage(
         thread: thread,
         title: "离线小说",
@@ -3659,7 +3640,7 @@ private func makeReaderRepositoryThreadPage(
         request: NovelOfflineCacheWorkRequest(
             ownerTitle: "离线小说",
             title: "第一页",
-            threadURL: threadURL,
+            threadID: "35",
             view: 1,
             authorID: "42",
             contentSource: .authorFilteredPage
@@ -3674,7 +3655,7 @@ private func makeReaderRepositoryThreadPage(
     )
 
     await #expect(throws: (any Error).self) {
-        _ = try await repository.loadPageResult(ReaderPageRequest(threadURL: threadURL, view: 1, authorID: "42"))
+        _ = try await repository.loadPageResult(ReaderPageRequest(threadID: "35", view: 1, authorID: "42"))
     }
 }
 
@@ -3685,8 +3666,7 @@ private func makeReaderRepositoryThreadPage(
     let directory = URL(fileURLWithPath: NSTemporaryDirectory())
         .appendingPathComponent(UUID().uuidString, isDirectory: true)
     let offlineStore = try makeTestOfflineCacheStore(rootDirectory: directory)
-    let threadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=36&mobile=2"))
-    let thread = ThreadIdentity(tid: "36", canonicalURL: ReaderCacheIdentity.canonicalThreadURL(from: threadURL))
+    let thread = ThreadIdentity(tid: "36")
     let oldSource = makeReaderRepositoryThreadPage(
         thread: thread,
         title: "自动刷新小说",
@@ -3700,7 +3680,7 @@ private func makeReaderRepositoryThreadPage(
         request: NovelOfflineCacheWorkRequest(
             ownerTitle: "自动刷新小说",
             title: "第一页",
-            threadURL: threadURL,
+            threadID: "36",
             view: 1,
             authorID: "42",
             contentSource: .authorFilteredPage
@@ -3715,17 +3695,17 @@ private func makeReaderRepositoryThreadPage(
         novelOfflineAutoRefreshEnabled: { true }
     )
 
-    let load = try await repository.loadPageResult(ReaderPageRequest(threadURL: threadURL, view: 1, authorID: "42"))
+    let load = try await repository.loadPageResult(ReaderPageRequest(threadID: "36", view: 1, authorID: "42"))
     let refreshedSource = await offlineStore.novelOfflineSourcePage(
         ownerTitle: "自动刷新小说",
-        threadURL: threadURL,
+        threadID: "36",
         view: 1,
         authorID: "42",
         contentSource: .authorFilteredPage
     )
     let snapshot = await offlineStore.novelOfflineCacheViewsSnapshot(
         ownerTitle: "自动刷新小说",
-        threadURL: threadURL,
+        threadID: "36",
         authorID: "42",
         contentSource: .authorFilteredPage
     )
@@ -3743,7 +3723,6 @@ private func makeReaderRepositoryThreadPage(
     let directory = URL(fileURLWithPath: NSTemporaryDirectory())
         .appendingPathComponent(UUID().uuidString, isDirectory: true)
     let offlineStore = try makeTestOfflineCacheStore(rootDirectory: directory)
-    let threadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=37&mobile=2"))
     let repository = NovelReaderRepository(
         client: YamiboClient(session: session, cookie: "sid=reader", userAgent: "Test-UA"),
         cacheStore: ReaderCacheStore(baseDirectory: directory.appendingPathComponent("reader", isDirectory: true)),
@@ -3752,10 +3731,10 @@ private func makeReaderRepositoryThreadPage(
         novelOfflineAutoRefreshEnabled: { true }
     )
 
-    _ = try await repository.loadPageResult(ReaderPageRequest(threadURL: threadURL, view: 1, authorID: "42"))
+    _ = try await repository.loadPageResult(ReaderPageRequest(threadID: "37", view: 1, authorID: "42"))
     let snapshot = await offlineStore.novelOfflineCacheViewsSnapshot(
         ownerTitle: "未缓存小说",
-        threadURL: threadURL,
+        threadID: "37",
         authorID: "42",
         contentSource: .authorFilteredPage
     )
@@ -3777,11 +3756,9 @@ private func makeReaderRepositoryThreadPage(
         cacheStore: cacheStore,
         forumCacheStore: forumCacheStore
     )
-    let threadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=24&mobile=2"))
-
     let result = await repository.cacheViews(
         [1, 2, 3],
-        for: threadURL,
+        for: "24",
         authorID: "42",
         contentSource: .authorFilteredPage
     )
@@ -3789,8 +3766,8 @@ private func makeReaderRepositoryThreadPage(
     #expect(result.completedViews == [1, 3])
     #expect(result.failedViews == [2])
     #expect(!result.wasCancelled)
-    #expect(await repository.cachedViews(for: threadURL, authorID: "42", contentSource: .authorFilteredPage) == [1, 3])
-    #expect(await cacheStore.cachedViews(for: threadURL, authorID: nil, contentSource: .fallbackUnfilteredPage).isEmpty)
+    #expect(await repository.cachedViews(for: "24", authorID: "42", contentSource: .authorFilteredPage) == [1, 3])
+    #expect(await cacheStore.cachedViews(for: "24", authorID: nil, contentSource: .fallbackUnfilteredPage).isEmpty)
 }
 
 @Test func readerRepositoryRefreshesLegacyCacheMissingChapterCommentSources() async throws {
@@ -3806,9 +3783,8 @@ private func makeReaderRepositoryThreadPage(
         cacheStore: cacheStore,
         forumCacheStore: forumCacheStore
     )
-    let threadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=25&mobile=2"))
     let legacyDocument = ReaderPageDocument(
-        threadURL: threadURL,
+        threadID: "25",
         view: 1,
         maxView: 1,
         resolvedAuthorID: "42",
@@ -3818,7 +3794,7 @@ private func makeReaderRepositoryThreadPage(
     )
     try await cacheStore.save(legacyDocument)
 
-    let loaded = try await repository.loadPage(ReaderPageRequest(threadURL: threadURL, view: 1, authorID: "42"))
+    let loaded = try await repository.loadPage(ReaderPageRequest(threadID: "25", view: 1, authorID: "42"))
 
     #expect(loaded.segments == [.text("新解析章节\n新正文", chapterTitle: "新解析章节")])
     #expect(loaded.source(forSegmentIndex: 0)?.ownerPostID == "41257246")
@@ -3832,7 +3808,7 @@ private func makeReaderRepositoryThreadPage(
         client: YamiboClient(session: session, cookie: "sid=reader", userAgent: "Test-UA")
     )
     let target = ReaderChapterCommentTarget(
-        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=26&mobile=2")),
+        threadID: "26",
         view: 2,
         ownerPostID: "2601",
         title: "episode 16",
@@ -3852,7 +3828,7 @@ private func makeReaderRepositoryThreadPage(
         client: YamiboClient(session: session, cookie: "sid=reader", userAgent: "Test-UA")
     )
     let target = ReaderChapterCommentTarget(
-        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?authorid=42&mod=viewthread&tid=27&mobile=2")),
+        threadID: "27",
         view: 2,
         ownerPostID: "2701",
         title: "第一章",
@@ -3876,7 +3852,7 @@ private func makeReaderRepositoryThreadPage(
         client: YamiboClient(session: session, cookie: "sid=reader", userAgent: "Test-UA")
     )
     let target = ReaderChapterCommentTarget(
-        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?authorid=42&mod=viewthread&tid=28&mobile=2")),
+        threadID: "28",
         view: 2,
         ownerPostID: "2801",
         title: "第一章",
@@ -3898,7 +3874,7 @@ private func makeReaderRepositoryThreadPage(
         client: YamiboClient(session: session, cookie: "sid=reader", userAgent: "Test-UA")
     )
     let target = ReaderChapterCommentTarget(
-        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?authorid=42&mod=viewthread&tid=29&mobile=2")),
+        threadID: "29",
         view: 2,
         ownerPostID: "2901",
         title: "第一章",
@@ -4003,7 +3979,7 @@ final class FavoriteRepositoryThreadFavoriteTests: XCTestCase {
 @MainActor
 @Test func novelTextSelectionCopiesDisplayedTextFromCommittedGeneration() throws {
     let document = ReaderPageDocument(
-        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=197&mobile=2")),
+        threadID: "197",
         view: 1,
         maxView: 1,
         segments: [.text("Alpha beta gamma delta", chapterTitle: "Selection")]
@@ -4045,7 +4021,7 @@ final class FavoriteRepositoryThreadFavoriteTests: XCTestCase {
         count: 80
     )
     let document = ReaderPageDocument(
-        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=198&mobile=2")),
+        threadID: "198",
         view: 1,
         maxView: 1,
         segments: [.text(text, chapterTitle: "Selection")]
@@ -4099,7 +4075,7 @@ final class FavoriteRepositoryThreadFavoriteTests: XCTestCase {
 @Test func novelTextSelectionRejectsStaleGeneration() throws {
 #if canImport(UIKit)
     let document = ReaderPageDocument(
-        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=199&mobile=2")),
+        threadID: "199",
         view: 1,
         maxView: 1,
         segments: [.text(String(repeating: "Stale selection should not copy. ", count: 20), chapterTitle: "Selection")]

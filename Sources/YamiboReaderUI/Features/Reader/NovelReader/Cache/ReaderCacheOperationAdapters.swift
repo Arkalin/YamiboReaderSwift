@@ -14,7 +14,7 @@ public struct ReaderRepositoryCacheOperationAdapter: ReaderCacheOperationReposit
 
     public func cachedViews(for context: ReaderCacheOperationContext) async -> Set<Int> {
         await repository.cachedViews(
-            for: context.threadURL,
+            for: context.threadID,
             authorID: context.authorID,
             contentSource: context.contentSource
         )
@@ -26,7 +26,7 @@ public struct ReaderRepositoryCacheOperationAdapter: ReaderCacheOperationReposit
     ) async throws {
         try await repository.deleteCachedViews(
             views,
-            for: context.threadURL,
+            for: context.threadID,
             authorID: context.authorID,
             contentSource: context.contentSource
         )
@@ -39,7 +39,7 @@ public struct ReaderRepositoryCacheOperationAdapter: ReaderCacheOperationReposit
     ) async -> ReaderCacheBatchResult {
         await repository.cacheViews(
             views,
-            for: context.threadURL,
+            for: context.threadID,
             authorID: context.authorID,
             contentSource: context.contentSource,
             progress: progress
@@ -78,7 +78,7 @@ public struct OfflineStoreReaderCacheOperationAdapter: ReaderCacheOperationRepos
     public func cacheState(for context: ReaderCacheOperationContext) async -> NovelOfflineCacheViewsSnapshot {
         await store.novelOfflineCacheViewsSnapshot(
             ownerTitle: context.ownerTitle,
-            threadURL: context.threadURL,
+            threadID: context.threadID,
             authorID: context.authorID,
             contentSource: context.contentSource
         )
@@ -95,7 +95,7 @@ public struct OfflineStoreReaderCacheOperationAdapter: ReaderCacheOperationRepos
         try await store.removeNovelOfflineCacheViews(
             views,
             ownerTitle: context.ownerTitle,
-            threadURL: context.threadURL,
+            threadID: context.threadID,
             authorID: context.authorID,
             contentSource: context.contentSource
         )
@@ -131,7 +131,7 @@ public struct OfflineStoreReaderCacheOperationAdapter: ReaderCacheOperationRepos
                 let request = NovelOfflineCacheWorkRequest(
                     ownerTitle: context.ownerTitle,
                     title: L10n.string("reader.page_number_spaced", view),
-                    threadURL: context.threadURL,
+                    threadID: context.threadID,
                     view: view,
                     authorID: context.authorID,
                     contentSource: context.contentSource ?? .fallbackUnfilteredPage,

@@ -22,9 +22,12 @@ public actor ThreadOpenResolver {
 
         switch favoriteType {
         case .novel:
+            guard let threadID = ReaderHTMLParser.extractThreadID(from: canonicalURL) else {
+                return .web(requestURL)
+            }
             return .novel(
                 ReaderLaunchContext(
-                    threadURL: canonicalURL,
+                    threadID: threadID,
                     threadTitle: title ?? L10n.string("reader.title"),
                     source: .favorites,
                     authorID: authorID
@@ -48,9 +51,12 @@ public actor ThreadOpenResolver {
 
         let snapshot = try await loadSnapshot(for: requestURL, knownTitle: title, htmlOverride: htmlOverride)
         if ReaderModeDetector.canOpenReader(url: canonicalURL, title: snapshot.title) {
+            guard let threadID = ReaderHTMLParser.extractThreadID(from: canonicalURL) else {
+                return .web(requestURL)
+            }
             return .novel(
                 ReaderLaunchContext(
-                    threadURL: canonicalURL,
+                    threadID: threadID,
                     threadTitle: snapshot.title,
                     source: .forum,
                     authorID: authorID

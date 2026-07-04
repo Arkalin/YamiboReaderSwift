@@ -31,11 +31,9 @@ import Testing
 }
 
 @Test func favoriteItemIdentityComesFromStableContentTarget() throws {
-    let firstURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=319&page=4&mobile=2"))
-    let secondURL = try #require(URL(string: "https://bbs.yamibo.com/thread-319-1-1.html"))
-    let normal = FavoriteContentTarget(kind: .normalThread, threadURL: firstURL)
-    let sameNormal = FavoriteContentTarget(kind: .normalThread, threadURL: secondURL)
-    let novel = FavoriteContentTarget(kind: .novelThread, threadURL: secondURL)
+    let normal = FavoriteContentTarget(kind: .normalThread, threadID: "319")
+    let sameNormal = FavoriteContentTarget(kind: .normalThread, threadID: "319")
+    let novel = FavoriteContentTarget(kind: .novelThread, threadID: "319")
     let manga = FavoriteContentTarget(mangaCleanBookName: "Clean Manga")
     let stableManga = FavoriteContentTarget(mangaID: "links:9001", mangaCleanBookName: "Clean Manga")
 
@@ -60,8 +58,7 @@ import Testing
 }
 
 @Test func favoriteItemRequiresAtLeastOneFavoriteLocation() throws {
-    let url = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=320"))
-    let target = FavoriteContentTarget(kind: .normalThread, threadURL: url)
+    let target = FavoriteContentTarget(kind: .normalThread, threadID: "320")
 
     #expect(throws: YamiboError.self) {
         _ = try FavoriteItem(target: target, title: "No location", locations: [])
@@ -72,8 +69,7 @@ import Testing
     let suiteName = "LocalFirstFavoriteLibraryTests.\(UUID().uuidString)"
     let suite = try #require(UserDefaults(suiteName: suiteName))
     let store = FavoriteLibraryStore(defaults: suite, key: "library")
-    let url = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=321"))
-    let target = FavoriteContentTarget(kind: .normalThread, threadURL: url)
+    let target = FavoriteContentTarget(kind: .normalThread, threadID: "321")
     let coverURL = try #require(URL(string: "https://img.example.test/cover.jpg"))
     var document = FavoriteLibraryDocument()
     let category = document.defaultCategory
@@ -104,8 +100,7 @@ import Testing
 }
 
 @Test func remoteFavoriteMappingDoesNotDecideLocalItemExistence() throws {
-    let url = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=324"))
-    let target = FavoriteContentTarget(kind: .normalThread, threadURL: url)
+    let target = FavoriteContentTarget(kind: .normalThread, threadID: "324")
     var document = FavoriteLibraryDocument()
     let item = try FavoriteItem(
         target: target,
@@ -146,7 +141,7 @@ import Testing
     let tag = document.createTag(name: "标签", color: .green, date: Date(timeIntervalSince1970: 10))
     let target = FavoriteContentTarget(
         kind: .novelThread,
-        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=321&page=4&mobile=2"))
+        threadID: "321"
     )
     let item = try FavoriteItem(
         target: target,
@@ -172,7 +167,7 @@ import Testing
     let loadedItem = try #require(loaded.items.first)
     #expect(loadedItem.id == "thread:novel:321")
     #expect(loadedItem.target.threadID == "321")
-    #expect(loadedItem.target.canonicalURL?.absoluteString == "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=321")
+    #expect(loaded.openRoute(for: loadedItem) == .novelDetail(threadID: "321"))
     #expect(loadedItem.locations == [.category(category.id), .collection(categoryID: category.id, collectionID: collection.id)])
     #expect(loadedItem.tagIDs == [tag.id])
     #expect(loadedItem.remoteMapping?.yamiboFavoriteID == "remote-321")

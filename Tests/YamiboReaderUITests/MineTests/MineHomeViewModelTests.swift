@@ -838,7 +838,7 @@ private func makeMineNovelOfflineCacheWorkRequest(
     NovelOfflineCacheWorkRequest(
         ownerTitle: ownerTitle,
         title: "第\(view)页",
-        threadURL: try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=\(tid)&page=\(view)")),
+        threadID: tid,
         view: view,
         targetImageURLs: []
     )

@@ -36,7 +36,7 @@ public struct NovelOfflineCacheEntry: Codable, Hashable, Identifiable, Sendable 
 
     public static func entryKey(document: ReaderPageDocument) -> String {
         entryKey(
-            threadURL: document.threadURL,
+            threadID: document.threadID,
             view: document.view,
             authorID: document.resolvedAuthorID,
             contentSource: document.contentSource
@@ -45,19 +45,19 @@ public struct NovelOfflineCacheEntry: Codable, Hashable, Identifiable, Sendable 
 
     public static func groupKey(document: ReaderPageDocument) -> String {
         groupKey(
-            threadURL: document.threadURL,
+            threadID: document.threadID,
             authorID: document.resolvedAuthorID,
             contentSource: document.contentSource
         )
     }
 
     public static func groupKey(
-        threadURL: URL,
+        threadID: String,
         authorID: String?,
         contentSource: ReaderContentSource?
     ) -> String {
         let identity = ReaderCacheIdentity(
-            threadURL: threadURL,
+            threadID: threadID,
             view: 1,
             authorID: authorID,
             contentSource: contentSource
@@ -74,19 +74,19 @@ public struct NovelOfflineCacheEntry: Codable, Hashable, Identifiable, Sendable 
     }
 
     public static func entryKey(
-        threadURL: URL,
+        threadID: String,
         view: Int,
         authorID: String?,
         contentSource: ReaderContentSource?
     ) -> String {
         let normalizedView = ReaderCacheIdentity(
-            threadURL: threadURL,
+            threadID: threadID,
             view: view,
             authorID: authorID,
             contentSource: contentSource
         ).view
         return [
-            groupKey(threadURL: threadURL, authorID: authorID, contentSource: contentSource),
+            groupKey(threadID: threadID, authorID: authorID, contentSource: contentSource),
             "view",
             String(normalizedView)
         ].joined(separator: "_")
@@ -124,7 +124,7 @@ public struct NovelOfflineCacheEntry: Codable, Hashable, Identifiable, Sendable 
 public struct NovelOfflineCacheWorkRequest: Hashable, Sendable {
     public var ownerTitle: String
     public var title: String
-    public var threadURL: URL
+    public var threadID: String
     public var view: Int
     public var authorID: String?
     public var contentSource: ReaderContentSource
@@ -133,7 +133,7 @@ public struct NovelOfflineCacheWorkRequest: Hashable, Sendable {
 
     public var entryKey: String {
         NovelOfflineCacheEntry.entryKey(
-            threadURL: threadURL,
+            threadID: threadID,
             view: view,
             authorID: authorID,
             contentSource: contentSource
@@ -142,7 +142,7 @@ public struct NovelOfflineCacheWorkRequest: Hashable, Sendable {
 
     public var groupKey: String {
         NovelOfflineCacheEntry.groupKey(
-            threadURL: threadURL,
+            threadID: threadID,
             authorID: authorID,
             contentSource: contentSource
         )
@@ -151,7 +151,7 @@ public struct NovelOfflineCacheWorkRequest: Hashable, Sendable {
     public init(
         ownerTitle: String,
         title: String,
-        threadURL: URL,
+        threadID: String,
         view: Int,
         authorID: String? = nil,
         contentSource: ReaderContentSource = .fallbackUnfilteredPage,
@@ -160,7 +160,9 @@ public struct NovelOfflineCacheWorkRequest: Hashable, Sendable {
     ) {
         self.ownerTitle = ownerTitle.trimmingCharacters(in: .whitespacesAndNewlines)
         self.title = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        self.threadURL = ReaderCacheIdentity.canonicalThreadURL(from: threadURL)
+        let normalizedThreadID = threadID.trimmingCharacters(in: .whitespacesAndNewlines)
+        precondition(!normalizedThreadID.isEmpty, "NovelOfflineCacheWorkRequest requires a Yamibo thread tid")
+        self.threadID = normalizedThreadID
         self.view = max(1, view)
         self.authorID = authorID?.trimmingCharacters(in: .whitespacesAndNewlines)
         if self.authorID?.isEmpty == true {

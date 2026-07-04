@@ -8,7 +8,7 @@ import Testing
     var document = FavoriteLibraryDocument()
     let category = document.createCategory(name: "分类")
     let collection = document.createCollection(categoryID: category.id, name: "合集", color: .blue)
-    let target = FavoriteContentTarget(kind: .normalThread, threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=801")))
+    let target = FavoriteContentTarget(kind: .normalThread, threadID: "801")
     let item = try FavoriteItem(
         target: target,
         title: "主题",

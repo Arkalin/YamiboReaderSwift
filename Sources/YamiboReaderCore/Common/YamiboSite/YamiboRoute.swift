@@ -71,6 +71,15 @@ public enum YamiboRoute: Sendable {
         return components.url
     }
 
+    public static func findPostURL(threadID: String, postID: String?) -> URL? {
+        let normalizedThreadID = threadID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedThreadID.isEmpty else { return nil }
+        return findPostURL(
+            threadURL: Self.threadByID(tid: normalizedThreadID, page: 1, authorID: nil, reverse: false).url,
+            postID: postID
+        )
+    }
+
     case favorites(page: Int)
     case favoriteDeleteForm
     case favoriteDelete

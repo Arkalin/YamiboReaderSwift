@@ -3,13 +3,13 @@ import YamiboReaderCore
 
 public struct ReaderCacheOperationContext: Equatable, Sendable {
     public var ownerTitle: String
-    public var threadURL: URL
+    public var threadID: String
     public var authorID: String?
     public var contentSource: ReaderContentSource?
 
-    public init(ownerTitle: String = "", threadURL: URL, authorID: String?, contentSource: ReaderContentSource?) {
+    public init(ownerTitle: String = "", threadID: String, authorID: String?, contentSource: ReaderContentSource?) {
         self.ownerTitle = ownerTitle
-        self.threadURL = threadURL
+        self.threadID = threadID.trimmingCharacters(in: .whitespacesAndNewlines)
         self.authorID = authorID
         self.contentSource = contentSource
     }

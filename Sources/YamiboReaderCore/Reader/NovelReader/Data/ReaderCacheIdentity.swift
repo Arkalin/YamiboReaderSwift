@@ -16,7 +16,6 @@ public enum ReaderCacheVariant: Hashable, Codable, Sendable {
 
 public struct ReaderCacheIdentity: Hashable, Codable, Sendable {
     public let threadID: String
-    public let threadURL: URL
     public let threadKey: String
     public let variant: ReaderCacheVariant
     public let view: Int
@@ -29,19 +28,18 @@ public struct ReaderCacheIdentity: Hashable, Codable, Sendable {
         "\(threadKey)#\(variantKey)#\(view)"
     }
 
-    public init(threadURL: URL, view: Int, authorID: String?, contentSource: ReaderContentSource?) {
-        let canonicalThreadURL = Self.canonicalThreadURL(from: threadURL)
-        let threadID = Self.threadID(from: canonicalThreadURL) ?? canonicalThreadURL.absoluteString
-        self.threadID = threadID
-        self.threadURL = canonicalThreadURL
-        self.threadKey = "tid:\(threadID)"
+    public init(threadID: String, view: Int, authorID: String?, contentSource: ReaderContentSource?) {
+        let normalizedThreadID = threadID.trimmingCharacters(in: .whitespacesAndNewlines)
+        precondition(!normalizedThreadID.isEmpty, "ReaderCacheIdentity requires a Yamibo thread tid")
+        self.threadID = normalizedThreadID
+        self.threadKey = "tid:\(normalizedThreadID)"
         self.variant = Self.resolveVariant(authorID: authorID, contentSource: contentSource)
         self.view = max(1, view)
     }
 
     public init(request: ReaderPageRequest, contentSource: ReaderContentSource? = nil) {
         self.init(
-            threadURL: request.threadURL,
+            threadID: request.threadID,
             view: request.view,
             authorID: request.authorID,
             contentSource: contentSource
@@ -50,19 +48,11 @@ public struct ReaderCacheIdentity: Hashable, Codable, Sendable {
 
     public init(document: ReaderPageDocument) {
         self.init(
-            threadURL: document.threadURL,
+            threadID: document.threadID,
             view: document.view,
             authorID: document.resolvedAuthorID,
             contentSource: document.contentSource
         )
-    }
-
-    public static func canonicalThreadURL(from url: URL) -> URL {
-        YamiboThreadURLCanonicalizer.canonicalThreadURL(from: url)
-    }
-
-    public static func threadID(from url: URL) -> String? {
-        YamiboThreadURLCanonicalizer.threadID(from: canonicalThreadURL(from: url))
     }
 
     private static func resolveVariant(authorID: String?, contentSource: ReaderContentSource?) -> ReaderCacheVariant {

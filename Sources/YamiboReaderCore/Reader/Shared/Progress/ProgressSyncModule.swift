@@ -1,7 +1,7 @@
 import Foundation
 
 public struct NovelReadingPosition: Hashable, Sendable {
-    public var threadURL: URL
+    public var threadID: String
     public var view: Int
     public var maxView: Int?
     public var chapterTitle: String?
@@ -11,7 +11,7 @@ public struct NovelReadingPosition: Hashable, Sendable {
     public var threadCoverURL: URL?
 
     public init(
-        threadURL: URL,
+        threadID: String,
         view: Int,
         maxView: Int? = nil,
         chapterTitle: String? = nil,
@@ -20,7 +20,9 @@ public struct NovelReadingPosition: Hashable, Sendable {
         documentSurfaceProgressPercent: Int? = nil,
         threadCoverURL: URL? = nil
     ) {
-        self.threadURL = threadURL
+        let normalizedThreadID = threadID.trimmingCharacters(in: .whitespacesAndNewlines)
+        precondition(!normalizedThreadID.isEmpty, "NovelReadingPosition requires a Yamibo thread tid")
+        self.threadID = normalizedThreadID
         self.view = max(1, view)
         self.maxView = maxView.map { max(self.view, $0) }
         self.chapterTitle = resumePoint?.chapterTitle ?? chapterTitle

@@ -19,10 +19,11 @@ extension OfflineCacheStore {
         return await offlineImageData(imageURLString: imageURLString, fileName: fileName)
     }
 
-    public func novelOfflineImageData(for imageURL: URL, refererURL: URL) async -> Data? {
+    public func novelOfflineImageData(for imageURL: URL, threadID: String) async -> Data? {
         try? await recoverQueueStateAfterRestart()
         let imageURLString = imageURL.absoluteString
-        let canonicalRefererURLString = ReaderCacheIdentity.canonicalThreadURL(from: refererURL).absoluteString
+        let normalizedThreadID = threadID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedThreadID.isEmpty else { return nil }
         guard let fileName = try? await database.read({ db in
             try String.fetchOne(
                 db,
@@ -34,11 +35,11 @@ extension OfflineCacheStore {
                 JOIN offline_cache_image_assets AS assets
                     ON assets.image_url = entry_images.image_url
                 WHERE entry_images.image_url = ?
-                    AND entries.thread_url = ?
+                    AND entries.thread_id = ?
                 ORDER BY entries.updated_at DESC, entry_images.entry_key ASC
                 LIMIT 1
                 """,
-                arguments: [imageURLString, canonicalRefererURLString]
+                arguments: [imageURLString, normalizedThreadID]
             )
         }) else {
             return nil

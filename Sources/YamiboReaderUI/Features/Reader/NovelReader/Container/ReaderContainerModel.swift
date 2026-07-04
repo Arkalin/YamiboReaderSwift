@@ -470,12 +470,17 @@ public final class ReaderContainerModel: ObservableObject {
     }
 
     public var forumURL: URL {
-        YamiboRoute.thread(url: context.threadURL, page: displayedView, authorID: currentAuthorID ?? context.authorID).url
+        YamiboRoute.threadByID(
+            tid: context.threadID,
+            page: displayedView,
+            authorID: currentAuthorID ?? context.authorID,
+            reverse: false
+        ).url
     }
 
     public var currentForumTargetURL: URL {
         guard let target = currentChapterCommentTarget else { return forumURL }
-        return YamiboRoute.findPostURL(threadURL: target.threadURL, postID: target.ownerPostID) ?? forumURL
+        return YamiboRoute.findPostURL(threadID: target.threadID, postID: target.ownerPostID) ?? forumURL
     }
 
     public func prepare(layout: ReaderContainerLayout) async {
@@ -483,7 +488,7 @@ public final class ReaderContainerModel: ObservableObject {
         latestRequestedLayout = layout
         layoutRequestSequence &+= 1
         if repository == nil {
-            inlineImageLoadingContext = await appContext.makeNovelInlineImageLoadingContext()
+            inlineImageLoadingContext = await appContext.makeNovelInlineImageLoadingContext(threadID: context.threadID)
             repository = await appContext.makeNovelReaderRepository()
             let appSettings = await appContext.settingsStore.load()
             bootstrapSettings = appSettings.reader
@@ -494,7 +499,7 @@ public final class ReaderContainerModel: ObservableObject {
             }
         }
         if readerSurfaces.isEmpty {
-            let progress = await appContext.readingProgressStore.load(for: context.threadURL)
+            let progress = await appContext.readingProgressStore.load(threadID: context.threadID)
             let novelProgress = progress?.novel
             await startReadingWorkflow(
                 resumePoint: context.initialResumePoint ?? novelProgress?.novelResumePoint,
@@ -1406,7 +1411,7 @@ public final class ReaderContainerModel: ObservableObject {
 
     private func currentProgressSnapshot() -> NovelReadingPosition {
         readingWorkflow?.currentProgressPosition() ?? NovelReadingPosition(
-            threadURL: context.threadURL,
+            threadID: context.threadID,
             view: displayedView,
             maxView: maxView,
             chapterTitle: currentChapterTitle,
@@ -1481,7 +1486,7 @@ public final class ReaderContainerModel: ObservableObject {
 
     private func resumeContext(for snapshot: NovelReadingPosition) -> ReaderLaunchContext {
         ReaderLaunchContext(
-            threadURL: context.threadURL,
+            threadID: context.threadID,
             threadTitle: context.threadTitle,
             source: .resume,
             initialView: snapshot.view,
@@ -1540,7 +1545,7 @@ public final class ReaderContainerModel: ObservableObject {
             updateTimesByView: cachedViewUpdateTimes,
             context: ReaderCacheOperationContext(
                 ownerTitle: title,
-                threadURL: self.context.threadURL,
+                threadID: self.context.threadID,
                 authorID: context.authorID,
                 contentSource: context.contentSource
             )

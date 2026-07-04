@@ -113,15 +113,15 @@ struct NovelInlineImageDataLoaderTests {
         let upstream = RecordingNovelInlineImageDataLoader(results: [.success(Data([9]))])
         let loader = CachedNovelInlineImageDataLoader(
             imageDataLoader: upstream,
-            offlineCacheStore: offlineProvider
+            offlineCacheStore: offlineProvider,
+            threadID: "910"
         )
 
         let data = try await loader.imageData(for: imageURL, refererURL: refererURL)
 
         #expect(data == Data([4, 2]))
-        #expect(await offlineProvider.requestedRequests == [
-            YamiboImageRequest(url: imageURL, refererURL: refererURL)
-        ])
+        #expect(await offlineProvider.requestedImageURLs == [imageURL])
+        #expect(await offlineProvider.requestedThreadIDs == ["910"])
         #expect(await upstream.callCount == 0)
     }
 
@@ -132,15 +132,15 @@ struct NovelInlineImageDataLoaderTests {
         let upstream = RecordingNovelInlineImageDataLoader(results: [.success(Data([6]))])
         let loader = CachedNovelInlineImageDataLoader(
             imageDataLoader: upstream,
-            offlineCacheStore: offlineProvider
+            offlineCacheStore: offlineProvider,
+            threadID: "911"
         )
 
         let data = try await loader.imageData(for: imageURL, refererURL: refererURL)
 
         #expect(data == Data([6]))
-        #expect(await offlineProvider.requestedRequests == [
-            YamiboImageRequest(url: imageURL, refererURL: refererURL)
-        ])
+        #expect(await offlineProvider.requestedImageURLs == [imageURL])
+        #expect(await offlineProvider.requestedThreadIDs == ["911"])
         #expect(await upstream.requestedRequests == [
             YamiboImageRequest(url: imageURL, refererURL: refererURL)
         ])
@@ -151,13 +151,14 @@ struct NovelInlineImageDataLoaderTests {
         let threadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=900&page=1"))
         let offlineStore = try makeTestOfflineCacheStore(rootDirectory: makeTemporaryNovelInlineImageLoaderDirectory())
         try await offlineStore.saveNovelOfflineCacheEntry(
-            makeNovelInlineImageOfflineEntry(threadURL: threadURL, imageURLs: [imageURL])
+            makeNovelInlineImageOfflineEntry(threadID: "900", imageURLs: [imageURL])
         )
         try await offlineStore.saveOfflineImageData(Data([7, 8]), for: imageURL)
         let upstream = RecordingNovelInlineImageDataLoader(results: [.success(Data([9]))])
         let loader = CachedNovelInlineImageDataLoader(
             imageDataLoader: upstream,
-            offlineCacheStore: offlineStore
+            offlineCacheStore: offlineStore,
+            threadID: "900"
         )
 
         let data = try await loader.imageData(for: imageURL, refererURL: threadURL)
@@ -171,12 +172,13 @@ struct NovelInlineImageDataLoaderTests {
         let threadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=901&page=1"))
         let offlineStore = try makeTestOfflineCacheStore(rootDirectory: makeTemporaryNovelInlineImageLoaderDirectory())
         try await offlineStore.saveNovelOfflineCacheEntry(
-            makeNovelInlineImageOfflineEntry(threadURL: threadURL, imageURLs: [imageURL])
+            makeNovelInlineImageOfflineEntry(threadID: "901", imageURLs: [imageURL])
         )
         let upstream = RecordingNovelInlineImageDataLoader(results: [.success(Data([3]))])
         let loader = CachedNovelInlineImageDataLoader(
             imageDataLoader: upstream,
-            offlineCacheStore: offlineStore
+            offlineCacheStore: offlineStore,
+            threadID: "901"
         )
 
         let data = try await loader.imageData(for: imageURL, refererURL: threadURL)
@@ -192,13 +194,14 @@ struct NovelInlineImageDataLoaderTests {
         let requestedThreadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=903&page=1"))
         let offlineStore = try makeTestOfflineCacheStore(rootDirectory: makeTemporaryNovelInlineImageLoaderDirectory())
         try await offlineStore.saveNovelOfflineCacheEntry(
-            makeNovelInlineImageOfflineEntry(threadURL: cachedThreadURL, imageURLs: [imageURL])
+            makeNovelInlineImageOfflineEntry(threadID: "902", imageURLs: [imageURL])
         )
         try await offlineStore.saveOfflineImageData(Data([7]), for: imageURL)
         let upstream = RecordingNovelInlineImageDataLoader(results: [.success(Data([4]))])
         let loader = CachedNovelInlineImageDataLoader(
             imageDataLoader: upstream,
-            offlineCacheStore: offlineStore
+            offlineCacheStore: offlineStore,
+            threadID: "903"
         )
 
         let data = try await loader.imageData(for: imageURL, refererURL: requestedThreadURL)
@@ -212,12 +215,13 @@ struct NovelInlineImageDataLoaderTests {
         let threadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=904&page=1"))
         let offlineStore = try makeTestOfflineCacheStore(rootDirectory: makeTemporaryNovelInlineImageLoaderDirectory())
         try await offlineStore.saveNovelOfflineCacheEntry(
-            makeNovelInlineImageOfflineEntry(threadURL: threadURL, imageURLs: [imageURL])
+            makeNovelInlineImageOfflineEntry(threadID: "904", imageURLs: [imageURL])
         )
         let upstream = RecordingNovelInlineImageDataLoader(results: [.failure(YamiboError.offline)])
         let loader = CachedNovelInlineImageDataLoader(
             imageDataLoader: upstream,
-            offlineCacheStore: offlineStore
+            offlineCacheStore: offlineStore,
+            threadID: "904"
         )
 
         await #expect(throws: YamiboError.offline) {
@@ -272,14 +276,16 @@ struct NovelInlineImageDataLoaderTests {
 
 private actor RecordingNovelOfflineImageProvider: NovelOfflineImageDataProviding {
     private let result: Data?
-    private(set) var requestedRequests: [YamiboImageRequest] = []
+    private(set) var requestedImageURLs: [URL] = []
+    private(set) var requestedThreadIDs: [String] = []
 
     init(result: Data?) {
         self.result = result
     }
 
-    func novelOfflineImageData(for imageURL: URL, refererURL: URL) async -> Data? {
-        requestedRequests.append(YamiboImageRequest(url: imageURL, refererURL: refererURL))
+    func novelOfflineImageData(for imageURL: URL, threadID: String) async -> Data? {
+        requestedImageURLs.append(imageURL)
+        requestedThreadIDs.append(threadID)
         return result
     }
 }
@@ -318,11 +324,11 @@ private final class NovelInlineImageRequestCounter: @unchecked Sendable {
     }
 }
 
-private func makeNovelInlineImageOfflineEntry(threadURL: URL, imageURLs: [URL]) -> NovelOfflineCacheEntry {
+private func makeNovelInlineImageOfflineEntry(threadID: String, imageURLs: [URL]) -> NovelOfflineCacheEntry {
     NovelOfflineCacheEntry(
         ownerTitle: "测试小说",
         document: ReaderPageDocument(
-            threadURL: threadURL,
+            threadID: threadID,
             view: 1,
             maxView: 1,
             resolvedAuthorID: "author-900",

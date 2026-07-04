@@ -101,7 +101,7 @@ public extension FavoriteLibraryDocument {
         let uploadTargetIDs = items
             .filter { item in
                 item.locations.contains(where: { $0.categoryID == categoryID })
-                    && item.target.canonicalURL != nil
+                    && item.target.threadID != nil
                     && item.remoteMapping?.yamiboFavoriteID == nil
             }
             .map(\.target.id)

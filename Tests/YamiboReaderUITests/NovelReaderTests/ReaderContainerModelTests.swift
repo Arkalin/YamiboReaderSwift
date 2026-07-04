@@ -640,7 +640,7 @@ final class ReaderContainerModelTests: XCTestCase {
 
     func testVerticalProgressScrubContextClampsSingleSurfaceWithoutChapters() async throws {
         let document = ReaderPageDocument(
-            threadURL: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=445566&mobile=2")!,
+            threadID: "445566",
             view: 1,
             maxView: 1,
             contentSource: .fallbackUnfilteredPage,
@@ -983,7 +983,7 @@ final class ReaderContainerModelTests: XCTestCase {
 
     func testTwoPageSpreadRepaginatesTextForHalfWidthColumns() async throws {
         let document = ReaderPageDocument(
-            threadURL: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9911&mobile=2")!,
+            threadID: "9911",
             view: 1,
             maxView: 1,
             contentSource: .fallbackUnfilteredPage,
@@ -1016,7 +1016,7 @@ final class ReaderContainerModelTests: XCTestCase {
 
     func testLatestLandscapeLayoutSupersedesInFlightPortraitLayoutMatchingCommittedLayout() async throws {
         let document = ReaderPageDocument(
-            threadURL: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9912&mobile=2")!,
+            threadID: "9912",
             view: 1,
             maxView: 1,
             contentSource: .fallbackUnfilteredPage,
@@ -1228,7 +1228,7 @@ final class ReaderContainerModelTests: XCTestCase {
         let model = await MainActor.run {
             ReaderContainerModel(
                 context: ReaderLaunchContext(
-                    threadURL: document.threadURL,
+                    threadID: document.threadID,
                     threadTitle: "测试线程",
                     source: .forum
                 ),
@@ -1285,7 +1285,7 @@ final class ReaderContainerModelTests: XCTestCase {
         let model = await MainActor.run {
             ReaderContainerModel(
                 context: ReaderLaunchContext(
-                    threadURL: document.threadURL,
+                    threadID: document.threadID,
                     threadTitle: "测试线程",
                     source: .forum
                 ),
@@ -1352,7 +1352,7 @@ final class ReaderContainerModelTests: XCTestCase {
         let model = await MainActor.run {
             ReaderContainerModel(
                 context: ReaderLaunchContext(
-                    threadURL: document.threadURL,
+                    threadID: document.threadID,
                     threadTitle: "测试线程",
                     source: .forum
                 ),
@@ -1430,10 +1430,10 @@ final class ReaderContainerModelTests: XCTestCase {
     }
 
     func testChapterDirectoryPreviewHidesAuthorRepliesToOthersAcrossWebViews() async throws {
-        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=889900&mobile=2")!
+        let threadID = "889900"
         let documents = [
             ReaderPageDocument(
-                threadURL: threadURL,
+                threadID: threadID,
                 view: 1,
                 maxView: 2,
                 resolvedAuthorID: "42",
@@ -1448,7 +1448,7 @@ final class ReaderContainerModelTests: XCTestCase {
                 ]
             ),
             ReaderPageDocument(
-                threadURL: threadURL,
+                threadID: threadID,
                 view: 2,
                 maxView: 2,
                 resolvedAuthorID: "42",
@@ -1469,7 +1469,7 @@ final class ReaderContainerModelTests: XCTestCase {
             documents: documents,
             settings: ReaderAppearanceSettings(showsAuthorRepliesToOthers: false, readingMode: .vertical),
             launchContext: ReaderLaunchContext(
-                threadURL: threadURL,
+                threadID: threadID,
                 threadTitle: "测试线程",
                 source: .forum,
                 authorID: "42"
@@ -1522,7 +1522,7 @@ final class ReaderContainerModelTests: XCTestCase {
 
     func testSettingsPreviewTextUsesDraftTranslationModeFromOriginalDocument() async throws {
         let document = ReaderPageDocument(
-            threadURL: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9012&mobile=2")!,
+            threadID: "9012",
             view: 1,
             maxView: 1,
             contentSource: .fallbackUnfilteredPage,
@@ -1560,9 +1560,9 @@ final class ReaderContainerModelTests: XCTestCase {
         let forumCacheStore = ForumCacheStore(
             baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         )
-        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9013&mobile=2")!
+        let threadID = "9013"
         let document = ReaderPageDocument(
-            threadURL: threadURL,
+            threadID: threadID,
             view: 1,
             maxView: 1,
             resolvedAuthorID: "author-1",
@@ -1592,7 +1592,7 @@ final class ReaderContainerModelTests: XCTestCase {
         let model = await MainActor.run {
             ReaderContainerModel(
                 context: ReaderLaunchContext(
-                    threadURL: threadURL,
+                    threadID: threadID,
                     threadTitle: "测试线程",
                     source: .favorites,
                     authorID: "author-1"
@@ -1632,7 +1632,7 @@ final class ReaderContainerModelTests: XCTestCase {
 
         let resumeContext = await model.saveProgress()
 
-        let readingProgress = await readingProgressStore.load(for: threadURL)
+        let readingProgress = await readingProgressStore.load(threadID: threadID)
         let savedResumePoint = try XCTUnwrap(readingProgress?.novel?.novelResumePoint)
         XCTAssertEqual(savedResumePoint.textSegmentIdentity, try XCTUnwrap(document.semantics(forSegmentIndex: 2)?.textSegmentIdentity))
         XCTAssertEqual(savedResumePoint.displayedTextOffset, targetOffset)
@@ -1669,7 +1669,7 @@ final class ReaderContainerModelTests: XCTestCase {
         let model = await MainActor.run {
             ReaderContainerModel(
                 context: ReaderLaunchContext(
-                    threadURL: document.threadURL,
+                    threadID: document.threadID,
                     threadTitle: "测试线程",
                     source: .forum
                 ),
@@ -1686,7 +1686,7 @@ final class ReaderContainerModelTests: XCTestCase {
         await model.saveProgress()
 
         let favorites = await appContext.localFavoriteLibraryStore.load().items
-        let readingProgress = await readingProgressStore.load(for: document.threadURL)
+        let readingProgress = await readingProgressStore.load(threadID: document.threadID)
         XCTAssertTrue(favorites.isEmpty)
         XCTAssertNotNil(readingProgress?.novel)
     }
@@ -1722,7 +1722,7 @@ final class ReaderContainerModelTests: XCTestCase {
         let model = await MainActor.run {
             ReaderContainerModel(
                 context: ReaderLaunchContext(
-                    threadURL: document.threadURL,
+                    threadID: document.threadID,
                     threadTitle: "测试线程",
                     source: .forum
                 ),
@@ -1743,7 +1743,7 @@ final class ReaderContainerModelTests: XCTestCase {
         guard case let .novel(context)? = await readerResumeRouteStore.load() else {
             return XCTFail("Expected novel resume route")
         }
-        XCTAssertEqual(context.threadURL, document.threadURL)
+        XCTAssertEqual(context.threadID, document.threadID)
         XCTAssertEqual(context.threadTitle, "测试线程")
         XCTAssertEqual(context.source, .resume)
         XCTAssertEqual(context.initialView, 1)
@@ -1784,7 +1784,7 @@ final class ReaderContainerModelTests: XCTestCase {
         }
         let model = await MainActor.run {
             let context = ReaderLaunchContext(
-                threadURL: document.threadURL,
+                threadID: document.threadID,
                 threadTitle: "测试线程",
                 source: .forum
             )
@@ -1846,7 +1846,7 @@ final class ReaderContainerModelTests: XCTestCase {
         let model = await MainActor.run {
             ReaderContainerModel(
                 context: ReaderLaunchContext(
-                    threadURL: document.threadURL,
+                    threadID: document.threadID,
                     threadTitle: "测试线程",
                     source: .forum
                 ),
@@ -1861,7 +1861,7 @@ final class ReaderContainerModelTests: XCTestCase {
         }
         await model.saveProgress()
 
-        let readingProgress = await readingProgressStore.load(for: document.threadURL)
+        let readingProgress = await readingProgressStore.load(threadID: document.threadID)
         XCTAssertNotNil(readingProgress?.novel?.novelResumePoint)
     }
 
@@ -1875,7 +1875,7 @@ final class ReaderContainerModelTests: XCTestCase {
             baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         )
         let document = ReaderPageDocument(
-            threadURL: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=901&mobile=2")!,
+            threadID: "901",
             view: 1,
             maxView: 1,
             contentSource: .fallbackUnfilteredPage,
@@ -1902,7 +1902,7 @@ final class ReaderContainerModelTests: XCTestCase {
         let model = await MainActor.run {
             ReaderContainerModel(
                 context: ReaderLaunchContext(
-                    threadURL: document.threadURL,
+                    threadID: document.threadID,
                     threadTitle: "测试线程",
                     source: .forum
                 ),
@@ -1923,11 +1923,11 @@ final class ReaderContainerModelTests: XCTestCase {
         }
 
         try await waitFor {
-            let readingProgress = await readingProgressStore.load(for: document.threadURL)
+            let readingProgress = await readingProgressStore.load(threadID: document.threadID)
             return readingProgress?.novel?.novelResumePoint != nil
         }
 
-        let readingProgress = await readingProgressStore.load(for: document.threadURL)
+        let readingProgress = await readingProgressStore.load(threadID: document.threadID)
         let savedResumePoint = try XCTUnwrap(readingProgress?.novel?.novelResumePoint)
         XCTAssertEqual(readingProgress?.novel?.lastView, 1)
         XCTAssertEqual(readingProgress?.novel?.lastChapter, "第一章")
@@ -1946,9 +1946,9 @@ final class ReaderContainerModelTests: XCTestCase {
         let forumCacheStore = ForumCacheStore(
             baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         )
-        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=902&mobile=2")!
+        let threadID = "902"
         let document = ReaderPageDocument(
-            threadURL: threadURL,
+            threadID: threadID,
             view: 2,
             maxView: 2,
             contentSource: .fallbackUnfilteredPage,
@@ -1990,7 +1990,7 @@ final class ReaderContainerModelTests: XCTestCase {
         let readingProgressStore = try ReadingProgressStore(testSuiteName: defaultsSuiteName, key: "reading-progress")
         try await readingProgressStore.saveNovel(
             NovelReadingPosition(
-                threadURL: threadURL,
+                threadID: threadID,
                 view: 2,
                 maxView: 2,
                 chapterTitle: "第三章",
@@ -2008,7 +2008,7 @@ final class ReaderContainerModelTests: XCTestCase {
         let model = await MainActor.run {
             ReaderContainerModel(
                 context: ReaderLaunchContext(
-                    threadURL: threadURL,
+                    threadID: threadID,
                     threadTitle: "测试线程",
                     source: .favorites
                 ),
@@ -2037,9 +2037,9 @@ final class ReaderContainerModelTests: XCTestCase {
         let forumCacheStore = ForumCacheStore(
             baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         )
-        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=905&mobile=2")!
+        let threadID = "905"
         let document = ReaderPageDocument(
-            threadURL: threadURL,
+            threadID: threadID,
             view: 1,
             maxView: 1,
             contentSource: .fallbackUnfilteredPage,
@@ -2064,7 +2064,7 @@ final class ReaderContainerModelTests: XCTestCase {
             forumCacheStore: forumCacheStore
         )
         let launchContext = ReaderLaunchContext(
-            threadURL: threadURL,
+            threadID: threadID,
             threadTitle: "测试线程",
             source: .favorites
         )
@@ -2089,7 +2089,7 @@ final class ReaderContainerModelTests: XCTestCase {
             model.updateVerticalViewportPosition(surfaceIndex: targetPage.surfaceOrdinal, intraSurfaceProgress: 0.59)
         }
         await model.saveProgress()
-        let savedReadingProgress = await readingProgressStore.load(for: threadURL)
+        let savedReadingProgress = await readingProgressStore.load(threadID: threadID)
         let savedProgressPercent = await MainActor.run { model.currentProgressPercent }
         XCTAssertEqual(savedReadingProgress?.novel?.novelDocumentSurfaceProgressPercent, savedProgressPercent)
 
@@ -2118,9 +2118,9 @@ final class ReaderContainerModelTests: XCTestCase {
         let forumCacheStore = ForumCacheStore(
             baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         )
-        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=904&mobile=2")!
+        let threadID = "904"
         let document = ReaderPageDocument(
-            threadURL: threadURL,
+            threadID: threadID,
             view: 2,
             maxView: 2,
             contentSource: .fallbackUnfilteredPage,
@@ -2161,7 +2161,7 @@ final class ReaderContainerModelTests: XCTestCase {
         let readingProgressStore = try ReadingProgressStore(testSuiteName: defaultsSuiteName, key: "reading-progress")
         try await readingProgressStore.saveNovel(
             NovelReadingPosition(
-                threadURL: threadURL,
+                threadID: threadID,
                 view: 2,
                 maxView: 2,
                 chapterTitle: "第二章",
@@ -2179,7 +2179,7 @@ final class ReaderContainerModelTests: XCTestCase {
         let model = await MainActor.run {
             ReaderContainerModel(
                 context: ReaderLaunchContext(
-                    threadURL: threadURL,
+                    threadID: threadID,
                     threadTitle: "测试线程",
                     source: .favorites,
                     initialView: 2
@@ -2208,9 +2208,9 @@ final class ReaderContainerModelTests: XCTestCase {
         let forumCacheStore = ForumCacheStore(
             baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         )
-        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=909&mobile=2")!
+        let threadID = "909"
         let document = ReaderPageDocument(
-            threadURL: threadURL,
+            threadID: threadID,
             view: 1,
             maxView: 1,
             contentSource: .fallbackUnfilteredPage,
@@ -2247,7 +2247,7 @@ final class ReaderContainerModelTests: XCTestCase {
         let readingProgressStore = try ReadingProgressStore(testSuiteName: defaultsSuiteName, key: "reading-progress")
         try await readingProgressStore.saveNovel(
             NovelReadingPosition(
-                threadURL: threadURL,
+                threadID: threadID,
                 view: 1,
                 maxView: 1,
                 chapterTitle: "第一章",
@@ -2265,7 +2265,7 @@ final class ReaderContainerModelTests: XCTestCase {
         let model = await MainActor.run {
             ReaderContainerModel(
                 context: ReaderLaunchContext(
-                    threadURL: threadURL,
+                    threadID: threadID,
                     threadTitle: "测试线程",
                     source: .favorites
                 ),
@@ -2286,7 +2286,7 @@ final class ReaderContainerModelTests: XCTestCase {
 
     func testPagedDirectLaunchRestoresSemanticPosition() async throws {
         let document = ReaderPageDocument(
-            threadURL: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=910&mobile=2")!,
+            threadID: "910",
             view: 1,
             maxView: 1,
             contentSource: .fallbackUnfilteredPage,
@@ -2316,7 +2316,7 @@ final class ReaderContainerModelTests: XCTestCase {
             documents: [document],
             settings: ReaderAppearanceSettings(readingMode: .paged),
             launchContext: ReaderLaunchContext(
-                threadURL: document.threadURL,
+                threadID: document.threadID,
                 threadTitle: "测试线程",
                 source: .resume,
                 initialView: 1,
@@ -2334,7 +2334,7 @@ final class ReaderContainerModelTests: XCTestCase {
 
     func testLaunchWithoutSemanticPositionStartsAtFirstSurface() async throws {
         let document = ReaderPageDocument(
-            threadURL: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=905&mobile=2")!,
+            threadID: "905",
             view: 1,
             maxView: 1,
             contentSource: .fallbackUnfilteredPage,
@@ -2367,7 +2367,7 @@ final class ReaderContainerModelTests: XCTestCase {
         let model = await MainActor.run {
             ReaderContainerModel(
                 context: ReaderLaunchContext(
-                    threadURL: document.threadURL,
+                    threadID: document.threadID,
                     threadTitle: "测试线程",
                     source: .forum,
                     initialView: 1
@@ -2387,7 +2387,7 @@ final class ReaderContainerModelTests: XCTestCase {
 
     func testChangingReadingModeKeepsSemanticAnchorOnSameSegment() async throws {
         let document = ReaderPageDocument(
-            threadURL: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=903&mobile=2")!,
+            threadID: "903",
             view: 1,
             maxView: 1,
             contentSource: .fallbackUnfilteredPage,
@@ -2431,7 +2431,7 @@ final class ReaderContainerModelTests: XCTestCase {
 
     func testChangingReadingModeFromMergedPagedTextTargetsActualSegment() async throws {
         let document = ReaderPageDocument(
-            threadURL: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=906&mobile=2")!,
+            threadID: "906",
             view: 1,
             maxView: 1,
             contentSource: .fallbackUnfilteredPage,
@@ -2472,7 +2472,7 @@ final class ReaderContainerModelTests: XCTestCase {
 
     func testModeSwitchAnchorSurvivesFollowUpLayoutRepagination() async throws {
         let document = ReaderPageDocument(
-            threadURL: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=907&mobile=2")!,
+            threadID: "907",
             view: 1,
             maxView: 1,
             contentSource: .fallbackUnfilteredPage,
@@ -2512,7 +2512,7 @@ final class ReaderContainerModelTests: XCTestCase {
 
     func testVerticalToPagedModeSwitchDoesNotTemporarilyShowFirstPageBeforeLayoutSync() async throws {
         let document = ReaderPageDocument(
-            threadURL: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=908&mobile=2")!,
+            threadID: "908",
             view: 1,
             maxView: 1,
             contentSource: .fallbackUnfilteredPage,
@@ -2546,16 +2546,16 @@ final class ReaderContainerModelTests: XCTestCase {
     }
 
     func testCachedViewsTrackCurrentVariant() async throws {
-        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=556677&mobile=2")!
+        let threadID = "556677"
         let unfilteredDocument = makeDocument(
-            threadURL: threadURL,
+            threadID: threadID,
             view: 1,
             maxView: 1,
             chapterTitles: ["全部回复"],
             contentSource: .fallbackUnfilteredPage
         )
         let authorFilteredDocument = makeDocument(
-            threadURL: threadURL,
+            threadID: threadID,
             view: 1,
             maxView: 1,
             chapterTitles: ["只看楼主"],
@@ -2578,7 +2578,7 @@ final class ReaderContainerModelTests: XCTestCase {
         let filteredModel = try await makeModel(
             documents: [authorFilteredDocument],
             launchContext: ReaderLaunchContext(
-                threadURL: threadURL,
+                threadID: threadID,
                 threadTitle: "测试线程",
                 source: .forum,
                 authorID: "42"
@@ -2608,9 +2608,9 @@ final class ReaderContainerModelTests: XCTestCase {
             )
         }
 
-        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=559900&mobile=2")!
+        let threadID = "559900"
         let document = makeDocument(
-            threadURL: threadURL,
+            threadID: threadID,
             view: 1,
             maxView: 1,
             chapterTitles: ["离线章节"],
@@ -2627,7 +2627,7 @@ final class ReaderContainerModelTests: XCTestCase {
         let model = try await makeModel(
             documents: [document],
             launchContext: ReaderLaunchContext(
-                threadURL: threadURL,
+                threadID: threadID,
                 threadTitle: "测试线程",
                 source: .forum,
                 authorID: "42"
@@ -2656,16 +2656,16 @@ final class ReaderContainerModelTests: XCTestCase {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [ReaderTestURLProtocol.self]
         let session = URLSession(configuration: configuration)
-        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=556677&mobile=2")!
+        let threadID = "556677"
         let unfilteredDocument = makeDocument(
-            threadURL: threadURL,
+            threadID: threadID,
             view: 1,
             maxView: 1,
             chapterTitles: ["全部回复旧缓存"],
             contentSource: .fallbackUnfilteredPage
         )
         let authorFilteredDocument = makeDocument(
-            threadURL: threadURL,
+            threadID: threadID,
             view: 1,
             maxView: 1,
             chapterTitles: ["只看楼主旧缓存"],
@@ -2686,7 +2686,7 @@ final class ReaderContainerModelTests: XCTestCase {
         let model = try await makeModel(
             documents: [authorFilteredDocument],
             launchContext: ReaderLaunchContext(
-                threadURL: threadURL,
+                threadID: threadID,
                 threadTitle: "测试线程",
                 source: .forum,
                 authorID: "42"
@@ -2702,11 +2702,11 @@ final class ReaderContainerModelTests: XCTestCase {
         }
 
         let preservedAuthorFiltered = await cacheStore.loadDocument(
-            for: ReaderPageRequest(threadURL: threadURL, view: 1, authorID: "42"),
+            for: ReaderPageRequest(threadID: threadID, view: 1, authorID: "42"),
             contentSource: .authorFilteredPage
         )
         let preservedUnfiltered = await cacheStore.loadDocument(
-            for: ReaderPageRequest(threadURL: threadURL, view: 1),
+            for: ReaderPageRequest(threadID: threadID, view: 1),
             contentSource: .fallbackUnfilteredPage
         )
 
@@ -2726,7 +2726,7 @@ final class ReaderContainerModelTests: XCTestCase {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [ReaderTestURLProtocol.self]
         let session = URLSession(configuration: configuration)
-        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9001&mobile=2")!
+        let threadID = "9001"
         nonisolated(unsafe) var requestCount = 0
         ReaderTestURLProtocol.handler = { request in
             requestCount += 1
@@ -2736,9 +2736,9 @@ final class ReaderContainerModelTests: XCTestCase {
                 HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: ["Content-Type": "text/html; charset=utf-8"])!
             )
         }
-        let target = ReaderChapterCommentTarget(threadURL: threadURL, view: 1, ownerPostID: "100", title: "第一章")
+        let target = ReaderChapterCommentTarget(threadID: threadID, view: 1, ownerPostID: "100", title: "第一章")
         let model = try await makeModel(
-            documents: [makeDocument(threadURL: threadURL, view: 1, maxView: 1, chapterTitles: ["第一章"])],
+            documents: [makeDocument(threadID: threadID, view: 1, maxView: 1, chapterTitles: ["第一章"])],
             session: session
         )
 
@@ -2770,7 +2770,7 @@ final class ReaderContainerModelTests: XCTestCase {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [ReaderTestURLProtocol.self]
         let session = URLSession(configuration: configuration)
-        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9002&mobile=2")!
+        let threadID = "9002"
         ReaderTestURLProtocol.handler = { request in
             let body = makeChapterCommentsHTML(ownerPostID: "100", commentBody: "旧评论")
             return (
@@ -2778,9 +2778,9 @@ final class ReaderContainerModelTests: XCTestCase {
                 HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: ["Content-Type": "text/html; charset=utf-8"])!
             )
         }
-        let target = ReaderChapterCommentTarget(threadURL: threadURL, view: 1, ownerPostID: "100", title: "第一章")
+        let target = ReaderChapterCommentTarget(threadID: threadID, view: 1, ownerPostID: "100", title: "第一章")
         let model = try await makeModel(
-            documents: [makeDocument(threadURL: threadURL, view: 1, maxView: 1, chapterTitles: ["第一章"])],
+            documents: [makeDocument(threadID: threadID, view: 1, maxView: 1, chapterTitles: ["第一章"])],
             session: session
         )
         await model.loadChapterComments(for: target)
@@ -2808,16 +2808,16 @@ final class ReaderContainerModelTests: XCTestCase {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [ReaderTestURLProtocol.self]
         let session = URLSession(configuration: configuration)
-        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9003&mobile=2")!
+        let threadID = "9003"
         ReaderTestURLProtocol.handler = { request in
             (
                 Data("server error".utf8),
                 HTTPURLResponse(url: request.url!, statusCode: 500, httpVersion: nil, headerFields: ["Content-Type": "text/html; charset=utf-8"])!
             )
         }
-        let target = ReaderChapterCommentTarget(threadURL: threadURL, view: 1, ownerPostID: "100", title: "第一章")
+        let target = ReaderChapterCommentTarget(threadID: threadID, view: 1, ownerPostID: "100", title: "第一章")
         let model = try await makeModel(
-            documents: [makeDocument(threadURL: threadURL, view: 1, maxView: 1, chapterTitles: ["第一章"])],
+            documents: [makeDocument(threadID: threadID, view: 1, maxView: 1, chapterTitles: ["第一章"])],
             session: session
         )
 
@@ -2838,7 +2838,7 @@ final class ReaderContainerModelTests: XCTestCase {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [ReaderTestURLProtocol.self]
         let session = URLSession(configuration: configuration)
-        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9004&mobile=2")!
+        let threadID = "9004"
         nonisolated(unsafe) var requestCount = 0
         nonisolated(unsafe) var servesComments = true
         ReaderTestURLProtocol.handler = { request in
@@ -2851,9 +2851,9 @@ final class ReaderContainerModelTests: XCTestCase {
                 HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: ["Content-Type": "text/html; charset=utf-8"])!
             )
         }
-        let target = ReaderChapterCommentTarget(threadURL: threadURL, view: 1, ownerPostID: "100", title: "第一章")
+        let target = ReaderChapterCommentTarget(threadID: threadID, view: 1, ownerPostID: "100", title: "第一章")
         let model = try await makeModel(
-            documents: [makeDocument(threadURL: threadURL, view: 1, maxView: 1, chapterTitles: ["第一章"])],
+            documents: [makeDocument(threadID: threadID, view: 1, maxView: 1, chapterTitles: ["第一章"])],
             session: session
         )
 
@@ -2873,11 +2873,11 @@ final class ReaderContainerModelTests: XCTestCase {
     }
 
     func testCurrentForumTargetURLUsesCurrentChapterPostIdentity() async throws {
-        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=7001&mobile=2")!
+        let threadID = "7001"
         let model = try await makeModel(
             documents: [
                 makeDocument(
-                    threadURL: threadURL,
+                    threadID: threadID,
                     view: 1,
                     maxView: 1,
                     chapterTitles: ["第一章"],
@@ -2895,11 +2895,11 @@ final class ReaderContainerModelTests: XCTestCase {
     }
 
     func testCurrentForumTargetURLFallsBackToCurrentWebPageWithoutPostIdentity() async throws {
-        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=7002&mobile=2")!
+        let threadID = "7002"
         let model = try await makeModel(
             documents: [
                 makeDocument(
-                    threadURL: threadURL,
+                    threadID: threadID,
                     view: 1,
                     maxView: 1,
                     chapterTitles: ["第一章"]
@@ -2913,11 +2913,11 @@ final class ReaderContainerModelTests: XCTestCase {
     }
 
     func testCurrentForumTargetURLIgnoresAuthorFilterWhenOpeningChapterPost() async throws {
-        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=7003&mobile=2")!
+        let threadID = "7003"
         let model = try await makeModel(
             documents: [
                 makeDocument(
-                    threadURL: threadURL,
+                    threadID: threadID,
                     view: 1,
                     maxView: 1,
                     chapterTitles: ["第一章"],
@@ -2927,7 +2927,7 @@ final class ReaderContainerModelTests: XCTestCase {
                 )
             ],
             launchContext: ReaderLaunchContext(
-                threadURL: threadURL,
+                threadID: threadID,
                 threadTitle: "测试线程",
                 source: .forum,
                 authorID: "42"
@@ -2948,7 +2948,7 @@ final class ReaderContainerModelTests: XCTestCase {
         try await seedNovelOfflineCache(offlineStore, document: document)
         let seededSnapshot = await offlineStore.novelOfflineCacheViewsSnapshot(
             ownerTitle: "测试线程",
-            threadURL: document.threadURL,
+            threadID: document.threadID,
             authorID: "42",
             contentSource: .authorFilteredPage
         )
@@ -2972,11 +2972,11 @@ final class ReaderContainerModelTests: XCTestCase {
     }
 
     func testStartCachingEnqueuesSelectedViewsInSharedDownloadQueue() async throws {
-        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=7001&mobile=2")!
+        let threadID = "7001"
 
         let model = try await makeModel(
             documents: [
-                makeDocument(threadURL: threadURL, view: 1, maxView: 3, chapterTitles: ["当前页"]),
+                makeDocument(threadID: threadID, view: 1, maxView: 3, chapterTitles: ["当前页"]),
             ]
         )
 
@@ -2997,12 +2997,12 @@ final class ReaderContainerModelTests: XCTestCase {
     }
 
     func testStartCachingContinuesSharedDownloadQueue() async throws {
-        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=7101&mobile=2")!
+        let threadID = "7101"
         let offlineStore = try makeReaderModelOfflineCacheStore()
 
         let model = try await makeModel(
             documents: [
-                makeDocument(threadURL: threadURL, view: 1, maxView: 2, chapterTitles: ["当前页"]),
+                makeDocument(threadID: threadID, view: 1, maxView: 2, chapterTitles: ["当前页"]),
             ],
             offlineCacheStore: offlineStore
         )
@@ -3017,10 +3017,10 @@ final class ReaderContainerModelTests: XCTestCase {
     }
 
     func testOfflineCacheQueueUpdatesRefreshNovelCacheStateAndEntryCount() async throws {
-        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=7102&mobile=2")!
+        let threadID = "7102"
         let offlineStore = try makeReaderModelOfflineCacheStore()
         let document = makeDocument(
-            threadURL: threadURL,
+            threadID: threadID,
             view: 1,
             maxView: 2,
             chapterTitles: ["当前页"],
@@ -3030,7 +3030,7 @@ final class ReaderContainerModelTests: XCTestCase {
         let model = try await makeModel(
             documents: [document],
             launchContext: ReaderLaunchContext(
-                threadURL: threadURL,
+                threadID: threadID,
                 threadTitle: "测试线程",
                 source: .forum,
                 authorID: "42"
@@ -3046,7 +3046,7 @@ final class ReaderContainerModelTests: XCTestCase {
         let request = NovelOfflineCacheWorkRequest(
             ownerTitle: "测试线程",
             title: L10n.string("reader.page_number_spaced", 2),
-            threadURL: threadURL,
+            threadID: threadID,
             view: 2,
             authorID: "42",
             contentSource: .authorFilteredPage
@@ -3062,17 +3062,17 @@ final class ReaderContainerModelTests: XCTestCase {
 
         let completedAt = Date(timeIntervalSince1970: 71_020)
         let completionDocument = makeDocument(
-            threadURL: threadURL,
+            threadID: threadID,
             view: 2,
             maxView: 2,
             chapterTitles: ["离线完成"],
             authorID: "42",
             contentSource: .authorFilteredPage
         )
-        let thread = try makeThreadIdentity(from: threadURL)
+        let thread = makeThreadIdentity(from: threadID)
         let sourcePage = makeThreadPageSource(from: completionDocument, thread: thread, authorID: "42")
         var projection = completionDocument
-        projection.threadURL = thread.canonicalURL
+        projection.threadID = thread.tid
         projection.resolvedAuthorID = "42"
         projection.contentSource = .authorFilteredPage
         try await offlineStore.saveNovelOfflineSourcePage(
@@ -3093,10 +3093,10 @@ final class ReaderContainerModelTests: XCTestCase {
     }
 
     func testUpdatingCachedViewShowsCachingWhileRetainingLastUpdateTime() async throws {
-        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=7002&mobile=2")!
+        let threadID = "7002"
         let offlineStore = try makeReaderModelOfflineCacheStore()
         let updatedAt = Date(timeIntervalSince1970: 44_000)
-        let document = makeDocument(threadURL: threadURL, view: 1, maxView: 4, chapterTitles: ["当前页"])
+        let document = makeDocument(threadID: threadID, view: 1, maxView: 4, chapterTitles: ["当前页"])
         try await seedNovelOfflineCache(offlineStore, document: document, updatedAt: updatedAt)
         let model = try await makeModel(
             documents: [
@@ -3122,14 +3122,14 @@ final class ReaderContainerModelTests: XCTestCase {
     }
 
     func testDeletingNovelOfflineCachePreservesTransparentCaches() async throws {
-        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=7003&mobile=2")!
+        let threadID = "7003"
         let cacheDirectory = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
         let cacheStore = ReaderCacheStore(baseDirectory: cacheDirectory.appendingPathComponent("reader", isDirectory: true))
         let forumCacheStore = ForumCacheStore(baseDirectory: cacheDirectory.appendingPathComponent("forum", isDirectory: true))
         let offlineStore = try makeReaderModelOfflineCacheStore(rootDirectory: cacheDirectory.appendingPathComponent("offline-root", isDirectory: true))
         let document = makeDocument(
-            threadURL: threadURL,
+            threadID: threadID,
             view: 1,
             maxView: 2,
             chapterTitles: ["离线缓存"]
@@ -3151,11 +3151,11 @@ final class ReaderContainerModelTests: XCTestCase {
             await MainActor.run { model.cachedViews.isEmpty }
         }
 
-        let thread = try makeThreadIdentity(from: threadURL)
+        let thread = makeThreadIdentity(from: threadID)
         let retainedThreadPage = await forumCacheStore.loadThreadPage(thread: thread, page: 1, authorID: "42")
         XCTAssertNotNil(retainedThreadPage)
         let retainedProjection = await cacheStore.loadDocument(
-            for: ReaderPageRequest(threadURL: threadURL, view: 1, authorID: "42"),
+            for: ReaderPageRequest(threadID: threadID, view: 1, authorID: "42"),
             contentSource: .authorFilteredPage
         )
         XCTAssertNotNil(retainedProjection)
@@ -3219,7 +3219,7 @@ private func makeModel(
     let model = await MainActor.run {
         ReaderContainerModel(
             context: launchContext ?? ReaderLaunchContext(
-                threadURL: documents[0].threadURL,
+                threadID: documents[0].threadID,
                 threadTitle: "测试线程",
                 source: .forum
             ),
@@ -3240,7 +3240,7 @@ private func seedReaderSourceCaches(
 ) async throws {
     var didSaveDiscoveryPage: Set<String> = []
     for document in documents {
-        let thread = try makeThreadIdentity(from: document.threadURL)
+        let thread = makeThreadIdentity(from: document.threadID)
         let trimmedAuthorID = document.resolvedAuthorID?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let authorID = trimmedAuthorID.isEmpty ? "42" : trimmedAuthorID
         let sourcePage = makeThreadPageSource(from: document, thread: thread, authorID: authorID)
@@ -3260,12 +3260,12 @@ private func seedReaderSourceCaches(
         }
 
         var projection = document
-        projection.threadURL = thread.canonicalURL
+        projection.threadID = thread.tid
         projection.resolvedAuthorID = authorID
         projection.contentSource = .authorFilteredPage
         projection.projectionSourceFingerprint = projectionFingerprint(
             page: sourcePage,
-            threadURL: thread.canonicalURL,
+            threadID: thread.tid,
             view: document.view,
             authorID: authorID
         )
@@ -3280,20 +3280,20 @@ private func seedNovelOfflineCache(
     ownerTitle: String = "测试线程",
     updatedAt: Date = Date(timeIntervalSince1970: 40_000)
 ) async throws {
-    let thread = try makeThreadIdentity(from: document.threadURL)
+    let thread = makeThreadIdentity(from: document.threadID)
     let trimmedAuthorID = document.resolvedAuthorID?.trimmingCharacters(in: .whitespacesAndNewlines)
     let authorID = trimmedAuthorID?.isEmpty == false ? trimmedAuthorID! : "42"
     let sourcePage = makeThreadPageSource(from: document, thread: thread, authorID: authorID)
     let request = NovelOfflineCacheWorkRequest(
         ownerTitle: ownerTitle,
         title: L10n.string("reader.page_number_spaced", document.view),
-        threadURL: document.threadURL,
+        threadID: document.threadID,
         view: document.view,
         authorID: authorID,
         contentSource: .authorFilteredPage
     )
     var projection = document
-    projection.threadURL = thread.canonicalURL
+    projection.threadID = thread.tid
     projection.resolvedAuthorID = authorID
     projection.contentSource = .authorFilteredPage
     try await store.saveNovelOfflineSourcePage(
@@ -3314,10 +3314,8 @@ private func makeReaderModelOfflineCacheStore(
     )
 }
 
-private func makeThreadIdentity(from threadURL: URL) throws -> ThreadIdentity {
-    let canonicalURL = ReaderCacheIdentity.canonicalThreadURL(from: threadURL)
-    let tid = try XCTUnwrap(ReaderHTMLParser.extractThreadID(from: canonicalURL))
-    return ThreadIdentity(tid: tid, canonicalURL: canonicalURL)
+private func makeThreadIdentity(from threadID: String) -> ThreadIdentity {
+    ThreadIdentity(tid: threadID)
 }
 
 private func makeThreadPageSource(
@@ -3354,12 +3352,12 @@ private func projectionSourceHTML(for segment: ReaderSegment, index: Int) -> Str
 
 private func projectionFingerprint(
     page: ForumThreadPage,
-    threadURL: URL,
+    threadID: String,
     view: Int,
     authorID: String
 ) -> String {
     let value = [
-        threadURL.absoluteString,
+        threadID,
         String(max(1, view)),
         authorID,
         page.posts.map { post in
@@ -3587,7 +3585,7 @@ private func rangeContainsOffset(_ range: ReaderRenderedTextRange, offset: Int) 
 }
 
 private func makeDocument(
-    threadURL: URL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=556677&mobile=2")!,
+    threadID: String = "556677",
     view: Int,
     maxView: Int,
     chapterTitles: [String],
@@ -3604,7 +3602,7 @@ private func makeDocument(
         }
     }
     return ReaderPageDocument(
-        threadURL: threadURL,
+        threadID: threadID,
         view: view,
         maxView: maxView,
         resolvedAuthorID: authorID,
@@ -3615,7 +3613,7 @@ private func makeDocument(
 }
 
 private func makeImageDocument(
-    threadURL: URL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=998877&mobile=2")!,
+    threadID: String = "998877",
     view: Int,
     maxView: Int,
     surfaceCount: Int
@@ -3627,7 +3625,7 @@ private func makeImageDocument(
         )
     }
     return ReaderPageDocument(
-        threadURL: threadURL,
+        threadID: threadID,
         view: view,
         maxView: maxView,
         contentSource: .fallbackUnfilteredPage,
@@ -3663,7 +3661,7 @@ private func layoutResult(
     )
     let context = viewportContext ?? NovelTextViewportContext(
         identity: NovelTextViewportIdentity(
-            threadURL: URL(string: "https://example.com/thread")!,
+            threadID: "test-thread",
             documentView: index.documentView,
             maxView: index.documentView,
             fetchedAt: Date(timeIntervalSince1970: 0),

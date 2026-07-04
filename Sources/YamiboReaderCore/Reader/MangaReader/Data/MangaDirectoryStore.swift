@@ -174,7 +174,7 @@ public actor MangaDirectoryStore: MangaDirectoryPersisting, MangaDirectoryStorag
         guard let strategy = MangaDirectoryStrategy(rawValue: directoryRow["strategy"] as String) else {
             return nil
         }
-        let chapters = try Row.fetchAll(
+        let chapters: [MangaChapter] = try Row.fetchAll(
             db,
             sql: """
             SELECT tid, raw_title, chapter_number, author_uid, author_name, group_index, publish_time
@@ -183,13 +183,14 @@ public actor MangaDirectoryStore: MangaDirectoryPersisting, MangaDirectoryStorag
             ORDER BY manual_order ASC, tid ASC
             """,
             arguments: [name]
-        ).map { row in
+        ).compactMap { row -> MangaChapter? in
             let tid = row["tid"] as String
+            guard let url = YamiboRoute.chapterURL(forTID: tid) else { return nil }
             return MangaChapter(
                 tid: tid,
                 rawTitle: row["raw_title"],
                 chapterNumber: row["chapter_number"],
-                url: YamiboRoute.chapterURL(forTID: tid) ?? URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=0")!,
+                url: url,
                 authorUID: row["author_uid"] as String?,
                 authorName: row["author_name"] as String?,
                 groupIndex: row["group_index"],

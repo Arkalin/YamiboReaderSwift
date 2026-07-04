@@ -593,7 +593,7 @@ public enum NovelTextLayout {
 
         return NovelTextViewportContext(
             identity: NovelTextViewportIdentity(
-                threadURL: document.threadURL,
+                threadID: document.threadID,
                 documentView: document.view,
                 maxView: document.maxView,
                 fetchedAt: document.fetchedAt,
@@ -920,7 +920,7 @@ public enum NovelTextLayout {
             return nil
         }
         return ReaderChapterCommentTarget(
-            threadURL: document.threadURL,
+            threadID: document.threadID,
             view: document.view,
             ownerPostID: ownerPostID,
             title: annotatedSegment.chapterTitle,

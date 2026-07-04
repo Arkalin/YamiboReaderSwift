@@ -20,7 +20,7 @@ final class NovelReadingSessionTests: XCTestCase {
         )
         let context = NovelTextViewportContext(
             identity: NovelTextViewportIdentity(
-                threadURL: document.threadURL,
+                threadID: document.threadID,
                 documentView: document.view,
                 maxView: document.maxView,
                 fetchedAt: document.fetchedAt,
@@ -106,7 +106,7 @@ final class NovelReadingSessionTests: XCTestCase {
             readingModeHint: .paged
         )
         let viewportCommentTarget = ReaderChapterCommentTarget(
-            threadURL: document.threadURL,
+            threadID: document.threadID,
             view: document.view,
             ownerPostID: "viewport-post",
             title: "第二章"
@@ -279,7 +279,7 @@ final class NovelReadingSessionTests: XCTestCase {
             readingModeHint: .paged
         )
         let refreshedDocument = ReaderPageDocument(
-            threadURL: originalDocument.threadURL,
+            threadID: originalDocument.threadID,
             view: 1,
             maxView: 1,
             contentSource: originalDocument.contentSource,
@@ -987,7 +987,7 @@ private func makeNovelDocument(
     segments: [(chapterTitle: String, text: String)]
 ) -> ReaderPageDocument {
     ReaderPageDocument(
-        threadURL: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9001&mobile=2")!,
+        threadID: "9001",
         view: view,
         maxView: maxView,
         contentSource: .fallbackUnfilteredPage,
@@ -1124,7 +1124,7 @@ private func layoutResult(
     )
     let context = viewportContext ?? NovelTextViewportContext(
         identity: NovelTextViewportIdentity(
-            threadURL: URL(string: "https://example.com/thread")!,
+            threadID: "test-thread",
             documentView: index.documentView,
             maxView: index.documentView,
             fetchedAt: Date(timeIntervalSince1970: 0),

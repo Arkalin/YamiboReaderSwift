@@ -244,14 +244,14 @@ public struct ReadingProgressWebDAVPayload: Codable, Equatable, Sendable {
         self.version = version
         self.updatedAt = try container.decode(Date.self, forKey: .updatedAt)
         self.records = try container.decode([ReadingProgressWebDAVRecord].self, forKey: .records)
-            .map { $0.record }
+            .map { try $0.record() }
     }
 
     public func encode(to encoder: any Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(version, forKey: .version)
         try container.encode(updatedAt, forKey: .updatedAt)
-        try container.encode(records.map(ReadingProgressWebDAVRecord.init(record:)), forKey: .records)
+        try container.encode(try records.map { try ReadingProgressWebDAVRecord(record: $0) }, forKey: .records)
     }
 }
 
@@ -344,8 +344,17 @@ private struct ReadingProgressWebDAVRecord: Codable, Equatable, Sendable {
     var novel: NovelReadingProgressRecord?
     var manga: MangaReadingProgressWebDAVRecord?
 
-    init(record: ReadingProgressRecord) {
-        self.contentTarget = record.contentTarget ?? Self.fallbackTarget(for: record)
+    init(record: ReadingProgressRecord) throws {
+        guard let contentTarget = record.contentTarget else {
+            throw EncodingError.invalidValue(
+                record,
+                EncodingError.Context(
+                    codingPath: [],
+                    debugDescription: "Reading progress WebDAV records require an explicit contentTarget."
+                )
+            )
+        }
+        self.contentTarget = contentTarget
         self.kind = record.kind
         self.updatedAt = record.updatedAt
         self.lastReadAt = record.lastReadAt
@@ -363,41 +372,37 @@ private struct ReadingProgressWebDAVRecord: Codable, Equatable, Sendable {
         }
     }
 
-    var record: ReadingProgressRecord {
-        let threadURL = contentTarget.canonicalURL
-            ?? Self.threadURL(for: threadID)
-            ?? Self.threadURL(for: manga?.chapterThreadID)
-            ?? URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=0")!
+    func record() throws -> ReadingProgressRecord {
+        let resolvedThreadID = contentTarget.threadID ?? threadID ?? manga?.chapterThreadID
+        let mangaRecord: MangaReadingProgressRecord?
+        if let payload = manga {
+            guard let lastMangaURL = Self.threadURL(for: payload.chapterThreadID)
+                ?? Self.threadURL(for: resolvedThreadID) else {
+                throw DecodingError.dataCorrupted(
+                    DecodingError.Context(
+                        codingPath: [],
+                        debugDescription: "Manga reading progress WebDAV records require chapterThreadID or threadID."
+                    )
+                )
+            }
+            mangaRecord = MangaReadingProgressRecord(
+                lastMangaURL: lastMangaURL,
+                chapterThreadID: payload.chapterThreadID,
+                lastChapter: payload.lastChapter,
+                mangaPageIndex: payload.mangaPageIndex,
+                mangaPageCount: payload.mangaPageCount
+            )
+        } else {
+            mangaRecord = nil
+        }
         return ReadingProgressRecord(
             contentTarget: contentTarget,
-            threadURL: threadURL,
+            threadID: resolvedThreadID,
             kind: kind,
             updatedAt: updatedAt,
             lastReadAt: lastReadAt,
             novel: novel,
-            manga: manga.map { payload in
-                MangaReadingProgressRecord(
-                    lastMangaURL: Self.threadURL(for: payload.chapterThreadID) ?? threadURL,
-                    chapterThreadID: payload.chapterThreadID,
-                    lastChapter: payload.lastChapter,
-                    mangaPageIndex: payload.mangaPageIndex,
-                    mangaPageCount: payload.mangaPageCount
-                )
-            }
-        )
-    }
-
-    private static func fallbackTarget(for record: ReadingProgressRecord) -> FavoriteContentTarget {
-        if record.kind == .novel {
-            return FavoriteContentTarget(kind: .novelThread, threadURL: record.threadURL)
-        }
-        let threadID = record.threadID
-            ?? record.manga?.chapterThreadID
-            ?? record.manga.flatMap { YamiboThreadURLCanonicalizer.threadID(from: $0.lastMangaURL) }
-            ?? record.threadURL.absoluteString
-        return FavoriteContentTarget(
-            mangaID: "thread:\(threadID)",
-            mangaCleanBookName: record.manga?.lastChapter ?? threadID
+            manga: mangaRecord
         )
     }
 

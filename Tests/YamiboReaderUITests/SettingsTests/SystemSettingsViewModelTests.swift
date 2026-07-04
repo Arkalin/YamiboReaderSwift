@@ -317,9 +317,8 @@ final class SystemSettingsViewModelTests: XCTestCase {
             homePage: .favorites
         ))
         var favoriteLibrary = FavoriteLibraryDocument()
-        let favoriteThreadURL = try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=905"))
         favoriteLibrary.addItem(try FavoriteItem(
-            target: FavoriteContentTarget(kind: .normalThread, threadURL: favoriteThreadURL),
+            target: FavoriteContentTarget(kind: .normalThread, threadID: "905"),
             title: "收藏条目",
             locations: [.category(favoriteLibrary.defaultCategory.id)]
         ))
@@ -753,12 +752,12 @@ private func novelOfflineEntryID(
     OfflineCacheEntryID(
         readerKind: .novel,
         ownerKey: NovelOfflineCacheEntry.groupKey(
-            threadURL: try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=\(tid)&mobile=2")),
+            threadID: tid,
             authorID: authorID,
             contentSource: contentSource
         ),
         entryKey: NovelOfflineCacheEntry.entryKey(
-            threadURL: try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=\(tid)&mobile=2")),
+            threadID: tid,
             view: view,
             authorID: authorID,
             contentSource: contentSource
@@ -793,12 +792,11 @@ private func makeNovelOfflineCacheEntry(
     view: Int,
     authorID: String? = nil
 ) throws -> NovelOfflineCacheEntry {
-    let threadURL = try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=\(tid)&mobile=2"))
     return NovelOfflineCacheEntry(
         ownerTitle: ownerTitle,
         title: "第\(view)页",
         document: ReaderPageDocument(
-            threadURL: threadURL,
+            threadID: tid,
             view: view,
             maxView: max(2, view),
             resolvedAuthorID: authorID,
@@ -810,10 +808,9 @@ private func makeNovelOfflineCacheEntry(
 }
 
 private func seedNovelCache(_ fixture: SystemSettingsFixture) async throws {
-    let threadURL = try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=900&mobile=2"))
     try await fixture.readerCacheStore.save(
         ReaderPageDocument(
-            threadURL: threadURL,
+            threadID: "900",
             view: 1,
             maxView: 1,
             segments: [.text("测试小说缓存", chapterTitle: nil)]

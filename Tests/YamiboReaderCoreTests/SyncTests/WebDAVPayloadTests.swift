@@ -20,7 +20,7 @@ import Testing
 }
 
 @Test func favoriteLibraryWebDAVMergePreservesIndependentLocationsAndTagsWithTombstones() throws {
-    let target = FavoriteContentTarget(kind: .normalThread, threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=1001")))
+    let target = FavoriteContentTarget(kind: .normalThread, threadID: "1001")
     let baseDate = Date(timeIntervalSince1970: 10)
     var localDocument = FavoriteLibraryDocument()
     let category = localDocument.createCategory(name: "分类")
@@ -50,7 +50,7 @@ import Testing
 }
 
 @Test func favoriteLibraryWebDAVMergeUsesFieldDomainClocks() throws {
-    let target = FavoriteContentTarget(kind: .normalThread, threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=1002")))
+    let target = FavoriteContentTarget(kind: .normalThread, threadID: "1002")
     let localClock = Date(timeIntervalSince1970: 20)
     let remoteClock = Date(timeIntervalSince1970: 30)
     let localItem = try FavoriteItem(
@@ -107,7 +107,7 @@ import Testing
     let target = FavoriteContentTarget(mangaCleanBookName: "清理后的书名")
     let older = ReadingProgressRecord(
         contentTarget: target,
-        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=1101")),
+        threadID: "1101",
         kind: .manga,
         updatedAt: Date(timeIntervalSince1970: 10),
         manga: MangaReadingProgressRecord(
@@ -119,7 +119,12 @@ import Testing
     )
     var newer = older
     newer.updatedAt = Date(timeIntervalSince1970: 20)
-    newer.manga = MangaReadingProgressRecord(lastMangaURL: older.threadURL, lastChapter: "第一话", mangaPageIndex: 7, mangaPageCount: 10)
+    newer.manga = MangaReadingProgressRecord(
+        lastMangaURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=1101")),
+        lastChapter: "第一话",
+        mangaPageIndex: 7,
+        mangaPageCount: 10
+    )
 
     let merged = ReadingProgressWebDAVMerger().merge(
         local: ReadingProgressWebDAVPayload(updatedAt: older.updatedAt, records: [older]),
@@ -134,21 +139,20 @@ import Testing
 }
 
 @Test func readingProgressWebDAVPayloadWritesTidFirstSchemaWithoutURLFields() throws {
-    let threadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=1201&mobile=2"))
     let chapterURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=1202&mobile=2"))
     let payload = ReadingProgressWebDAVPayload(
         updatedAt: Date(timeIntervalSince1970: 40),
         records: [
             ReadingProgressRecord(
-                contentTarget: FavoriteContentTarget(kind: .novelThread, threadURL: threadURL),
-                threadURL: threadURL,
+                contentTarget: FavoriteContentTarget(kind: .novelThread, threadID: "1201"),
+                threadID: "1201",
                 kind: .novel,
                 updatedAt: Date(timeIntervalSince1970: 41),
                 novel: NovelReadingProgressRecord(lastView: 4, lastChapter: "第四章")
             ),
             ReadingProgressRecord(
                 contentTarget: FavoriteContentTarget(mangaID: "manga-1", mangaCleanBookName: "漫画"),
-                threadURL: threadURL,
+                threadID: "1201",
                 kind: .manga,
                 updatedAt: Date(timeIntervalSince1970: 42),
                 manga: MangaReadingProgressRecord(

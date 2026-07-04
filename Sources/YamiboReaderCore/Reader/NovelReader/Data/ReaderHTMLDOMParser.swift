@@ -57,9 +57,7 @@ enum ReaderHTMLDOMParser {
     }
 
     static func parseOnlyAuthorID(in context: Context, request: ReaderPageRequest) throws -> String? {
-        guard let threadID = ReaderHTMLParser.extractThreadID(from: request.threadURL) else {
-            return nil
-        }
+        let threadID = request.threadID
 
         for link in try context.document.select("a[href]") {
             let href = try link.attr("href").trimmingCharacters(in: .whitespacesAndNewlines)
@@ -77,9 +75,7 @@ enum ReaderHTMLDOMParser {
 
     static func parseMaxView(in context: Context, request: ReaderPageRequest) throws -> Int {
         let fallback = max(1, request.view)
-        guard let threadID = ReaderHTMLParser.extractThreadID(from: request.threadURL) else {
-            return fallback
-        }
+        let threadID = request.threadID
 
         var pages = Set([fallback])
 

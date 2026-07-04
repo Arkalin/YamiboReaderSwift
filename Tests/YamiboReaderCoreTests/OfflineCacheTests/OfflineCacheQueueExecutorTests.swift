@@ -163,7 +163,7 @@ struct OfflineCacheTestsQueueExecutor {
         let chapterURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=350&page=2&mobile=2"))
         var favoriteLibrary = FavoriteLibraryDocument()
         let favorite = try FavoriteItem(
-            target: FavoriteContentTarget(kind: .normalThread, threadURL: ownerURL),
+            target: FavoriteContentTarget(kind: .normalThread, threadID: "350"),
             title: "阅读进度漫画",
             locations: [.category(favoriteLibrary.defaultCategory.id)]
         )
@@ -641,7 +641,7 @@ struct OfflineCacheTestsQueueExecutor {
         #expect(await store.offlineImageData(for: imageURLs[0]) == Data([1]))
         #expect(await store.offlineImageData(for: imageURLs[1]) == nil)
         let sourceSnapshot = await store.novelOfflineSourcePageSnapshot(
-            threadURL: request.threadURL,
+            threadID: request.threadID,
             view: request.view,
             authorID: request.authorID,
             contentSource: request.contentSource
@@ -955,7 +955,7 @@ private func makeNovelExecutorWorkRequest(
     NovelOfflineCacheWorkRequest(
         ownerTitle: ownerTitle ?? "小说\(tid)",
         title: "第\(view)页",
-        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=\(tid)&mobile=2")),
+        threadID: tid,
         view: view,
         authorID: "42",
         contentSource: .authorFilteredPage,
@@ -968,8 +968,7 @@ private func makeNovelExecutorPreparedSourcePage(
     view: Int,
     imageURLs: [URL]
 ) throws -> NovelOfflineCachePreparedSourcePage {
-    let threadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=\(tid)&mobile=2"))
-    let canonicalURL = ReaderCacheIdentity.canonicalThreadURL(from: threadURL)
+    let canonicalURL = YamiboRoute.threadByID(tid: tid, page: 1, authorID: nil, reverse: false).url
     let segments = [.text("正文\(view)", chapterTitle: "第\(view)章")]
         + imageURLs.map { ReaderSegment.image($0, chapterTitle: nil) }
     let sourcePage = ForumThreadPage(
@@ -987,7 +986,7 @@ private func makeNovelExecutorPreparedSourcePage(
         pageNavigation: ForumPageNavigation(currentPage: view, totalPages: max(2, view))
     )
     let document = ReaderPageDocument(
-        threadURL: canonicalURL,
+        threadID: tid,
         view: view,
         maxView: max(2, view),
         resolvedAuthorID: "42",

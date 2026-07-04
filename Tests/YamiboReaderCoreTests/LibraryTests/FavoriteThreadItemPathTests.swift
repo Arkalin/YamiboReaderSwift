@@ -4,7 +4,7 @@ import Testing
 
 @Test func threadFavoriteImportProbesBeforeCreatingNormalThreadItem() async throws {
     let url = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=420"))
-    let target = FavoriteContentTarget(kind: .normalThread, threadURL: url)
+    let target = FavoriteContentTarget(kind: .normalThread, threadID: "420")
     var document = FavoriteLibraryDocument()
     var probedURL: URL?
 
@@ -31,7 +31,7 @@ import Testing
 
     let item = try document.importThreadFavorite(
         probeResult: FavoriteThreadProbeResult(
-            target: FavoriteContentTarget(kind: .normalThread, threadURL: url),
+            target: FavoriteContentTarget(kind: .normalThread, threadID: "426"),
             title: "普通主题"
         ),
         displayName: nil
@@ -49,7 +49,7 @@ import Testing
 
 @Test func threadFavoriteProbeResultCarriesExplicitForumMetadata() throws {
     let url = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=428"))
-    let target = FavoriteContentTarget(kind: .normalThread, threadURL: url)
+    let target = FavoriteContentTarget(kind: .normalThread, threadID: "428")
     let probe = FavoriteThreadProbeResult(
         target: target,
         title: "普通主题",
@@ -82,7 +82,7 @@ import Testing
 
 @Test func threadFavoriteImportDoesNotEraseExistingForumMetadataWhenProbeSourceIsUnknown() throws {
     let url = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=427"))
-    let target = FavoriteContentTarget(kind: .normalThread, threadURL: url)
+    let target = FavoriteContentTarget(kind: .normalThread, threadID: "427")
     var document = FavoriteLibraryDocument()
     let existing = try FavoriteItem(
         target: target,
@@ -122,8 +122,8 @@ import Testing
 
 @Test func threadFavoriteImportRetargetsExistingItemWhenThreadKindChanges() async throws {
     let url = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=422"))
-    let normalTarget = FavoriteContentTarget(kind: .normalThread, threadURL: url)
-    let novelTarget = FavoriteContentTarget(kind: .novelThread, threadURL: url)
+    let normalTarget = FavoriteContentTarget(kind: .normalThread, threadID: "422")
+    let novelTarget = FavoriteContentTarget(kind: .novelThread, threadID: "422")
     var document = FavoriteLibraryDocument()
     let tag = document.createTag(name: "保留标签", color: .purple)
     let existing = try FavoriteItem(
@@ -149,7 +149,7 @@ import Testing
 
 @Test func threadFavoriteDisplayNameStaysLocalMetadata() throws {
     let url = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=423"))
-    let target = FavoriteContentTarget(kind: .normalThread, threadURL: url)
+    let target = FavoriteContentTarget(kind: .normalThread, threadID: "423")
     var document = FavoriteLibraryDocument()
 
     let item = try document.importThreadFavorite(
@@ -165,21 +165,20 @@ import Testing
 
 @Test func threadFavoriteOpenRoutesUseNormalAndNovelNativeTargets() throws {
     let normalURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=424"))
-    let novelURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=425"))
     var document = FavoriteLibraryDocument()
     let normal = try document.importThreadFavorite(
         probeResult: FavoriteThreadProbeResult(
-            target: FavoriteContentTarget(kind: .normalThread, threadURL: normalURL),
+            target: FavoriteContentTarget(kind: .normalThread, threadID: "424"),
             title: "普通主题"
         )
     )
     let novel = try document.importThreadFavorite(
         probeResult: FavoriteThreadProbeResult(
-            target: FavoriteContentTarget(kind: .novelThread, threadURL: novelURL),
+            target: FavoriteContentTarget(kind: .novelThread, threadID: "425"),
             title: "小说主题"
         )
     )
 
     #expect(document.openRoute(for: normal) == .nativeThread(FavoriteLibraryURLIdentity.canonicalThreadURL(from: normalURL)))
-    #expect(document.openRoute(for: novel) == .novelDetail(FavoriteLibraryURLIdentity.canonicalThreadURL(from: novelURL)))
+    #expect(document.openRoute(for: novel) == .novelDetail(threadID: "425"))
 }

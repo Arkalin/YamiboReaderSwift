@@ -139,7 +139,7 @@ struct ReaderChapterCommentsContent: View {
                         ForEach(page.comments) { comment in
                             ReaderChapterCommentRow(
                                 comment: comment,
-                                originalPostURL: comment.originalPostURL(threadURL: target.threadURL),
+                                originalPostURL: comment.originalPostURL(threadID: target.threadID),
                                 openOriginalPost: openOriginalPost
                             )
                         }

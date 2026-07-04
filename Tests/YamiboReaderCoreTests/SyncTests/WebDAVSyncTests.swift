@@ -71,9 +71,9 @@ private enum WebDAVTestError: Error {
     let fixture = try WebDAVSyncFixture(prefix: "webdav-local-first-upload")
     try await fixture.signIn(accountUID: "100")
 
-    let threadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=940&mobile=2"))
+    let threadID = "940"
     var document = FavoriteLibraryDocument()
-    let target = FavoriteContentTarget(kind: .novelThread, threadURL: threadURL)
+    let target = FavoriteContentTarget(kind: .novelThread, threadID: threadID)
     try document.addItem(
         FavoriteItem(
             target: target,
@@ -83,7 +83,7 @@ private enum WebDAVTestError: Error {
     )
     try await fixture.localFavoriteLibraryStore.save(document)
     _ = try await fixture.readingProgressStore.saveNovel(
-        NovelReadingPosition(threadURL: threadURL, view: 4, chapterTitle: "第四章")
+        NovelReadingPosition(threadID: threadID, view: 4, chapterTitle: "第四章")
     )
 
     var putPaths: [String] = []
@@ -219,11 +219,10 @@ private enum WebDAVTestError: Error {
     ))
     try await fixture.signIn(accountUID: "123")
 
-    let threadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=965&mobile=2"))
     var document = FavoriteLibraryDocument()
     try document.addItem(
         FavoriteItem(
-            target: FavoriteContentTarget(kind: .normalThread, threadURL: threadURL),
+            target: FavoriteContentTarget(kind: .normalThread, threadID: "965"),
             title: "自动同步收藏",
             locations: [.category(document.defaultCategory.id)]
         )

@@ -66,7 +66,7 @@ extension OfflineCacheStore {
 
     public func novelOfflineSourcePage(
         ownerTitle: String,
-        threadURL: URL,
+        threadID: String,
         view: Int,
         authorID: String?,
         contentSource: ReaderContentSource?
@@ -74,7 +74,7 @@ extension OfflineCacheStore {
         try? await recoverQueueStateAfterRestart()
         guard let identity = novelEntryLookup(
             ownerTitle: ownerTitle,
-            threadURL: threadURL,
+            threadID: threadID,
             view: view,
             authorID: authorID,
             contentSource: contentSource
@@ -102,17 +102,18 @@ extension OfflineCacheStore {
     }
 
     public func novelOfflineSourcePageSnapshot(
-        threadURL: URL,
+        threadID: String,
         view: Int,
         authorID: String?,
         contentSource: ReaderContentSource?
     ) async -> NovelOfflineSourcePageSnapshot? {
         try? await recoverQueueStateAfterRestart()
-        let canonicalThreadURL = ReaderCacheIdentity.canonicalThreadURL(from: threadURL)
+        let normalizedThreadID = threadID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedThreadID.isEmpty else { return nil }
         let normalizedAuthorID = authorID?.mangaReaderTrimmedNonEmpty
         let source = normalizedAuthorID == nil ? (contentSource ?? .fallbackUnfilteredPage) : .authorFilteredPage
         let entryKey = NovelOfflineCacheEntry.entryKey(
-            threadURL: canonicalThreadURL,
+            threadID: normalizedThreadID,
             view: view,
             authorID: normalizedAuthorID,
             contentSource: source
@@ -134,7 +135,7 @@ extension OfflineCacheStore {
             }
             return NovelOfflineSourcePageSnapshotRow(
                 ownerTitle: (row["owner_title"] as String?)
-                    ?? Self.novelDisplayOwnerTitle(ownerTitle: "", threadURL: canonicalThreadURL),
+                    ?? Self.novelDisplayOwnerTitle(ownerTitle: "", threadID: normalizedThreadID),
                 fileName: fileName,
                 updatedAt: novelPayloadOptionalDate(from: row["updated_at"] as Double?)
             )
@@ -157,14 +158,15 @@ extension OfflineCacheStore {
 
     func novelEntryLookup(
         ownerTitle: String,
-        threadURL: URL,
+        threadID: String,
         view: Int,
         authorID: String?,
         contentSource: ReaderContentSource?
     ) -> NovelEntryLookup? {
-        let canonicalThreadURL = ReaderCacheIdentity.canonicalThreadURL(from: threadURL)
+        let normalizedThreadID = threadID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedThreadID.isEmpty else { return nil }
         let identity = ReaderCacheIdentity(
-            threadURL: canonicalThreadURL,
+            threadID: normalizedThreadID,
             view: max(1, view),
             authorID: authorID,
             contentSource: contentSource
@@ -172,16 +174,15 @@ extension OfflineCacheStore {
         let normalizedAuthorID = authorID?.mangaReaderTrimmedNonEmpty
         let source = normalizedAuthorID == nil ? (contentSource ?? .fallbackUnfilteredPage) : .authorFilteredPage
         return NovelEntryLookup(
-            ownerTitle: Self.novelDisplayOwnerTitle(ownerTitle: ownerTitle, threadURL: canonicalThreadURL),
+            ownerTitle: Self.novelDisplayOwnerTitle(ownerTitle: ownerTitle, threadID: normalizedThreadID),
             groupKey: NovelOfflineCacheEntry.groupKey(
-                threadURL: canonicalThreadURL,
+                threadID: normalizedThreadID,
                 authorID: normalizedAuthorID,
                 contentSource: source
             ),
-            threadURL: canonicalThreadURL,
             threadID: identity.threadID,
             entryKey: NovelOfflineCacheEntry.entryKey(
-                threadURL: canonicalThreadURL,
+                threadID: normalizedThreadID,
                 view: view,
                 authorID: normalizedAuthorID,
                 contentSource: source
@@ -277,7 +278,7 @@ extension OfflineCacheStore {
         return try ReaderHTMLParser.parseDocument(
             threadPage: sourcePage,
             request: ReaderPageRequest(
-                threadURL: request.threadURL,
+                threadID: request.threadID,
                 view: request.view,
                 authorID: authorID
             ),
@@ -288,14 +289,7 @@ extension OfflineCacheStore {
     }
 
     static func syntheticSourcePage(from document: ReaderPageDocument) -> ForumThreadPage {
-        let canonicalURL = ReaderCacheIdentity.canonicalThreadURL(from: document.threadURL)
-        let threadID = ReaderCacheIdentity(
-            threadURL: canonicalURL,
-            view: document.view,
-            authorID: document.resolvedAuthorID,
-            contentSource: document.contentSource
-        ).threadID
-        let thread = ThreadIdentity(tid: threadID, canonicalURL: canonicalURL)
+        let thread = ThreadIdentity(tid: document.threadID)
         let authorID = document.resolvedAuthorID?.mangaReaderTrimmedNonEmpty ?? "offline"
         let posts = document.segments.enumerated().map { index, segment in
             ForumThreadPost(
@@ -309,7 +303,7 @@ extension OfflineCacheStore {
         }
         return ForumThreadPage(
             thread: thread,
-            title: document.threadURL.absoluteString,
+            title: document.threadID,
             posts: posts,
             pageNavigation: ForumPageNavigation(currentPage: document.view, totalPages: document.maxView)
         )
@@ -347,7 +341,6 @@ extension OfflineCacheStore {
 struct NovelEntryLookup {
     var ownerTitle: String
     var groupKey: String
-    var threadURL: URL
     var threadID: String
     var entryKey: String
     var authorID: String?

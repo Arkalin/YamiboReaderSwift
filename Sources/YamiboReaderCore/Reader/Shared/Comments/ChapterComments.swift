@@ -46,8 +46,8 @@ public struct ChapterComment: Codable, Hashable, Identifiable, Sendable {
         return value
     }
 
-    public func originalPostURL(threadURL: URL) -> URL? {
-        YamiboRoute.findPostURL(threadURL: threadURL, postID: postID)
+    public func originalPostURL(threadID: String) -> URL? {
+        YamiboRoute.findPostURL(threadID: threadID, postID: postID)
     }
 }
 

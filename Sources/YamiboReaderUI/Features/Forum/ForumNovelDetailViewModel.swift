@@ -199,7 +199,7 @@ final class ForumNovelDetailViewModel {
                 threadURL: context.thread.canonicalURL,
                 type: .novel
             )
-            readingProgress = await appContext.readingProgressStore.load(for: context.thread.canonicalURL)
+            readingProgress = await appContext.readingProgressStore.load(threadID: context.thread.tid)
             contentCover = await loadContentCover()
             readerSettings = await appContext.settingsStore.load().reader
             favoriteErrorMessage = nil
@@ -227,7 +227,7 @@ final class ForumNovelDetailViewModel {
             rebuildChapterDirectory()
             preloadReaderDocument()
         } catch {
-            readingProgress = await appContext.readingProgressStore.load(for: context.thread.canonicalURL)
+            readingProgress = await appContext.readingProgressStore.load(threadID: context.thread.tid)
             contentCover = await loadContentCover()
             if preservesCurrentContentOnFailure {
                 document = nil
@@ -283,7 +283,7 @@ final class ForumNovelDetailViewModel {
 
     private func preloadReaderDocument() {
         let request = ReaderPageRequest(
-            threadURL: context.thread.canonicalURL,
+            threadID: context.thread.tid,
             view: 1,
             authorID: resolvedAuthorID ?? context.authorID
         )
@@ -304,7 +304,7 @@ final class ForumNovelDetailViewModel {
 
     func launchContext(for chapter: ForumNovelChapterSummary?) -> ReaderLaunchContext {
         ReaderLaunchContext(
-            threadURL: context.thread.canonicalURL,
+            threadID: context.thread.tid,
             threadTitle: context.title,
             source: .forum,
             initialView: chapter?.view ?? 1,
@@ -319,7 +319,7 @@ final class ForumNovelDetailViewModel {
         let resumePoint = novelProgress?.novelResumePoint
         let hasProgress = Self.hasReadingProgress(readingProgress, favorite: favorite)
         return ReaderLaunchContext(
-            threadURL: context.thread.canonicalURL,
+            threadID: context.thread.tid,
             threadTitle: favorite?.resolvedDisplayTitle ?? context.title,
             source: hasProgress ? .resume : .forum,
             initialView: resumePoint?.view ?? novelProgress?.lastView ?? 1,
@@ -428,7 +428,7 @@ final class ForumNovelDetailViewModel {
     }
 
     private func refreshReadingProgress(from readingProgressStore: ReadingProgressStore) async {
-        readingProgress = await readingProgressStore.load(for: context.thread.canonicalURL)
+        readingProgress = await readingProgressStore.load(threadID: context.thread.tid)
         rebuildChapterDirectory()
     }
 
@@ -518,7 +518,7 @@ final class ForumNovelDetailViewModel {
         let resolvedAuthorID = trimmedNonEmpty(authorID) ?? trimmedNonEmpty(page.posts.first?.author.uid)
         guard let resolvedAuthorID else { return [] }
         let request = ReaderPageRequest(
-            threadURL: page.thread.canonicalURL,
+            threadID: page.thread.tid,
             view: pageNumber,
             authorID: resolvedAuthorID
         )
@@ -694,10 +694,9 @@ final class ForumNovelDetailViewModel {
     }
 
     private func localFavoriteItem(from store: FavoriteLibraryStore) async -> FavoriteItem? {
-        let target = FavoriteContentTarget(kind: .novelThread, threadURL: context.thread.canonicalURL)
-        let threadID = target.threadID
+        let target = FavoriteContentTarget.novelThread(threadID: context.thread.tid)
         return await store.load().items.first { item in
-            item.target.id == target.id || item.target.threadID == threadID
+            item.target.id == target.id || item.target.threadID == target.threadID
         }
     }
 
@@ -750,7 +749,7 @@ private extension FavoriteItem {
             id: id,
             title: title,
             displayName: displayName,
-            url: target.canonicalURL ?? threadURL,
+            url: threadURL,
             remoteFavoriteID: remoteMapping?.yamiboFavoriteID,
             type: type,
             tagIDs: tagIDs

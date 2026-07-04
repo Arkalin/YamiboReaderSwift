@@ -3,7 +3,7 @@ import Foundation
 
 extension OfflineCacheStore {
     private static let novelEntryColumnList = """
-    owner_name, owner_title, entry_key, title, thread_url, view, author_id, content_source, document_json,
+    owner_name, owner_title, entry_key, title, thread_id, view, author_id, content_source, document_json,
     source_page_file_name, source_page_schema_version, source_page_fingerprint, byte_count, created_at, updated_at
     """
 
@@ -29,7 +29,7 @@ extension OfflineCacheStore {
         let request = NovelOfflineCacheWorkRequest(
             ownerTitle: entry.ownerTitle,
             title: entry.title,
-            threadURL: entry.document.threadURL,
+            threadID: entry.document.threadID,
             view: entry.document.view,
             authorID: entry.document.resolvedAuthorID,
             contentSource: entry.document.contentSource,
@@ -60,14 +60,14 @@ extension OfflineCacheStore {
 
     public func novelOfflineCacheViewsSnapshot(
         ownerTitle: String,
-        threadURL: URL,
+        threadID: String,
         authorID: String?,
         contentSource: ReaderContentSource?
     ) async -> NovelOfflineCacheViewsSnapshot {
         try? await recoverQueueStateAfterRestart()
         guard let lookup = novelEntryLookup(
             ownerTitle: ownerTitle,
-            threadURL: threadURL,
+            threadID: threadID,
             view: 1,
             authorID: authorID,
             contentSource: contentSource
@@ -80,12 +80,12 @@ extension OfflineCacheStore {
                     sql: """
                     SELECT view, source_page_file_name, updated_at
                     FROM offline_cache_novel_entries
-                    WHERE owner_name = ? AND thread_url = ? AND author_id = ? AND content_source = ?
+                    WHERE owner_name = ? AND thread_id = ? AND author_id = ? AND content_source = ?
                     ORDER BY view ASC
                     """,
                     arguments: [
                         lookup.groupKey,
-                        lookup.threadURL.absoluteString,
+                        lookup.threadID,
                         authorID,
                         lookup.contentSource.rawValue
                     ]
@@ -96,12 +96,12 @@ extension OfflineCacheStore {
                     sql: """
                     SELECT view, source_page_file_name, updated_at
                     FROM offline_cache_novel_entries
-                    WHERE owner_name = ? AND thread_url = ? AND author_id IS NULL AND content_source = ?
+                    WHERE owner_name = ? AND thread_id = ? AND author_id IS NULL AND content_source = ?
                     ORDER BY view ASC
                     """,
                     arguments: [
                         lookup.groupKey,
-                        lookup.threadURL.absoluteString,
+                        lookup.threadID,
                         lookup.contentSource.rawValue
                     ]
                 )
@@ -145,14 +145,14 @@ extension OfflineCacheStore {
     public func removeNovelOfflineCacheViews(
         _ views: Set<Int>,
         ownerTitle: String,
-        threadURL: URL,
+        threadID: String,
         authorID: String?,
         contentSource: ReaderContentSource?
     ) async throws {
         for view in views {
             guard let lookup = novelEntryLookup(
                 ownerTitle: ownerTitle,
-                threadURL: threadURL,
+                threadID: threadID,
                 view: view,
                 authorID: authorID,
                 contentSource: contentSource
@@ -229,9 +229,9 @@ extension OfflineCacheStore {
             throw YamiboError.persistenceFailed("Novel offline cache entry is empty")
         }
         return NovelOfflineCacheWorkRequest(
-            ownerTitle: novelDisplayOwnerTitle(ownerTitle: request.ownerTitle, threadURL: request.threadURL),
+            ownerTitle: novelDisplayOwnerTitle(ownerTitle: request.ownerTitle, threadID: request.threadID),
             title: request.title,
-            threadURL: request.threadURL,
+            threadID: request.threadID,
             view: request.view,
             authorID: request.authorID,
             contentSource: request.contentSource,
@@ -292,7 +292,7 @@ extension OfflineCacheStore {
             throw YamiboError.persistenceFailed("Novel offline cache entry is empty")
         }
         return NovelOfflineCacheEntry(
-            ownerTitle: novelDisplayOwnerTitle(ownerTitle: entry.ownerTitle, threadURL: entry.document.threadURL),
+            ownerTitle: novelDisplayOwnerTitle(ownerTitle: entry.ownerTitle, threadID: entry.document.threadID),
             title: entry.title,
             document: entry.document,
             imageURLs: entry.imageURLs,
@@ -307,7 +307,7 @@ extension OfflineCacheStore {
             sql: """
             INSERT OR REPLACE INTO offline_cache_novel_entries
             (
-                owner_name, owner_title, entry_key, title, thread_url, view, author_id, content_source, document_json,
+                owner_name, owner_title, entry_key, title, thread_id, view, author_id, content_source, document_json,
                 source_page_file_name, source_page_schema_version, source_page_fingerprint,
                 byte_count, created_at, updated_at
             )
@@ -318,7 +318,7 @@ extension OfflineCacheStore {
                 entry.ownerTitle,
                 entryKey,
                 entry.title,
-                entry.document.threadURL.absoluteString,
+                entry.document.threadID,
                 entry.document.view,
                 entry.document.resolvedAuthorID,
                 entry.document.contentSource.rawValue,
@@ -358,7 +358,7 @@ extension OfflineCacheStore {
             sql: """
             INSERT OR REPLACE INTO offline_cache_novel_entries
             (
-                owner_name, owner_title, entry_key, title, thread_url, view, author_id, content_source, document_json,
+                owner_name, owner_title, entry_key, title, thread_id, view, author_id, content_source, document_json,
                 source_page_file_name, source_page_schema_version, source_page_fingerprint,
                 byte_count, created_at, updated_at
             )
@@ -369,7 +369,7 @@ extension OfflineCacheStore {
                 request.ownerTitle,
                 request.entryKey,
                 request.title.isEmpty ? L10n.string("reader.page_number_spaced", request.view) : request.title,
-                request.threadURL.absoluteString,
+                request.threadID,
                 request.view,
                 request.authorID,
                 request.contentSource.rawValue,
@@ -428,15 +428,12 @@ extension OfflineCacheStore {
 
     private static func novelEntry(from row: Row, in db: Database) throws -> NovelOfflineCacheEntry {
         var document = try decodeNovelDocument(row["document_json"] as String)
-        if let threadURLString = row["thread_url"] as String?,
-           let threadURL = URL(string: threadURLString) {
-            document.threadURL = ReaderCacheIdentity.canonicalThreadURL(from: threadURL)
-        }
+        document.threadID = row["thread_id"] as String
         document.view = row["view"] as Int
         document.resolvedAuthorID = row["author_id"] as String?
         document.contentSource = ReaderContentSource(rawValue: row["content_source"] as String) ?? document.contentSource
         return NovelOfflineCacheEntry(
-            ownerTitle: (row["owner_title"] as String?) ?? novelDisplayOwnerTitle(ownerTitle: "", threadURL: document.threadURL),
+            ownerTitle: (row["owner_title"] as String?) ?? novelDisplayOwnerTitle(ownerTitle: "", threadID: document.threadID),
             title: row["title"],
             document: document,
             imageURLs: try novelImageURLs(entryKey: row["entry_key"], in: db),
@@ -479,8 +476,8 @@ extension OfflineCacheStore {
         return try JSONDecoder().decode(ReaderPageDocument.self, from: data)
     }
 
-    static func novelDisplayOwnerTitle(ownerTitle: String, threadURL: URL) -> String {
-        ownerTitle.mangaReaderTrimmedNonEmpty ?? ReaderCacheIdentity.canonicalThreadURL(from: threadURL).absoluteString
+    static func novelDisplayOwnerTitle(ownerTitle: String, threadID: String) -> String {
+        ownerTitle.mangaReaderTrimmedNonEmpty ?? threadID.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     static func novelGroupKey(fromEntryKey entryKey: String) -> String? {

@@ -27,14 +27,14 @@ import Testing
     var document = FavoriteLibraryDocument()
     let categoryID = document.defaultCategory.id
     let first = try FavoriteItem(
-        target: FavoriteContentTarget(kind: .normalThread, threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=711"))),
+        target: FavoriteContentTarget(kind: .normalThread, threadID: "711"),
         title: "第一条",
         sourceGroup: .forumBoard(id: "10", label: "旧标签Z"),
         forumName: "版块A",
         locations: [.category(categoryID)]
     )
     let second = try FavoriteItem(
-        target: FavoriteContentTarget(kind: .normalThread, threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=712"))),
+        target: FavoriteContentTarget(kind: .normalThread, threadID: "712"),
         title: "第二条",
         sourceGroup: .forumBoard(id: "20", label: "旧标签A"),
         forumName: "版块B",
@@ -56,13 +56,13 @@ import Testing
     var document = FavoriteLibraryDocument()
     let categoryID = document.defaultCategory.id
     let current = try FavoriteItem(
-        target: FavoriteContentTarget(kind: .normalThread, threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=713"))),
+        target: FavoriteContentTarget(kind: .normalThread, threadID: "713"),
         title: "当前版名",
         sourceGroup: .forumBoard(id: "30", label: "新版名"),
         locations: [.category(categoryID)]
     )
     let legacy = try FavoriteItem(
-        target: FavoriteContentTarget(kind: .normalThread, threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=714"))),
+        target: FavoriteContentTarget(kind: .normalThread, threadID: "714"),
         title: "旧版名",
         sourceGroup: .forumBoard(id: "30", label: "旧版名"),
         locations: [.category(categoryID)]
@@ -101,7 +101,7 @@ import Testing
     let progress = [
         ReadingProgressRecord(
             contentTarget: items.normal.target,
-            threadURL: try #require(items.normal.target.canonicalURL),
+            threadID: "701",
             kind: .novel,
             updatedAt: Date(timeIntervalSince1970: 10),
             lastReadAt: Date(timeIntervalSince1970: 30),
@@ -109,7 +109,7 @@ import Testing
         ),
         ReadingProgressRecord(
             contentTarget: items.novel.target,
-            threadURL: try #require(items.novel.target.canonicalURL),
+            threadID: "702",
             kind: .novel,
             updatedAt: Date(timeIntervalSince1970: 20),
             lastReadAt: Date(timeIntervalSince1970: 20),
@@ -130,7 +130,7 @@ import Testing
     let (document, items) = try makeProjectionDocument()
     let mangaProgress = ReadingProgressRecord(
         contentTarget: items.manga.target,
-        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=703")),
+        threadID: "703",
         kind: .manga,
         updatedAt: Date(timeIntervalSince1970: 50),
         lastReadAt: Date(timeIntervalSince1970: 60),
@@ -160,7 +160,7 @@ private func makeProjectionDocument() throws -> (FavoriteLibraryDocument, Projec
     let collection = document.createCollection(categoryID: categoryID, name: "合集A")
     let coverURL = try #require(URL(string: "https://img.example.test/manga.jpg"))
     let normal = try FavoriteItem(
-        target: FavoriteContentTarget(kind: .normalThread, threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=701"))),
+        target: FavoriteContentTarget(kind: .normalThread, threadID: "701"),
         title: "普通主题",
         displayName: "本地名",
         sourceGroup: .forumBoard(id: "fid-1", label: "版块A"),
@@ -170,7 +170,7 @@ private func makeProjectionDocument() throws -> (FavoriteLibraryDocument, Projec
         updatedAt: Date(timeIntervalSince1970: 10)
     )
     let novel = try FavoriteItem(
-        target: FavoriteContentTarget(kind: .novelThread, threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=702"))),
+        target: FavoriteContentTarget(kind: .novelThread, threadID: "702"),
         title: "小说主题",
         sourceGroup: .forumBoard(id: "fid-1", label: "版块A"),
         contentUpdatedAt: Date(timeIntervalSince1970: 200),
@@ -192,7 +192,7 @@ private func makeProjectionDocument() throws -> (FavoriteLibraryDocument, Projec
         updatedAt: Date(timeIntervalSince1970: 30)
     )
     let unknown = try FavoriteItem(
-        target: FavoriteContentTarget(kind: .normalThread, threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=704"))),
+        target: FavoriteContentTarget(kind: .normalThread, threadID: "704"),
         title: "未知来源",
         sourceGroup: .unknown,
         locations: [.category(categoryID)],

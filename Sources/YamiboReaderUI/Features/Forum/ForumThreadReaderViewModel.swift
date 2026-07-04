@@ -306,10 +306,10 @@ final class ForumThreadReaderViewModel {
 
     private func localFavoriteItem(for url: URL) async -> FavoriteItem? {
         guard let localFavoriteLibraryStore = await localFavoriteLibraryStoreProvider() else { return nil }
-        let target = FavoriteContentTarget(kind: .normalThread, threadURL: url)
-        let threadID = target.threadID
+        guard let threadID = YamiboThreadURLCanonicalizer.threadID(from: url) else { return nil }
+        let target = FavoriteContentTarget.normalThread(threadID: threadID)
         return await localFavoriteLibraryStore.load().items.first { item in
-            item.target.id == target.id || item.target.threadID == threadID
+            item.target.id == target.id || item.target.threadID == target.threadID
         }
     }
 }
@@ -320,7 +320,7 @@ private extension FavoriteItem {
             id: id,
             title: title,
             displayName: displayName,
-            url: target.canonicalURL ?? threadURL,
+            url: threadURL,
             remoteFavoriteID: remoteMapping?.yamiboFavoriteID,
             type: type,
             tagIDs: tagIDs

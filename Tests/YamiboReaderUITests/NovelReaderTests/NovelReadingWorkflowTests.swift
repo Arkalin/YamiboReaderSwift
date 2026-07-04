@@ -92,13 +92,13 @@ private extension NovelTextViewportRuntimeOwner {
 @MainActor
 final class NovelReadingWorkflowTests: XCTestCase {
     func testStartCreatesOneWorkflowOwnedViewportRuntimeAndPublishesPagedDisplayReference() async throws {
-        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9178&mobile=2")!
+        let threadID = "9178"
         let repository = RecordingNovelReadingRepository(documents: [
-            1: makeNovelDocument(threadURL: threadURL, view: 1, maxView: 1, authorID: "author-1")
+            1: makeNovelDocument(threadID: threadID, view: 1, maxView: 1, authorID: "author-1")
         ])
         let workflow = NovelReadingWorkflow(
             context: ReaderLaunchContext(
-                threadURL: threadURL,
+                threadID: threadID,
                 threadTitle: "Thread",
                 source: .forum,
                 initialView: 1,
@@ -129,11 +129,11 @@ final class NovelReadingWorkflowTests: XCTestCase {
     }
 
     func testOfflineFallbackLoadSourcePropagatesToPresentationAndProgressPosition() async throws {
-        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9180&mobile=2")!
+        let threadID = "9180"
         let updatedAt = Date(timeIntervalSince1970: 91_800)
         let repository = RecordingNovelReadingRepository(
             documents: [
-                1: makeNovelDocument(threadURL: threadURL, view: 1, maxView: 1, authorID: "42")
+                1: makeNovelDocument(threadID: threadID, view: 1, maxView: 1, authorID: "42")
             ],
             loadSources: [
                 1: .offlineFallback(updatedAt: updatedAt)
@@ -141,7 +141,7 @@ final class NovelReadingWorkflowTests: XCTestCase {
         )
         let workflow = NovelReadingWorkflow(
             context: ReaderLaunchContext(
-                threadURL: threadURL,
+                threadID: threadID,
                 threadTitle: "Thread",
                 source: .forum,
                 initialView: 1,
@@ -162,13 +162,13 @@ final class NovelReadingWorkflowTests: XCTestCase {
     }
 
     func testVerticalDisplayReferenceBecomesStaleAfterRuntimeGenerationChanges() async throws {
-        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9179&mobile=2")!
+        let threadID = "9179"
         let repository = RecordingNovelReadingRepository(documents: [
-            1: makeNovelDocument(threadURL: threadURL, view: 1, maxView: 1, authorID: "author-1")
+            1: makeNovelDocument(threadID: threadID, view: 1, maxView: 1, authorID: "author-1")
         ])
         let workflow = NovelReadingWorkflow(
             context: ReaderLaunchContext(
-                threadURL: threadURL,
+                threadID: threadID,
                 threadTitle: "Thread",
                 source: .forum,
                 initialView: 1,
@@ -205,10 +205,10 @@ final class NovelReadingWorkflowTests: XCTestCase {
     }
 
     func testVerticalDisplayReferencePositionsLaterChunkStartNearSurfaceTop() async throws {
-        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9188&mobile=2")!
+        let threadID = "9188"
         let text = String(repeating: "最终得出的结论，利用对方的体重来刺穿喉咙是最有效率的。", count: 160)
         let document = ReaderPageDocument(
-            threadURL: threadURL,
+            threadID: threadID,
             view: 1,
             maxView: 1,
             resolvedAuthorID: "author-1",
@@ -220,7 +220,7 @@ final class NovelReadingWorkflowTests: XCTestCase {
         ])
         let workflow = NovelReadingWorkflow(
             context: ReaderLaunchContext(
-                threadURL: threadURL,
+                threadID: threadID,
                 threadTitle: "Thread",
                 source: .forum,
                 initialView: 1,
@@ -258,10 +258,10 @@ final class NovelReadingWorkflowTests: XCTestCase {
     }
 
     func testVerticalPresentationUsesFrozenChunkHeightsAndOnlySpacesExternalBlocks() async throws {
-        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9196&mobile=2")!
+        let threadID = "9196"
         let imageURL = URL(string: "https://example.com/image.jpg")!
         let document = ReaderPageDocument(
-            threadURL: threadURL,
+            threadID: threadID,
             view: 1,
             maxView: 1,
             resolvedAuthorID: "author-1",
@@ -276,7 +276,7 @@ final class NovelReadingWorkflowTests: XCTestCase {
         let layout = ReaderContainerLayout(width: 320, height: 500, readingMode: .vertical)
         let workflow = NovelReadingWorkflow(
             context: ReaderLaunchContext(
-                threadURL: threadURL,
+                threadID: threadID,
                 threadTitle: "Thread",
                 source: .forum,
                 initialView: 1,
@@ -335,9 +335,9 @@ final class NovelReadingWorkflowTests: XCTestCase {
     }
 
     func testRuntimeDiagnosticsRecordCompactionAndSurfaceIdentityPreheat() async throws {
-        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9197&mobile=2")!
+        let threadID = "9197"
         let document = ReaderPageDocument(
-            threadURL: threadURL,
+            threadID: threadID,
             view: 1,
             maxView: 1,
             resolvedAuthorID: "author-1",
@@ -353,7 +353,7 @@ final class NovelReadingWorkflowTests: XCTestCase {
         let repository = RecordingNovelReadingRepository(documents: [1: document])
         let workflow = NovelReadingWorkflow(
             context: ReaderLaunchContext(
-                threadURL: threadURL,
+                threadID: threadID,
                 threadTitle: "Thread",
                 source: .forum,
                 initialView: 1,
@@ -420,9 +420,9 @@ final class NovelReadingWorkflowTests: XCTestCase {
     }
 
     func testRepeatedVerticalViewportSampleDoesNotPublishPresentationRevision() async throws {
-        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9222&mobile=2")!
+        let threadID = "9222"
         let document = ReaderPageDocument(
-            threadURL: threadURL,
+            threadID: threadID,
             view: 1,
             maxView: 1,
             resolvedAuthorID: "author-1",
@@ -436,7 +436,7 @@ final class NovelReadingWorkflowTests: XCTestCase {
         let repository = RecordingNovelReadingRepository(documents: [1: document])
         let workflow = NovelReadingWorkflow(
             context: ReaderLaunchContext(
-                threadURL: threadURL,
+                threadID: threadID,
                 threadTitle: "Thread",
                 source: .forum,
                 initialView: 1,
@@ -470,9 +470,9 @@ final class NovelReadingWorkflowTests: XCTestCase {
     }
 
     func testTwoPageSpreadReferencesShareRuntimeGeneration() async throws {
-        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9180&mobile=2")!
+        let threadID = "9180"
         let document = ReaderPageDocument(
-            threadURL: threadURL,
+            threadID: threadID,
             view: 1,
             maxView: 1,
             resolvedAuthorID: "author-1",
@@ -484,7 +484,7 @@ final class NovelReadingWorkflowTests: XCTestCase {
         let repository = RecordingNovelReadingRepository(documents: [1: document])
         let workflow = NovelReadingWorkflow(
             context: ReaderLaunchContext(
-                threadURL: threadURL,
+                threadID: threadID,
                 threadTitle: "Thread",
                 source: .forum,
                 initialView: 1,
@@ -513,11 +513,11 @@ final class NovelReadingWorkflowTests: XCTestCase {
     }
 
     func testWorkflowPublishesPresentationWithGenerationScopedSurfaceIdentities() async throws {
-        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9192&mobile=2")!
+        let threadID = "9192"
         let repository = RecordingNovelReadingRepository(documents: [
-            1: makeNovelDocument(threadURL: threadURL, view: 1, maxView: 1, authorID: "author-1")
+            1: makeNovelDocument(threadID: threadID, view: 1, maxView: 1, authorID: "author-1")
         ])
-        let workflow = makeWorkflow(threadURL: threadURL, repository: repository)
+        let workflow = makeWorkflow(threadID: threadID, repository: repository)
 
         let initialState = try await workflow.start(initial: NovelReadingInitialPosition())
         let initialPresentation = try XCTUnwrap(initialState.presentation)
@@ -590,12 +590,12 @@ final class NovelReadingWorkflowTests: XCTestCase {
     }
 
     func testPrefetchDoesNotCreateASecondViewportRuntime() async throws {
-        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9181&mobile=2")!
+        let threadID = "9181"
         let repository = RecordingNovelReadingRepository(documents: [
-            1: makeNovelDocument(threadURL: threadURL, view: 1, maxView: 2, authorID: "author-1"),
-            2: makeNovelDocument(threadURL: threadURL, view: 2, maxView: 2, authorID: "author-1")
+            1: makeNovelDocument(threadID: threadID, view: 1, maxView: 2, authorID: "author-1"),
+            2: makeNovelDocument(threadID: threadID, view: 2, maxView: 2, authorID: "author-1")
         ])
-        let workflow = makeWorkflow(threadURL: threadURL, repository: repository)
+        let workflow = makeWorkflow(threadID: threadID, repository: repository)
 
         let initialState = try await workflow.start(initial: NovelReadingInitialPosition())
         let surfaceOrdinal = try firstSurfaceOrdinal(in: initialState)
@@ -612,11 +612,11 @@ final class NovelReadingWorkflowTests: XCTestCase {
     }
 
     func testCloseReleasesRuntimeAndAllowsWorkflowToReopen() async throws {
-        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9182&mobile=2")!
+        let threadID = "9182"
         let repository = RecordingNovelReadingRepository(documents: [
-            1: makeNovelDocument(threadURL: threadURL, view: 1, maxView: 1, authorID: "author-1")
+            1: makeNovelDocument(threadID: threadID, view: 1, maxView: 1, authorID: "author-1")
         ])
-        let workflow = makeWorkflow(threadURL: threadURL, repository: repository)
+        let workflow = makeWorkflow(threadID: threadID, repository: repository)
 
         let initialState = try await workflow.start(initial: NovelReadingInitialPosition())
         let surfaceOrdinal = try firstSurfaceOrdinal(in: initialState)
@@ -646,11 +646,11 @@ final class NovelReadingWorkflowTests: XCTestCase {
     }
 
     func testMemoryPressureClearsSemanticCacheWithoutInvalidatingCurrentGeneration() async throws {
-        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9183&mobile=2")!
+        let threadID = "9183"
         let repository = RecordingNovelReadingRepository(documents: [
-            1: makeNovelDocument(threadURL: threadURL, view: 1, maxView: 1, authorID: "author-1")
+            1: makeNovelDocument(threadID: threadID, view: 1, maxView: 1, authorID: "author-1")
         ])
-        let workflow = makeWorkflow(threadURL: threadURL, repository: repository)
+        let workflow = makeWorkflow(threadID: threadID, repository: repository)
 
         let state = try await workflow.start(initial: NovelReadingInitialPosition())
         let surfaceOrdinal = try firstSurfaceOrdinal(in: state)
@@ -667,15 +667,15 @@ final class NovelReadingWorkflowTests: XCTestCase {
     }
 
     func testWorkflowDeinitDoesNotRetainRuntimeThroughDisplayReferences() async throws {
-        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9184&mobile=2")!
+        let threadID = "9184"
         let repository = RecordingNovelReadingRepository(documents: [
-            1: makeNovelDocument(threadURL: threadURL, view: 1, maxView: 1, authorID: "author-1")
+            1: makeNovelDocument(threadID: threadID, view: 1, maxView: 1, authorID: "author-1")
         ])
         weak var weakWorkflow: NovelReadingWorkflow?
         var reference: NovelTextViewportDisplayReference?
 
         do {
-            let workflow = makeWorkflow(threadURL: threadURL, repository: repository)
+            let workflow = makeWorkflow(threadID: threadID, repository: repository)
             weakWorkflow = workflow
             let state = try await workflow.start(initial: NovelReadingInitialPosition())
             let surfaceOrdinal = try firstSurfaceOrdinal(in: state)
@@ -687,8 +687,8 @@ final class NovelReadingWorkflowTests: XCTestCase {
     }
 
     func testStartUsesStoredResumePointBeforeLaunchDefaults() async throws {
-        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9101&mobile=2")!
-        let resumeDocument = makeNovelDocument(threadURL: threadURL, view: 3, maxView: 5, authorID: "resume-author")
+        let threadID = "9101"
+        let resumeDocument = makeNovelDocument(threadID: threadID, view: 3, maxView: 5, authorID: "resume-author")
         let repository = RecordingNovelReadingRepository(documents: [
             3: resumeDocument
         ])
@@ -704,7 +704,7 @@ final class NovelReadingWorkflowTests: XCTestCase {
         )
         let workflow = NovelReadingWorkflow(
             context: ReaderLaunchContext(
-                threadURL: threadURL,
+                threadID: threadID,
                 threadTitle: "Thread",
                 source: .favorites,
                 initialView: 2,
@@ -723,7 +723,7 @@ final class NovelReadingWorkflowTests: XCTestCase {
         )
 
         XCTAssertEqual(repository.loadRequests, [
-            ReaderPageRequest(threadURL: threadURL, view: 3, authorID: "resume-author")
+            ReaderPageRequest(threadID: threadID, view: 3, authorID: "resume-author")
         ])
         XCTAssertEqual(state.snapshot.currentView, 3)
         XCTAssertEqual(state.presentation?.readingState.authorID, "resume-author")
@@ -731,13 +731,13 @@ final class NovelReadingWorkflowTests: XCTestCase {
     }
 
     func testStartUsesFirstSurfaceAndFavoriteAuthorWhenNoResumePoint() async throws {
-        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9108&mobile=2")!
+        let threadID = "9108"
         let repository = RecordingNovelReadingRepository(documents: [
-            2: makeNovelDocument(threadURL: threadURL, view: 2, maxView: 5, authorID: "favorite-author")
+            2: makeNovelDocument(threadID: threadID, view: 2, maxView: 5, authorID: "favorite-author")
         ])
         let workflow = NovelReadingWorkflow(
             context: ReaderLaunchContext(
-                threadURL: threadURL,
+                threadID: threadID,
                 threadTitle: "Thread",
                 source: .favorites,
                 initialView: 2,
@@ -753,7 +753,7 @@ final class NovelReadingWorkflowTests: XCTestCase {
         )
 
         XCTAssertEqual(repository.loadRequests, [
-            ReaderPageRequest(threadURL: threadURL, view: 2, authorID: "favorite-author")
+            ReaderPageRequest(threadID: threadID, view: 2, authorID: "favorite-author")
         ])
         XCTAssertEqual(state.snapshot.currentView, 2)
         XCTAssertEqual(state.snapshot.selectedSurfaceOrdinal, 0)
@@ -761,13 +761,13 @@ final class NovelReadingWorkflowTests: XCTestCase {
     }
 
     func testUpdatingSettingsThrowsWhenViewportLayoutFailsAndKeepsSnapshot() async throws {
-        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9110&mobile=2")!
+        let threadID = "9110"
         let repository = RecordingNovelReadingRepository(documents: [
-            1: makeNovelDocument(threadURL: threadURL, view: 1, maxView: 1, authorID: "author-1")
+            1: makeNovelDocument(threadID: threadID, view: 1, maxView: 1, authorID: "author-1")
         ])
         let workflow = NovelReadingWorkflow(
             context: ReaderLaunchContext(
-                threadURL: threadURL,
+                threadID: threadID,
                 threadTitle: "Thread",
                 source: .forum,
                 initialView: 1,
@@ -822,14 +822,14 @@ final class NovelReadingWorkflowTests: XCTestCase {
     }
 
     func testRuntimeAdapterFailureConsumesGenerationAndKeepsActiveWorkflowState() async throws {
-        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9191&mobile=2")!
+        let threadID = "9191"
         let repository = RecordingNovelReadingRepository(documents: [
-            1: makeNovelDocument(threadURL: threadURL, view: 1, maxView: 1, authorID: "author-1")
+            1: makeNovelDocument(threadID: threadID, view: 1, maxView: 1, authorID: "author-1")
         ])
         let runtimeAdapter = TestNovelTextLayoutRuntimeAdapter()
         let workflow = NovelReadingWorkflow(
             context: ReaderLaunchContext(
-                threadURL: threadURL,
+                threadID: threadID,
                 threadTitle: "Thread",
                 source: .forum,
                 initialView: 1,
@@ -876,7 +876,7 @@ final class NovelReadingWorkflowTests: XCTestCase {
         let runtimeAdapter = TestNovelTextLayoutRuntimeAdapter()
         let runtimeOwner = NovelTextViewportRuntimeOwner(adapter: runtimeAdapter)
         let document = ReaderPageDocument(
-            threadURL: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9190&mobile=2")!,
+            threadID: "9190",
             view: 1,
             maxView: 1,
             segments: [
@@ -926,13 +926,13 @@ final class NovelReadingWorkflowTests: XCTestCase {
     }
 
     func testAppearanceLayoutSpreadAndModeUpdatesCommitOneRuntimeTransaction() async throws {
-        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9185&mobile=2")!
+        let threadID = "9185"
         let repository = RecordingNovelReadingRepository(documents: [
-            1: makeNovelDocument(threadURL: threadURL, view: 1, maxView: 1, authorID: "author-1")
+            1: makeNovelDocument(threadID: threadID, view: 1, maxView: 1, authorID: "author-1")
         ])
         let workflow = NovelReadingWorkflow(
             context: ReaderLaunchContext(
-                threadURL: threadURL,
+                threadID: threadID,
                 threadTitle: "Thread",
                 source: .forum,
                 initialView: 1,
@@ -1019,11 +1019,11 @@ final class NovelReadingWorkflowTests: XCTestCase {
     }
 
     func testRuntimeUpdateRequestsAreLatestWinsWhenPreparationCompletesOutOfOrder() async throws {
-        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9188&mobile=2")!
+        let threadID = "9188"
         let repository = RecordingNovelReadingRepository(documents: [
-            1: makeNovelDocument(threadURL: threadURL, view: 1, maxView: 1, authorID: "author-1")
+            1: makeNovelDocument(threadID: threadID, view: 1, maxView: 1, authorID: "author-1")
         ])
-        let workflow = makeWorkflow(threadURL: threadURL, repository: repository)
+        let workflow = makeWorkflow(threadID: threadID, repository: repository)
         _ = try await workflow.start(initial: NovelReadingInitialPosition())
         let initialTransactionCount = workflow.runtimeTransactionDiagnostics.committedTransactionCount
         let firstUpdate = NovelReadingWorkflowRuntimeUpdate(
@@ -1067,11 +1067,11 @@ final class NovelReadingWorkflowTests: XCTestCase {
     }
 
     func testLatestRuntimeUpdateFailureDoesNotCommitSupersededOrFailedRequest() async throws {
-        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9189&mobile=2")!
+        let threadID = "9189"
         let repository = RecordingNovelReadingRepository(documents: [
-            1: makeNovelDocument(threadURL: threadURL, view: 1, maxView: 1, authorID: "author-1")
+            1: makeNovelDocument(threadID: threadID, view: 1, maxView: 1, authorID: "author-1")
         ])
-        let workflow = makeWorkflow(threadURL: threadURL, repository: repository)
+        let workflow = makeWorkflow(threadID: threadID, repository: repository)
         let initialState = try await workflow.start(initial: NovelReadingInitialPosition())
         let initialTransactions = workflow.runtimeTransactionDiagnostics
         let preparationGate = RuntimeUpdatePreparationGate()
@@ -1111,11 +1111,11 @@ final class NovelReadingWorkflowTests: XCTestCase {
     }
 
     func testWorkflowCloseRejectsLateRuntimeUpdatePreparation() async throws {
-        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9190&mobile=2")!
+        let threadID = "9190"
         let repository = RecordingNovelReadingRepository(documents: [
-            1: makeNovelDocument(threadURL: threadURL, view: 1, maxView: 1, authorID: "author-1")
+            1: makeNovelDocument(threadID: threadID, view: 1, maxView: 1, authorID: "author-1")
         ])
-        let workflow = makeWorkflow(threadURL: threadURL, repository: repository)
+        let workflow = makeWorkflow(threadID: threadID, repository: repository)
         _ = try await workflow.start(initial: NovelReadingInitialPosition())
         let preparationGate = RuntimeUpdatePreparationGate()
         let updateTask = Task {
@@ -1142,10 +1142,10 @@ final class NovelReadingWorkflowTests: XCTestCase {
     }
 
     func testLoadCurrentForceRefreshDeletesOnlyCurrentVariantAndReloadsIgnoringCache() async throws {
-        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9102&mobile=2")!
+        let threadID = "9102"
         let repository = RecordingNovelReadingRepository(documents: [
             2: makeNovelDocument(
-                threadURL: threadURL,
+                threadID: threadID,
                 view: 2,
                 maxView: 4,
                 authorID: "author-2",
@@ -1154,7 +1154,7 @@ final class NovelReadingWorkflowTests: XCTestCase {
         ])
         let workflow = NovelReadingWorkflow(
             context: ReaderLaunchContext(
-                threadURL: threadURL,
+                threadID: threadID,
                 threadTitle: "Thread",
                 source: .favorites,
                 initialView: 2,
@@ -1175,25 +1175,25 @@ final class NovelReadingWorkflowTests: XCTestCase {
         XCTAssertEqual(repository.deletedViews, [
             RecordingNovelReadingRepository.DeletedViews(
                 views: [2],
-                threadURL: threadURL,
+                threadID: threadID,
                 authorID: "author-2",
                 contentSource: .authorFilteredPage
             )
         ])
         XCTAssertEqual(repository.ignoringCacheRequests, [
-            ReaderPageRequest(threadURL: threadURL, view: 2, authorID: "author-2")
+            ReaderPageRequest(threadID: threadID, view: 2, authorID: "author-2")
         ])
     }
 
     func testPrefetchNearEndLoadsNextViewWithoutMergingInVerticalMode() async throws {
-        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9103&mobile=2")!
+        let threadID = "9103"
         let repository = RecordingNovelReadingRepository(documents: [
-            1: makeNovelDocument(threadURL: threadURL, view: 1, maxView: 2, authorID: "author-1"),
-            2: makeNovelDocument(threadURL: threadURL, view: 2, maxView: 2, authorID: "author-1")
+            1: makeNovelDocument(threadID: threadID, view: 1, maxView: 2, authorID: "author-1"),
+            2: makeNovelDocument(threadID: threadID, view: 2, maxView: 2, authorID: "author-1")
         ])
         let workflow = NovelReadingWorkflow(
             context: ReaderLaunchContext(
-                threadURL: threadURL,
+                threadID: threadID,
                 threadTitle: "Thread",
                 source: .forum,
                 initialView: 1,
@@ -1209,17 +1209,17 @@ final class NovelReadingWorkflowTests: XCTestCase {
         let state = try XCTUnwrap(prefetchState)
 
         XCTAssertEqual(repository.loadRequests, [
-            ReaderPageRequest(threadURL: threadURL, view: 1, authorID: "author-1"),
-            ReaderPageRequest(threadURL: threadURL, view: 2, authorID: "author-1")
+            ReaderPageRequest(threadID: threadID, view: 1, authorID: "author-1"),
+            ReaderPageRequest(threadID: threadID, view: 2, authorID: "author-1")
         ])
         XCTAssertEqual(state.snapshot.currentView, 1)
         XCTAssertEqual(documentViews(in: state), [1])
     }
 
     func testVerticalViewportSampleUpdatesSessionBackedNovelReadingPosition() async throws {
-        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9111&mobile=2")!
+        let threadID = "9111"
         let document = makeSegmentedNovelDocument(
-            threadURL: threadURL,
+            threadID: threadID,
             view: 1,
             maxView: 1,
             authorID: "author-1",
@@ -1230,7 +1230,7 @@ final class NovelReadingWorkflowTests: XCTestCase {
         ])
         let workflow = NovelReadingWorkflow(
             context: ReaderLaunchContext(
-                threadURL: threadURL,
+                threadID: threadID,
                 threadTitle: "Thread",
                 source: .forum,
                 initialView: 1,
@@ -1325,9 +1325,9 @@ final class NovelReadingWorkflowTests: XCTestCase {
     }
 
     func testVerticalViewportSampleUsesTextKitIndexPositionInsteadOfFrameProgress() async throws {
-        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9153&mobile=2")!
+        let threadID = "9153"
         let document = makeSegmentedNovelDocument(
-            threadURL: threadURL,
+            threadID: threadID,
             view: 1,
             maxView: 1,
             authorID: "author-1",
@@ -1338,7 +1338,7 @@ final class NovelReadingWorkflowTests: XCTestCase {
         ])
         let workflow = NovelReadingWorkflow(
             context: ReaderLaunchContext(
-                threadURL: threadURL,
+                threadID: threadID,
                 threadTitle: "Thread",
                 source: .forum,
                 initialView: 1,
@@ -1437,9 +1437,9 @@ final class NovelReadingWorkflowTests: XCTestCase {
     }
 
     func testVerticalViewportSamplePreservesExactOffsetInsideMultiRangePage() async throws {
-        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9157&mobile=2")!
+        let threadID = "9157"
         let document = makeSegmentedNovelDocument(
-            threadURL: threadURL,
+            threadID: threadID,
             view: 1,
             maxView: 1,
             authorID: "author-1",
@@ -1450,7 +1450,7 @@ final class NovelReadingWorkflowTests: XCTestCase {
         ])
         let workflow = NovelReadingWorkflow(
             context: ReaderLaunchContext(
-                threadURL: threadURL,
+                threadID: threadID,
                 threadTitle: "Thread",
                 source: .forum,
                 initialView: 1,
@@ -1520,9 +1520,9 @@ final class NovelReadingWorkflowTests: XCTestCase {
     }
 
     func testExternalBlockViewportMovementPreservesTextOnlyResumeUntilNextTextSample() async throws {
-        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9154&mobile=2")!
+        let threadID = "9154"
         let document = ReaderPageDocument(
-            threadURL: threadURL,
+            threadID: threadID,
             view: 1,
             maxView: 1,
             resolvedAuthorID: "author-1",
@@ -1537,7 +1537,7 @@ final class NovelReadingWorkflowTests: XCTestCase {
         ])
         let workflow = NovelReadingWorkflow(
             context: ReaderLaunchContext(
-                threadURL: threadURL,
+                threadID: threadID,
                 threadTitle: "Thread",
                 source: .forum,
                 initialView: 1,
@@ -1661,9 +1661,9 @@ final class NovelReadingWorkflowTests: XCTestCase {
     }
 
     func testNoTextReaderPageDocumentPreservesPreviousTextOnlyResumePoint() async throws {
-        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9254&mobile=2")!
+        let threadID = "9254"
         let firstDocument = ReaderPageDocument(
-            threadURL: threadURL,
+            threadID: threadID,
             view: 1,
             maxView: 2,
             resolvedAuthorID: "author-1",
@@ -1672,7 +1672,7 @@ final class NovelReadingWorkflowTests: XCTestCase {
             ]
         )
         let secondDocument = ReaderPageDocument(
-            threadURL: threadURL,
+            threadID: threadID,
             view: 2,
             maxView: 2,
             resolvedAuthorID: "author-1",
@@ -1686,7 +1686,7 @@ final class NovelReadingWorkflowTests: XCTestCase {
         ])
         let workflow = NovelReadingWorkflow(
             context: ReaderLaunchContext(
-                threadURL: threadURL,
+                threadID: threadID,
                 threadTitle: "Thread",
                 source: .forum,
                 initialView: 1,
@@ -1781,10 +1781,10 @@ final class NovelReadingWorkflowTests: XCTestCase {
     }
 
     func testCurrentProgressPositionUsesSessionBackedResumePoint() async throws {
-        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9112&mobile=2")!
+        let threadID = "9112"
         let repository = RecordingNovelReadingRepository(documents: [
             2: makeSegmentedNovelDocument(
-                threadURL: threadURL,
+                threadID: threadID,
                 view: 2,
                 maxView: 3,
                 authorID: "author-2",
@@ -1793,7 +1793,7 @@ final class NovelReadingWorkflowTests: XCTestCase {
         ])
         let workflow = NovelReadingWorkflow(
             context: ReaderLaunchContext(
-                threadURL: threadURL,
+                threadID: threadID,
                 threadTitle: "Thread",
                 source: .forum,
                 initialView: 2,
@@ -1876,7 +1876,7 @@ final class NovelReadingWorkflowTests: XCTestCase {
 
         let position = workflow.currentProgressPosition()
 
-        XCTAssertEqual(position.threadURL, threadURL)
+        XCTAssertEqual(position.threadID, threadID)
         XCTAssertEqual(position.view, 2)
         XCTAssertEqual(position.chapterTitle, "第二章")
         XCTAssertEqual(position.authorID, "author-2")
@@ -1887,10 +1887,10 @@ final class NovelReadingWorkflowTests: XCTestCase {
     }
 
     func testCurrentProgressPositionSurvivesNavigationSettingsAndLayoutChanges() async throws {
-        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9115&mobile=2")!
+        let threadID = "9115"
         let repository = RecordingNovelReadingRepository(documents: [
             1: ReaderPageDocument(
-                threadURL: threadURL,
+                threadID: threadID,
                 view: 1,
                 maxView: 1,
                 resolvedAuthorID: "author-1",
@@ -1902,7 +1902,7 @@ final class NovelReadingWorkflowTests: XCTestCase {
         ])
         let workflow = NovelReadingWorkflow(
             context: ReaderLaunchContext(
-                threadURL: threadURL,
+                threadID: threadID,
                 threadTitle: "Thread",
                 source: .forum,
                 initialView: 1,
@@ -1921,7 +1921,7 @@ final class NovelReadingWorkflowTests: XCTestCase {
         _ = workflow.selectSurface(1)
         let navigatedPosition = workflow.currentProgressPosition()
 
-        XCTAssertEqual(navigatedPosition.threadURL, threadURL)
+        XCTAssertEqual(navigatedPosition.threadID, threadID)
         XCTAssertEqual(navigatedPosition.view, 1)
         XCTAssertEqual(navigatedPosition.chapterTitle, "第一章")
         XCTAssertEqual(navigatedPosition.authorID, "author-1")
@@ -1945,9 +1945,9 @@ final class NovelReadingWorkflowTests: XCTestCase {
     }
 
     func testPreviewSourceTextStartsAtRestoredNovelReadingPosition() async throws {
-        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9113&mobile=2")!
+        let threadID = "9113"
         let document = ReaderPageDocument(
-            threadURL: threadURL,
+            threadID: threadID,
             view: 1,
             maxView: 1,
             resolvedAuthorID: "author-1",
@@ -1961,7 +1961,7 @@ final class NovelReadingWorkflowTests: XCTestCase {
         let repository = RecordingNovelReadingRepository(documents: [1: document])
         let workflow = NovelReadingWorkflow(
             context: ReaderLaunchContext(
-                threadURL: threadURL,
+                threadID: threadID,
                 threadTitle: "Thread",
                 source: .favorites,
                 initialView: 1,
@@ -1992,9 +1992,9 @@ final class NovelReadingWorkflowTests: XCTestCase {
     }
 
     func testPreviewSourceTextFollowsVerticalViewportMovement() async throws {
-        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9114&mobile=2")!
+        let threadID = "9114"
         let document = ReaderPageDocument(
-            threadURL: threadURL,
+            threadID: threadID,
             view: 1,
             maxView: 1,
             resolvedAuthorID: "author-1",
@@ -2008,7 +2008,7 @@ final class NovelReadingWorkflowTests: XCTestCase {
         let repository = RecordingNovelReadingRepository(documents: [1: document])
         let workflow = NovelReadingWorkflow(
             context: ReaderLaunchContext(
-                threadURL: threadURL,
+                threadID: threadID,
                 threadTitle: "Thread",
                 source: .forum,
                 initialView: 1,
@@ -2033,14 +2033,14 @@ final class NovelReadingWorkflowTests: XCTestCase {
     }
 
     func testPromotingPrefetchedViewPublishesRequestedPageImmediately() async throws {
-        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9109&mobile=2")!
+        let threadID = "9109"
         let repository = RecordingNovelReadingRepository(documents: [
-            1: makeNovelDocument(threadURL: threadURL, view: 1, maxView: 2, authorID: "author-1"),
-            2: makeNovelDocument(threadURL: threadURL, view: 2, maxView: 2, authorID: "author-1")
+            1: makeNovelDocument(threadID: threadID, view: 1, maxView: 2, authorID: "author-1"),
+            2: makeNovelDocument(threadID: threadID, view: 2, maxView: 2, authorID: "author-1")
         ])
         let workflow = NovelReadingWorkflow(
             context: ReaderLaunchContext(
-                threadURL: threadURL,
+                threadID: threadID,
                 threadTitle: "Thread",
                 source: .forum,
                 initialView: 1,
@@ -2078,11 +2078,11 @@ final class NovelReadingWorkflowTests: XCTestCase {
     }
 
     func testPureExternalBlockDocumentPublishesFrozenExternalBlockSurfacesWithoutTextResume() async throws {
-        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9193&mobile=2")!
+        let threadID = "9193"
         let imageURL = URL(string: "https://example.com/only-image.jpg")!
         let repository = RecordingNovelReadingRepository(documents: [
             1: ReaderPageDocument(
-                threadURL: threadURL,
+                threadID: threadID,
                 view: 1,
                 maxView: 1,
                 resolvedAuthorID: "author-1",
@@ -2092,7 +2092,7 @@ final class NovelReadingWorkflowTests: XCTestCase {
         ])
         let workflow = NovelReadingWorkflow(
             context: ReaderLaunchContext(
-                threadURL: threadURL,
+                threadID: threadID,
                 threadTitle: "Thread",
                 source: .forum,
                 initialView: 1,
@@ -2117,14 +2117,14 @@ final class NovelReadingWorkflowTests: XCTestCase {
     }
 
     func testFailedPrefetchedPromotionKeepsCurrentRuntimeAndReadingPosition() async throws {
-        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9186&mobile=2")!
+        let threadID = "9186"
         let repository = RecordingNovelReadingRepository(documents: [
-            1: makeNovelDocument(threadURL: threadURL, view: 1, maxView: 2, authorID: "author-1"),
-            2: makeNovelDocument(threadURL: threadURL, view: 2, maxView: 2, authorID: "author-1")
+            1: makeNovelDocument(threadID: threadID, view: 1, maxView: 2, authorID: "author-1"),
+            2: makeNovelDocument(threadID: threadID, view: 2, maxView: 2, authorID: "author-1")
         ])
         let workflow = NovelReadingWorkflow(
             context: ReaderLaunchContext(
-                threadURL: threadURL,
+                threadID: threadID,
                 threadTitle: "Thread",
                 source: .forum,
                 initialView: 1,
@@ -2182,12 +2182,12 @@ final class NovelReadingWorkflowTests: XCTestCase {
     }
 
     func testRepeatedPromotionAndCloseDoNotCreateAdditionalRuntimeGenerations() async throws {
-        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9187&mobile=2")!
+        let threadID = "9187"
         let repository = RecordingNovelReadingRepository(documents: [
-            1: makeNovelDocument(threadURL: threadURL, view: 1, maxView: 2, authorID: "author-1"),
-            2: makeNovelDocument(threadURL: threadURL, view: 2, maxView: 2, authorID: "author-1")
+            1: makeNovelDocument(threadID: threadID, view: 1, maxView: 2, authorID: "author-1"),
+            2: makeNovelDocument(threadID: threadID, view: 2, maxView: 2, authorID: "author-1")
         ])
-        let workflow = makeWorkflow(threadURL: threadURL, repository: repository)
+        let workflow = makeWorkflow(threadID: threadID, repository: repository)
         let initialState = try await workflow.start(initial: NovelReadingInitialPosition())
         _ = await workflow.prefetchIfNeeded(
             nearSurfaceOrdinal: max(try surfaceCount(in: initialState) - 2, 0)
@@ -2214,14 +2214,14 @@ final class NovelReadingWorkflowTests: XCTestCase {
     }
 
     func testPrefetchNearEndDoesNotMergeNextViewInPagedMode() async throws {
-        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9104&mobile=2")!
+        let threadID = "9104"
         let repository = RecordingNovelReadingRepository(documents: [
-            1: makeNovelDocument(threadURL: threadURL, view: 1, maxView: 2, authorID: "author-1"),
-            2: makeNovelDocument(threadURL: threadURL, view: 2, maxView: 2, authorID: "author-1")
+            1: makeNovelDocument(threadID: threadID, view: 1, maxView: 2, authorID: "author-1"),
+            2: makeNovelDocument(threadID: threadID, view: 2, maxView: 2, authorID: "author-1")
         ])
         let workflow = NovelReadingWorkflow(
             context: ReaderLaunchContext(
-                threadURL: threadURL,
+                threadID: threadID,
                 threadTitle: "Thread",
                 source: .forum,
                 initialView: 1,
@@ -2241,14 +2241,14 @@ final class NovelReadingWorkflowTests: XCTestCase {
     }
 
     func testRepeatedPrefetchDoesNotReloadAlreadyPrefetchedNextView() async throws {
-        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9105&mobile=2")!
+        let threadID = "9105"
         let repository = RecordingNovelReadingRepository(documents: [
-            1: makeNovelDocument(threadURL: threadURL, view: 1, maxView: 2, authorID: "author-1"),
-            2: makeNovelDocument(threadURL: threadURL, view: 2, maxView: 2, authorID: "author-1")
+            1: makeNovelDocument(threadID: threadID, view: 1, maxView: 2, authorID: "author-1"),
+            2: makeNovelDocument(threadID: threadID, view: 2, maxView: 2, authorID: "author-1")
         ])
         let workflow = NovelReadingWorkflow(
             context: ReaderLaunchContext(
-                threadURL: threadURL,
+                threadID: threadID,
                 threadTitle: "Thread",
                 source: .forum,
                 initialView: 1,
@@ -2265,22 +2265,22 @@ final class NovelReadingWorkflowTests: XCTestCase {
         _ = await workflow.prefetchIfNeeded(nearSurfaceOrdinal: nearEndPage)
 
         XCTAssertEqual(repository.loadRequests, [
-            ReaderPageRequest(threadURL: threadURL, view: 1, authorID: "author-1"),
-            ReaderPageRequest(threadURL: threadURL, view: 2, authorID: "author-1")
+            ReaderPageRequest(threadID: threadID, view: 1, authorID: "author-1"),
+            ReaderPageRequest(threadID: threadID, view: 2, authorID: "author-1")
         ])
     }
 
     func testPrefetchFailureKeepsCurrentSnapshot() async throws {
-        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9106&mobile=2")!
+        let threadID = "9106"
         let repository = RecordingNovelReadingRepository(
             documents: [
-                1: makeNovelDocument(threadURL: threadURL, view: 1, maxView: 2, authorID: "author-1")
+                1: makeNovelDocument(threadID: threadID, view: 1, maxView: 2, authorID: "author-1")
             ],
             failingViews: [2]
         )
         let workflow = NovelReadingWorkflow(
             context: ReaderLaunchContext(
-                threadURL: threadURL,
+                threadID: threadID,
                 threadTitle: "Thread",
                 source: .forum,
                 initialView: 1,
@@ -2300,17 +2300,17 @@ final class NovelReadingWorkflowTests: XCTestCase {
     }
 
     func testCacheContextSeparatesCurrentFallbackAndPrefetchedAuthorFilteredVariants() async throws {
-        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9107&mobile=2")!
+        let threadID = "9107"
         let repository = RecordingNovelReadingRepository(documents: [
             1: makeNovelDocument(
-                threadURL: threadURL,
+                threadID: threadID,
                 view: 1,
                 maxView: 2,
                 authorID: nil,
                 contentSource: .fallbackUnfilteredPage
             ),
             2: makeNovelDocument(
-                threadURL: threadURL,
+                threadID: threadID,
                 view: 2,
                 maxView: 2,
                 authorID: "author-2",
@@ -2319,7 +2319,7 @@ final class NovelReadingWorkflowTests: XCTestCase {
         ])
         let workflow = NovelReadingWorkflow(
             context: ReaderLaunchContext(
-                threadURL: threadURL,
+                threadID: threadID,
                 threadTitle: "Thread",
                 source: .forum,
                 initialView: 1,
@@ -2341,10 +2341,10 @@ final class NovelReadingWorkflowTests: XCTestCase {
     }
 
     func testLongCurrentWebpageViewportPublishesExactIndexAndRestoresAcrossReaderChanges() async throws {
-        let threadURL = URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=1520&mobile=2")!
+        let threadID = "1520"
         let chapterTitles = (1...6).map { "第\($0)章" }
         let document = ReaderPageDocument(
-            threadURL: threadURL,
+            threadID: threadID,
             view: 1,
             maxView: 1,
             resolvedAuthorID: "author-152",
@@ -2356,7 +2356,7 @@ final class NovelReadingWorkflowTests: XCTestCase {
         let repository = RecordingNovelReadingRepository(documents: [1: document])
         let workflow = NovelReadingWorkflow(
             context: ReaderLaunchContext(
-                threadURL: threadURL,
+                threadID: threadID,
                 threadTitle: "测试线程",
                 source: .forum,
                 initialView: 1,
@@ -2461,12 +2461,12 @@ final class NovelReadingWorkflowTests: XCTestCase {
 
 @MainActor
 private func makeWorkflow(
-    threadURL: URL,
+    threadID: String,
     repository: RecordingNovelReadingRepository
 ) -> NovelReadingWorkflow {
     NovelReadingWorkflow(
         context: ReaderLaunchContext(
-            threadURL: threadURL,
+            threadID: threadID,
             threadTitle: "Thread",
             source: .forum,
             initialView: 1,
@@ -2574,7 +2574,7 @@ private extension NovelReadingWorkflow {
 private final class RecordingNovelReadingRepository: NovelReadingPageRepository, @unchecked Sendable {
     struct DeletedViews: Equatable {
         var views: Set<Int>
-        var threadURL: URL
+        var threadID: String
         var authorID: String?
         var contentSource: ReaderContentSource?
     }
@@ -2617,7 +2617,7 @@ private final class RecordingNovelReadingRepository: NovelReadingPageRepository,
     }
 
     func cachedViews(
-        for threadURL: URL,
+        for threadID: String,
         authorID: String?,
         contentSource: ReaderContentSource?
     ) async -> Set<Int> {
@@ -2626,13 +2626,13 @@ private final class RecordingNovelReadingRepository: NovelReadingPageRepository,
 
     func deleteCachedViews(
         _ views: Set<Int>,
-        for threadURL: URL,
+        for threadID: String,
         authorID: String?,
         contentSource: ReaderContentSource?
     ) async throws {
         deletedViews.append(DeletedViews(
             views: views,
-            threadURL: threadURL,
+            threadID: threadID,
             authorID: authorID,
             contentSource: contentSource
         ))
@@ -2657,14 +2657,14 @@ private final class RecordingNovelReadingRepository: NovelReadingPageRepository,
 }
 
 private func makeNovelDocument(
-    threadURL: URL,
+    threadID: String,
     view: Int,
     maxView: Int,
     authorID: String? = nil,
     contentSource: ReaderContentSource = .authorFilteredPage
 ) -> ReaderPageDocument {
     ReaderPageDocument(
-        threadURL: threadURL,
+        threadID: threadID,
         view: view,
         maxView: maxView,
         resolvedAuthorID: authorID,
@@ -2676,14 +2676,14 @@ private func makeNovelDocument(
 }
 
 private func makeSegmentedNovelDocument(
-    threadURL: URL,
+    threadID: String,
     view: Int,
     maxView: Int,
     authorID: String? = nil,
     segmentCount: Int
 ) -> ReaderPageDocument {
     ReaderPageDocument(
-        threadURL: threadURL,
+        threadID: threadID,
         view: view,
         maxView: maxView,
         resolvedAuthorID: authorID,
@@ -2725,7 +2725,7 @@ private func layoutResult(
     )
     let context = viewportContext ?? NovelTextViewportContext(
         identity: NovelTextViewportIdentity(
-            threadURL: URL(string: "https://example.com/thread")!,
+            threadID: "test-thread",
             documentView: index.documentView,
             maxView: index.documentView,
             fetchedAt: Date(timeIntervalSince1970: 0),
@@ -2809,7 +2809,7 @@ private func previewSourcePagination(
     }
     let viewportContext = NovelTextViewportContext(
         identity: NovelTextViewportIdentity(
-            threadURL: document.threadURL,
+            threadID: document.threadID,
             documentView: document.view,
             maxView: document.maxView,
             fetchedAt: document.fetchedAt,

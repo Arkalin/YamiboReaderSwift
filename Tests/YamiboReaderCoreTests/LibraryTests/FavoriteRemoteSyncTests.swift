@@ -11,9 +11,9 @@ import Testing
         into: category.id,
         remoteEntries: [YamiboRemoteFavoriteEntry(remoteFavoriteID: "r-901", threadURL: url, remoteOrder: 3)],
         date: Date(timeIntervalSince1970: 10)
-    ) { probeURL in
+    ) { _ in
         FavoriteThreadProbeResult(
-            target: FavoriteContentTarget(kind: .novelThread, threadURL: probeURL),
+            target: FavoriteContentTarget(kind: .novelThread, threadID: "901"),
             title: "远端小说",
             sourceGroup: .forumBoard(id: "fid", label: "小说")
         )
@@ -82,8 +82,7 @@ import Testing
 
 @Test func yamiboRemoteSyncMarksDisappearedRemoteMappingMissingWithoutDeletingItem() async throws {
     var document = FavoriteLibraryDocument()
-    let url = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=903"))
-    let target = FavoriteContentTarget(kind: .normalThread, threadURL: url)
+    let target = FavoriteContentTarget(kind: .normalThread, threadID: "903")
     let item = try FavoriteItem(
         target: target,
         title: "本地",
@@ -107,9 +106,8 @@ import Testing
 @Test func yamiboRemoteSyncUploadsOnlyThreadItemsInCategoryWithoutRemoteMapping() async throws {
     var document = FavoriteLibraryDocument()
     let category = document.createCategory(name: "同步")
-    let threadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=904"))
     let unsyncedThread = try FavoriteItem(
-        target: FavoriteContentTarget(kind: .normalThread, threadURL: threadURL),
+        target: FavoriteContentTarget(kind: .normalThread, threadID: "904"),
         title: "本地主题",
         locations: [.category(category.id)]
     )

@@ -99,7 +99,7 @@ public actor YamiboMangaReaderProjectionLoader: MangaReaderProjectionSnapshotLoa
             try? await forumCacheStore.saveThreadPage(discoveryPage, thread: thread, pageNumber: 1, authorID: nil)
             if let onlyAuthorID = ReaderHTMLParser.extractOnlyAuthorID(
                 from: html,
-                request: ReaderPageRequest(threadURL: thread.canonicalURL, view: 1)
+                request: ReaderPageRequest(threadID: thread.tid, view: 1)
             )?.mangaReaderTrimmedNonEmpty {
                 return onlyAuthorID
             }

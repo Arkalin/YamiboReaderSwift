@@ -8,8 +8,10 @@ public actor ReaderChapterCommentsRepository {
     }
 
     public func loadChapterComments(for target: ReaderChapterCommentTarget) async throws -> ChapterCommentsPage {
-        let html = try await client.fetchHTML(
-            for: .thread(url: target.threadURL, page: target.view, authorID: target.authorID)
+        let html = try await client.fetchThreadById(
+            tid: target.threadID,
+            authorID: target.authorID,
+            page: target.view
         )
         var page = try ChapterCommentsHTMLParser.parseInitialPage(html: html, target: target)
         if let fullRatingsURL = try ChapterCommentsHTMLParser.fullRatingReasonsURL(html: html, target: target),
@@ -43,23 +45,25 @@ public actor ReaderChapterCommentsRepository {
         for target: ReaderChapterCommentTarget,
         view: Int
     ) async throws -> ChapterCommentsPage {
-        let html = try await client.fetchHTML(
-            for: .thread(url: Self.threadURLRemovingAuthorID(target.threadURL), page: view, authorID: nil),
+        let html = try await client.fetchThreadById(
+            tid: target.threadID,
+            page: view,
             cachePolicy: .reloadIgnoringLocalCacheData
         )
         return try ChapterCommentsHTMLParser.parseContinuationPage(html: html, target: target, view: view)
     }
 
     private func loadUnfilteredChapterCommentHTML(for target: ReaderChapterCommentTarget) async throws -> String {
-        if let findPostURL = YamiboRoute.findPostURL(threadURL: target.threadURL, postID: target.ownerPostID),
+        if let findPostURL = YamiboRoute.findPostURL(threadID: target.threadID, postID: target.ownerPostID),
            let html = try? await client.fetchHTML(
                url: findPostURL,
                cachePolicy: .reloadIgnoringLocalCacheData
            ) {
             return html
         }
-        return try await client.fetchHTML(
-            for: .thread(url: Self.threadURLRemovingAuthorID(target.threadURL), page: target.view, authorID: nil),
+        return try await client.fetchThreadById(
+            tid: target.threadID,
+            page: target.view,
             cachePolicy: .reloadIgnoringLocalCacheData
         )
     }
@@ -93,12 +97,4 @@ public actor ReaderChapterCommentsRepository {
         )
     }
 
-    private static func threadURLRemovingAuthorID(_ url: URL) -> URL {
-        guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false),
-              let queryItems = components.queryItems else {
-            return url
-        }
-        components.queryItems = queryItems.filter { $0.name != "authorid" }
-        return components.url ?? url
-    }
 }

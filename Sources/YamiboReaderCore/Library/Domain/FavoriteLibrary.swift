@@ -14,7 +14,6 @@ public enum FavoriteContentTarget: Codable, Hashable, Identifiable, Sendable {
     private enum CodingKeys: String, CodingKey {
         case kind
         case threadID
-        case canonicalURL
         case mangaID
         case cleanBookName
     }
@@ -41,17 +40,6 @@ public enum FavoriteContentTarget: Codable, Hashable, Identifiable, Sendable {
         }
     }
 
-    public var canonicalURL: URL? {
-        switch self {
-        case let .normalThread(threadID), let .novelThread(threadID):
-            return FavoriteLibraryURLIdentity.canonicalThreadURL(
-                from: YamiboRoute.threadByID(tid: threadID, page: 1, authorID: nil, reverse: false).url
-            )
-        case .mangaTitle:
-            return nil
-        }
-    }
-
     public var mangaID: String? {
         guard case let .mangaTitle(mangaID, _) = self else { return nil }
         return mangaID
@@ -71,16 +59,16 @@ public enum FavoriteContentTarget: Codable, Hashable, Identifiable, Sendable {
         }
     }
 
-    public init(kind: FavoriteContentTargetKind, threadURL: URL) {
-        let canonicalURL = FavoriteLibraryURLIdentity.canonicalThreadURL(from: threadURL)
-        let threadID = YamiboThreadURLCanonicalizer.threadID(from: canonicalURL) ?? canonicalURL.absoluteString
+    public init(kind: FavoriteContentTargetKind, threadID: String) {
+        let normalizedThreadID = threadID.trimmingCharacters(in: .whitespacesAndNewlines)
+        precondition(!normalizedThreadID.isEmpty, "FavoriteContentTarget requires a Yamibo thread tid")
         switch kind {
         case .normalThread:
-            self = .normalThread(threadID: threadID)
+            self = .normalThread(threadID: normalizedThreadID)
         case .novelThread:
-            self = .novelThread(threadID: threadID)
+            self = .novelThread(threadID: normalizedThreadID)
         case .mangaTitle:
-            self = .mangaTitle(mangaID: threadID, cleanBookName: threadID)
+            self = .mangaTitle(mangaID: normalizedThreadID, cleanBookName: normalizedThreadID)
         }
     }
 
@@ -140,9 +128,10 @@ public enum FavoriteContentTarget: Codable, Hashable, Identifiable, Sendable {
            !threadID.isEmpty {
             return threadID
         }
-        let legacyURL = try container.decode(URL.self, forKey: .canonicalURL)
-        let canonicalURL = FavoriteLibraryURLIdentity.canonicalThreadURL(from: legacyURL)
-        return YamiboThreadURLCanonicalizer.threadID(from: canonicalURL) ?? canonicalURL.absoluteString
+        throw DecodingError.keyNotFound(
+            CodingKeys.threadID,
+            DecodingError.Context(codingPath: container.codingPath, debugDescription: "FavoriteContentTarget requires threadID")
+        )
     }
 }
 
@@ -503,7 +492,7 @@ public enum FavoriteThreadImportFailure: Error, Equatable, Sendable {
 
 public enum FavoriteItemOpenRoute: Equatable, Sendable {
     case nativeThread(URL)
-    case novelDetail(URL)
+    case novelDetail(threadID: String)
     case mangaTitle(cleanBookName: String)
     case unsupported
 }
@@ -687,13 +676,19 @@ public struct FavoriteLibraryDocument: Codable, Equatable, Sendable {
 
     public func openRoute(for item: FavoriteItem) -> FavoriteItemOpenRoute {
         switch item.target {
-        case .normalThread:
-            item.target.canonicalURL.map(FavoriteItemOpenRoute.nativeThread) ?? .unsupported
-        case .novelThread:
-            item.target.canonicalURL.map(FavoriteItemOpenRoute.novelDetail) ?? .unsupported
+        case let .normalThread(threadID):
+            .nativeThread(Self.threadURL(for: threadID))
+        case let .novelThread(threadID):
+            .novelDetail(threadID: threadID)
         case let .mangaTitle(_, cleanBookName):
             .mangaTitle(cleanBookName: cleanBookName)
         }
+    }
+
+    private static func threadURL(for threadID: String) -> URL {
+        FavoriteLibraryURLIdentity.canonicalThreadURL(
+            from: YamiboRoute.threadByID(tid: threadID, page: 1, authorID: nil, reverse: false).url
+        )
     }
 
     @discardableResult

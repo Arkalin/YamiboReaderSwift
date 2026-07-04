@@ -41,7 +41,7 @@ final class ReaderCacheOperationModuleTests: XCTestCase {
                 cachedViews: [1],
                 cachingViews: [1, 2],
                 context: ReaderCacheOperationContext(
-                    threadURL: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=1&mobile=2")!,
+                    threadID: "1",
                     authorID: "42",
                     contentSource: .authorFilteredPage
                 )
@@ -136,7 +136,7 @@ final class ReaderCacheOperationModuleTests: XCTestCase {
 
     func testRepositoryReceivesSnapshotContextForCacheUpdateDeleteAndRefresh() async throws {
         let context = ReaderCacheOperationContext(
-            threadURL: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=42&mobile=2")!,
+            threadID: "42",
             authorID: "42",
             contentSource: .authorFilteredPage
         )
@@ -189,7 +189,7 @@ final class ReaderCacheOperationModuleTests: XCTestCase {
         )
         let context = ReaderCacheOperationContext(
             ownerTitle: "小说A",
-            threadURL: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=8848&mobile=2")!,
+            threadID: "8848",
             authorID: "42",
             contentSource: .authorFilteredPage
         )
@@ -209,7 +209,7 @@ final class ReaderCacheOperationModuleTests: XCTestCase {
             cacheableViews: cacheableViews,
             cachedViews: cachedViews,
             context: ReaderCacheOperationContext(
-                threadURL: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=1&mobile=2")!,
+                threadID: "1",
                 authorID: nil,
                 contentSource: .fallbackUnfilteredPage
             )

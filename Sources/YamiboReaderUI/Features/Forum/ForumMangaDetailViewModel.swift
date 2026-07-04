@@ -27,7 +27,7 @@ final class ForumMangaDetailViewModel {
                       changeID == readingProgressStore.changeID else {
                     continue
                 }
-                readingProgress = await readingProgressStore.load(for: context.thread.canonicalURL)
+                readingProgress = await readingProgressStore.load(threadID: context.thread.tid)
             }
         }
     }
@@ -52,7 +52,7 @@ final class ForumMangaDetailViewModel {
     func reload() async {
         isLoading = true
         errorMessage = nil
-        readingProgress = await appContext.readingProgressStore.load(for: context.thread.canonicalURL)
+        readingProgress = await appContext.readingProgressStore.load(threadID: context.thread.tid)
         defer { isLoading = false }
 
         do {
@@ -87,7 +87,7 @@ final class ForumMangaDetailViewModel {
         } catch {
             currentDocument = nil
             directory = nil
-            readingProgress = await appContext.readingProgressStore.load(for: context.thread.canonicalURL)
+            readingProgress = await appContext.readingProgressStore.load(threadID: context.thread.tid)
             errorMessage = error.localizedDescription
         }
     }

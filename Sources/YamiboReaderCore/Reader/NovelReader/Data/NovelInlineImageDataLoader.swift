@@ -36,13 +36,16 @@ public actor YamiboNovelInlineImageDataLoader: NovelInlineImageDataLoading {
 public actor CachedNovelInlineImageDataLoader: NovelInlineImageDataLoading {
     private let imageDataLoader: any NovelInlineImageDataLoading
     private let offlineCacheStore: (any NovelOfflineImageDataProviding)?
+    private let threadID: String?
 
     public init(
         imageDataLoader: any NovelInlineImageDataLoading,
-        offlineCacheStore: (any NovelOfflineImageDataProviding)? = nil
+        offlineCacheStore: (any NovelOfflineImageDataProviding)? = nil,
+        threadID: String? = nil
     ) {
         self.imageDataLoader = imageDataLoader
         self.offlineCacheStore = offlineCacheStore
+        self.threadID = threadID?.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     public func imageData(for imageURL: URL, refererURL: URL) async throws -> Data {
@@ -52,7 +55,8 @@ public actor CachedNovelInlineImageDataLoader: NovelInlineImageDataLoading {
         return try await imageDataLoader.imageData(for: imageURL, refererURL: refererURL)
     }
 
-    private func offlineImageData(for imageURL: URL, refererURL: URL) async -> Data? {
-        await offlineCacheStore?.novelOfflineImageData(for: imageURL, refererURL: refererURL)
+    private func offlineImageData(for imageURL: URL, refererURL _: URL) async -> Data? {
+        guard let threadID, !threadID.isEmpty else { return nil }
+        return await offlineCacheStore?.novelOfflineImageData(for: imageURL, threadID: threadID)
     }
 }

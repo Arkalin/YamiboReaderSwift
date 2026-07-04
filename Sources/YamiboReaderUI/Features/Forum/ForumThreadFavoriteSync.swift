@@ -49,7 +49,7 @@ enum ForumThreadFavoriteSync {
         remoteRepository: (any ForumThreadFavoriteRemoteOperating)?
     ) async throws {
         var document = await localFavoriteLibraryStore.load()
-        document.removeItem(target: localTarget(for: favorite))
+        document.removeItem(target: try localTarget(for: favorite))
         try await localFavoriteLibraryStore.save(document)
         if let remoteRepository {
             let remoteFavoriteID = try await remoteFavoriteID(for: favorite, remoteRepository: remoteRepository)
@@ -86,7 +86,7 @@ enum ForumThreadFavoriteSync {
             throw YamiboError.persistenceFailed(L10n.string("favorite_library.item_requires_location"))
         }
         var document = await localFavoriteLibraryStore.load()
-        let target = localTarget(for: favorite)
+        let target = try localTarget(for: favorite)
         let item = try FavoriteItem(
             target: target,
             title: favorite.title,
@@ -108,9 +108,12 @@ enum ForumThreadFavoriteSync {
         return item
     }
 
-    private static func localTarget(for favorite: Favorite) -> FavoriteContentTarget {
+    private static func localTarget(for favorite: Favorite) throws -> FavoriteContentTarget {
         let kind: FavoriteContentTargetKind = favorite.type == .novel ? .novelThread : .normalThread
-        return FavoriteContentTarget(kind: kind, threadURL: favorite.url)
+        guard let threadID = YamiboThreadURLCanonicalizer.threadID(from: favorite.url) else {
+            throw YamiboError.missingFavoriteThreadID
+        }
+        return FavoriteContentTarget(kind: kind, threadID: threadID)
     }
 }
 
@@ -120,7 +123,7 @@ private extension FavoriteItem {
             id: id,
             title: title,
             displayName: displayName,
-            url: target.canonicalURL ?? threadURL,
+            url: threadURL,
             remoteFavoriteID: remoteMapping?.yamiboFavoriteID,
             type: type,
             tagIDs: tagIDs

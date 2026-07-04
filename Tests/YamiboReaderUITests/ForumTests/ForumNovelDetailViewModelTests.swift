@@ -33,7 +33,7 @@ import Testing
         type: .novel
     )
     model.readingProgress = ReadingProgressRecord(
-        threadURL: model.context.thread.canonicalURL,
+        threadID: model.context.thread.tid,
         kind: .novel,
         novel: NovelReadingProgressRecord(
             lastView: 5,
@@ -66,7 +66,7 @@ import Testing
     )
     model.favorite = nil
     model.readingProgress = ReadingProgressRecord(
-        threadURL: model.context.thread.canonicalURL,
+        threadID: model.context.thread.tid,
         kind: .novel,
         novel: NovelReadingProgressRecord(
             lastView: 4,
@@ -93,7 +93,7 @@ import Testing
 @Test func forumNovelDetailContinueUsesStoredChapterReadingProgress() throws {
     let model = try makeForumNovelDetailViewModel()
     model.readingProgress = ReadingProgressRecord(
-        threadURL: model.context.thread.canonicalURL,
+        threadID: model.context.thread.tid,
         kind: .novel,
         novel: NovelReadingProgressRecord(
             lastView: 1,
@@ -555,7 +555,7 @@ import Testing
     let historyCover = try #require(URL(string: "https://img.example.com/history-cover.jpg"))
     try await readingProgressStore.saveNovel(
         NovelReadingPosition(
-            threadURL: try modelThreadURL(),
+            threadID: "900",
             view: 3,
             chapterTitle: "第三章",
             threadCoverURL: historyCover
@@ -1080,7 +1080,7 @@ import Testing
 @Test func forumNovelDetailMarksCurrentReadChapterFromReadingProgressResumePoint() throws {
     let model = try makeForumNovelDetailViewModel()
     model.readingProgress = ReadingProgressRecord(
-        threadURL: model.context.thread.canonicalURL,
+        threadID: model.context.thread.tid,
         kind: .novel,
         novel: NovelReadingProgressRecord(
             lastView: 1,
@@ -1148,23 +1148,23 @@ import Testing
         )
     )
     let model = try makeForumNovelDetailViewModel(appContext: appContext)
-    let url = model.context.thread.canonicalURL
+    let threadID = model.context.thread.tid
 
     try await readingProgressStore.saveNovel(
         NovelReadingPosition(
-            threadURL: url,
+            threadID: threadID,
             view: 1,
             chapterTitle: "第一章",
             documentSurfaceProgressPercent: 10
         )
     )
-    model.readingProgress = await readingProgressStore.load(for: url)
+    model.readingProgress = await readingProgressStore.load(threadID: threadID)
     #expect(model.headerSummary.readingProgressText == "第一章")
     await Task.yield()
 
     try await readingProgressStore.saveNovel(
         NovelReadingPosition(
-            threadURL: url,
+            threadID: threadID,
             view: 2,
             maxView: 3,
             chapterTitle: "第二章",
@@ -1260,7 +1260,7 @@ private func makeNovelDetailThreadPage(
 private struct FakeForumNovelDocumentLoader: ForumNovelDocumentLoading {
     func loadPage(_ request: ReaderPageRequest) async throws -> ReaderPageDocument {
         ReaderPageDocument(
-            threadURL: request.threadURL,
+            threadID: request.threadID,
             view: request.view,
             maxView: 1,
             resolvedAuthorID: request.authorID,

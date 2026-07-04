@@ -10,7 +10,7 @@ import Testing
     </body></html>
     """
     let request = ReaderPageRequest(
-        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=42&mobile=2")),
+        threadID: "42",
         view: 3,
         authorID: "7"
     )
@@ -42,7 +42,7 @@ import Testing
     </body></html>
     """
     let request = ReaderPageRequest(
-        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=557752&mobile=2")),
+        threadID: "557752",
         view: 1,
         authorID: "595655"
     )
@@ -72,7 +72,7 @@ import Testing
     </body></html>
     """
     let request = ReaderPageRequest(
-        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=557752&mobile=2")),
+        threadID: "557752",
         view: 1,
         authorID: "595655"
     )
@@ -126,7 +126,7 @@ import Testing
     </body></html>
     """
     let target = ReaderChapterCommentTarget(
-        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=42&mobile=2")),
+        threadID: "42",
         view: 3,
         ownerPostID: "100",
         title: "第一章"
@@ -186,7 +186,7 @@ import Testing
     </body></html>
     """
     let target = ReaderChapterCommentTarget(
-        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=557752&mobile=2")),
+        threadID: "557752",
         view: 1,
         ownerPostID: "41257246",
         title: "第一章"
@@ -228,7 +228,7 @@ import Testing
     </body></html>
     """
     let target = ReaderChapterCommentTarget(
-        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=521519&mobile=2")),
+        threadID: "521519",
         view: 2,
         ownerPostID: "40217745",
         title: "episode 16",
@@ -262,7 +262,7 @@ import Testing
     </body></html>
     """
     let target = ReaderChapterCommentTarget(
-        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=42&mobile=2")),
+        threadID: "42",
         view: 1,
         ownerPostID: "100",
         title: "第一章"
@@ -294,7 +294,7 @@ import Testing
     </body></html>
     """
     let target = ReaderChapterCommentTarget(
-        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=42&mobile=2")),
+        threadID: "42",
         view: 1,
         ownerPostID: "100",
         title: "第一章"
@@ -306,7 +306,6 @@ import Testing
 }
 
 @Test func chapterCommentOriginalPostURLUsesThreadAndPostIdentity() throws {
-    let threadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=42&mobile=2&page=3"))
     let comment = ChapterComment(
         id: "100:reply:102",
         source: .reply,
@@ -315,7 +314,7 @@ import Testing
         postID: "102"
     )
 
-    let url = try #require(comment.originalPostURL(threadURL: threadURL))
+    let url = try #require(comment.originalPostURL(threadID: "42"))
 
     #expect(url.absoluteString == "https://bbs.yamibo.com/forum.php?goto=findpost&mobile=2&mod=redirect&pid=102&ptid=42")
 }
@@ -366,7 +365,7 @@ import Testing
     </body></html>
     """
     let target = ReaderChapterCommentTarget(
-        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=42&mobile=2")),
+        threadID: "42",
         view: 1,
         ownerPostID: "100",
         title: "第一章"
@@ -406,7 +405,7 @@ import Testing
     </body></html>
     """
     let target = ReaderChapterCommentTarget(
-        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=42&mobile=2")),
+        threadID: "42",
         view: 1,
         ownerPostID: "100",
         title: "第一章"
@@ -435,7 +434,7 @@ import Testing
     </body></html>
     """
     let target = ReaderChapterCommentTarget(
-        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=42&mobile=2")),
+        threadID: "42",
         view: 1,
         ownerPostID: "100",
         title: "第一章"
@@ -463,7 +462,7 @@ import Testing
     </body></html>
     """
     let target = ReaderChapterCommentTarget(
-        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=42&mobile=2")),
+        threadID: "42",
         view: 1,
         ownerPostID: "100",
         title: "第一章"
@@ -491,7 +490,7 @@ import Testing
     </body></html>
     """
     let target = ReaderChapterCommentTarget(
-        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=42&mobile=2")),
+        threadID: "42",
         view: 1,
         ownerPostID: "100",
         title: "第一章"
@@ -538,7 +537,7 @@ import Testing
     </body></html>
     """
     let target = ReaderChapterCommentTarget(
-        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=42&mobile=2")),
+        threadID: "42",
         view: 1,
         ownerPostID: "100",
         title: "第一章"

@@ -55,7 +55,7 @@ final class NovelReadingSessionRuntimeTests: XCTestCase {
 
     func testHidingAuthorReplyToOtherFallbacksToPreviousVisibleText() throws {
         let document = ReaderPageDocument(
-            threadURL: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9101&mobile=2")!,
+            threadID: "9101",
             view: 1,
             maxView: 1,
             contentSource: .authorFilteredPage,
@@ -101,7 +101,7 @@ final class NovelReadingSessionRuntimeTests: XCTestCase {
 
     func testHidingAuthorReplyToOtherFallbacksToNextVisibleTextWhenNoPreviousTextExists() throws {
         let document = ReaderPageDocument(
-            threadURL: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9102&mobile=2")!,
+            threadID: "9102",
             view: 1,
             maxView: 1,
             contentSource: .authorFilteredPage,
@@ -145,7 +145,7 @@ final class NovelReadingSessionRuntimeTests: XCTestCase {
 
     func testLeftToRightTwoPageSpreadNormalizesSelectionToRightPage() throws {
         let document = ReaderPageDocument(
-            threadURL: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9002&mobile=2")!,
+            threadID: "9002",
             view: 1,
             maxView: 1,
             contentSource: .fallbackUnfilteredPage,
@@ -174,7 +174,7 @@ final class NovelReadingSessionRuntimeTests: XCTestCase {
 
     func testRightToLeftTwoPageSpreadNormalizesSelectionToLeftPage() throws {
         let document = ReaderPageDocument(
-            threadURL: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9002&mobile=2")!,
+            threadID: "9002",
             view: 1,
             maxView: 1,
             contentSource: .fallbackUnfilteredPage,
@@ -204,7 +204,7 @@ final class NovelReadingSessionRuntimeTests: XCTestCase {
 
     func testTwoPageSpreadRequestsNextWebViewPageAfterLastCompleteSpread() throws {
         let document = ReaderPageDocument(
-            threadURL: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9002&mobile=2")!,
+            threadID: "9002",
             view: 1,
             maxView: 2,
             contentSource: .fallbackUnfilteredPage,
@@ -236,7 +236,7 @@ private func makeNovelDocument(
     segments: [(chapterTitle: String, text: String)]
 ) -> ReaderPageDocument {
     ReaderPageDocument(
-        threadURL: URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=9001&mobile=2")!,
+        threadID: "9001",
         view: view,
         maxView: maxView,
         contentSource: .fallbackUnfilteredPage,

@@ -422,7 +422,6 @@ import Testing
 @Test func readerResumeRouteStorePersistsNovelRouteAndClearsIt() async throws {
     let defaults = try makeIsolatedDefaults(prefix: "reader-resume-novel-tests")
     let store = ReaderResumeRouteStore(defaults: defaults, key: "reader-route")
-    let threadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=611&mobile=2"))
     let resumePoint = ReaderResumePoint(
         view: 2,
         displayedTextOffset: 20,
@@ -433,7 +432,7 @@ import Testing
         readingModeHint: .vertical
     )
     let context = ReaderLaunchContext(
-        threadURL: threadURL,
+        threadID: "611",
         threadTitle: "测试小说",
         source: .resume,
         initialView: 2,
@@ -486,18 +485,16 @@ private func persistedResumeRoute(_ route: ReaderResumeRoute) throws -> ReaderRe
 @Test func readerResumeRouteStoreSuppressesLatePositionSaveAfterClearUntilNextPresentation() async throws {
     let defaults = try makeIsolatedDefaults(prefix: "reader-resume-suppression-tests")
     let store = ReaderResumeRouteStore(defaults: defaults, key: "reader-route")
-    let firstURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=614&mobile=2"))
-    let secondURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=615&mobile=2"))
     let firstRoute = ReaderResumeRoute.novel(
         ReaderLaunchContext(
-            threadURL: firstURL,
+            threadID: "614",
             threadTitle: "第一本",
             source: .resume
         )
     )
     let secondRoute = ReaderResumeRoute.novel(
         ReaderLaunchContext(
-            threadURL: secondURL,
+            threadID: "615",
             threadTitle: "第二本",
             source: .resume
         )
@@ -514,7 +511,7 @@ private func persistedResumeRoute(_ route: ReaderResumeRoute) throws -> ReaderRe
     #expect(await store.load() == secondRoute)
 }
 
-@Test func readingProgressStoreSavesNovelAndMangaProgressByCanonicalThreadURL() async throws {
+@Test func readingProgressStoreSavesNovelByThreadIDAndMangaProgressByCanonicalThreadURL() async throws {
     let suiteName = makeIsolatedDefaultsSuiteName(prefix: "reading-progress-store-tests")
     let defaults = try #require(UserDefaults(suiteName: suiteName))
     defaults.removePersistentDomain(forName: suiteName)
@@ -529,7 +526,6 @@ private func persistedResumeRoute(_ route: ReaderResumeRoute) throws -> ReaderRe
         key: "reading-progress",
         databasePool: database
     )
-    let threadURL = try #require(URL(string: "https://bbs.yamibo.com/thread-12345-1-1.html"))
     let canonicalURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=12345"))
     let chapterURL = try #require(URL(string: "https://bbs.yamibo.com/thread-12346-1-1.html"))
     let threadCoverURL = try #require(URL(string: "https://img.example.com/thread-cover.jpg"))
@@ -544,7 +540,7 @@ private func persistedResumeRoute(_ route: ReaderResumeRoute) throws -> ReaderRe
     )
 
     try await store.saveNovel(NovelReadingPosition(
-        threadURL: threadURL,
+        threadID: "12345",
         view: 2,
         maxView: 8,
         chapterTitle: "旧章",
@@ -554,9 +550,8 @@ private func persistedResumeRoute(_ route: ReaderResumeRoute) throws -> ReaderRe
         threadCoverURL: threadCoverURL
     ))
 
-    let novel = await store.load(for: canonicalURL)
+    let novel = await store.load(threadID: "12345")
     #expect(novel?.kind == .novel)
-    #expect(novel?.threadURL.absoluteString == "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=12345")
     #expect(novel?.threadID == "12345")
     #expect(novel?.novel?.lastView == 3)
     #expect(novel?.novel?.lastChapter == "第三章")
@@ -574,7 +569,7 @@ private func persistedResumeRoute(_ route: ReaderResumeRoute) throws -> ReaderRe
         pageCount: 12
     ))
 
-    let manga = await store.load(for: threadURL)
+    let manga = await store.load(threadID: "12345")
     #expect(manga?.kind == .manga)
     #expect(manga?.novel == nil)
     #expect(manga?.threadID == "12345")
@@ -624,13 +619,9 @@ private func persistedResumeRoute(_ route: ReaderResumeRoute) throws -> ReaderRe
         defaults: defaults,
         key: "reading-progress"
     )
-    let listURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?extra=page%3D1&mod=viewthread&tid=521519&mobile=2&page=25&authorid=406769"))
-    let readerURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=521519"))
+    try await store.saveNovel(NovelReadingPosition(threadID: "521519", view: 25, chapterTitle: "第二十五章"))
 
-    try await store.saveNovel(NovelReadingPosition(threadURL: listURL, view: 25, chapterTitle: "第二十五章"))
-
-    let progress = await store.load(for: readerURL)
-    #expect(progress?.threadURL.absoluteString == "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=521519")
+    let progress = await store.load(threadID: "521519")
     #expect(progress?.kind == .novel)
     #expect(progress?.novel?.lastView == 25)
     #expect(progress?.novel?.lastChapter == "第二十五章")
@@ -639,11 +630,10 @@ private func persistedResumeRoute(_ route: ReaderResumeRoute) throws -> ReaderRe
 @Test func readerCacheStoreReportsUsageAndCanClearAll() async throws {
     let baseDirectory = makeTemporaryDirectory(prefix: "reader-cache-tests")
     let store = ReaderCacheStore(baseDirectory: baseDirectory)
-    let threadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=600&mobile=2"))
 
     try await store.save(
         ReaderPageDocument(
-            threadURL: threadURL,
+            threadID: "600",
             view: 1,
             maxView: 1,
             segments: [.text("测试内容", chapterTitle: "第一章")]
@@ -687,12 +677,11 @@ private func persistedResumeRoute(_ route: ReaderResumeRoute) throws -> ReaderRe
     let rootDirectory = makeTemporaryDirectory(prefix: "cache-clear-background-root")
     let readerCacheStore = ReaderCacheStore(baseDirectory: rootDirectory.appendingPathComponent("reader-cache", isDirectory: true))
     let backgroundStore = FavoriteBackgroundImageStore(baseDirectory: rootDirectory.appendingPathComponent("favorite-background", isDirectory: true))
-    let threadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=701&mobile=2"))
     let backgroundData = Data(repeating: 4, count: 64)
 
     try await readerCacheStore.save(
         ReaderPageDocument(
-            threadURL: threadURL,
+            threadID: "701",
             view: 1,
             maxView: 1,
             segments: [.text("测试", chapterTitle: nil)]
@@ -773,16 +762,16 @@ private func persistedResumeRoute(_ route: ReaderResumeRoute) throws -> ReaderRe
     try await sessionStore.updateWebSession(cookie: "sid=1", userAgent: "UA", isLoggedIn: true)
     try await settingsStore.save(AppSettings(webBrowser: WebBrowserSettings(showsNavigationBar: false)))
     try await readerResumeRouteStore.save(
-        .novel(
-            ReaderLaunchContext(
-                threadURL: threadURL,
-                threadTitle: "测试小说",
-                source: .resume
-            )
+            .novel(
+                ReaderLaunchContext(
+                    threadID: "700",
+                    threadTitle: "测试小说",
+                    source: .resume
+                )
         )
     )
     var localLibrary = FavoriteLibraryDocument()
-    let localTarget = FavoriteContentTarget(kind: .normalThread, threadURL: threadURL)
+    let localTarget = FavoriteContentTarget(kind: .normalThread, threadID: "700")
     try localLibrary.addItem(
         FavoriteItem(
             target: localTarget,
@@ -793,7 +782,7 @@ private func persistedResumeRoute(_ route: ReaderResumeRoute) throws -> ReaderRe
     try await localFavoriteLibraryStore.save(localLibrary)
     try await readerCacheStore.save(
         ReaderPageDocument(
-            threadURL: threadURL,
+            threadID: "700",
             view: 1,
             maxView: 1,
             segments: [.text("测试", chapterTitle: nil)]
@@ -858,7 +847,7 @@ private func persistedResumeRoute(_ route: ReaderResumeRoute) throws -> ReaderRe
             ownerTitle: "测试小说",
             title: "第一页",
             document: ReaderPageDocument(
-                threadURL: threadURL,
+                threadID: "700",
                 view: 1,
                 maxView: 2,
                 resolvedAuthorID: "author-700",
@@ -871,7 +860,7 @@ private func persistedResumeRoute(_ route: ReaderResumeRoute) throws -> ReaderRe
         NovelOfflineCacheWorkRequest(
             ownerTitle: "测试小说",
             title: "第二页",
-            threadURL: threadURL,
+            threadID: "700",
             view: 2,
             authorID: "author-700",
             contentSource: .authorFilteredPage

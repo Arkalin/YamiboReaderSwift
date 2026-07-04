@@ -152,7 +152,7 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
         return ReaderChapterCommentsRepository(client: client)
     }
 
-    public func makeNovelInlineImageLoadingContext() async -> NovelInlineImageLoadingContext {
+    public func makeNovelInlineImageLoadingContext(threadID: String? = nil) async -> NovelInlineImageLoadingContext {
         let sessionState = await sessionStore.load()
         let client = YamiboClient(
             session: imageSession,
@@ -165,7 +165,8 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
         return NovelInlineImageLoadingContext(
             loader: CachedNovelInlineImageDataLoader(
                 imageDataLoader: remoteLoader,
-                offlineCacheStore: offlineCacheStore
+                offlineCacheStore: offlineCacheStore,
+                threadID: threadID
             )
         )
     }

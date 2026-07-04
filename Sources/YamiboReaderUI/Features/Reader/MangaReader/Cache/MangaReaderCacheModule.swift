@@ -255,7 +255,7 @@ private extension FavoriteItem {
             id: id,
             title: title,
             displayName: displayName,
-            url: target.canonicalURL ?? threadURL,
+            url: threadURL,
             remoteFavoriteID: remoteMapping?.yamiboFavoriteID,
             type: type,
             tagIDs: tagIDs

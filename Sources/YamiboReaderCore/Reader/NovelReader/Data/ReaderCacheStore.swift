@@ -37,7 +37,7 @@ public actor ReaderCacheStore {
         for request: ReaderPageRequest,
         contentSource: ReaderContentSource? = nil
     ) async -> ReaderPageDocument? {
-        let key = projectionCacheKey(threadURL: request.threadURL, view: request.view, authorID: request.authorID, contentSource: contentSource)
+        let key = projectionCacheKey(threadID: request.threadID, view: request.view, authorID: request.authorID, contentSource: contentSource)
 
         guard let document: ReaderPageDocument = try? await cacheStore.get(
             namespace: Self.projectionNamespace,
@@ -58,17 +58,17 @@ public actor ReaderCacheStore {
     }
 
     public func cachedViews(
-        for threadURL: URL,
+        for threadID: String,
         authorID: String?,
         contentSource: ReaderContentSource? = nil
     ) async -> Set<Int> {
-        let threadID = ReaderCacheIdentity(threadURL: threadURL, view: 1, authorID: authorID, contentSource: contentSource).threadID
+        let identity = ReaderCacheIdentity(threadID: threadID, view: 1, authorID: authorID, contentSource: contentSource)
         let resolvedSource = resolvedContentSource(authorID: authorID, contentSource: contentSource)
         let normalizedAuthorID = authorID?.nilIfBlank
         let entries = (try? await cacheStore.entries(namespace: Self.projectionNamespace)) ?? []
         return Set(entries.compactMap { entry -> Int? in
             guard let parsed = projectionKeyComponents(from: entry.key),
-                  parsed.threadID == threadID,
+                  parsed.threadID == identity.threadID,
                   parsed.contentSource == resolvedSource,
                   parsed.authorID == normalizedAuthorID else {
                 return nil
@@ -79,24 +79,24 @@ public actor ReaderCacheStore {
 
     public func deleteViews(
         _ views: Set<Int>,
-        for threadURL: URL,
+        for threadID: String,
         authorID: String?,
         contentSource: ReaderContentSource? = nil
     ) async throws {
         for view in views {
-            let key = projectionCacheKey(threadURL: threadURL, view: view, authorID: authorID, contentSource: contentSource)
+            let key = projectionCacheKey(threadID: threadID, view: view, authorID: authorID, contentSource: contentSource)
             try await cacheStore.remove(namespace: Self.projectionNamespace, key: key)
             memoryCache.removeObject(forKey: key as NSString)
         }
     }
 
     public func deleteAll(
-        for threadURL: URL,
+        for threadID: String,
         authorID: String?,
         contentSource: ReaderContentSource? = nil
     ) async throws {
-        let views = await cachedViews(for: threadURL, authorID: authorID, contentSource: contentSource)
-        try await deleteViews(views, for: threadURL, authorID: authorID, contentSource: contentSource)
+        let views = await cachedViews(for: threadID, authorID: authorID, contentSource: contentSource)
+        try await deleteViews(views, for: threadID, authorID: authorID, contentSource: contentSource)
     }
 
     public func totalDiskUsageBytes() async -> Int {
@@ -121,7 +121,7 @@ public actor ReaderCacheStore {
 
     private func projectionCacheKey(document: ReaderPageDocument) -> String {
         projectionCacheKey(
-            threadURL: document.threadURL,
+            threadID: document.threadID,
             view: document.view,
             authorID: document.resolvedAuthorID,
             contentSource: document.contentSource
@@ -129,12 +129,12 @@ public actor ReaderCacheStore {
     }
 
     private func projectionCacheKey(
-        threadURL: URL,
+        threadID: String,
         view: Int,
         authorID: String?,
         contentSource: ReaderContentSource?
     ) -> String {
-        let identity = ReaderCacheIdentity(threadURL: threadURL, view: view, authorID: authorID, contentSource: contentSource)
+        let identity = ReaderCacheIdentity(threadID: threadID, view: view, authorID: authorID, contentSource: contentSource)
         let source = resolvedContentSource(authorID: authorID, contentSource: contentSource)
         return [
             "tid", identity.threadID,

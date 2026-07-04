@@ -436,7 +436,7 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
     func testNovelReadingPositionDisplayFailureDoesNotPublishUIKitOrEstimatedFallback() throws {
         let text = String(repeating: "Novel Reading Position must not advance through fallback display. ", count: 12)
         let document = ReaderPageDocument(
-            threadURL: try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=124&mobile=2")),
+            threadID: "124",
             view: 1,
             maxView: 1,
             segments: [.text(text, chapterTitle: "第一章")]

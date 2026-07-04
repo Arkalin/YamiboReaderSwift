@@ -33,10 +33,10 @@ import Testing
     let chapterURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=7001"))
     let imageURL = try #require(URL(string: "https://img.example.test/7001-1.jpg"))
 
-    try await saveMigratedAppState(appContext: appContext, chapterURL: chapterURL, imageURL: imageURL)
+    try await saveMigratedAppState(appContext: appContext, chapterTID: "7001", chapterURL: chapterURL, imageURL: imageURL)
     try await appContext.readerCacheStore.save(
         ReaderPageDocument(
-            threadURL: chapterURL,
+            threadID: "7001",
             view: 1,
             maxView: 1,
             segments: [.text("Reader GRDB cache", chapterTitle: nil)]
@@ -100,10 +100,10 @@ import Testing
     let chapterURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=7002"))
     let imageURL = try #require(URL(string: "https://img.example.test/7002-1.jpg"))
 
-    try await saveMigratedAppState(appContext: appContext, chapterURL: chapterURL, imageURL: imageURL)
+    try await saveMigratedAppState(appContext: appContext, chapterTID: "7002", chapterURL: chapterURL, imageURL: imageURL)
     try await appContext.readerCacheStore.save(
         ReaderPageDocument(
-            threadURL: chapterURL,
+            threadID: "7002",
             view: 1,
             maxView: 1,
             segments: [.text("Reader reset cache", chapterTitle: nil)]
@@ -250,7 +250,7 @@ import Testing
         request: NovelOfflineCacheWorkRequest(
             ownerTitle: "Legacy Novel",
             title: "第一页",
-            threadURL: novelSourcePage.thread.canonicalURL,
+            threadID: novelSourcePage.thread.tid,
             view: 1,
             authorID: "42",
             contentSource: .authorFilteredPage
@@ -270,7 +270,7 @@ import Testing
     #expect(await appContext.offlineCacheStore.offlineCacheState(ownerName: "Legacy Manga", tid: "9003") == .uncached)
     let loadedNovelSourcePage = await appContext.offlineCacheStore.novelOfflineSourcePage(
         ownerTitle: "Legacy Novel",
-        threadURL: novelSourcePage.thread.canonicalURL,
+        threadID: novelSourcePage.thread.tid,
         view: 1,
         authorID: "42",
         contentSource: .authorFilteredPage
@@ -314,11 +314,12 @@ private func makeIsolatedAppContext(suiteName: String, rootDirectory: URL) throw
 
 private func saveMigratedAppState(
     appContext: YamiboAppContext,
+    chapterTID: String,
     chapterURL: URL,
     imageURL: URL
 ) async throws {
     var library = FavoriteLibraryDocument()
-    let favoriteTarget = FavoriteContentTarget(kind: .novelThread, threadURL: chapterURL)
+    let favoriteTarget = FavoriteContentTarget(kind: .novelThread, threadID: chapterTID)
     library.addItem(
         try FavoriteItem(
             target: favoriteTarget,
@@ -328,7 +329,7 @@ private func saveMigratedAppState(
     )
     try await appContext.localFavoriteLibraryStore.save(library)
     try await appContext.readingProgressStore.saveNovel(
-        NovelReadingPosition(threadURL: chapterURL, view: 3)
+        NovelReadingPosition(threadID: chapterTID, view: 3)
     )
     let chapter = MangaChapter(
         tid: "7001",

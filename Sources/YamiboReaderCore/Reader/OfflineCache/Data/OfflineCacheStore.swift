@@ -202,7 +202,7 @@ public actor OfflineCacheStore: OfflineCacheStoring {
                     ownerName: newOwnerName,
                     tid: membership.tid,
                     chapterTitle: membership.chapterTitle,
-                    chapterURL: Self.chapterURL(tid: membership.tid),
+                    chapterURL: try Self.chapterURL(tid: membership.tid),
                     imageURLs: membership.imageURLs,
                     sourcePage: membership.sourcePage,
                     createdAt: membership.createdAt
@@ -234,7 +234,7 @@ public actor OfflineCacheStore: OfflineCacheStoring {
                         ownerName: newOwnerName,
                         tid: work.tid,
                         chapterTitle: work.chapterTitle,
-                        chapterURL: Self.chapterURL(tid: work.tid),
+                        chapterURL: try Self.chapterURL(tid: work.tid),
                         targetImageURLs: work.targetImageURLs,
                         completedImageURLs: work.completedImageURLs,
                         state: work.state,
@@ -290,7 +290,7 @@ public actor OfflineCacheStore: OfflineCacheStoring {
                     ownerName: request.ownerName,
                     tid: request.tid,
                     chapterTitle: request.chapterTitle,
-                    chapterURL: Self.chapterURL(tid: request.tid),
+                    chapterURL: try Self.chapterURL(tid: request.tid),
                     targetImageURLs: request.targetImageURLs
                 )
                 if let membership = try Self.membership(
@@ -588,7 +588,7 @@ public actor OfflineCacheStore: OfflineCacheStoring {
             ownerName: membership.ownerName,
             tid: membership.tid,
             chapterTitle: membership.chapterTitle,
-            chapterURL: chapterURL(tid: membership.tid),
+            chapterURL: try chapterURL(tid: membership.tid),
             imageURLs: membership.imageURLs,
             sourcePage: membership.sourcePage,
             createdAt: membership.createdAt
@@ -793,7 +793,7 @@ public actor OfflineCacheStore: OfflineCacheStoring {
             ownerName: row["owner_name"],
             tid: tid,
             chapterTitle: row["chapter_title"],
-            chapterURL: chapterURL(tid: tid),
+            chapterURL: try chapterURL(tid: tid),
             imageURLs: try imageURLs(
                 table: "offline_cache_manga_entry_images",
                 ownerName: row["owner_name"],
@@ -870,7 +870,7 @@ public actor OfflineCacheStore: OfflineCacheStoring {
             ownerName: row["owner_name"],
             tid: tid,
             chapterTitle: row["chapter_title"],
-            chapterURL: chapterURL(tid: tid),
+            chapterURL: try chapterURL(tid: tid),
             targetImageURLs: try imageURLs(
                 table: "offline_cache_work_images",
                 readerKind: mangaReaderKind,
@@ -1097,8 +1097,11 @@ public actor OfflineCacheStore: OfflineCacheStoring {
         )
     }
 
-    private static func chapterURL(tid: String) -> URL {
-        YamiboRoute.chapterURL(forTID: tid) ?? URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=0")!
+    private static func chapterURL(tid: String) throws -> URL {
+        guard let url = YamiboRoute.chapterURL(forTID: tid) else {
+            throw YamiboError.persistenceFailed("Chapter tid is empty")
+        }
+        return url
     }
 
     private static func defaultBaseDirectory(fileManager: FileManager) -> URL {

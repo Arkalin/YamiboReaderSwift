@@ -12,7 +12,7 @@ struct MangaReaderTestsNovelOfflineCacheStore {
 
         #expect(await store.novelOfflineCacheViewsSnapshot(
             ownerTitle: request.ownerTitle,
-            threadURL: request.threadURL,
+            threadID: request.threadID,
             authorID: request.authorID,
             contentSource: request.contentSource
         ).cachedViews.isEmpty)
@@ -25,13 +25,13 @@ struct MangaReaderTestsNovelOfflineCacheStore {
 
         let snapshot = await store.novelOfflineCacheViewsSnapshot(
             ownerTitle: request.ownerTitle,
-            threadURL: request.threadURL,
+            threadID: request.threadID,
             authorID: request.authorID,
             contentSource: request.contentSource
         )
         let loadedSource = await store.novelOfflineSourcePage(
             ownerTitle: request.ownerTitle,
-            threadURL: request.threadURL,
+            threadID: request.threadID,
             view: request.view,
             authorID: request.authorID,
             contentSource: request.contentSource
@@ -61,7 +61,7 @@ struct MangaReaderTestsNovelOfflineCacheStore {
 
         let snapshot = await store.novelOfflineCacheViewsSnapshot(
             ownerTitle: request.ownerTitle,
-            threadURL: request.threadURL,
+            threadID: request.threadID,
             authorID: request.authorID,
             contentSource: request.contentSource
         )
@@ -78,7 +78,7 @@ struct MangaReaderTestsNovelOfflineCacheStore {
 
         let snapshot = await store.novelOfflineCacheViewsSnapshot(
             ownerTitle: request.ownerTitle,
-            threadURL: request.threadURL,
+            threadID: request.threadID,
             authorID: request.authorID,
             contentSource: request.contentSource
         )
@@ -103,13 +103,13 @@ struct MangaReaderTestsNovelOfflineCacheStore {
 
         let renamedSnapshot = await store.novelOfflineCacheViewsSnapshot(
             ownerTitle: renamedRequest.ownerTitle,
-            threadURL: renamedRequest.threadURL,
+            threadID: renamedRequest.threadID,
             authorID: renamedRequest.authorID,
             contentSource: renamedRequest.contentSource
         )
         let loadedSource = await store.novelOfflineSourcePage(
             ownerTitle: renamedRequest.ownerTitle,
-            threadURL: renamedRequest.threadURL,
+            threadID: renamedRequest.threadID,
             view: renamedRequest.view,
             authorID: renamedRequest.authorID,
             contentSource: renamedRequest.contentSource
@@ -121,14 +121,14 @@ struct MangaReaderTestsNovelOfflineCacheStore {
         try await store.removeNovelOfflineCacheViews(
             [1],
             ownerTitle: renamedRequest.ownerTitle,
-            threadURL: renamedRequest.threadURL,
+            threadID: renamedRequest.threadID,
             authorID: renamedRequest.authorID,
             contentSource: renamedRequest.contentSource
         )
 
         #expect(await store.novelOfflineSourcePage(
             ownerTitle: originalRequest.ownerTitle,
-            threadURL: originalRequest.threadURL,
+            threadID: originalRequest.threadID,
             view: originalRequest.view,
             authorID: originalRequest.authorID,
             contentSource: originalRequest.contentSource
@@ -150,7 +150,7 @@ struct MangaReaderTestsNovelOfflineCacheStore {
         }
         let works = await store.offlineCacheQueueWorks()
         let expectedGroupKey = NovelOfflineCacheEntry.groupKey(
-            threadURL: renamedRequest.threadURL,
+            threadID: renamedRequest.threadID,
             authorID: renamedRequest.authorID,
             contentSource: renamedRequest.contentSource
         )
@@ -181,7 +181,7 @@ struct MangaReaderTestsNovelOfflineCacheStore {
         let snapshot = await store.offlineCacheManagementSnapshot()
         let group = try #require(snapshot.groups.first)
         let expectedGroupKey = NovelOfflineCacheEntry.groupKey(
-            threadURL: renamedRequest.threadURL,
+            threadID: renamedRequest.threadID,
             authorID: renamedRequest.authorID,
             contentSource: renamedRequest.contentSource
         )
@@ -199,7 +199,7 @@ struct MangaReaderTestsNovelOfflineCacheStore {
         let matchingRequest = try NovelOfflineCacheWorkRequest(
             ownerTitle: "小说7013",
             title: "第1页",
-            threadURL: #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=7013&mobile=2")),
+            threadID: "7013",
             view: 1,
             authorID: "42",
             contentSource: .authorFilteredPage,
@@ -222,11 +222,8 @@ struct MangaReaderTestsNovelOfflineCacheStore {
         )
         try await store.saveOfflineImageData(Data([1, 3]), for: sharedImageURL)
 
-        let matchingReferer = try #require(URL(string: "https://bbs.yamibo.com/forum.php?page=9&tid=7013&mod=viewthread&mobile=2"))
-        let otherReferer = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=7014&page=1&mobile=2"))
-
-        #expect(await store.novelOfflineImageData(for: sharedImageURL, refererURL: matchingReferer) == Data([1, 3]))
-        #expect(await store.novelOfflineImageData(for: sharedImageURL, refererURL: otherReferer) == nil)
+        #expect(await store.novelOfflineImageData(for: sharedImageURL, threadID: "7013") == Data([1, 3]))
+        #expect(await store.novelOfflineImageData(for: sharedImageURL, threadID: "7014") == nil)
     }
 
     @Test func deletingNovelOfflineEntryPreservesTransparentThreadPageAndProjectionCaches() async throws {
@@ -251,14 +248,14 @@ struct MangaReaderTestsNovelOfflineCacheStore {
         try await offlineStore.removeNovelOfflineCacheViews(
             [1],
             ownerTitle: request.ownerTitle,
-            threadURL: request.threadURL,
+            threadID: request.threadID,
             authorID: request.authorID,
             contentSource: request.contentSource
         )
 
         #expect(await offlineStore.novelOfflineSourcePage(
             ownerTitle: request.ownerTitle,
-            threadURL: request.threadURL,
+            threadID: request.threadID,
             view: 1,
             authorID: request.authorID,
             contentSource: request.contentSource
@@ -266,7 +263,7 @@ struct MangaReaderTestsNovelOfflineCacheStore {
         #expect(await offlineStore.offlineCacheQueueWorks().isEmpty)
         #expect(await forumCacheStore.loadThreadPage(thread: thread, page: 1, authorID: "42") == sourcePage)
         let retainedProjection = await readerCacheStore.loadDocument(
-            for: ReaderPageRequest(threadURL: request.threadURL, view: 1, authorID: "42"),
+            for: ReaderPageRequest(threadID: request.threadID, view: 1, authorID: "42"),
             contentSource: .authorFilteredPage
         )
         #expect(retainedProjection?.view == projection.view)
@@ -280,7 +277,7 @@ struct MangaReaderTestsNovelOfflineCacheStore {
         let initialRequest = NovelOfflineCacheWorkRequest(
             ownerTitle: "小说7005",
             title: "第1页",
-            threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=7005&mobile=2")),
+            threadID: "7005",
             view: 1,
             authorID: "42",
             contentSource: .authorFilteredPage,
@@ -290,7 +287,7 @@ struct MangaReaderTestsNovelOfflineCacheStore {
         let disabledRequest = NovelOfflineCacheWorkRequest(
             ownerTitle: initialRequest.ownerTitle,
             title: initialRequest.title,
-            threadURL: initialRequest.threadURL,
+            threadID: initialRequest.threadID,
             view: initialRequest.view,
             authorID: initialRequest.authorID,
             contentSource: initialRequest.contentSource,
@@ -328,7 +325,7 @@ private func makeNovelWorkRequest(
     NovelOfflineCacheWorkRequest(
         ownerTitle: ownerTitle ?? "小说\(tid)",
         title: "第\(view)页",
-        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=\(tid)&mobile=2")),
+        threadID: tid,
         view: view,
         authorID: "42",
         contentSource: .authorFilteredPage
@@ -336,10 +333,8 @@ private func makeNovelWorkRequest(
 }
 
 private func makeNovelSourcePage(tid: String, view: Int, totalPages: Int) throws -> ForumThreadPage {
-    let threadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=\(tid)&mobile=2"))
-    let thread = ThreadIdentity(tid: tid, canonicalURL: ReaderCacheIdentity.canonicalThreadURL(from: threadURL))
     return ForumThreadPage(
-        thread: thread,
+        thread: ThreadIdentity(tid: tid),
         title: "小说\(tid)",
         posts: [
             ForumThreadPost(
@@ -354,9 +349,8 @@ private func makeNovelSourcePage(tid: String, view: Int, totalPages: Int) throws
 }
 
 private func makeNovelDocument(tid: String, view: Int, maxView: Int) throws -> ReaderPageDocument {
-    let threadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=\(tid)&mobile=2"))
     return ReaderPageDocument(
-        threadURL: ReaderCacheIdentity.canonicalThreadURL(from: threadURL),
+        threadID: tid,
         view: view,
         maxView: maxView,
         resolvedAuthorID: "42",

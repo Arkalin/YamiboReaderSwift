@@ -8,7 +8,7 @@ import Testing
     let fixture = try ForumThreadReaderViewModelFixture()
     var document = FavoriteLibraryDocument()
     document.addItem(try FavoriteItem(
-        target: FavoriteContentTarget(kind: .normalThread, threadURL: fixture.threadURL),
+        target: FavoriteContentTarget(kind: .normalThread, threadID: "704"),
         title: "已收藏标题",
         locations: [.category(document.defaultCategory.id)]
     ))
@@ -215,7 +215,7 @@ private struct ForumThreadReaderViewModelFixture {
     }
 
     func localFavoriteItem() async -> FavoriteItem? {
-        let target = FavoriteContentTarget(kind: .normalThread, threadURL: threadURL)
+        let target = FavoriteContentTarget(kind: .normalThread, threadID: "704")
         return await localFavoriteLibraryStore.load().items.first { item in
             item.target.id == target.id
         }

@@ -349,7 +349,7 @@ final class MangaReaderModelSettingsProgressTests: XCTestCase {
         fixture.model.updateCurrentPage(globalIndex: 2)
         let route = await fixture.model.saveProgress()
 
-        let progress = await readingProgressStore.load(for: fixture.originalURL)
+        let progress = await readingProgressStore.load(threadID: "700")
         XCTAssertEqual(progress?.manga?.lastMangaURL.absoluteString, "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=701")
         XCTAssertEqual(progress?.manga?.mangaPageIndex, 2)
 
@@ -382,7 +382,7 @@ final class MangaReaderModelSettingsProgressTests: XCTestCase {
 
         let favorites = await fixture.localFavoriteLibraryStore.load().items
         XCTAssertTrue(favorites.isEmpty)
-        let progress = await readingProgressStore.load(for: fixture.originalURL)
+        let progress = await readingProgressStore.load(threadID: "700")
         XCTAssertEqual(progress?.manga?.lastMangaURL.absoluteString, "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=701")
         XCTAssertEqual(progress?.manga?.mangaPageIndex, 2)
     }
@@ -393,7 +393,7 @@ final class MangaReaderModelSettingsProgressTests: XCTestCase {
         await fixture.model.prepare()
 
         let target = try XCTUnwrap(fixture.model.currentChapterCommentTarget)
-        XCTAssertEqual(target.threadURL, fixture.chapterURL)
+        XCTAssertEqual(target.threadID, "701")
         XCTAssertEqual(target.view, 1)
         XCTAssertEqual(target.ownerPostID, "post-701")
         XCTAssertEqual(target.title, "第701话")

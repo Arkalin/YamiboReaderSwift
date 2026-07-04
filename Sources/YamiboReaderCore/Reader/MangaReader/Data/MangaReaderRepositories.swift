@@ -113,7 +113,7 @@ public extension MangaImageDataLoading {
 }
 
 public protocol NovelOfflineImageDataProviding: Sendable {
-    func novelOfflineImageData(for imageURL: URL, refererURL: URL) async -> Data?
+    func novelOfflineImageData(for imageURL: URL, threadID: String) async -> Data?
 }
 
 public protocol OfflineCacheStoring: NovelOfflineImageDataProviding, Sendable {
@@ -143,27 +143,27 @@ public protocol OfflineCacheStoring: NovelOfflineImageDataProviding, Sendable {
     ) async throws
     func novelOfflineSourcePage(
         ownerTitle: String,
-        threadURL: URL,
+        threadID: String,
         view: Int,
         authorID: String?,
         contentSource: ReaderContentSource?
     ) async -> ForumThreadPage?
     func novelOfflineSourcePageSnapshot(
-        threadURL: URL,
+        threadID: String,
         view: Int,
         authorID: String?,
         contentSource: ReaderContentSource?
     ) async -> NovelOfflineSourcePageSnapshot?
     func novelOfflineCacheViewsSnapshot(
         ownerTitle: String,
-        threadURL: URL,
+        threadID: String,
         authorID: String?,
         contentSource: ReaderContentSource?
     ) async -> NovelOfflineCacheViewsSnapshot
     func removeNovelOfflineCacheViews(
         _ views: Set<Int>,
         ownerTitle: String,
-        threadURL: URL,
+        threadID: String,
         authorID: String?,
         contentSource: ReaderContentSource?
     ) async throws

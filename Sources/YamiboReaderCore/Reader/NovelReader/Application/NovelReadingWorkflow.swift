@@ -6,13 +6,13 @@ public protocol NovelReadingPageRepository: Sendable {
     func loadPageResult(_ request: ReaderPageRequest) async throws -> NovelReaderPageLoad
     func loadPageIgnoringCacheResult(_ request: ReaderPageRequest) async throws -> NovelReaderPageLoad
     func cachedViews(
-        for threadURL: URL,
+        for threadID: String,
         authorID: String?,
         contentSource: ReaderContentSource?
     ) async -> Set<Int>
     func deleteCachedViews(
         _ views: Set<Int>,
-        for threadURL: URL,
+        for threadID: String,
         authorID: String?,
         contentSource: ReaderContentSource?
     ) async throws
@@ -243,7 +243,7 @@ public final class NovelReadingWorkflow {
 
     package func previewChapterDirectory(view: Int) async throws -> [NovelChapterDirectoryEntry] {
         let request = ReaderPageRequest(
-            threadURL: context.threadURL,
+            threadID: context.threadID,
             view: view,
             authorID: cacheContext(forView: view).authorID
         )
@@ -584,7 +584,7 @@ public final class NovelReadingWorkflow {
         let surfaces = viewportRuntime.currentResult?.viewportIndex.surfaces ?? []
         let view = currentDisplayedView(in: snapshot, surfaces: surfaces) ?? resumePoint?.view ?? context.initialView ?? 1
         return NovelReadingPosition(
-            threadURL: context.threadURL,
+            threadID: context.threadID,
             view: view,
             maxView: snapshot?.maxView,
             chapterTitle: resumePoint?.chapterTitle ?? snapshot?.currentChapterTitle,
@@ -676,7 +676,7 @@ public final class NovelReadingWorkflow {
         }
 
         let nextRequest = ReaderPageRequest(
-            threadURL: context.threadURL,
+            threadID: context.threadID,
             view: currentDocument.view + 1,
             authorID: currentAuthorID ?? currentDocument.resolvedAuthorID ?? context.authorID
         )
@@ -747,14 +747,14 @@ public final class NovelReadingWorkflow {
             let context = cacheContext(forView: view)
             try await repository.deleteCachedViews(
                 [view],
-                for: self.context.threadURL,
+                for: self.context.threadID,
                 authorID: context.authorID,
                 contentSource: context.contentSource
             )
         }
 
         let request = ReaderPageRequest(
-            threadURL: context.threadURL,
+            threadID: context.threadID,
             view: view,
             authorID: currentAuthorID ?? context.authorID
         )
@@ -785,7 +785,7 @@ public final class NovelReadingWorkflow {
         )
         let documentCacheContext = cacheContext(for: document)
         let cachedViews = await repository.cachedViews(
-            for: context.threadURL,
+            for: context.threadID,
             authorID: documentCacheContext.authorID,
             contentSource: documentCacheContext.contentSource
         )
@@ -817,7 +817,7 @@ public final class NovelReadingWorkflow {
         currentDocumentSurfaceCount = session?.surfaceCount(in: snapshot.currentView) ?? 0
         let cachedViews = if refreshCachedViews {
             await repository.cachedViews(
-                for: context.threadURL,
+                for: context.threadID,
                 authorID: cacheContext(forView: snapshot.currentView).authorID,
                 contentSource: cacheContext(forView: snapshot.currentView).contentSource
             )

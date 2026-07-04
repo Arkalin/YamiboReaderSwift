@@ -11,10 +11,10 @@ import Testing
         key: "favorite-library"
     )
     let resumeRouteStore = try ReaderResumeRouteStore(testSuiteName: defaultsSuiteName, key: "resume")
-    let threadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=901&mobile=2"))
+    let threadID = "901"
     let staleRoute = ReaderResumeRoute.novel(
         ReaderLaunchContext(
-            threadURL: threadURL,
+            threadID: threadID,
             threadTitle: "旧标题",
             source: .resume,
             initialView: 1
@@ -32,7 +32,7 @@ import Testing
     try await resumeRouteStore.save(staleRoute)
     try await readingProgressStore.saveNovel(
         NovelReadingPosition(
-            threadURL: threadURL,
+            threadID: threadID,
             view: 5,
             authorID: "42",
             resumePoint: resumePoint
@@ -41,7 +41,7 @@ import Testing
     var document = FavoriteLibraryDocument()
     try document.importThreadFavorite(
         probeResult: FavoriteThreadProbeResult(
-            target: FavoriteContentTarget(kind: .novelThread, threadURL: threadURL),
+            target: FavoriteContentTarget(kind: .novelThread, threadID: threadID),
             title: "远端小说"
         )
     )
@@ -60,7 +60,7 @@ import Testing
     )
 
     let expectedContext = ReaderLaunchContext(
-        threadURL: threadURL,
+        threadID: threadID,
         threadTitle: "远端小说",
         source: .resume,
         initialView: 5,
@@ -108,10 +108,10 @@ import Testing
     let workflow = AppContinuityWorkflow(
         appContext: YamiboAppContext(readerResumeRouteStore: resumeRouteStore)
     )
-    let threadURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=902&mobile=2"))
+    let threadID = "902"
     let route = ReaderResumeRoute.novel(
         ReaderLaunchContext(
-            threadURL: threadURL,
+            threadID: threadID,
             threadTitle: "测试小说",
             source: .resume,
             initialView: 1

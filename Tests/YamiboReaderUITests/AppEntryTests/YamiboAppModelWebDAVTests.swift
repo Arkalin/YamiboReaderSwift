@@ -49,8 +49,7 @@ final class YamiboAppModelWebDAVTests: XCTestCase {
         defer { observerTask.cancel() }
         try await Task.sleep(nanoseconds: 50_000_000)
 
-        let threadURL = try XCTUnwrap(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=2701&mobile=2"))
-        try await readingProgressStore.saveNovel(NovelReadingPosition(threadURL: threadURL, view: 2))
+        try await readingProgressStore.saveNovel(NovelReadingPosition(threadID: "2701", view: 2))
 
         let localUpdatedAt = try await Self.waitForLocalUpdatedAt(in: webDAVSettingsStore)
         XCTAssertNotNil(localUpdatedAt)

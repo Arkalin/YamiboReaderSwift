@@ -322,7 +322,12 @@ public actor OfflineCacheQueueExecutor {
         if completedImageURLs.count < targetImageURLs.count {
             completedImageURLs = try await transferMissingImages(
                 workID: work.id,
-                refererURL: request.threadURL,
+                refererURL: YamiboRoute.threadByID(
+                    tid: request.threadID,
+                    page: request.view,
+                    authorID: request.authorID,
+                    reverse: false
+                ).url,
                 targetImageURLs: targetImageURLs,
                 completedImageURLs: completedImageURLs
             )
@@ -432,7 +437,7 @@ public actor OfflineCacheQueueExecutor {
         return NovelOfflineCacheWorkRequest(
             ownerTitle: work.ownerTitle,
             title: work.title,
-            threadURL: Self.rebuiltChapterURL(tid: components.threadID),
+            threadID: components.threadID,
             view: components.view,
             authorID: components.authorID,
             contentSource: components.contentSource,

@@ -8,7 +8,7 @@ public enum ReaderLaunchSource: String, Codable, Hashable, Sendable {
 }
 
 public struct ReaderLaunchContext: Codable, Hashable, Identifiable, Sendable {
-    public var threadURL: URL
+    public var threadID: String
     public var threadTitle: String
     public var source: ReaderLaunchSource
     public var initialView: Int?
@@ -16,10 +16,10 @@ public struct ReaderLaunchContext: Codable, Hashable, Identifiable, Sendable {
     public var initialResumePoint: ReaderResumePoint?
     public var threadCoverURL: URL?
 
-    public var id: String { threadURL.absoluteString }
+    public var id: String { threadID }
 
     public init(
-        threadURL: URL,
+        threadID: String,
         threadTitle: String,
         source: ReaderLaunchSource,
         initialView: Int? = nil,
@@ -27,7 +27,7 @@ public struct ReaderLaunchContext: Codable, Hashable, Identifiable, Sendable {
         initialResumePoint: ReaderResumePoint? = nil,
         threadCoverURL: URL? = nil
     ) {
-        self.threadURL = threadURL
+        self.threadID = Self.normalizedThreadID(threadID)
         self.threadTitle = threadTitle
         self.source = source
         self.initialView = initialView
@@ -35,25 +35,25 @@ public struct ReaderLaunchContext: Codable, Hashable, Identifiable, Sendable {
         self.initialResumePoint = initialResumePoint
         self.threadCoverURL = threadCoverURL
     }
+
+    private static func normalizedThreadID(_ value: String) -> String {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        precondition(!trimmed.isEmpty, "ReaderLaunchContext requires a Yamibo thread tid")
+        return trimmed
+    }
 }
 
 public struct ReaderPageRequest: Codable, Hashable, Sendable {
-    public var threadURL: URL
+    public var threadID: String
     public var view: Int
     public var authorID: String?
 
-    public init(threadURL: URL, view: Int, authorID: String? = nil) {
-        self.threadURL = threadURL
+    public init(threadID: String, view: Int, authorID: String? = nil) {
+        let normalizedThreadID = threadID.trimmingCharacters(in: .whitespacesAndNewlines)
+        precondition(!normalizedThreadID.isEmpty, "ReaderPageRequest requires a Yamibo thread tid")
+        self.threadID = normalizedThreadID
         self.view = max(1, view)
         self.authorID = authorID
-    }
-
-    public init(threadID: String, view: Int, authorID: String? = nil) {
-        self.init(
-            threadURL: YamiboRoute.threadByID(tid: threadID, page: max(1, view), authorID: authorID, reverse: false).url,
-            view: view,
-            authorID: authorID
-        )
     }
 }
 
@@ -247,14 +247,16 @@ extension ReaderSegmentSemantics: Codable {
 }
 
 public struct ReaderChapterCommentTarget: Codable, Hashable, Sendable {
-    public var threadURL: URL
+    public var threadID: String
     public var view: Int
     public var ownerPostID: String
     public var title: String?
     public var authorID: String?
 
-    public init(threadURL: URL, view: Int, ownerPostID: String, title: String? = nil, authorID: String? = nil) {
-        self.threadURL = threadURL
+    public init(threadID: String, view: Int, ownerPostID: String, title: String? = nil, authorID: String? = nil) {
+        let normalizedThreadID = threadID.trimmingCharacters(in: .whitespacesAndNewlines)
+        precondition(!normalizedThreadID.isEmpty, "ReaderChapterCommentTarget requires a Yamibo thread tid")
+        self.threadID = normalizedThreadID
         self.view = max(1, view)
         self.ownerPostID = ownerPostID.trimmingCharacters(in: .whitespacesAndNewlines)
         self.title = title
@@ -310,9 +312,9 @@ extension ReaderSegment: Codable {
 }
 
 public struct ReaderPageDocument: Codable, Hashable, Sendable {
-    public static let schemaVersion = 5
+    public static let schemaVersion = 6
 
-    public var threadURL: URL
+    public var threadID: String
     public var view: Int
     public var maxView: Int
     public var resolvedAuthorID: String?
@@ -328,7 +330,7 @@ public struct ReaderPageDocument: Codable, Hashable, Sendable {
     public var decodedSchemaVersion: Int?
 
     public init(
-        threadURL: URL,
+        threadID: String,
         view: Int,
         maxView: Int,
         resolvedAuthorID: String? = nil,
@@ -343,7 +345,9 @@ public struct ReaderPageDocument: Codable, Hashable, Sendable {
         fetchedAt: Date = .now,
         decodedSchemaVersion: Int? = Self.schemaVersion
     ) {
-        self.threadURL = threadURL
+        let normalizedThreadID = threadID.trimmingCharacters(in: .whitespacesAndNewlines)
+        precondition(!normalizedThreadID.isEmpty, "ReaderPageDocument requires a Yamibo thread tid")
+        self.threadID = normalizedThreadID
         self.view = max(1, view)
         self.maxView = max(self.view, maxView)
         self.resolvedAuthorID = resolvedAuthorID
@@ -355,7 +359,7 @@ public struct ReaderPageDocument: Codable, Hashable, Sendable {
         self.segmentSemantics = segmentSemantics ?? Self.legacySegmentSemantics(
             segments: segments,
             segmentSources: self.segmentSources,
-            threadURL: self.threadURL,
+            threadID: self.threadID,
             view: self.view,
             contentSource: self.contentSource
         )
@@ -378,7 +382,7 @@ public struct ReaderPageDocument: Codable, Hashable, Sendable {
 
 extension ReaderPageDocument {
     private enum CodingKeys: String, CodingKey {
-        case threadURL
+        case threadID
         case view
         case maxView
         case resolvedAuthorID
@@ -398,7 +402,7 @@ extension ReaderPageDocument {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         let segments = try container.decode([ReaderSegment].self, forKey: .segments)
         let sourceValues = try container.decodeIfPresent([ReaderSegmentSource?].self, forKey: .segmentSources)
-        let threadURL = try container.decode(URL.self, forKey: .threadURL)
+        let threadID = try container.decode(String.self, forKey: .threadID)
         let view = try container.decode(Int.self, forKey: .view)
         let contentSource = try container.decodeIfPresent(ReaderContentSource.self, forKey: .contentSource) ?? .allPostsPage
         let schemaVersion = try container.decodeIfPresent(Int.self, forKey: .schemaVersion)
@@ -416,13 +420,13 @@ extension ReaderPageDocument {
             resolvedSemantics = Self.legacySegmentSemantics(
                 segments: segments,
                 segmentSources: sources,
-                threadURL: threadURL,
+                threadID: threadID,
                 view: view,
                 contentSource: contentSource
             )
         }
         self.init(
-            threadURL: threadURL,
+            threadID: threadID,
             view: view,
             maxView: try container.decode(Int.self, forKey: .maxView),
             resolvedAuthorID: try container.decodeIfPresent(String.self, forKey: .resolvedAuthorID),
@@ -447,7 +451,7 @@ extension ReaderPageDocument {
         )
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(Self.schemaVersion, forKey: .schemaVersion)
-        try container.encode(threadURL, forKey: .threadURL)
+        try container.encode(threadID, forKey: .threadID)
         try container.encode(view, forKey: .view)
         try container.encode(maxView, forKey: .maxView)
         try container.encodeIfPresent(resolvedAuthorID, forKey: .resolvedAuthorID)
@@ -467,7 +471,7 @@ extension ReaderPageDocument {
     static func legacySegmentSemantics(
         segments: [ReaderSegment],
         segmentSources: [ReaderSegmentSource?],
-        threadURL: URL,
+        threadID: String,
         view: Int,
         contentSource: ReaderContentSource
     ) -> [ReaderSegmentSemantics?] {
@@ -488,7 +492,7 @@ extension ReaderPageDocument {
                 chapterIdentity = NovelChapterIdentity(rawValue: "post:\(ownerPostID)#chapter:\(postOccurrence)")
             } else {
                 chapterIdentity = NovelChapterIdentity(
-                    rawValue: "document:\(threadURL.absoluteString)#view:\(max(1, view))#source:\(contentSource.rawValue)#chapter:\(sourceOccurrence)"
+                    rawValue: "thread:\(threadID)#view:\(max(1, view))#source:\(contentSource.rawValue)#chapter:\(sourceOccurrence)"
                 )
                 sourceOccurrence += 1
             }
@@ -1468,7 +1472,7 @@ package extension NovelTextViewportIndexSurface {
 }
 
 package struct NovelTextViewportIdentity: Hashable, Sendable {
-    public var threadURL: URL
+    public var threadID: String
     public var documentView: Int
     public var maxView: Int
     public var fetchedAt: Date
@@ -1477,7 +1481,7 @@ package struct NovelTextViewportIdentity: Hashable, Sendable {
     public var layout: ReaderContainerLayout
 
     public init(
-        threadURL: URL,
+        threadID: String,
         documentView: Int,
         maxView: Int,
         fetchedAt: Date,
@@ -1485,7 +1489,9 @@ package struct NovelTextViewportIdentity: Hashable, Sendable {
         appearance: ReaderAppearanceSettings,
         layout: ReaderContainerLayout
     ) {
-        self.threadURL = threadURL
+        let normalizedThreadID = threadID.trimmingCharacters(in: .whitespacesAndNewlines)
+        precondition(!normalizedThreadID.isEmpty, "NovelTextViewportIdentity requires a Yamibo thread tid")
+        self.threadID = normalizedThreadID
         self.documentView = max(1, documentView)
         self.maxView = max(self.documentView, maxView)
         self.fetchedAt = fetchedAt

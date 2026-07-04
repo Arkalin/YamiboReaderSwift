@@ -326,7 +326,7 @@ public final class MangaReaderModel: ObservableObject {
             return nil
         }
         return ReaderChapterCommentTarget(
-            threadURL: currentPage.refererURL,
+            threadID: currentPage.tid,
             view: Self.webViewPage(from: currentPage.refererURL),
             ownerPostID: currentPage.ownerPostID,
             title: currentPage.chapterTitle
@@ -335,8 +335,15 @@ public final class MangaReaderModel: ObservableObject {
 
     public func loadChapterComments(for target: ReaderChapterCommentTarget?) async {
         guard let target else {
+            guard let threadID = YamiboThreadURLCanonicalizer.threadID(from: context.chapterURL) else {
+                chapterCommentsState = .unsupported
+                isLoadingMoreChapterComments = false
+                chapterCommentsLoadMoreError = nil
+                chapterCommentsRefreshError = nil
+                return
+            }
             let emptyTarget = ReaderChapterCommentTarget(
-                threadURL: context.originalThreadURL,
+                threadID: threadID,
                 view: 1,
                 ownerPostID: "",
                 title: nil

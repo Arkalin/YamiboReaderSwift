@@ -168,11 +168,11 @@ public final class AppContinuityWorkflow {
     private func routeReconciledWithReadingProgress(_ route: ReaderResumeRoute) async -> ReaderResumeRoute? {
         switch route {
         case let .novel(context):
-            if let progress = await appContext.readingProgressStore.load(for: context.threadURL),
+            if let progress = await appContext.readingProgressStore.load(threadID: context.threadID),
                progress.hasNovelReadingProgress {
                 return .novel(context.reconciledWithReadingProgress(
                     progress,
-                    favoriteItem: await favoriteItem(forThreadURL: context.threadURL)
+                    favoriteItem: await favoriteItem(forThreadID: context.threadID)
                 ))
             }
             return nil
@@ -187,7 +187,7 @@ public final class AppContinuityWorkflow {
     private func mangaRouteReconciledWithReadingProgress(_ route: MangaPresentationRoute) async -> MangaPresentationRoute? {
         switch route {
         case let .native(context):
-            if let progress = await appContext.readingProgressStore.load(for: context.originalThreadURL),
+            if let progress = await readingProgress(forThreadURL: context.originalThreadURL),
                progress.hasMangaReadingProgress {
                 return .native(context.reconciledWithReadingProgress(
                     progress,
@@ -196,7 +196,7 @@ public final class AppContinuityWorkflow {
             }
             return nil
         case let .web(context):
-            if let progress = await appContext.readingProgressStore.load(for: context.originalThreadURL),
+            if let progress = await readingProgress(forThreadURL: context.originalThreadURL),
                progress.hasMangaReadingProgress {
                 return .web(context.reconciledWithReadingProgress(progress))
             }
@@ -204,11 +204,17 @@ public final class AppContinuityWorkflow {
         }
     }
 
-    private func favoriteItem(forThreadURL url: URL) async -> FavoriteItem? {
-        let target = FavoriteContentTarget(kind: .novelThread, threadURL: url)
-        let threadID = target.threadID
+    private func readingProgress(forThreadURL url: URL) async -> ReadingProgressRecord? {
+        guard let threadID = YamiboThreadURLCanonicalizer.threadID(from: FavoriteLibraryURLIdentity.canonicalThreadURL(from: url)) else {
+            return nil
+        }
+        return await appContext.readingProgressStore.load(threadID: threadID)
+    }
+
+    private func favoriteItem(forThreadID threadID: String) async -> FavoriteItem? {
+        let target = FavoriteContentTarget.novelThread(threadID: threadID)
         return await appContext.localFavoriteLibraryStore.load().items.first { item in
-            item.target.id == target.id || item.target.threadID == threadID
+            item.target.id == target.id || item.target.threadID == target.threadID
         }
     }
 
@@ -292,7 +298,7 @@ private extension ReaderLaunchContext {
         let novel = progress.novel
         let resumePoint = novel?.novelResumePoint ?? initialResumePoint
         return ReaderLaunchContext(
-            threadURL: threadURL,
+            threadID: threadID,
             threadTitle: favoriteItem?.resolvedDisplayTitle ?? threadTitle,
             source: .resume,
             initialView: resumePoint?.view ?? novel?.lastView ?? initialView,

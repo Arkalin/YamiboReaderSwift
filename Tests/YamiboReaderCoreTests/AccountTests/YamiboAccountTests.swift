@@ -162,14 +162,14 @@ private enum YamiboAccountTestError: Error {
         sessionStore: sessionStore,
         profileStore: profileStore
     )
-    let favoriteURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=970&mobile=2"))
     var favoriteLibrary = FavoriteLibraryDocument()
     let favoriteItem = try FavoriteItem(
-        target: FavoriteContentTarget(kind: .normalThread, threadURL: favoriteURL),
+        target: FavoriteContentTarget(kind: .normalThread, threadID: "970"),
         title: "退出保留漫画",
         locations: [.category(favoriteLibrary.defaultCategory.id)]
     )
     favoriteLibrary.addItem(favoriteItem)
+    let favoriteURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=970&mobile=2"))
     let imageURL = try #require(URL(string: "https://img.example.com/signout-offline.jpg"))
 
     try await sessionStore.save(SessionState(cookie: "sid=1; EeqY_2132_auth=token", isLoggedIn: true, accountUID: "535977"))
