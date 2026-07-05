@@ -1,6 +1,8 @@
 # YamiboReader Context
 
-This repository now uses multiple domain context documents. Start with `CONTEXT-MAP.md`, then read only the context files relevant to the current task.
+Agent instructions live in `AGENTS.md`. Read `AGENTS.md` first and follow its policies before using this context file.
+
+This repository uses multiple domain context documents. After reading `AGENTS.md`, start with `CONTEXT-MAP.md`, then read only the context files relevant to the current task.
 
 The current contexts are:
 
