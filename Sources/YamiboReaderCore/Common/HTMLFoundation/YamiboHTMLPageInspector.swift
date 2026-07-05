@@ -44,16 +44,16 @@ enum YamiboHTMLPageInspector {
 }
 
 enum YamiboThreadHTMLFacts {
-    static func onlyAuthorID(from html: String, request: NovelPageRequest) -> String? {
+    static func onlyAuthorID(from html: String, threadID: String) -> String? {
         guard let document = try? KannaSoup.parse(html) else { return nil }
-        return try? onlyAuthorID(in: document, threadID: request.threadID)
+        return try? onlyAuthorID(in: document, threadID: threadID)
     }
 
-    static func maxView(from html: String, request: NovelPageRequest) -> Int {
+    static func maxView(from html: String, threadID: String, currentView: Int) -> Int {
         guard let document = try? KannaSoup.parse(html) else {
-            return max(1, request.view)
+            return max(1, currentView)
         }
-        return maxView(in: document, threadID: request.threadID, currentView: request.view)
+        return maxView(in: document, threadID: threadID, currentView: currentView)
     }
 
     static func maxView(in document: Document, threadID: String, currentView: Int) -> Int {

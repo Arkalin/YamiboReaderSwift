@@ -969,7 +969,7 @@ private final class StubURLProtocol: URLProtocol {
         view: 1
     )
 
-    #expect(YamiboThreadHTMLFacts.maxView(from: html, request: request) == 4)
+    #expect(YamiboThreadHTMLFacts.maxView(from: html, threadID: request.threadID, currentView: request.view) == 4)
 }
 
 @Test func readerHTMLParserExtractsPageTitle() async throws {
@@ -991,7 +991,7 @@ private final class StubURLProtocol: URLProtocol {
         view: 1
     )
 
-    #expect(YamiboThreadHTMLFacts.onlyAuthorID(from: html, request: request) == "595655")
+    #expect(YamiboThreadHTMLFacts.onlyAuthorID(from: html, threadID: request.threadID) == "595655")
 }
 
 @Test func readerHTMLParserHandlesMalformedHTML() async throws {
@@ -4335,7 +4335,7 @@ private func novelProjection(
     let page = try forumThreadPage(from: html, threadID: request.threadID)
     let resolvedAuthorID = authorID
         ?? request.authorID
-        ?? YamiboThreadHTMLFacts.onlyAuthorID(from: html, request: request)
+        ?? YamiboThreadHTMLFacts.onlyAuthorID(from: html, threadID: request.threadID)
         ?? page.posts.first?.author.uid
         ?? "99"
     return try NovelReaderProjectionBuilder.build(
