@@ -2,6 +2,18 @@ import CryptoKit
 import Foundation
 @preconcurrency import GRDB
 
+extension OfflineCacheStore: YamiboOfflineImageDataProviding {
+    public func offlineImageData(url: URL, scope: YamiboImageOfflineScope) async -> Data? {
+        if let ownerName = scope.ownerName,
+           let membership = await mangaOfflineCacheMembership(ownerName: ownerName, tid: scope.tid),
+           membership.imageURLs.contains(where: { $0.absoluteString == url.absoluteString }),
+           let data = await offlineImageData(for: url) {
+            return data
+        }
+        return await novelOfflineImageData(for: url, threadID: scope.tid)
+    }
+}
+
 extension OfflineCacheStore {
     public func offlineImageData(for imageURL: URL) async -> Data? {
         try? await recoverQueueStateAfterRestart()

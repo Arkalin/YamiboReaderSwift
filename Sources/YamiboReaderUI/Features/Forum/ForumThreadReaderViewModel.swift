@@ -32,7 +32,6 @@ final class ForumThreadReaderViewModel {
     var transientMessage: String?
     var isFavorited = false
     var favoriteErrorMessage: String?
-    var inlineImageLoadingContext: NovelInlineImageLoadingContext?
 
     let context: ThreadNovelLaunchContext
 
@@ -40,7 +39,6 @@ final class ForumThreadReaderViewModel {
     @ObservationIgnored private let localFavoriteLibraryStoreProvider: @Sendable () async -> FavoriteLibraryStore?
     @ObservationIgnored private let readingProgressStoreProvider: @Sendable () async -> ReadingProgressStore?
     @ObservationIgnored private let favoriteRepositoryProvider: @Sendable () async -> (any ForumThreadFavoriteRemoteOperating)?
-    @ObservationIgnored private let inlineImageLoadingContextProvider: @Sendable () async -> NovelInlineImageLoadingContext?
 
     init(context: ThreadNovelLaunchContext, appContext: YamiboAppContext) {
         self.context = context
@@ -55,9 +53,6 @@ final class ForumThreadReaderViewModel {
         }
         favoriteRepositoryProvider = {
             await appContext.makeFavoriteRepository()
-        }
-        inlineImageLoadingContextProvider = {
-            await appContext.makeNovelInlineImageLoadingContext()
         }
     }
 
@@ -80,9 +75,6 @@ final class ForumThreadReaderViewModel {
         }
         favoriteRepositoryProvider = {
             favoriteRepository
-        }
-        inlineImageLoadingContextProvider = {
-            nil
         }
     }
 
@@ -248,9 +240,6 @@ final class ForumThreadReaderViewModel {
         defer { isLoading = false }
 
         do {
-            if inlineImageLoadingContext == nil {
-                inlineImageLoadingContext = await inlineImageLoadingContextProvider()
-            }
             let repository = await repositoryProvider()
             let loaded = if preferCache, let cached = await repository.cachedThreadPage(context: context, page: page) {
                 cached

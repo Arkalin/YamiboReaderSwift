@@ -205,12 +205,12 @@ private struct PrivateMessageAvatarView: View {
     let url: URL?
 
     var body: some View {
-        YamiboRemoteImage(request: url.map { YamiboImageRequest(url: $0) }) { image in
+        YamiboRemoteImage(source: url.map { YamiboImageSource(url: $0) }) { image in
             image.resizable().scaledToFill()
         } placeholder: {
             Image(systemName: "person.crop.circle")
                 .foregroundStyle(ForumColors.secondaryText)
-        } failure: {
+        } failure: { _ in
             Image(systemName: "person.crop.circle")
                 .foregroundStyle(ForumColors.secondaryText)
         }

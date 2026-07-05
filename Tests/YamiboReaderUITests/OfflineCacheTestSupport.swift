@@ -1,7 +1,7 @@
 import Foundation
 import YamiboReaderCore
 
-typealias TestOfflineCacheStoring = OfflineCacheStoreCore & MangaOfflineCacheStoring & NovelOfflineCacheStoring & NovelOfflineImageDataProviding
+typealias TestOfflineCacheStoring = OfflineCacheStoreCore & MangaOfflineCacheStoring & NovelOfflineCacheStoring & YamiboOfflineImageDataProviding
 
 extension OfflineCacheQueueWorkProjection {
     var workID: String { id.rawValue }

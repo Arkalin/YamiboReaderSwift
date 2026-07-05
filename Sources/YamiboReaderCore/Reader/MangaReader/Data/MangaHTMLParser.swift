@@ -121,10 +121,7 @@ public enum MangaHTMLParser {
         var seen = Set<String>()
 
         for image in images {
-            let raw = ((try? image.attr("zsrc")) ?? "").nilIfEmpty
-                ?? ((try? image.attr("src")) ?? "").nilIfEmpty
-            guard let raw else { continue }
-            guard let url = URL(string: raw, relativeTo: baseURL)?.absoluteURL else { continue }
+            guard let url = YamiboImageReferenceExtractor.mangaPage.url(from: image, baseURL: baseURL) else { continue }
             if seen.insert(url.absoluteString).inserted {
                 urls.append(url)
             }

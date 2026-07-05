@@ -6,24 +6,17 @@ public protocol YamiboProfileAvatarLoading: Sendable {
 
 public actor YamiboProfileAvatarLoader: YamiboProfileAvatarLoading {
     private let sessionStore: any SessionStoring
-    private let imageDataLoaderFactory: @Sendable (SessionState) -> any YamiboImageDataLoading
+    private let imageData: @Sendable (YamiboImageSource) async throws -> Data
     private var cachedData: [RequestKey: Data] = [:]
     private var inFlightTasks: [RequestKey: Task<Data, Error>] = [:]
 
     public init(
-        session: URLSession = YamiboNetworkConfiguration.makeSession(),
         sessionStore: any SessionStoring,
-        imageDataLoaderFactory: (@Sendable (SessionState) -> any YamiboImageDataLoading)? = nil
+        imageData: (@Sendable (YamiboImageSource) async throws -> Data)? = nil
     ) {
         self.sessionStore = sessionStore
-        self.imageDataLoaderFactory = imageDataLoaderFactory ?? { sessionState in
-            YamiboImageDataLoader(
-                client: YamiboClient(
-                    session: session,
-                    cookie: sessionState.cookie,
-                    userAgent: sessionState.userAgent
-                )
-            )
+        self.imageData = imageData ?? { source in
+            try await YamiboImagePipeline.shared.data(for: source)
         }
     }
 
@@ -45,11 +38,8 @@ public actor YamiboProfileAvatarLoader: YamiboProfileAvatarLoading {
             return try await task.value
         }
 
-        let imageDataLoader = imageDataLoaderFactory(sessionState)
-        let task = Task<Data, Error> {
-            try await imageDataLoader.imageData(
-                for: YamiboImageRequest(url: avatarURL)
-            )
+        let task = Task<Data, Error> { [imageData] in
+            try await imageData(YamiboImageSource(url: avatarURL))
         }
         inFlightTasks[key] = task
         do {

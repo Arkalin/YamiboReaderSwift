@@ -229,10 +229,7 @@ public enum ForumThreadPageHTMLParser {
         let imageElements = try body.select("img").array()
             + container.select(".img_one img").array()
         return try imageElements.compactMap { image in
-            let source = try image.attr("zsrc").threadRoutingTrimmedNonEmpty
-                ?? image.attr("src").threadRoutingTrimmedNonEmpty
-            guard let source,
-                  !source.lowercased().contains("static/image/") else {
+            guard let source = YamiboImageReferenceExtractor.forumPostImage.rawReference(from: image) else {
                 return nil
             }
             return ForumThreadPostImage(
@@ -1649,26 +1646,18 @@ enum ForumThreadHTMLBlockParser {
         }
 
         private func appendImage(from element: Element) throws {
-            let rawSource = try element.attr("file").threadRoutingTrimmedNonEmpty
-                ?? element.attr("zoomfile").threadRoutingTrimmedNonEmpty
-                ?? element.attr("src").threadRoutingTrimmedNonEmpty
-            guard let rawSource,
-                  !rawSource.lowercased().contains("none.gif"),
-                  let url = HTMLTextExtractor.absoluteURL(from: rawSource) else {
+            guard let url = YamiboImageReferenceExtractor.forumContent.url(from: element) else {
                 return
             }
 
             commitText()
-            let lowercased = url.absoluteString.lowercased()
             appendBlock(
                 .image(
                     ForumThreadImageBlock(
                         url: url,
                         altText: try element.attr("alt"),
                         linkURL: currentLinkURL,
-                        isEmoticon: lowercased.contains("/static/image/smiley/")
-                            || lowercased.contains("static/image/smiley/")
-                            || lowercased.contains("/smiley/")
+                        isEmoticon: YamiboImageReferenceExtractor.isEmoticonURL(url)
                     )
                 ),
                 seed: "image-\(url.absoluteString)"

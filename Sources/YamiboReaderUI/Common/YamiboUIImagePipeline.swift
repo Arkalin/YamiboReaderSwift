@@ -5,19 +5,23 @@ import Nuke
 
 typealias YamiboPlatformImage = UIImage
 
-enum YamiboUIImagePipelineError: Error, Equatable {
-    case invalidImageData
-}
-
+/// Thin UI layer over `YamiboImagePipeline`: decodes bytes into `UIImage`
+/// with an in-memory cache, and offers prefetching. All byte loading —
+/// offline lookup, session headers, disk cache — lives in the Core pipeline.
 @MainActor
-final class YamiboUIImagePipeline {
-    static let shared = YamiboUIImagePipeline()
+public final class YamiboUIImagePipeline {
+    public static let shared = YamiboUIImagePipeline()
     static let defaultMemoryLimitBytes = 80 * 1024 * 1024
 
+    private let core: YamiboImagePipeline
     private let pipeline: ImagePipeline
     private var prefetchingKeys = Set<String>()
 
-    init(memoryLimitBytes: Int = YamiboUIImagePipeline.defaultMemoryLimitBytes) {
+    init(
+        core: YamiboImagePipeline = .shared,
+        memoryLimitBytes: Int = YamiboUIImagePipeline.defaultMemoryLimitBytes
+    ) {
+        self.core = core
         self.pipeline = ImagePipeline {
             $0.imageCache = ImageCache(costLimit: memoryLimitBytes)
             $0.dataCache = nil
@@ -25,51 +29,31 @@ final class YamiboUIImagePipeline {
         }
     }
 
-    func cachedImage(for request: YamiboImageRequest) -> YamiboPlatformImage? {
-        pipeline.cache.cachedImage(for: nukeRequest(for: request))?.image
+    func cachedImage(for source: YamiboImageSource) -> YamiboPlatformImage? {
+        pipeline.cache.cachedImage(for: nukeRequest(for: source))?.image
     }
 
-    func image(
-        for request: YamiboImageRequest,
-        dataLoader: any YamiboImageDataLoading
-    ) async throws -> YamiboPlatformImage {
-        try await image(for: request) {
-            try await dataLoader.imageData(for: request)
-        }
-    }
-
-    func image(
-        for request: YamiboImageRequest,
-        loadData: @escaping @Sendable () async throws -> Data
-    ) async throws -> YamiboPlatformImage {
-        if let cached = cachedImage(for: request) {
+    func image(for source: YamiboImageSource) async throws -> YamiboPlatformImage {
+        if let cached = cachedImage(for: source) {
             return cached
         }
 
         do {
-            return try await pipeline.image(for: nukeRequest(for: request, loadData: loadData))
+            return try await pipeline.image(for: nukeRequest(for: source))
         } catch {
             throw Self.mapImagePipelineError(error)
         }
     }
 
-    func prefetchImages(
-        for requests: [YamiboImageRequest],
-        dataLoader: any YamiboImageDataLoading
-    ) {
-        for request in requests {
-            prefetchImage(for: request) {
-                try await dataLoader.imageData(for: request)
-            }
+    func prefetchImages(for sources: [YamiboImageSource]) {
+        for source in sources {
+            prefetchImage(for: source)
         }
     }
 
-    func prefetchImage(
-        for request: YamiboImageRequest,
-        loadData: @escaping @Sendable () async throws -> Data
-    ) {
-        let key = request.cacheKey
-        guard cachedImage(for: request) == nil,
+    func prefetchImage(for source: YamiboImageSource) {
+        let key = source.cacheKey
+        guard cachedImage(for: source) == nil,
               prefetchingKeys.insert(key).inserted else {
             return
         }
@@ -78,23 +62,21 @@ final class YamiboUIImagePipeline {
             defer {
                 self.prefetchingKeys.remove(key)
             }
-            _ = try? await self.image(for: request, loadData: loadData)
+            _ = try? await self.image(for: source)
         }
     }
 
-    private func nukeRequest(for request: YamiboImageRequest) -> ImageRequest {
-        nukeRequest(for: request) {
-            Data()
-        }
+    /// Clears the decoded in-memory image cache and the shared bytes disk cache.
+    public func clearCache() async {
+        pipeline.cache.removeAll()
+        await core.clearCache()
     }
 
-    private func nukeRequest(
-        for request: YamiboImageRequest,
-        loadData: @escaping @Sendable () async throws -> Data
-    ) -> ImageRequest {
+    private func nukeRequest(for source: YamiboImageSource) -> ImageRequest {
+        let core = self.core
         var imageRequest = ImageRequest(
-            id: request.cacheKey,
-            data: loadData,
+            id: source.cacheKey,
+            data: { try await core.data(for: source) },
             options: [.disableDiskCache]
         )
         imageRequest.scale = Float(UIScreen.main.scale)
@@ -106,47 +88,39 @@ final class YamiboUIImagePipeline {
         case .dataLoadingFailed(let underlying):
             return underlying
         case .dataIsEmpty, .decoderNotRegistered, .decodingFailed:
-            return YamiboUIImagePipelineError.invalidImageData
+            return YamiboError.invalidImageData
         default:
             return error
         }
     }
 }
 
-extension EnvironmentValues {
-    var yamiboImageLoadingContext: YamiboImageLoadingContext? {
-        get { self[YamiboImageLoadingContextKey.self] }
-        set { self[YamiboImageLoadingContextKey.self] = newValue }
+extension YamiboUIImagePipeline: YamiboOrdinaryImageCacheClearing {
+    public func removeAllCachedData() async {
+        await clearCache()
     }
 }
 
-private struct YamiboImageLoadingContextKey: EnvironmentKey {
-    static let defaultValue: YamiboImageLoadingContext? = nil
-}
-
 struct YamiboRemoteImage<Content: View, Placeholder: View, Failure: View>: View {
-    private let request: YamiboImageRequest?
-    private let explicitContext: YamiboImageLoadingContext?
+    private let source: YamiboImageSource?
     private let pipeline: YamiboUIImagePipeline
     private let content: (Image) -> Content
     private let placeholder: () -> Placeholder
-    private let failure: () -> Failure
+    private let failure: (@escaping () -> Void) -> Failure
 
-    @Environment(\.yamiboImageLoadingContext) private var environmentContext
     @State private var image: YamiboPlatformImage?
     @State private var didFail = false
     @State private var loadedKey: String?
+    @State private var attempt = 0
 
     init(
-        request: YamiboImageRequest?,
-        context: YamiboImageLoadingContext? = nil,
+        source: YamiboImageSource?,
         pipeline: YamiboUIImagePipeline = .shared,
         @ViewBuilder content: @escaping (Image) -> Content,
         @ViewBuilder placeholder: @escaping () -> Placeholder,
-        @ViewBuilder failure: @escaping () -> Failure
+        @ViewBuilder failure: @escaping (@escaping () -> Void) -> Failure
     ) {
-        self.request = request
-        explicitContext = context
+        self.source = source
         self.pipeline = pipeline
         self.content = content
         self.placeholder = placeholder
@@ -156,9 +130,9 @@ struct YamiboRemoteImage<Content: View, Placeholder: View, Failure: View>: View 
     var body: some View {
         Group {
             if let image {
-                content(Image(yamiboPlatformImage: image))
+                content(Image(uiImage: image))
             } else if didFail {
-                failure()
+                failure(retry)
             } else {
                 placeholder()
             }
@@ -168,28 +142,29 @@ struct YamiboRemoteImage<Content: View, Placeholder: View, Failure: View>: View 
         }
     }
 
-    private var activeContext: YamiboImageLoadingContext? {
-        explicitContext ?? environmentContext
+    private var taskIdentity: String {
+        "\(source?.cacheKey ?? "yamibo-image:no-source")#\(attempt)"
     }
 
-    private var taskIdentity: String {
-        request?.cacheKey ?? "yamibo-image:no-request"
+    private func retry() {
+        didFail = false
+        loadedKey = nil
+        attempt += 1
     }
 
     private func load() async {
-        guard let request,
-              let activeContext else {
+        guard let source else {
             image = nil
             loadedKey = nil
             didFail = false
             return
         }
-        guard loadedKey != request.cacheKey || image == nil else {
+        guard loadedKey != source.cacheKey || image == nil else {
             return
         }
-        if let cached = pipeline.cachedImage(for: request) {
+        if let cached = pipeline.cachedImage(for: source) {
             image = cached
-            loadedKey = request.cacheKey
+            loadedKey = source.cacheKey
             didFail = false
             return
         }
@@ -197,19 +172,13 @@ struct YamiboRemoteImage<Content: View, Placeholder: View, Failure: View>: View 
         image = nil
         didFail = false
         do {
-            let loaded = try await pipeline.image(for: request, dataLoader: activeContext.dataLoader)
+            let loaded = try await pipeline.image(for: source)
             image = loaded
-            loadedKey = request.cacheKey
+            loadedKey = source.cacheKey
             didFail = false
         } catch {
-            loadedKey = request.cacheKey
+            loadedKey = source.cacheKey
             didFail = true
         }
-    }
-}
-
-private extension Image {
-    init(yamiboPlatformImage image: YamiboPlatformImage) {
-        self.init(uiImage: image)
     }
 }

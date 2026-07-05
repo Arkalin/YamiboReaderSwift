@@ -99,7 +99,7 @@ final class MangaReaderDataTestHarness: @unchecked Sendable {
     let testID = UUID().uuidString
     let session: URLSession
     private let dataCacheDirectory: URL
-    private let imagePipeline: YamiboImageDataPipeline
+    private let engine: YamiboImageDataPipeline
 
     init() {
         dataCacheDirectory = FileManager.default.temporaryDirectory
@@ -109,7 +109,7 @@ final class MangaReaderDataTestHarness: @unchecked Sendable {
             at: dataCacheDirectory,
             withIntermediateDirectories: true
         )
-        imagePipeline = try! YamiboImageDataPipeline(
+        engine = try! YamiboImageDataPipeline(
             dataCacheDirectory: dataCacheDirectory,
             dataCacheLimitBytes: 16 * 1024 * 1024
         )
@@ -128,20 +128,32 @@ final class MangaReaderDataTestHarness: @unchecked Sendable {
         MangaReaderDataTestURLProtocol.requests(for: testID)
     }
 
-    func imageDataLoader(cookie: String, userAgent: String) -> YamiboImageDataLoader {
-        YamiboImageDataLoader(
-            client: YamiboClient(
-                session: session,
-                cookie: cookie,
-                userAgent: userAgent
-            ),
-            pipeline: imagePipeline
+    func makeImagePipeline(
+        sessionState: SessionState = SessionState(cookie: "auth=1", userAgent: "UnitAgent"),
+        offlineImages: (any YamiboOfflineImageDataProviding)? = nil
+    ) -> YamiboImagePipeline {
+        YamiboImagePipeline(
+            engine: engine,
+            sessionStore: FixedSessionStateStore(state: sessionState),
+            imageSession: session,
+            offlineImages: offlineImages
         )
     }
 
     func reset() {
-        imagePipeline.removeAllCachedData()
+        engine.removeAllCachedData()
         MangaReaderDataTestURLProtocol.reset(testID: testID)
         try? FileManager.default.removeItem(at: dataCacheDirectory)
     }
+}
+
+struct FixedSessionStateStore: SessionStoring {
+    let state: SessionState
+
+    func load() async -> SessionState { state }
+    func save(_ session: SessionState) async throws {}
+    func updateCookie(_ cookie: String, isLoggedIn: Bool) async throws {}
+    func updateWebSession(cookie: String, userAgent: String, isLoggedIn: Bool) async throws {}
+    func updateAccountUID(_ accountUID: String?) async throws {}
+    func reset() async throws {}
 }

@@ -343,13 +343,13 @@ private struct UserSpaceProfileHeaderView: View {
     var body: some View {
         VStack(spacing: 0) {
             ZStack {
-                YamiboRemoteImage(request: (profile.avatarBackgroundURL ?? profile.avatarURL).map { YamiboImageRequest(url: $0) }) { image in
+                YamiboRemoteImage(source: (profile.avatarBackgroundURL ?? profile.avatarURL).map { YamiboImageSource(url: $0) }) { image in
                     image
                         .resizable()
                         .scaledToFill()
                 } placeholder: {
                     Rectangle().fill(ForumColors.brownDeep.opacity(0.24))
-                } failure: {
+                } failure: { _ in
                     Rectangle().fill(ForumColors.brownDeep.opacity(0.24))
                 }
                 .frame(height: 172)
@@ -359,7 +359,7 @@ private struct UserSpaceProfileHeaderView: View {
                     .fill(.black.opacity(0.38))
 
                 VStack(spacing: 10) {
-                    YamiboRemoteImage(request: profile.avatarURL.map { YamiboImageRequest(url: $0) }) { image in
+                    YamiboRemoteImage(source: profile.avatarURL.map { YamiboImageSource(url: $0) }) { image in
                         image
                             .resizable()
                             .scaledToFill()
@@ -367,7 +367,7 @@ private struct UserSpaceProfileHeaderView: View {
                         Image(systemName: "person.crop.circle.fill")
                             .resizable()
                             .foregroundStyle(.white.opacity(0.8))
-                    } failure: {
+                    } failure: { _ in
                         Image(systemName: "person.crop.circle.fill")
                             .resizable()
                             .foregroundStyle(.white.opacity(0.8))
@@ -868,12 +868,12 @@ private struct UserSpaceFriendRowView: View {
 
     private var friendContent: some View {
         HStack(spacing: 10) {
-            YamiboRemoteImage(request: friend.avatarURL.map { YamiboImageRequest(url: $0) }) { image in
+            YamiboRemoteImage(source: friend.avatarURL.map { YamiboImageSource(url: $0) }) { image in
                 image.resizable().scaledToFill()
             } placeholder: {
                 Image(systemName: "person.crop.circle")
                     .foregroundStyle(ForumColors.secondaryText)
-            } failure: {
+            } failure: { _ in
                 Image(systemName: "person.crop.circle")
                     .foregroundStyle(ForumColors.secondaryText)
             }
@@ -966,13 +966,13 @@ private struct UserSpaceAddFriendFormView: View {
         Form {
             Section {
                 HStack(spacing: 12) {
-                    YamiboRemoteImage(request: avatarURL.map { YamiboImageRequest(url: $0) }) { image in
+                    YamiboRemoteImage(source: avatarURL.map { YamiboImageSource(url: $0) }) { image in
                         image.resizable().scaledToFill()
                     } placeholder: {
                         Image(systemName: "person.crop.circle")
                             .font(.largeTitle)
                             .foregroundStyle(ForumColors.secondaryText)
-                    } failure: {
+                    } failure: { _ in
                         Image(systemName: "person.crop.circle")
                             .font(.largeTitle)
                             .foregroundStyle(ForumColors.secondaryText)

@@ -279,10 +279,6 @@ public struct MangaReaderView: View {
     private func saveImage(_ page: MangaReaderPageProjection) async {
         guard !isSavingImage else { return }
         imageSavePresentation.clearActionTarget()
-        guard let imageDataLoader = model.imageDataLoader else {
-            imageSavePresentation.finishSave(with: .failure(message: L10n.string("image.save_failed")))
-            return
-        }
 
         isSavingImage = true
         defer {
@@ -290,10 +286,7 @@ public struct MangaReaderView: View {
         }
 
         do {
-            let data = try await imageDataLoader.imageData(
-                for: page.mangaReaderImageRequest,
-                offlineCacheContext: model.imageOfflineCacheContext(for: page)
-            )
+            let data = try await YamiboImagePipeline.shared.data(for: model.imageSource(for: page))
             let photoSaver = MangaImagePhotoSaver()
             try await photoSaver.saveImageData(data)
             imageSavePresentation.finishSave(with: .success)

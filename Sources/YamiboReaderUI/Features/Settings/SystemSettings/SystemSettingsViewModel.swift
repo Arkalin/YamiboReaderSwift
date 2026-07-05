@@ -322,7 +322,7 @@ final class SystemSettingsViewModel: ObservableObject {
         activeAction = .clearingImageCache
         defer { activeAction = nil }
 
-        appContext.clearOrdinaryImageCache()
+        await appContext.clearOrdinaryImageCache()
         await refreshStorageUsage()
         return true
     }

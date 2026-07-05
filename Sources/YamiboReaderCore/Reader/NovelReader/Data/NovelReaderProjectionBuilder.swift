@@ -701,23 +701,7 @@ private enum NovelReaderPostHTMLProjectionParser {
     }
 
     private static func imageURL(from image: Element) throws -> URL? {
-        let raw = try imageSource(from: image)
-        guard let raw,
-              !raw.isEmpty,
-              !raw.localizedCaseInsensitiveContains("smiley/") else {
-            return nil
-        }
-        return HTMLTextExtractor.absoluteURL(from: raw)
-    }
-
-    private static func imageSource(from image: Element) throws -> String? {
-        for attribute in ["zoomfile", "file", "src"] {
-            let value = try image.attr(attribute).trimmingCharacters(in: .whitespacesAndNewlines)
-            if !value.isEmpty {
-                return value
-            }
-        }
-        return nil
+        YamiboImageReferenceExtractor.novelInline.url(from: image)
     }
 
     private static func missingAttachmentImageSegments(

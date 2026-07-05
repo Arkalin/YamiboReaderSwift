@@ -1,16 +1,6 @@
 import SwiftUI
 import YamiboReaderCore
 
-private enum NovelReaderInlineImageUnavailableError: Error {
-    case unavailable
-}
-
-private actor ReaderInlineImageUnavailableDataLoader: YamiboImageDataLoading {
-    func imageData(for _: YamiboImageRequest) async throws -> Data {
-        throw NovelReaderInlineImageUnavailableError.unavailable
-    }
-}
-
 private struct NovelReaderLinearReadingPageKey: Equatable, Sendable {
     var view: Int
     var surfaceIndex: Int
@@ -42,9 +32,6 @@ public final class NovelReaderViewModel: ObservableObject {
     @Published public private(set) var novelReaderPresentation: NovelReaderPresentation?
     @Published private var navigationHistory = ReaderNavigationHistory<NovelResumePoint>()
     private var linearReadingHistoryExpiration = ReaderNavigationLinearReadingExpiration<NovelReaderLinearReadingPageKey>()
-    @Published public private(set) var inlineImageLoadingContext = NovelInlineImageLoadingContext(
-        loader: ReaderInlineImageUnavailableDataLoader()
-    )
     public private(set) var chromeProgressSnapshot = NovelReaderChromeProgressSnapshot.empty
 
     public let context: NovelLaunchContext
@@ -469,6 +456,10 @@ public final class NovelReaderViewModel: ObservableObject {
         L10n.string("reader.chapter_summary", retainedChapterCount, filteredChapterCandidateCount)
     }
 
+    public var inlineImageOfflineScope: YamiboImageOfflineScope? {
+        YamiboImageOfflineScope(tid: context.threadID)
+    }
+
     public var forumURL: URL {
         YamiboRoute.threadByID(
             tid: context.threadID,
@@ -488,7 +479,6 @@ public final class NovelReaderViewModel: ObservableObject {
         latestRequestedLayout = layout
         layoutRequestSequence &+= 1
         if repository == nil {
-            inlineImageLoadingContext = await appContext.makeNovelInlineImageLoadingContext(threadID: context.threadID)
             repository = await appContext.makeNovelReaderRepository()
             let appSettings = await appContext.settingsStore.load()
             bootstrapSettings = appSettings.novelReader

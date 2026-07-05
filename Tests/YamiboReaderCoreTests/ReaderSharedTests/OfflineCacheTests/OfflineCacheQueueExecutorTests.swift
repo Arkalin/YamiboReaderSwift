@@ -345,10 +345,18 @@ struct ReaderSharedTestsOfflineCacheQueueExecutor {
         _ = try await store.enqueueMangaOfflineCacheWork(
             try makeExecutorWorkRequest(ownerName: "favorite-a", tid: "700", targetImageURLs: imageURLs)
         )
-        let networkLoader = RecordingNetworkImageLoader(dataByURL: [
+        let harness = MangaReaderDataTestHarness()
+        defer { harness.reset() }
+        let dataByURL = [
             imageURLs[0]: Data([7]),
             imageURLs[1]: Data([8])
-        ])
+        ]
+        harness.setHandler { request in
+            guard let url = request.url, let data = dataByURL[url] else {
+                throw YamiboError.invalidResponse(statusCode: 404)
+            }
+            return MangaReaderDataTestResponse(data: data)
+        }
         let executor = OfflineCacheQueueExecutor(
             store: store,
             mangaCacheStore: store,
@@ -357,7 +365,7 @@ struct ReaderSharedTestsOfflineCacheQueueExecutor {
                 try makeDocument(tid: "700", imageURLs: imageURLs)
             ]),
             imageAcquirer: OfflineCacheImageAcquirer(
-                networkLoader: networkLoader
+                imagePipeline: harness.makeImagePipeline()
             )
         )
 
@@ -366,25 +374,29 @@ struct ReaderSharedTestsOfflineCacheQueueExecutor {
 
         #expect(await store.offlineImageData(for: imageURLs[0]) == Data([7]))
         #expect(await store.offlineImageData(for: imageURLs[1]) == Data([8]))
-        #expect(await networkLoader.requestedURLs == imageURLs)
+        #expect(Set(harness.requests.compactMap(\.url)) == Set(imageURLs))
     }
 
     @Test func imageAcquirerUsesBackgroundTransportInsteadOfNetworkLoader() async throws {
         let imageURL = try #require(URL(string: "https://img.example.com/710-1.jpg"))
         let transport = RecordingImageTransport(dataByURL: [imageURL: Data([8])])
-        let networkLoader = RecordingNetworkImageLoader(dataByURL: [:])
+        let harness = MangaReaderDataTestHarness()
+        defer { harness.reset() }
+        harness.setHandler { _ in
+            throw YamiboError.invalidResponse(statusCode: 500)
+        }
         let acquirer = OfflineCacheImageAcquirer(
-            networkLoader: networkLoader,
+            imagePipeline: harness.makeImagePipeline(),
             backgroundTransport: transport
         )
         let refererURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?tid=710"))
 
-        let request = YamiboImageRequest(url: imageURL, refererURL: refererURL)
-        let acquisition = try await acquirer.acquireImageData(for: request)
+        let source = YamiboImageSource(url: imageURL, refererPageURL: refererURL)
+        let acquisition = try await acquirer.acquireImageData(for: source)
 
         #expect(acquisition == OfflineCacheImageAcquisition(data: Data([8]), source: .network))
-        #expect(await transport.requests == [request])
-        #expect(await networkLoader.requestedURLs.isEmpty)
+        #expect(await transport.requests == [source])
+        #expect(harness.requests.isEmpty)
     }
 
     @Test func observerReceivesSubmissionProgressAndSuccessfulFinish() async throws {
@@ -492,7 +504,7 @@ struct ReaderSharedTestsOfflineCacheQueueExecutor {
         configuration.httpAdditionalHeaders = ["X-Manga-Test-ID": harness.testID]
         let transport = OfflineCacheBackgroundDownloadTransport(configuration: configuration)
 
-        let data = try await transport.downloadImageData(for: YamiboImageRequest(url: imageURL, refererURL: refererURL))
+        let data = try await transport.downloadImageData(for: YamiboImageSource(url: imageURL, refererPageURL: refererURL))
 
         #expect(data == Data([7, 4, 0]))
         #expect(harness.requests.count == 1)
@@ -966,15 +978,15 @@ private actor RecordingOfflineImageAcquirer: OfflineCacheImageAcquiring {
         }
     }
 
-    func acquireImageData(for request: YamiboImageRequest) async throws -> OfflineCacheImageAcquisition {
-        requestedURLs.append(request.url)
+    func acquireImageData(for source: YamiboImageSource) async throws -> OfflineCacheImageAcquisition {
+        requestedURLs.append(source.url)
         activeCount += 1
         maxActiveCount = max(maxActiveCount, activeCount)
         defer { activeCount -= 1 }
         if delayNanoseconds > 0 {
             try await Task.sleep(nanoseconds: delayNanoseconds)
         }
-        guard let data = dataByURL[request.url] else {
+        guard let data = dataByURL[source.url] else {
             throw YamiboError.invalidResponse(statusCode: 404)
         }
         return OfflineCacheImageAcquisition(data: data, source: .network)
@@ -988,8 +1000,8 @@ private actor FirstImageOnlyImmediateAcquirer: OfflineCacheImageAcquiring {
         self.firstImageURL = firstImageURL
     }
 
-    func acquireImageData(for request: YamiboImageRequest) async throws -> OfflineCacheImageAcquisition {
-        if request.url == firstImageURL {
+    func acquireImageData(for source: YamiboImageSource) async throws -> OfflineCacheImageAcquisition {
+        if source.url == firstImageURL {
             return OfflineCacheImageAcquisition(data: Data([1]), source: .network)
         }
         try await Task.sleep(nanoseconds: 5_000_000_000)
@@ -1011,12 +1023,12 @@ private actor RetryOfflineImageAcquirer: OfflineCacheImageAcquiring {
         requestedURLs.removeAll()
     }
 
-    func acquireImageData(for request: YamiboImageRequest) async throws -> OfflineCacheImageAcquisition {
-        requestedURLs.append(request.url)
-        if request.url == failingImageURL, shouldFail {
+    func acquireImageData(for source: YamiboImageSource) async throws -> OfflineCacheImageAcquisition {
+        requestedURLs.append(source.url)
+        if source.url == failingImageURL, shouldFail {
             throw YamiboError.offline
         }
-        return OfflineCacheImageAcquisition(data: request.url == failingImageURL ? Data([2]) : Data([1]), source: .network)
+        return OfflineCacheImageAcquisition(data: source.url == failingImageURL ? Data([2]) : Data([1]), source: .network)
     }
 }
 
@@ -1028,9 +1040,9 @@ private actor EmptyImageThenFailingAcquirer: OfflineCacheImageAcquiring {
         self.emptyImageURL = emptyImageURL
     }
 
-    func acquireImageData(for request: YamiboImageRequest) async throws -> OfflineCacheImageAcquisition {
-        requestedURLs.append(request.url)
-        if request.url == emptyImageURL {
+    func acquireImageData(for source: YamiboImageSource) async throws -> OfflineCacheImageAcquisition {
+        requestedURLs.append(source.url)
+        if source.url == emptyImageURL {
             return OfflineCacheImageAcquisition(data: Data(), source: .network)
         }
         throw YamiboError.offline
@@ -1046,44 +1058,23 @@ private actor CancelingOfflineImageAcquirer: OfflineCacheImageAcquiring {
         self.workID = workID
     }
 
-    func acquireImageData(for request: YamiboImageRequest) async throws -> OfflineCacheImageAcquisition {
+    func acquireImageData(for source: YamiboImageSource) async throws -> OfflineCacheImageAcquisition {
         try await store.cancelOfflineCacheWork(id: workID)
         return OfflineCacheImageAcquisition(data: Data([1]), source: .network)
     }
 }
 
-private actor RecordingNetworkImageLoader: YamiboImageDataLoading {
-    private(set) var requestedRequests: [YamiboImageRequest] = []
-    private let dataByURL: [URL: Data]
-
-    init(dataByURL: [URL: Data]) {
-        self.dataByURL = dataByURL
-    }
-
-    var requestedURLs: [URL] {
-        requestedRequests.map(\.url)
-    }
-
-    func imageData(for request: YamiboImageRequest) async throws -> Data {
-        requestedRequests.append(request)
-        guard let data = dataByURL[request.url] else {
-            throw YamiboError.invalidResponse(statusCode: 404)
-        }
-        return data
-    }
-}
-
 private actor RecordingImageTransport: OfflineCacheImageTransporting {
-    private(set) var requests: [YamiboImageRequest] = []
+    private(set) var requests: [YamiboImageSource] = []
     private let dataByURL: [URL: Data]
 
     init(dataByURL: [URL: Data]) {
         self.dataByURL = dataByURL
     }
 
-    func downloadImageData(for request: YamiboImageRequest) async throws -> Data {
-        requests.append(request)
-        guard let data = dataByURL[request.url] else {
+    func downloadImageData(for source: YamiboImageSource) async throws -> Data {
+        requests.append(source)
+        guard let data = dataByURL[source.url] else {
             throw YamiboError.invalidResponse(statusCode: 404)
         }
         return data

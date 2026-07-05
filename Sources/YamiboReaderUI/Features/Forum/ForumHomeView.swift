@@ -128,7 +128,7 @@ private struct ForumCarouselImageButton: View {
         Button {
             onTap(item)
         } label: {
-            YamiboRemoteImage(request: YamiboImageRequest(url: item.imageURL)) { image in
+            YamiboRemoteImage(source: YamiboImageSource(url: item.imageURL)) { image in
                 image
                     .resizable()
                     .scaledToFill()
@@ -137,7 +137,7 @@ private struct ForumCarouselImageButton: View {
                     Rectangle().fill(ForumColors.creamSurface)
                     ProgressView()
                 }
-            } failure: {
+            } failure: { _ in
                 ZStack {
                     Rectangle().fill(ForumColors.creamSurface)
                     Image(systemName: "photo")
@@ -275,7 +275,7 @@ private struct ForumBoardIconView: View {
     let name: String
 
     var body: some View {
-        YamiboRemoteImage(request: iconURL.map { YamiboImageRequest(url: $0) }) { image in
+        YamiboRemoteImage(source: iconURL.map { YamiboImageSource(url: $0) }) { image in
             image
                 .resizable()
                 .scaledToFit()
@@ -283,7 +283,7 @@ private struct ForumBoardIconView: View {
             Image(systemName: "text.bubble")
                 .font(.title3)
                 .foregroundStyle(ForumColors.secondaryText)
-        } failure: {
+        } failure: { _ in
             Image(systemName: "text.bubble")
                 .font(.title3)
                 .foregroundStyle(ForumColors.secondaryText)

@@ -2,7 +2,7 @@ import Foundation
 import Nuke
 
 public protocol YamiboOrdinaryImageCacheClearing: Sendable {
-    func removeAllCachedData()
+    func removeAllCachedData() async
 }
 
 public final class YamiboImageDataPipeline: YamiboOrdinaryImageCacheClearing, @unchecked Sendable {
@@ -59,20 +59,20 @@ public final class YamiboImageDataPipeline: YamiboOrdinaryImageCacheClearing, @u
         )
     }
 
-    public func imageData(
-        for request: YamiboImageRequest,
+    public func data(
+        for source: YamiboImageSource,
         client: YamiboClient
     ) async throws -> Data {
         do {
-            let (data, _) = try await pipeline.data(for: nukeRequest(for: request, client: client))
+            let (data, _) = try await pipeline.data(for: nukeRequest(for: source, client: client))
             return data
         } catch {
             throw Self.mapImagePipelineError(error)
         }
     }
 
-    public func cachedData(for request: YamiboImageRequest) -> Data? {
-        pipeline.cache.cachedData(for: nukeRequest(for: request, client: nil))
+    public func cachedData(for source: YamiboImageSource) -> Data? {
+        pipeline.cache.cachedData(for: nukeRequest(for: source, client: nil))
     }
 
     public func removeAllCachedData() {
@@ -80,11 +80,11 @@ public final class YamiboImageDataPipeline: YamiboOrdinaryImageCacheClearing, @u
     }
 
     private func nukeRequest(
-        for request: YamiboImageRequest,
+        for source: YamiboImageSource,
         client: YamiboClient?
     ) -> ImageRequest {
         var urlRequest = YamiboNetworkConfiguration.makeRequest(
-            url: request.url,
+            url: source.url,
             cachePolicy: .reloadIgnoringLocalCacheData
         )
         urlRequest.setValue("image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8", forHTTPHeaderField: "Accept")
@@ -98,12 +98,12 @@ public final class YamiboImageDataPipeline: YamiboOrdinaryImageCacheClearing, @u
             }
             userInfo[.yamiboURLSession] = YamiboImageRequestSession(client.session)
         }
-        if let refererURL = request.refererURL {
-            urlRequest.setValue(refererURL.absoluteString, forHTTPHeaderField: "Referer")
+        if let refererPageURL = source.refererPageURL {
+            urlRequest.setValue(refererPageURL.absoluteString, forHTTPHeaderField: "Referer")
         }
 
         var imageRequest = ImageRequest(urlRequest: urlRequest, userInfo: userInfo)
-        imageRequest.imageID = request.cacheKey
+        imageRequest.imageID = source.cacheKey
         return imageRequest
     }
 

@@ -15,11 +15,11 @@ public struct OfflineCacheImageAcquisition: Hashable, Sendable {
 }
 
 public protocol OfflineCacheImageAcquiring: Sendable {
-    func acquireImageData(for request: YamiboImageRequest) async throws -> OfflineCacheImageAcquisition
+    func acquireImageData(for source: YamiboImageSource) async throws -> OfflineCacheImageAcquisition
 }
 
 public protocol OfflineCacheImageTransporting: Sendable {
-    func downloadImageData(for request: YamiboImageRequest) async throws -> Data
+    func downloadImageData(for source: YamiboImageSource) async throws -> Data
 }
 
 public protocol OfflineCacheQueueRunObserving: Sendable {
@@ -30,23 +30,23 @@ public protocol OfflineCacheQueueRunObserving: Sendable {
 }
 
 public actor OfflineCacheImageAcquirer: OfflineCacheImageAcquiring {
-    private let networkLoader: any YamiboImageDataLoading
+    private let imagePipeline: YamiboImagePipeline
     private let backgroundTransport: (any OfflineCacheImageTransporting)?
 
     public init(
-        networkLoader: any YamiboImageDataLoading,
+        imagePipeline: YamiboImagePipeline = .shared,
         backgroundTransport: (any OfflineCacheImageTransporting)? = nil
     ) {
-        self.networkLoader = networkLoader
+        self.imagePipeline = imagePipeline
         self.backgroundTransport = backgroundTransport
     }
 
-    public func acquireImageData(for request: YamiboImageRequest) async throws -> OfflineCacheImageAcquisition {
+    public func acquireImageData(for source: YamiboImageSource) async throws -> OfflineCacheImageAcquisition {
         let data: Data
         if let backgroundTransport {
-            data = try await backgroundTransport.downloadImageData(for: request)
+            data = try await backgroundTransport.downloadImageData(for: source)
         } else {
-            data = try await networkLoader.imageData(for: request)
+            data = try await imagePipeline.data(for: source)
         }
         return OfflineCacheImageAcquisition(data: data, source: .network)
     }

@@ -31,13 +31,12 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
     public let mangaDirectoryStore: any MangaDirectoryPersisting & MangaDirectoryStorageReporting & MangaDirectoryClearing
     public let mangaDirectorySearchCooldownState: MangaDirectorySearchCooldownState
     public let mangaReaderProjectionStore: any MangaReaderProjectionPersisting & MangaReaderProjectionStorageReporting
-    public let offlineCacheStore: any OfflineCacheStoreCore & MangaOfflineCacheStoring & NovelOfflineCacheStoring & NovelOfflineImageDataProviding
+    public let offlineCacheStore: any OfflineCacheStoreCore & MangaOfflineCacheStoring & NovelOfflineCacheStoring & YamiboOfflineImageDataProviding
     public let forumCacheStore: ForumCacheStore
     public let ordinaryImageCache: any YamiboOrdinaryImageCacheClearing
     public let offlineCacheBackgroundDownloadTransport: OfflineCacheBackgroundDownloadTransport
     public let offlineCacheContinuedProcessingCoordinator: OfflineCacheContinuedProcessingCoordinator
     let session: URLSession
-    let imageSession: URLSession
     private let offlineCacheQueueExecutorBox = OfflineCacheQueueExecutorBox()
     private nonisolated(unsafe) let uiDefaults: UserDefaults
     private let clearsWebDataOnReset: Bool
@@ -58,7 +57,7 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
         mangaDirectoryStore: (any MangaDirectoryPersisting & MangaDirectoryStorageReporting & MangaDirectoryClearing)? = nil,
         mangaDirectorySearchCooldownState: MangaDirectorySearchCooldownState = MangaDirectorySearchCooldownState(),
         mangaReaderProjectionStore: (any MangaReaderProjectionPersisting & MangaReaderProjectionStorageReporting)? = nil,
-        offlineCacheStore: (any OfflineCacheStoreCore & MangaOfflineCacheStoring & NovelOfflineCacheStoring & NovelOfflineImageDataProviding)? = nil,
+        offlineCacheStore: (any OfflineCacheStoreCore & MangaOfflineCacheStoring & NovelOfflineCacheStoring & YamiboOfflineImageDataProviding)? = nil,
         forumCacheStore: ForumCacheStore? = nil,
         ordinaryImageCache: any YamiboOrdinaryImageCacheClearing = YamiboImageDataPipeline.shared,
         offlineCacheBackgroundDownloadTransport: OfflineCacheBackgroundDownloadTransport = OfflineCacheBackgroundDownloadTransport(),
@@ -66,7 +65,6 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
         grdbRootDirectory: URL? = nil,
         uiDefaults: UserDefaults = .standard,
         clearsWebDataOnReset: Bool = true,
-        imageSession: URLSession = YamiboNetworkConfiguration.makeImageSession(),
         session: URLSession = YamiboNetworkConfiguration.makeSession()
     ) {
         let resolvedGRDBRootDirectory = grdbRootDirectory ?? YamiboDatabase.defaultRootDirectory()
@@ -108,7 +106,7 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
         self.offlineCacheBackgroundDownloadTransport = offlineCacheBackgroundDownloadTransport
         self.offlineCacheContinuedProcessingCoordinator = offlineCacheContinuedProcessingCoordinator
         self.session = session
-        self.imageSession = imageSession
+        YamiboImagePipeline.shared.setOfflineImageProvider(resolvedOfflineCacheStore)
     }
 
     public func makeFavoriteRepository() async -> FavoriteRepository {
@@ -152,50 +150,8 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
         return ReaderChapterCommentsRepository(client: client)
     }
 
-    public func makeNovelInlineImageLoadingContext(threadID: String? = nil) async -> NovelInlineImageLoadingContext {
-        let sessionState = await sessionStore.load()
-        let client = YamiboClient(
-            session: imageSession,
-            cookie: sessionState.cookie,
-            userAgent: sessionState.userAgent
-        )
-        let remoteLoader = YamiboNovelInlineImageDataLoader(
-            imageDataLoader: YamiboImageDataLoader(client: client)
-        )
-        return NovelInlineImageLoadingContext(
-            loader: CachedNovelInlineImageDataLoader(
-                imageDataLoader: remoteLoader,
-                offlineCacheStore: offlineCacheStore,
-                threadID: threadID
-            )
-        )
-    }
-
-    public func makeImagePipelineContext() async -> YamiboImageLoadingContext {
-        let sessionState = await sessionStore.load()
-        let client = YamiboClient(
-            session: imageSession,
-            cookie: sessionState.cookie,
-            userAgent: sessionState.userAgent
-        )
-        return YamiboImageLoadingContext(
-            dataLoader: YamiboImageDataLoader(client: client)
-        )
-    }
-
     public func makeProfileAvatarLoader() -> any YamiboProfileAvatarLoading {
-        YamiboProfileAvatarLoader(
-            session: imageSession,
-            sessionStore: sessionStore,
-            imageDataLoaderFactory: { [imageSession] sessionState in
-                let client = YamiboClient(
-                    session: imageSession,
-                    cookie: sessionState.cookie,
-                    userAgent: sessionState.userAgent
-                )
-                return YamiboImageDataLoader(client: client)
-            }
-        )
+        YamiboProfileAvatarLoader(sessionStore: sessionStore)
     }
 
     public func makeYamiboThreadRouteResolver() async -> YamiboThreadRouteResolver {
@@ -277,20 +233,7 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
         mangaDirectoryStore
     }
 
-    public func makeMangaImageDataLoader() async -> any MangaImageDataLoading {
-        let sessionState = await sessionStore.load()
-        let client = YamiboClient(
-            session: imageSession,
-            cookie: sessionState.cookie,
-            userAgent: sessionState.userAgent
-        )
-        return CachedMangaImageDataLoader(
-            imageDataLoader: YamiboImageDataLoader(client: client),
-            offlineCacheStore: offlineCacheStore
-        )
-    }
-
-    public func makeOfflineCacheStore() -> any OfflineCacheStoreCore & MangaOfflineCacheStoring & NovelOfflineCacheStoring & NovelOfflineImageDataProviding {
+    public func makeOfflineCacheStore() -> any OfflineCacheStoreCore & MangaOfflineCacheStoring & NovelOfflineCacheStoring & YamiboOfflineImageDataProviding {
         offlineCacheStore
     }
 
@@ -299,12 +242,6 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
             return executor
         }
 
-        let sessionState = await sessionStore.load()
-        let client = YamiboClient(
-            session: imageSession,
-            cookie: sessionState.cookie,
-            userAgent: sessionState.userAgent
-        )
         let executor = OfflineCacheQueueExecutor(
             store: offlineCacheStore,
             mangaCacheStore: offlineCacheStore,
@@ -312,7 +249,6 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
             readerProjectionLoader: await makeMangaReaderProjectionLoader(),
             novelSourcePageLoader: await makeNovelReaderRepository(),
             imageAcquirer: OfflineCacheImageAcquirer(
-                networkLoader: YamiboImageDataLoader(client: client),
                 backgroundTransport: offlineCacheBackgroundDownloadTransport
             ),
             runObserver: offlineCacheContinuedProcessingCoordinator
@@ -347,8 +283,8 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
         )
     }
 
-    public func clearOrdinaryImageCache() {
-        ordinaryImageCache.removeAllCachedData()
+    public func clearOrdinaryImageCache() async {
+        await ordinaryImageCache.removeAllCachedData()
     }
 
     public func bootstrap() async -> YamiboBootstrapState {
@@ -376,7 +312,7 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
         try await offlineCacheStore.clearAll()
         try await forumCacheStore.clearAll()
         try await favoriteBackgroundImageStore.deleteAll()
-        clearOrdinaryImageCache()
+        await clearOrdinaryImageCache()
         clearLocalUIState()
         if clearsWebDataOnReset {
             await clearWebData()

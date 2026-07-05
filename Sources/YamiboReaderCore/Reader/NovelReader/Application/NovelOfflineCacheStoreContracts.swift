@@ -1,9 +1,5 @@
 import Foundation
 
-public protocol NovelOfflineImageDataProviding: Sendable {
-    func novelOfflineImageData(for imageURL: URL, threadID: String) async -> Data?
-}
-
 public protocol NovelOfflineCacheStoring: OfflineCacheUpdateObserving {
     func saveNovelOfflineCacheEntry(_ entry: NovelOfflineCacheEntry) async throws
     func novelOfflineCacheEntry(id: OfflineCacheEntryID) async -> NovelOfflineCacheEntry?

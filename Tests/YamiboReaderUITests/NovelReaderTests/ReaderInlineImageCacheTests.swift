@@ -8,102 +8,113 @@ final class ReaderInlineImageCacheTests: XCTestCase {
     @MainActor
     func testMemoryCacheUsesURLIdentityAcrossReferers() async throws {
         let imageURL = URL(string: "https://img.example.com/shared.jpg")!
-        let firstRequest = YamiboImageRequest(
+        let scope = try XCTUnwrap(YamiboImageOfflineScope(tid: "42"))
+        let firstSource = YamiboImageSource(
             url: imageURL,
-            refererURL: URL(string: "https://bbs.yamibo.com/forum.php?tid=42")
+            refererPageURL: URL(string: "https://bbs.yamibo.com/forum.php?tid=42"),
+            offlineScope: scope
         )
-        let secondRequest = YamiboImageRequest(
+        let secondSource = YamiboImageSource(
             url: imageURL,
-            refererURL: URL(string: "https://bbs.yamibo.com/forum.php?tid=43")
+            refererPageURL: URL(string: "https://bbs.yamibo.com/forum.php?tid=43"),
+            offlineScope: scope
         )
-        let pipeline = YamiboUIImagePipeline()
-        let loader = SequencedImageDataLoader(outputs: [
-            .success(testImageData(color: .red)),
-            .success(testImageData(color: .blue))
+        let bytes = SequencedOfflineImageBytes(outputs: [
+            testImageData(color: .red),
+            testImageData(color: .blue)
         ])
+        let pipeline = makeUIPipeline(bytes: bytes)
 
-        let firstImage = try await pipeline.image(for: firstRequest, dataLoader: loader)
-        let secondImage = try await pipeline.image(for: secondRequest, dataLoader: loader)
+        let firstImage = try await pipeline.image(for: firstSource)
+        let secondImage = try await pipeline.image(for: secondSource)
 
-        XCTAssertTrue(pipeline.cachedImage(for: firstRequest) === firstImage)
-        XCTAssertTrue(pipeline.cachedImage(for: secondRequest) === firstImage)
+        XCTAssertTrue(pipeline.cachedImage(for: firstSource) === firstImage)
+        XCTAssertTrue(pipeline.cachedImage(for: secondSource) === firstImage)
         XCTAssertTrue(firstImage === secondImage)
-        let callCount = await loader.loadCallCount()
+        let callCount = await bytes.loadCallCount()
         XCTAssertEqual(callCount, 1)
     }
 
     @MainActor
     func testImagePipelineDeduplicatesConcurrentLoads() async throws {
-        let request = YamiboImageRequest(
+        let source = YamiboImageSource(
             url: URL(string: "https://img.example.com/dedupe.jpg")!,
-            refererURL: URL(string: "https://bbs.yamibo.com/forum.php?tid=42")!
+            refererPageURL: URL(string: "https://bbs.yamibo.com/forum.php?tid=42")!,
+            offlineScope: YamiboImageOfflineScope(tid: "42")
         )
-        let pipeline = YamiboUIImagePipeline()
-        let loader = SequencedImageDataLoader(outputs: [.success(testImageData(color: .red))], delayNanoseconds: 50_000_000)
+        let bytes = SequencedOfflineImageBytes(
+            outputs: [testImageData(color: .red)],
+            delayNanoseconds: 50_000_000
+        )
+        let pipeline = makeUIPipeline(bytes: bytes)
 
-        async let first = pipeline.image(for: request, dataLoader: loader)
-        async let second = pipeline.image(for: request, dataLoader: loader)
+        async let first = pipeline.image(for: source)
+        async let second = pipeline.image(for: source)
         _ = try await [first, second]
 
-        let callCount = await loader.loadCallCount()
+        let callCount = await bytes.loadCallCount()
         XCTAssertEqual(callCount, 1)
     }
 
     @MainActor
     func testImagePipelineDoesNotCacheDecodeFailures() async throws {
-        let request = YamiboImageRequest(
+        let source = YamiboImageSource(
             url: URL(string: "https://img.example.com/retry.jpg")!,
-            refererURL: nil
+            offlineScope: YamiboImageOfflineScope(tid: "42")
         )
-        let pipeline = YamiboUIImagePipeline()
-        let loader = SequencedImageDataLoader(outputs: [
-            .success(Data([0, 1, 2])),
-            .success(testImageData(color: .blue))
+        let bytes = SequencedOfflineImageBytes(outputs: [
+            Data([0, 1, 2]),
+            testImageData(color: .blue)
         ])
+        let pipeline = makeUIPipeline(bytes: bytes)
 
         do {
-            _ = try await pipeline.image(for: request, dataLoader: loader)
+            _ = try await pipeline.image(for: source)
             XCTFail("Expected invalid image data")
-        } catch YamiboUIImagePipelineError.invalidImageData {
+        } catch YamiboError.invalidImageData {
         } catch {
             XCTFail("Unexpected error: \(error)")
         }
-        XCTAssertNil(pipeline.cachedImage(for: request))
+        XCTAssertNil(pipeline.cachedImage(for: source))
 
-        _ = try await pipeline.image(for: request, dataLoader: loader)
+        _ = try await pipeline.image(for: source)
 
-        XCTAssertNotNil(pipeline.cachedImage(for: request))
-        let callCount = await loader.loadCallCount()
+        XCTAssertNotNil(pipeline.cachedImage(for: source))
+        let callCount = await bytes.loadCallCount()
         XCTAssertEqual(callCount, 2)
+    }
+
+    @MainActor
+    private func makeUIPipeline(bytes: SequencedOfflineImageBytes) -> YamiboUIImagePipeline {
+        YamiboUIImagePipeline(
+            core: YamiboImagePipeline(offlineImages: bytes)
+        )
     }
 }
 
-private actor SequencedImageDataLoader: YamiboImageDataLoading {
-    private var outputs: [Result<Data, Error>]
+/// Feeds sequenced bytes through the offline-lookup path so tests never
+/// touch the network or the shared disk cache.
+private actor SequencedOfflineImageBytes: YamiboOfflineImageDataProviding {
+    private var outputs: [Data]
     private let delayNanoseconds: UInt64
     private(set) var callCount = 0
 
-    init(outputs: [Result<Data, Error>], delayNanoseconds: UInt64 = 0) {
+    init(outputs: [Data], delayNanoseconds: UInt64 = 0) {
         self.outputs = outputs
         self.delayNanoseconds = delayNanoseconds
     }
 
-    func imageData(for _: YamiboImageRequest) async throws -> Data {
+    func offlineImageData(url _: URL, scope _: YamiboImageOfflineScope) async -> Data? {
         callCount += 1
         if delayNanoseconds > 0 {
-            try await Task.sleep(nanoseconds: delayNanoseconds)
+            try? await Task.sleep(nanoseconds: delayNanoseconds)
         }
-        let output = outputs.isEmpty ? .failure(TestImageDataLoaderError.exhausted) : outputs.removeFirst()
-        return try output.get()
+        return outputs.isEmpty ? nil : outputs.removeFirst()
     }
 
     func loadCallCount() -> Int {
         callCount
     }
-}
-
-private enum TestImageDataLoaderError: Error {
-    case exhausted
 }
 
 private func testImageData(color: UIColor) -> Data {

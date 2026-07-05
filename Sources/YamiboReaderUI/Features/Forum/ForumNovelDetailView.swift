@@ -447,9 +447,9 @@ private struct ForumNovelDetailHeader: View {
 
             if let coverURL = summary.coverURL {
                 YamiboRemoteImage(
-                    request: YamiboImageRequest(
+                    source: YamiboImageSource(
                         url: coverURL,
-                        refererURL: YamiboRoute.threadByID(
+                        refererPageURL: YamiboRoute.threadByID(
                             tid: summary.threadID,
                             page: 1,
                             authorID: nil,
@@ -464,7 +464,7 @@ private struct ForumNovelDetailHeader: View {
                         ProgressView()
                             .controlSize(.small)
                             .tint(ForumColors.brownPrimary)
-                } failure: {
+                } failure: { _ in
                     coverPlaceholder(systemImage: "book.closed")
                 }
             } else {

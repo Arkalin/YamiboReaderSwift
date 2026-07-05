@@ -306,7 +306,7 @@ public struct NovelReaderView: View {
                     surfaces: model.novelReaderSurfaces,
                     settings: model.settings,
                     refererURL: model.forumURL,
-                    imageDataLoader: model.inlineImageLoadingContext.loader,
+                    offlineScope: model.inlineImageOfflineScope,
                     topInset: pagedTopInset,
                     bottomInset: layout.chromeInsets.bottom,
                     selectionIndex: model.pagedViewportSelectionIndex,
@@ -346,7 +346,7 @@ public struct NovelReaderView: View {
                     surfaces: model.novelReaderSurfaces,
                     settings: model.settings,
                     refererURL: model.forumURL,
-                    imageDataLoader: model.inlineImageLoadingContext.loader,
+                    offlineScope: model.inlineImageOfflineScope,
                     topInset: pagedTopInset,
                     bottomInset: layout.chromeInsets.bottom,
                     selectionIndex: model.pagedViewportSelectionIndex,
@@ -384,7 +384,7 @@ public struct NovelReaderView: View {
                     surfaces: model.novelReaderSurfaces,
                     settings: model.settings,
                     refererURL: model.forumURL,
-                    imageDataLoader: model.inlineImageLoadingContext.loader,
+                    offlineScope: model.inlineImageOfflineScope,
                     topInset: pagedTopInset,
                     bottomInset: layout.chromeInsets.bottom,
                     selectionIndex: model.pagedViewportSelectionIndex,
@@ -428,7 +428,7 @@ public struct NovelReaderView: View {
             surfaces: model.novelReaderSurfaces,
             settings: model.settings,
             refererURL: model.forumURL,
-            imageDataLoader: model.inlineImageLoadingContext.loader,
+            offlineScope: model.inlineImageOfflineScope,
             topInset: topInset,
             bottomInset: bottomInset,
             scrollRequest: verticalScrollRequest,
@@ -668,7 +668,11 @@ public struct NovelReaderView: View {
     private func openImageBrowser(url: URL, title: String?) {
         imageBrowserItem = ImageBrowserItem(
             id: url.absoluteString,
-            request: YamiboImageRequest(url: url, refererURL: model.forumURL),
+            source: YamiboImageSource(
+                url: url,
+                refererPageURL: model.forumURL,
+                offlineScope: model.inlineImageOfflineScope
+            ),
             title: imageBrowserTitle(title),
         )
     }
@@ -1354,8 +1358,7 @@ private struct NovelReaderPresentationModifier: ViewModifier {
                 ImageBrowserView(
                     items: [item],
                     initialItemID: item.id,
-                    mode: .single,
-                    imageDataLoader: model.inlineImageLoadingContext.loader
+                    mode: .single
                 ) {
                     imageBrowserItem = nil
                 }

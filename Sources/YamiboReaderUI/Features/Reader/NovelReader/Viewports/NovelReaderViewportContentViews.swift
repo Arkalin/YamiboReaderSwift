@@ -32,7 +32,7 @@ struct NovelReaderPresentationSpreadContent: View {
     let surfaces: [NovelReaderSurface]
     let settings: NovelReaderAppearanceSettings
     let refererURL: URL
-    let imageDataLoader: any YamiboImageDataLoading
+    let offlineScope: YamiboImageOfflineScope?
     let topInset: CGFloat
     let bottomInset: CGFloat
     let displayReferenceProvider: @MainActor (NovelReaderSurfaceIdentity) -> NovelTextViewportDisplayReference?
@@ -62,7 +62,7 @@ struct NovelReaderPresentationSpreadContent: View {
                     fallbackSurfaceIndex: surfaceIndex,
                     settings: settings,
                     refererURL: refererURL,
-                    imageDataLoader: imageDataLoader,
+                    offlineScope: offlineScope,
                     onImageTap: onImageTap
                 )
                 .padding(.horizontal, settings.horizontalPadding)
@@ -86,7 +86,7 @@ struct NovelReaderViewportSurfaceContent: View {
     let fallbackSurfaceIndex: Int?
     let settings: NovelReaderAppearanceSettings
     let refererURL: URL
-    let imageDataLoader: any YamiboImageDataLoading
+    let offlineScope: YamiboImageOfflineScope?
     let onImageTap: (URL, String?) -> Void
 
     init(
@@ -97,7 +97,7 @@ struct NovelReaderViewportSurfaceContent: View {
         fallbackSurfaceIndex: Int?,
         settings: NovelReaderAppearanceSettings,
         refererURL: URL,
-        imageDataLoader: any YamiboImageDataLoading,
+        offlineScope: YamiboImageOfflineScope?,
         onImageTap: @escaping (URL, String?) -> Void = { _, _ in }
     ) {
         self.surface = surface
@@ -107,7 +107,7 @@ struct NovelReaderViewportSurfaceContent: View {
         self.fallbackSurfaceIndex = fallbackSurfaceIndex
         self.settings = settings
         self.refererURL = refererURL
-        self.imageDataLoader = imageDataLoader
+        self.offlineScope = offlineScope
         self.onImageTap = onImageTap
     }
 
@@ -132,7 +132,7 @@ struct NovelReaderViewportSurfaceContent: View {
                     displayReference: displayReference,
                     selectionController: selectionController,
                     refererURL: refererURL,
-                    imageDataLoader: imageDataLoader,
+                    offlineScope: offlineScope,
                     title: surface?.chapterTitle,
                     onImageTap: onImageTap
                 )
@@ -151,7 +151,7 @@ struct NovelReaderViewportSurfaceContent: View {
                     displayReference: displayReference,
                     selectionController: selectionController,
                     refererURL: refererURL,
-                    imageDataLoader: imageDataLoader,
+                    offlineScope: offlineScope,
                     title: surface?.chapterTitle,
                     onImageTap: onImageTap
                 )
@@ -203,7 +203,7 @@ private struct NovelReaderViewportBlockView: View {
     let displayReference: NovelTextViewportDisplayReference?
     let selectionController: NovelTextSelectionController?
     let refererURL: URL
-    let imageDataLoader: any YamiboImageDataLoading
+    let offlineScope: YamiboImageOfflineScope?
     let title: String?
     let onImageTap: (URL, String?) -> Void
 
@@ -223,7 +223,7 @@ private struct NovelReaderViewportBlockView: View {
             NovelReaderInlineViewportImage(
                 url: url,
                 refererURL: refererURL,
-                imageDataLoader: imageDataLoader,
+                offlineScope: offlineScope,
                 title: title,
                 onTap: onImageTap
             )
@@ -236,101 +236,6 @@ private struct NovelReaderViewportBlockView: View {
         }
     }
 
-}
-
-@MainActor
-final class NovelReaderImageLoader: ObservableObject {
-    @Published var image: UIImage?
-    @Published var isLoading = false
-    @Published var didFail = false
-
-    private let request: YamiboImageRequest
-    private let imageDataLoader: any YamiboImageDataLoading
-
-    init(
-        request: YamiboImageRequest,
-        imageDataLoader: any YamiboImageDataLoading
-    ) {
-        self.request = request
-        self.imageDataLoader = imageDataLoader
-    }
-
-    func loadIfNeeded() async {
-        let imageDataLoader = self.imageDataLoader
-        let request = self.request
-        if let cachedImage = YamiboUIImagePipeline.shared.cachedImage(for: request) {
-            image = cachedImage
-            didFail = false
-            return
-        }
-        guard image == nil, !isLoading else { return }
-        isLoading = true
-        didFail = false
-        defer { isLoading = false }
-
-        do {
-            let image = try await YamiboUIImagePipeline.shared.image(for: request) {
-                try await imageDataLoader.imageData(for: request)
-            }
-            self.image = image
-            didFail = false
-        } catch {
-            didFail = true
-        }
-    }
-
-    func retry() async {
-        await loadIfNeeded()
-    }
-}
-
-private struct AuthenticatedReaderImage: View {
-    @StateObject private var loader: NovelReaderImageLoader
-
-    init(
-        request: YamiboImageRequest,
-        imageDataLoader: any YamiboImageDataLoading
-    ) {
-        _loader = StateObject(
-            wrappedValue: NovelReaderImageLoader(
-                request: request,
-                imageDataLoader: imageDataLoader
-            )
-        )
-    }
-
-    var body: some View {
-        Group {
-            if let image = loader.image {
-                Image(uiImage: image)
-                    .resizable()
-                    .scaledToFit()
-            } else if loader.didFail {
-                VStack(spacing: 8) {
-                    Label(L10n.string("image.load_failed"), systemImage: "photo")
-                        .foregroundColor(.secondary)
-
-                    Button {
-                        Task {
-                            await loader.retry()
-                        }
-                    } label: {
-                        Label(L10n.string("common.retry"), systemImage: "arrow.clockwise")
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 12)
-            } else {
-                ProgressView()
-                    .frame(maxWidth: .infinity)
-            }
-        }
-        .task {
-            await loader.loadIfNeeded()
-        }
-    }
 }
 
 #endif

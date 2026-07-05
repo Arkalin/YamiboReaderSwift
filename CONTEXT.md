@@ -16,6 +16,14 @@ The current contexts are:
 The app-wide, regenerable local store of remote image bytes reused by reader, forum, account, and library surfaces. It is separate from decoded in-memory image caching and from user-retained offline content such as **Manga Offline Cache**, and entries may have different retention policies such as normal evictable bytes or protected avatar bytes.
 _Avoid_: manga image cache, image offline cache, decoded image cache
 
+**Yamibo Image Source**:
+The caller-side description of one remote image to load: its URL, the forum page it appears on (which becomes the Referer), and an optional **Image Offline Scope**. Callers construct sources; the image pipeline owns session headers, offline lookup, byte caching, and decoding, so no caller assembles headers or bridges bytes to decoded images.
+_Avoid_: image request, image loader, data loader
+
+**Image Offline Scope**:
+The thread identity (tid, with optional manga owner name) that lets the image pipeline consult user-retained offline content before the network. It selects where to look first; it never changes which image a URL identifies, so cache identity stays URL-only.
+_Avoid_: offline cache context, offline loader, per-reader image cache
+
 **Transparent JSON Cache**:
 The app-wide, regenerable local store of JSON-encoded parsed content used by forum and reader surfaces. It is separate from UserDefaults-backed app state, WebDAV payloads, structured GRDB state, and user-retained offline content such as **Manga Offline Cache**.
 _Avoid_: JSON store, UserDefaults JSON, WebDAV JSON, offline cache, structured state

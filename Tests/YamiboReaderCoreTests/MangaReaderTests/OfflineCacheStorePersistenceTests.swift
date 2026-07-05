@@ -606,9 +606,9 @@ private actor RecordingOfflineImageAcquirer: OfflineCacheImageAcquiring {
         }
     }
 
-    func acquireImageData(for request: YamiboImageRequest) async throws -> OfflineCacheImageAcquisition {
-        requestedURLs.append(request.url)
-        guard let data = dataByURL[request.url] else {
+    func acquireImageData(for source: YamiboImageSource) async throws -> OfflineCacheImageAcquisition {
+        requestedURLs.append(source.url)
+        guard let data = dataByURL[source.url] else {
             throw YamiboError.invalidResponse(statusCode: 404)
         }
         return OfflineCacheImageAcquisition(data: data, source: .network)

@@ -205,12 +205,12 @@ private struct BlogReaderAuthorRow: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            YamiboRemoteImage(request: user.avatarURL.map { YamiboImageRequest(url: $0) }) { image in
+            YamiboRemoteImage(source: user.avatarURL.map { YamiboImageSource(url: $0) }) { image in
                 image.resizable().scaledToFill()
             } placeholder: {
                 Image(systemName: "person.crop.circle")
                     .foregroundStyle(ForumColors.secondaryText)
-            } failure: {
+            } failure: { _ in
                 Image(systemName: "person.crop.circle")
                     .foregroundStyle(ForumColors.secondaryText)
             }
@@ -401,12 +401,12 @@ private struct BlogReaderCommentRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .top, spacing: 10) {
-                YamiboRemoteImage(request: comment.author.avatarURL.map { YamiboImageRequest(url: $0) }) { image in
+                YamiboRemoteImage(source: comment.author.avatarURL.map { YamiboImageSource(url: $0) }) { image in
                     image.resizable().scaledToFill()
                 } placeholder: {
                     Image(systemName: "person.crop.circle")
                         .foregroundStyle(ForumColors.secondaryText)
-                } failure: {
+                } failure: { _ in
                     Image(systemName: "person.crop.circle")
                         .foregroundStyle(ForumColors.secondaryText)
                 }

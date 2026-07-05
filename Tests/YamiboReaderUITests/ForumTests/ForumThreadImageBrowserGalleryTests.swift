@@ -60,7 +60,7 @@ final class ForumThreadImageBrowserGalleryTests: XCTestCase {
         )
         XCTAssertEqual(gallery.initialItemID, "collapse-image")
         XCTAssertEqual(gallery.items.map(\.title), ["Top", "Image", "Collapsed", "Image", "Image", "Second"])
-        XCTAssertTrue(gallery.items.allSatisfy { $0.request.refererURL == refererURL })
+        XCTAssertTrue(gallery.items.allSatisfy { $0.source.refererPageURL == refererURL })
         XCTAssertEqual(Set(gallery.items.map(\.id)).count, gallery.items.count)
     }
 

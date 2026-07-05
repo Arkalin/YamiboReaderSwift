@@ -9,7 +9,7 @@ struct NovelReaderPresentationSpreadCollectionViewport: UIViewRepresentable {
     let surfaces: [NovelReaderSurface]
     let settings: NovelReaderAppearanceSettings
     let refererURL: URL
-    let imageDataLoader: any YamiboImageDataLoading
+    let offlineScope: YamiboImageOfflineScope?
     let topInset: CGFloat
     let bottomInset: CGFloat
     let selectionIndex: Int
@@ -166,7 +166,7 @@ struct NovelReaderPresentationSpreadCollectionViewport: UIViewRepresentable {
                         surfaces: parent.surfaces,
                         settings: parent.settings,
                         refererURL: parent.refererURL,
-                        imageDataLoader: parent.imageDataLoader,
+                        offlineScope: parent.offlineScope,
                         topInset: parent.topInset,
                         bottomInset: parent.bottomInset,
                         displayReferenceProvider: parent.displayReferenceProvider,

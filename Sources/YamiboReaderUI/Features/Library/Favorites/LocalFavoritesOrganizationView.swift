@@ -3849,14 +3849,14 @@ private struct LocalFavoriteCoverThumbnail: View {
             RoundedRectangle(cornerRadius: 6, style: .continuous)
                 .fill(fallbackColor.opacity(0.16))
             if let url {
-                YamiboRemoteImage(request: YamiboImageRequest(url: url)) { image in
+                YamiboRemoteImage(source: YamiboImageSource(url: url)) { image in
                     image
                         .resizable()
                         .scaledToFill()
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } placeholder: {
                     ProgressView()
-                } failure: {
+                } failure: { _ in
                     fallbackIcon
                 }
             } else {

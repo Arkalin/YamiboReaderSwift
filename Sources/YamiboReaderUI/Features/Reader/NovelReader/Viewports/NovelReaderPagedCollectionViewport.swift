@@ -8,7 +8,7 @@ struct NovelReaderPagedCollectionViewport: UIViewRepresentable {
     let surfaces: [NovelReaderSurface]
     let settings: NovelReaderAppearanceSettings
     let refererURL: URL
-    let imageDataLoader: any YamiboImageDataLoading
+    let offlineScope: YamiboImageOfflineScope?
     let topInset: CGFloat
     let bottomInset: CGFloat
     let selectionIndex: Int
@@ -168,7 +168,7 @@ struct NovelReaderPagedCollectionViewport: UIViewRepresentable {
                         fallbackSurfaceIndex: surfaceIndex,
                         settings: parent.settings,
                         refererURL: parent.refererURL,
-                        imageDataLoader: parent.imageDataLoader,
+                        offlineScope: parent.offlineScope,
                         onImageTap: parent.onImageTap
                     )
                     .padding(.horizontal, parent.settings.horizontalPadding)

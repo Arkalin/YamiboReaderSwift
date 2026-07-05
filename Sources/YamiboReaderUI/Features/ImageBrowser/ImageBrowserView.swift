@@ -6,7 +6,7 @@ import UIKit
 
 struct ImageBrowserItem: Identifiable, Equatable {
     let id: String
-    let request: YamiboImageRequest
+    let source: YamiboImageSource
     let title: String
 }
 
@@ -18,7 +18,6 @@ enum ImageBrowserMode: Equatable {
 struct ImageBrowserView: View {
     let items: [ImageBrowserItem]
     let mode: ImageBrowserMode
-    let imageDataLoader: any YamiboImageDataLoading
     let onDismiss: () -> Void
 
     @State private var selectedItemID: String
@@ -32,12 +31,10 @@ struct ImageBrowserView: View {
         items: [ImageBrowserItem],
         initialItemID: String?,
         mode: ImageBrowserMode,
-        imageDataLoader: any YamiboImageDataLoading,
         onDismiss: @escaping () -> Void
     ) {
         self.items = items
         self.mode = mode
-        self.imageDataLoader = imageDataLoader
         self.onDismiss = onDismiss
         _selectedItemID = State(initialValue: Self.initialSelection(in: items, initialItemID: initialItemID))
     }
@@ -52,7 +49,6 @@ struct ImageBrowserView: View {
                 items: items,
                 mode: mode,
                 selectedItemID: $selectedItemID,
-                imageDataLoader: imageDataLoader,
                 onSwipeDownProgressChange: { progress in
                     swipeDismissProgress = progress
                 },
@@ -170,11 +166,11 @@ struct ImageBrowserView: View {
     }
 
     private func imageData(for item: ImageBrowserItem) async throws -> Data {
-        try await imageDataLoader.imageData(for: item.request)
+        try await YamiboImagePipeline.shared.data(for: item.source)
     }
 
     private func preferredImageExtension(for item: ImageBrowserItem) -> String {
-        let ext = item.request.url.pathExtension.trimmingCharacters(in: .whitespacesAndNewlines)
+        let ext = item.source.url.pathExtension.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !ext.isEmpty, ext.count <= 8 else { return "jpg" }
         return ext
     }
@@ -195,7 +191,6 @@ private struct ImageBrowserContentView: View {
     let items: [ImageBrowserItem]
     let mode: ImageBrowserMode
     @Binding var selectedItemID: String
-    let imageDataLoader: any YamiboImageDataLoading
     let onSwipeDownProgressChange: (CGFloat) -> Void
     let onSwipeDownCommit: () -> Void
     let onSwipeDownDismiss: () -> Void
@@ -206,7 +201,6 @@ private struct ImageBrowserContentView: View {
                 ForEach(items) { item in
                     ImageBrowserPageView(
                         item: item,
-                        imageDataLoader: imageDataLoader,
                         onSwipeDownProgressChange: onSwipeDownProgressChange,
                         onSwipeDownCommit: onSwipeDownCommit,
                         onSwipeDownDismiss: onSwipeDownDismiss
@@ -218,7 +212,6 @@ private struct ImageBrowserContentView: View {
         } else if let item = items.first {
             ImageBrowserPageView(
                 item: item,
-                imageDataLoader: imageDataLoader,
                 onSwipeDownProgressChange: onSwipeDownProgressChange,
                 onSwipeDownCommit: onSwipeDownCommit,
                 onSwipeDownDismiss: onSwipeDownDismiss
@@ -231,54 +224,45 @@ private struct ImageBrowserContentView: View {
 
 private struct ImageBrowserPageView: View {
     let item: ImageBrowserItem
-    let imageDataLoader: any YamiboImageDataLoading
     let onSwipeDownProgressChange: (CGFloat) -> Void
     let onSwipeDownCommit: () -> Void
     let onSwipeDownDismiss: () -> Void
 
-    @StateObject private var loader: NovelReaderImageLoader
-
-    init(
-        item: ImageBrowserItem,
-        imageDataLoader: any YamiboImageDataLoading,
-        onSwipeDownProgressChange: @escaping (CGFloat) -> Void,
-        onSwipeDownCommit: @escaping () -> Void,
-        onSwipeDownDismiss: @escaping () -> Void
-    ) {
-        self.item = item
-        self.imageDataLoader = imageDataLoader
-        self.onSwipeDownProgressChange = onSwipeDownProgressChange
-        self.onSwipeDownCommit = onSwipeDownCommit
-        self.onSwipeDownDismiss = onSwipeDownDismiss
-        _loader = StateObject(
-            wrappedValue: NovelReaderImageLoader(
-                request: item.request,
-                imageDataLoader: imageDataLoader
-            )
-        )
-    }
+    @State private var image: UIImage?
+    @State private var didFail = false
+    @State private var attempt = 0
 
     var body: some View {
-        if let image = loader.image {
-            ImageBrowserZoomableImageView(
-                image: image,
-                onSwipeDownProgressChange: onSwipeDownProgressChange,
-                onSwipeDownCommit: onSwipeDownCommit,
-                onSwipeDownDismiss: onSwipeDownDismiss
-            )
-        } else if loader.didFail {
-            ImageBrowserFailureView {
-                Task {
-                    await loader.retry()
+        Group {
+            if let image {
+                ImageBrowserZoomableImageView(
+                    image: image,
+                    onSwipeDownProgressChange: onSwipeDownProgressChange,
+                    onSwipeDownCommit: onSwipeDownCommit,
+                    onSwipeDownDismiss: onSwipeDownDismiss
+                )
+            } else if didFail {
+                ImageBrowserFailureView {
+                    didFail = false
+                    attempt += 1
                 }
+            } else {
+                ProgressView(L10n.string("image.loading"))
+                    .tint(.white)
+                    .foregroundStyle(.white.opacity(0.8))
             }
-        } else {
-            ProgressView(L10n.string("image.loading"))
-                .tint(.white)
-                .foregroundStyle(.white.opacity(0.8))
-                .task {
-                    await loader.loadIfNeeded()
-                }
+        }
+        .task(id: "\(item.source.cacheKey)#\(attempt)") {
+            await load()
+        }
+    }
+
+    private func load() async {
+        guard image == nil else { return }
+        do {
+            image = try await YamiboUIImagePipeline.shared.image(for: item.source)
+        } catch {
+            didFail = true
         }
     }
 }

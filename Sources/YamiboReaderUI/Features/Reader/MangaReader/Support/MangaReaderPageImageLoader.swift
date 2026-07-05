@@ -4,64 +4,40 @@ import YamiboReaderCore
 #if os(iOS)
 import UIKit
 
-enum MangaReaderPageImageLoaderError: Error, Equatable {
-    case invalidImageData
-}
-
+/// Page-keyed image access for the manga reader viewports: maps a page
+/// projection to its `YamiboImageSource` and forwards to the UI pipeline.
 @MainActor
 final class MangaReaderPageImageLoader {
-    private let dataLoader: any MangaImageDataLoading
-    private let offlineCacheContext: (MangaReaderPageProjection) -> MangaImageOfflineCacheContext?
+    private let imageSource: (MangaReaderPageProjection) -> YamiboImageSource
     private let uiImagePipeline: YamiboUIImagePipeline
 
     init(
-        dataLoader: any MangaImageDataLoading,
-        offlineCacheContext: @escaping (MangaReaderPageProjection) -> MangaImageOfflineCacheContext? = { _ in nil },
+        imageSource: @escaping (MangaReaderPageProjection) -> YamiboImageSource,
         uiImagePipeline: YamiboUIImagePipeline = .shared
     ) {
-        self.dataLoader = dataLoader
-        self.offlineCacheContext = offlineCacheContext
+        self.imageSource = imageSource
         self.uiImagePipeline = uiImagePipeline
     }
 
     func cachedImage(for page: MangaReaderPageProjection) -> UIImage? {
-        uiImagePipeline.cachedImage(for: page.mangaReaderImageRequest)
+        uiImagePipeline.cachedImage(for: imageSource(page))
     }
 
     func prefetchImages(for pages: [MangaReaderPageProjection]) {
-        for page in pages {
-            let request = page.mangaReaderImageRequest
-            let offlineContext = offlineCacheContext(page)
-            uiImagePipeline.prefetchImage(for: request) { [dataLoader] in
-                try await dataLoader.imageData(
-                    for: request,
-                    offlineCacheContext: offlineContext
-                )
-            }
-        }
+        uiImagePipeline.prefetchImages(for: pages.map(imageSource))
     }
 
     func image(for page: MangaReaderPageProjection) async throws -> UIImage {
-        let request = page.mangaReaderImageRequest
-        let offlineContext = offlineCacheContext(page)
-        do {
-            return try await uiImagePipeline.image(for: request) { [dataLoader] in
-                try await dataLoader.imageData(
-                    for: request,
-                    offlineCacheContext: offlineContext
-                )
-            }
-        } catch YamiboUIImagePipelineError.invalidImageData {
-            throw MangaReaderPageImageLoaderError.invalidImageData
-        }
+        try await uiImagePipeline.image(for: imageSource(page))
     }
 }
 
 extension MangaReaderPageProjection {
-    var mangaReaderImageRequest: YamiboImageRequest {
-        YamiboImageRequest(
+    func mangaReaderImageSource(offlineScope: YamiboImageOfflineScope?) -> YamiboImageSource {
+        YamiboImageSource(
             url: imageURL,
-            refererURL: mangaReaderRefererURL
+            refererPageURL: mangaReaderRefererURL,
+            offlineScope: offlineScope
         )
     }
 

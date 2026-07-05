@@ -134,7 +134,7 @@ struct NovelReaderPagedPageCurlViewport: UIViewControllerRepresentable {
     let surfaces: [NovelReaderSurface]
     let settings: NovelReaderAppearanceSettings
     let refererURL: URL
-    let imageDataLoader: any YamiboImageDataLoading
+    let offlineScope: YamiboImageOfflineScope?
     let topInset: CGFloat
     let bottomInset: CGFloat
     let selectionIndex: Int
@@ -476,7 +476,7 @@ struct NovelReaderPagedPageCurlViewport: UIViewControllerRepresentable {
                     surfaces: parent.surfaces,
                     settings: parent.settings,
                     refererURL: parent.refererURL,
-                    imageDataLoader: parent.imageDataLoader,
+                    offlineScope: parent.offlineScope,
                     topInset: parent.topInset,
                     bottomInset: parent.bottomInset,
                     displayReferenceProvider: parent.displayReferenceProvider,
@@ -659,7 +659,7 @@ private struct NovelReaderPagedPageCurlLeafView: View {
     let surfaces: [NovelReaderSurface]
     let settings: NovelReaderAppearanceSettings
     let refererURL: URL
-    let imageDataLoader: any YamiboImageDataLoading
+    let offlineScope: YamiboImageOfflineScope?
     let topInset: CGFloat
     let bottomInset: CGFloat
     let displayReferenceProvider: @MainActor (NovelReaderSurfaceIdentity) -> NovelTextViewportDisplayReference?
@@ -678,7 +678,7 @@ private struct NovelReaderPagedPageCurlLeafView: View {
                     fallbackSurfaceIndex: surfaceIndex,
                     settings: settings,
                     refererURL: refererURL,
-                    imageDataLoader: imageDataLoader,
+                    offlineScope: offlineScope,
                     onImageTap: onImageTap
                 )
                 .padding(.horizontal, settings.horizontalPadding)

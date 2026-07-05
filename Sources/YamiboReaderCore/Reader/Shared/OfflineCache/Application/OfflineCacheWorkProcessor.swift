@@ -134,7 +134,7 @@ struct OfflineCacheWorkProcessor<Strategy: OfflineCacheWorkProcessingStrategy>: 
                     }
                     let startedAt = Date()
                     let acquisition = try await imageAcquirer.acquireImageData(
-                        for: YamiboImageRequest(url: imageURL, refererURL: refererURL)
+                        for: YamiboImageSource(url: imageURL, refererPageURL: refererURL)
                     )
                     guard !acquisition.data.isEmpty else {
                         throw YamiboError.invalidResponse(statusCode: nil)

@@ -97,7 +97,6 @@ final class MangaReaderViewModelSettingsProgressTests: XCTestCase {
             makeProjectionLoader: { loader },
             makeDirectoryRepository: { repository },
             makeDirectoryStore: { store },
-            makeImageDataLoader: { StubMangaImageDataLoader() },
             progressSync: ProgressSyncModule(
                 adapter: FavoriteLibraryProgressSyncAdapter(
                     readingProgressStore: appContext.readingProgressStore
@@ -395,17 +394,12 @@ final class MangaReaderViewModelSettingsProgressTests: XCTestCase {
         XCTAssertEqual(target.title, "第701话")
     }
 
-    func testNilMangaChapterCommentTargetShowsEmptyCommentsState() async throws {
+    func testNilMangaChapterCommentTargetShowsUnsupportedCommentsState() async throws {
         let fixture = try await makeFixture()
 
         await fixture.model.loadChapterComments(for: nil)
 
-        guard case let .loaded(_, page) = fixture.model.chapterCommentsState else {
-            XCTFail("Expected empty loaded comments state")
-            return
-        }
-        XCTAssertTrue(page.comments.isEmpty)
-        XCTAssertNil(page.nextView)
+        XCTAssertEqual(fixture.model.chapterCommentsState, .unsupported)
     }
 
     func testJumpToPagePublishesViewportPlacementForSharedScrubberCommit() async throws {
@@ -735,7 +729,6 @@ private func makeFixture(
         makeProjectionLoader: { StubMangaReaderProjectionLoader(documents: suppliedDocuments ?? [document]) },
         makeDirectoryRepository: { repository },
         makeDirectoryStore: { store },
-        makeImageDataLoader: { StubMangaImageDataLoader() },
         progressSync: resolvedProgressSync
     )
     #else
@@ -886,11 +879,6 @@ private func makeFixtureChapter(tid: String) -> MangaChapter {
 }
 
 #if os(iOS)
-private actor StubMangaImageDataLoader: MangaImageDataLoading {
-    func imageData(for request: YamiboImageRequest) async throws -> Data {
-        Data()
-    }
-}
 #endif
 
 private actor RecordingMangaProgressAdapter: ProgressSyncAdapter {

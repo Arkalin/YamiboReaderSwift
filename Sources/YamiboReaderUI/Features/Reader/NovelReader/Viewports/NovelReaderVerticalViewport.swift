@@ -17,7 +17,7 @@ struct NovelReaderVerticalViewportScrollView: UIViewRepresentable {
     let surfaces: [NovelReaderSurface]
     let settings: NovelReaderAppearanceSettings
     let refererURL: URL
-    let imageDataLoader: any YamiboImageDataLoading
+    let offlineScope: YamiboImageOfflineScope?
     let topInset: CGFloat
     let bottomInset: CGFloat
     let scrollRequest: NovelReaderVerticalScrollRequest?
@@ -192,7 +192,7 @@ struct NovelReaderVerticalViewportScrollView: UIViewRepresentable {
                 textHeight: displaySurface.presentationHeight,
                 settings: parent.settings,
                 refererURL: parent.refererURL,
-                imageDataLoader: parent.imageDataLoader,
+                offlineScope: parent.offlineScope,
                 contentWidth: max(verticalItemWidth(in: collectionView) - parent.settings.horizontalPadding * 2, 1),
                 topPadding: displaySurface.surfaceIndex == 0 ? 16 : 0,
                 onImageTap: parent.onImageTap
@@ -631,7 +631,7 @@ private final class NovelReaderVerticalViewportCell: UICollectionViewCell {
     private var currentPage: NovelReaderVerticalViewportDisplaySurface?
     private var currentSettings = NovelReaderAppearanceSettings()
     private var currentRefererURL: URL?
-    private var currentImageDataLoader: (any YamiboImageDataLoading)?
+    private var currentOfflineScope: YamiboImageOfflineScope?
     private var currentContentWidth: CGFloat = 0
     private var currentTopPadding: CGFloat = 0
     private var currentDisplayReference: NovelTextViewportDisplayReference?
@@ -685,8 +685,7 @@ private final class NovelReaderVerticalViewportCell: UICollectionViewCell {
 
     private func reconfigureForCurrentTraitCollection() {
         guard let currentPage,
-              let currentRefererURL,
-              let currentImageDataLoader else {
+              let currentRefererURL else {
             return
         }
         configure(
@@ -696,7 +695,7 @@ private final class NovelReaderVerticalViewportCell: UICollectionViewCell {
             textHeight: currentTextHeight,
             settings: currentSettings,
             refererURL: currentRefererURL,
-            imageDataLoader: currentImageDataLoader,
+            offlineScope: currentOfflineScope,
             contentWidth: currentContentWidth,
             topPadding: currentTopPadding,
             onImageTap: currentOnImageTap
@@ -710,7 +709,7 @@ private final class NovelReaderVerticalViewportCell: UICollectionViewCell {
         textHeight: CGFloat?,
         settings: NovelReaderAppearanceSettings,
         refererURL: URL,
-        imageDataLoader: any YamiboImageDataLoading,
+        offlineScope: YamiboImageOfflineScope?,
         contentWidth: CGFloat,
         topPadding: CGFloat,
         onImageTap: @escaping (URL, String?) -> Void
@@ -721,7 +720,7 @@ private final class NovelReaderVerticalViewportCell: UICollectionViewCell {
         currentTextHeight = textHeight
         currentSettings = settings
         currentRefererURL = refererURL
-        currentImageDataLoader = imageDataLoader
+        currentOfflineScope = offlineScope
         currentContentWidth = contentWidth
         currentTopPadding = topPadding
         currentOnImageTap = onImageTap
@@ -735,7 +734,7 @@ private final class NovelReaderVerticalViewportCell: UICollectionViewCell {
                 page: page,
                 contentWidth: contentWidth,
                 refererURL: refererURL,
-                imageDataLoader: imageDataLoader,
+                offlineScope: offlineScope,
                 displayReference: displayReference,
                 selectionController: selectionController,
                 textHeight: textHeight,
@@ -818,7 +817,7 @@ private final class NovelReaderVerticalViewportCell: UICollectionViewCell {
         page: NovelReaderVerticalViewportDisplaySurface,
         contentWidth: CGFloat,
         refererURL: URL,
-        imageDataLoader: any YamiboImageDataLoading,
+        offlineScope: YamiboImageOfflineScope?,
         displayReference: NovelTextViewportDisplayReference?,
         selectionController: NovelTextSelectionController?,
         textHeight: CGFloat?,
@@ -836,7 +835,7 @@ private final class NovelReaderVerticalViewportCell: UICollectionViewCell {
             return makeImageBlockView(
                 url: url,
                 refererURL: refererURL,
-                imageDataLoader: imageDataLoader,
+                offlineScope: offlineScope,
                 preferredHeight: textHeight,
                 title: page.chapterTitle,
                 onImageTap: onImageTap
@@ -865,7 +864,7 @@ private final class NovelReaderVerticalViewportCell: UICollectionViewCell {
     private func makeImageBlockView(
         url: URL,
         refererURL: URL,
-        imageDataLoader: any YamiboImageDataLoading,
+        offlineScope: YamiboImageOfflineScope?,
         preferredHeight: CGFloat?,
         title: String?,
         onImageTap: @escaping (URL, String?) -> Void
@@ -873,8 +872,7 @@ private final class NovelReaderVerticalViewportCell: UICollectionViewCell {
         let height = max(preferredHeight ?? bounds.height, 1)
         let imageView = NovelReaderVerticalViewportImageView()
         imageView.configure(
-            request: YamiboImageRequest(url: url, refererURL: refererURL),
-            imageDataLoader: imageDataLoader,
+            source: YamiboImageSource(url: url, refererPageURL: refererURL, offlineScope: offlineScope),
             title: title,
             onTap: onImageTap
         )
@@ -945,7 +943,7 @@ final class NovelReaderVerticalViewportImageView: UIView {
     private var task: Task<Void, Never>?
     private var url: URL?
     private var title: String?
-    private var requestIdentity: YamiboImageRequest?
+    private var sourceIdentity: YamiboImageSource?
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -994,17 +992,16 @@ final class NovelReaderVerticalViewportImageView: UIView {
     }
 
     func configure(
-        request: YamiboImageRequest,
-        imageDataLoader: any YamiboImageDataLoading,
+        source: YamiboImageSource,
         title: String?,
         onTap: @escaping (URL, String?) -> Void
     ) {
-        self.url = request.url
+        self.url = source.url
         self.title = title
-        guard requestIdentity != request else { return }
-        requestIdentity = request
+        guard sourceIdentity != source else { return }
+        sourceIdentity = source
         task?.cancel()
-        if let cachedImage = YamiboUIImagePipeline.shared.cachedImage(for: request) {
+        if let cachedImage = YamiboUIImagePipeline.shared.cachedImage(for: source) {
             Task { @MainActor [weak self] in
                 self?.show(image: cachedImage)
             }
@@ -1015,9 +1012,7 @@ final class NovelReaderVerticalViewportImageView: UIView {
         activityIndicator.startAnimating()
         task = Task { [weak self] in
             do {
-                let image = try await YamiboUIImagePipeline.shared.image(for: request) {
-                    try await imageDataLoader.imageData(for: request)
-                }
+                let image = try await YamiboUIImagePipeline.shared.image(for: source)
                 guard !Task.isCancelled else { return }
                 self?.show(image: image)
             } catch {
@@ -1075,7 +1070,7 @@ final class NovelReaderVerticalViewportImageView: UIView {
 struct NovelReaderInlineViewportImage: UIViewRepresentable {
     let url: URL
     let refererURL: URL
-    let imageDataLoader: any YamiboImageDataLoading
+    let offlineScope: YamiboImageOfflineScope?
     let title: String?
     let onTap: (URL, String?) -> Void
 
@@ -1085,8 +1080,7 @@ struct NovelReaderInlineViewportImage: UIViewRepresentable {
 
     func updateUIView(_ uiView: NovelReaderVerticalViewportImageView, context: Context) {
         uiView.configure(
-            request: YamiboImageRequest(url: url, refererURL: refererURL),
-            imageDataLoader: imageDataLoader,
+            source: YamiboImageSource(url: url, refererPageURL: refererURL, offlineScope: offlineScope),
             title: title,
             onTap: onTap
         )

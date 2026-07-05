@@ -8,7 +8,6 @@ struct MangaReaderViewModelDependencies {
     var makeOfflineCacheStore: @Sendable () -> (any MangaOfflineCacheStoring & OfflineCacheQueueStoring)?
     var makeDirectorySearchCooldownState: @Sendable () -> MangaDirectorySearchCooldownState
     var directoryWorkflowConfiguration: MangaDirectoryWorkflowConfiguration
-    var makeImageDataLoader: @Sendable () async -> any MangaImageDataLoading
     var progressSync: ProgressSyncModule
 
     init(
@@ -20,7 +19,6 @@ struct MangaReaderViewModelDependencies {
             MangaDirectorySearchCooldownState()
         },
         directoryWorkflowConfiguration: MangaDirectoryWorkflowConfiguration = MangaDirectoryWorkflowConfiguration(),
-        makeImageDataLoader: @escaping @Sendable () async -> any MangaImageDataLoading,
         progressSync: ProgressSyncModule
     ) {
         self.makeProjectionLoader = makeProjectionLoader
@@ -29,7 +27,6 @@ struct MangaReaderViewModelDependencies {
         self.makeOfflineCacheStore = makeOfflineCacheStore
         self.makeDirectorySearchCooldownState = makeDirectorySearchCooldownState
         self.directoryWorkflowConfiguration = directoryWorkflowConfiguration
-        self.makeImageDataLoader = makeImageDataLoader
         self.progressSync = progressSync
     }
 
@@ -40,7 +37,6 @@ struct MangaReaderViewModelDependencies {
             makeDirectoryStore: { appContext.makeMangaDirectoryStore() },
             makeOfflineCacheStore: { appContext.makeOfflineCacheStore() },
             makeDirectorySearchCooldownState: { appContext.mangaDirectorySearchCooldownState },
-            makeImageDataLoader: { await appContext.makeMangaImageDataLoader() },
             progressSync: ProgressSyncModule(
                 adapter: FavoriteLibraryProgressSyncAdapter(
                     readingProgressStore: appContext.readingProgressStore
@@ -63,7 +59,6 @@ public final class MangaReaderViewModel: ObservableObject {
 
     public let context: MangaLaunchContext
     private(set) var imageLoader: MangaReaderPageImageLoader?
-    private(set) var imageDataLoader: (any MangaImageDataLoading)?
 
     private let appContext: YamiboAppContext
     private let dependencies: MangaReaderViewModelDependencies
@@ -126,7 +121,6 @@ public final class MangaReaderViewModel: ObservableObject {
         self.dependencies = MangaReaderViewModelDependencies(appContext: appContext)
         self.onReaderResumeRouteChange = onReaderResumeRouteChange
         self.imageLoader = nil
-        self.imageDataLoader = nil
         self.presentation = MangaReaderPresentation(
             state: .loading(MangaReaderLoadingPresentation(title: Self.presentationTitle(for: context)))
         )
@@ -143,7 +137,6 @@ public final class MangaReaderViewModel: ObservableObject {
         self.dependencies = dependencies
         self.onReaderResumeRouteChange = onReaderResumeRouteChange
         self.imageLoader = nil
-        self.imageDataLoader = nil
         self.presentation = MangaReaderPresentation(
             state: .loading(MangaReaderLoadingPresentation(title: Self.presentationTitle(for: context)))
         )
@@ -159,11 +152,9 @@ public final class MangaReaderViewModel: ObservableObject {
         committedSettings = Self.normalizedSettings(appSettings.manga)
         applePencilPageTurnSettings = appSettings.applePencilPageTurn
         presentation = presentationWithCommittedSettings(presentation)
-        let imageDataLoader = await dependencies.makeImageDataLoader()
         let imageLoader = MangaReaderPageImageLoader(
-            dataLoader: imageDataLoader,
-            offlineCacheContext: { [weak self] page in
-                self?.imageOfflineCacheContext(for: page)
+            imageSource: { [weak self] page in
+                self?.imageSource(for: page) ?? page.mangaReaderImageSource(offlineScope: nil)
             }
         )
         let workflow = MangaReaderWorkflow(
@@ -177,7 +168,6 @@ public final class MangaReaderViewModel: ObservableObject {
             directorySearchCooldownState: dependencies.makeDirectorySearchCooldownState()
         )
         self.workflow = workflow
-        self.imageDataLoader = imageDataLoader
         self.imageLoader = imageLoader
         presentation = workflow.presentation
         presentation = await workflow.prepare()
@@ -193,7 +183,6 @@ public final class MangaReaderViewModel: ObservableObject {
         cancelReaderTasks()
         workflow = nil
         imageLoader = nil
-        imageDataLoader = nil
         hasPrepared = false
         offlineCacheOwnerName = nil
         resetNavigationHistory()
@@ -339,8 +328,11 @@ public final class MangaReaderViewModel: ObservableObject {
         )
     }
 
-    func imageOfflineCacheContext(for page: MangaReaderPageProjection) -> MangaImageOfflineCacheContext? {
-        MangaImageOfflineCacheContext(ownerName: offlineCacheOwnerName, tid: page.tid)
+    func imageSource(for page: MangaReaderPageProjection) -> YamiboImageSource {
+        let scope = offlineCacheOwnerName.flatMap { ownerName in
+            YamiboImageOfflineScope(tid: page.tid, ownerName: ownerName)
+        }
+        return page.mangaReaderImageSource(offlineScope: scope)
     }
 
     public func loadChapterComments(for target: ReaderChapterCommentTarget?) async {

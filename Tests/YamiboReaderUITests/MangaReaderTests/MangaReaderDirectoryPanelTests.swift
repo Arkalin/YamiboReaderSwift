@@ -233,7 +233,6 @@ private func makeDirectoryPanelFixture(
         makeDirectoryStore: { DirectoryPanelStore(directories: storedDirectories) },
         makeDirectorySearchCooldownState: { MangaDirectorySearchCooldownState() },
         directoryWorkflowConfiguration: configuration,
-        makeImageDataLoader: { DirectoryPanelImageDataLoader() },
         progressSync: ProgressSyncModule(
             adapter: FavoriteLibraryProgressSyncAdapter(
                     readingProgressStore: appContext.readingProgressStore
@@ -373,11 +372,6 @@ private actor DirectoryPanelStore: MangaDirectoryPersisting {
 }
 
 #if os(iOS)
-private actor DirectoryPanelImageDataLoader: MangaImageDataLoading {
-    func imageData(for request: YamiboImageRequest) async throws -> Data {
-        Data()
-    }
-}
 #endif
 
 private final class ManualDateProvider: @unchecked Sendable {

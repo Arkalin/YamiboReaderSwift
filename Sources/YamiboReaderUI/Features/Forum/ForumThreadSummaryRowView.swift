@@ -88,14 +88,14 @@ private struct ForumThreadSummaryAuthorView: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            YamiboRemoteImage(request: authorAvatarURL.map { YamiboImageRequest(url: $0) }) { image in
+            YamiboRemoteImage(source: authorAvatarURL.map { YamiboImageSource(url: $0) }) { image in
                 image
                     .resizable()
                     .scaledToFill()
             } placeholder: {
                 Image(systemName: "person.crop.circle")
                     .foregroundStyle(ForumColors.secondaryText)
-            } failure: {
+            } failure: { _ in
                 Image(systemName: "person.crop.circle")
                     .foregroundStyle(ForumColors.secondaryText)
             }

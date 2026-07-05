@@ -2,6 +2,7 @@ import Foundation
 
 public enum YamiboError: LocalizedError, Equatable, Sendable {
     case invalidResponse(statusCode: Int?)
+    case invalidImageData
     case unreadableBody
     case emptyHTML
     case parsingFailed(context: String)
@@ -32,6 +33,8 @@ public enum YamiboError: LocalizedError, Equatable, Sendable {
                 return L10n.string("error.invalid_response_with_status", statusCode)
             }
             return L10n.string("error.invalid_response")
+        case .invalidImageData:
+            return L10n.string("image.load_failed")
         case .unreadableBody:
             return L10n.string("error.unreadable_body")
         case .emptyHTML:

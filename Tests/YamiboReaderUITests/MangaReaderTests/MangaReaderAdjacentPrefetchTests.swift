@@ -276,7 +276,6 @@ private func makeAdjacentPrefetchFixture(
         makeDirectoryRepository: { AdjacentPrefetchDirectoryRepository(seed: makeAdjacentPrefetchSeed(document: document)) },
         makeDirectoryStore: { AdjacentPrefetchDirectoryStore(directories: [directory]) },
         makeDirectorySearchCooldownState: { MangaDirectorySearchCooldownState() },
-        makeImageDataLoader: { AdjacentPrefetchImageDataLoader() },
         progressSync: resolvedProgressSync
     )
     #else
@@ -389,11 +388,6 @@ private actor AdjacentPrefetchDirectoryStore: MangaDirectoryPersisting {
 }
 
 #if os(iOS)
-private actor AdjacentPrefetchImageDataLoader: MangaImageDataLoading {
-    func imageData(for request: YamiboImageRequest) async throws -> Data {
-        Data()
-    }
-}
 #endif
 
 private actor RecordingAdjacentPrefetchProgressAdapter: ProgressSyncAdapter {

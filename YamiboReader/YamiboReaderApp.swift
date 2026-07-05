@@ -19,7 +19,7 @@ struct YamiboReaderApp: App {
 
     init() {
         let initialTab = YamiboReaderApp.resolveInitialTab()
-        let appContext = YamiboAppContext()
+        let appContext = YamiboAppContext(ordinaryImageCache: YamiboUIImagePipeline.shared)
         #if os(iOS)
         YamiboAppDelegate.appContext = appContext
         #endif

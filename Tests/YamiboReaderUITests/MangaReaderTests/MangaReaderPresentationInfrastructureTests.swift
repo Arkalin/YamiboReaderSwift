@@ -13,16 +13,15 @@ import UIKit
 struct MangaReaderPresentationInfrastructureTests {
     #if os(iOS)
     @MainActor
-    @Test func mangaImageDataLoaderReturnsOriginalImageDataForSaving() async throws {
-        let loader = RecordingMangaPipelineDataLoader(outputs: [.success(Self.pngData)])
+    @Test func mangaPageImageSourceCarriesURLRefererAndOfflineScope() throws {
         let page = try makePipelinePage()
+        let scope = try #require(YamiboImageOfflineScope(tid: page.tid, ownerName: "favorite-a"))
 
-        let data = try await loader.imageData(
-            for: page.mangaReaderImageRequest
-        )
+        let source = page.mangaReaderImageSource(offlineScope: scope)
 
-        #expect(data == Self.pngData)
-        #expect(await loader.callCount == 1)
+        #expect(source.url == page.imageURL)
+        #expect(source.refererPageURL == page.mangaReaderRefererURL)
+        #expect(source.offlineScope == scope)
     }
 
     @Test func imageSaveSuccessFeedbackIsAvailableWhileActionDialogDismisses() async throws {
@@ -33,19 +32,6 @@ struct MangaReaderPresentationInfrastructureTests {
         state.finishSave(with: .success)
 
         #expect(state.feedback?.message == L10n.string("image.save_success_message"))
-    }
-
-    @MainActor
-    @Test func mangaImageDataLoaderPropagatesOriginalImageDataFailuresForSaving() async throws {
-        let loader = RecordingMangaPipelineDataLoader(outputs: [.failure(MangaPipelineTestError.loaderFailure)])
-        let page = try makePipelinePage()
-
-        await #expect(throws: MangaPipelineTestError.loaderFailure) {
-            _ = try await loader.imageData(
-                for: page.mangaReaderImageRequest
-            )
-        }
-        #expect(await loader.callCount == 1)
     }
 
     @MainActor
@@ -111,7 +97,7 @@ struct MangaReaderPresentationInfrastructureTests {
 
     @MainActor
     @Test func pageImageLoaderDeduplicatesConcurrentLoads() async throws {
-        let loader = RecordingMangaPipelineDataLoader(outputs: [.success(Self.pngData)], delayNanoseconds: 50_000_000)
+        let loader = RecordingMangaPipelineDataLoader(outputs: [Self.pngData], delayNanoseconds: 50_000_000)
         let pageImageLoader = makeMangaReaderPageImageLoader(dataLoader: loader)
         let page = try makePipelinePage()
 
@@ -126,7 +112,7 @@ struct MangaReaderPresentationInfrastructureTests {
 
     @MainActor
     @Test func pageImageLoaderCachesDecodedImages() async throws {
-        let loader = RecordingMangaPipelineDataLoader(outputs: [.success(Self.pngData)])
+        let loader = RecordingMangaPipelineDataLoader(outputs: [Self.pngData])
         let pageImageLoader = makeMangaReaderPageImageLoader(dataLoader: loader)
         let page = try makePipelinePage()
 
@@ -140,34 +126,15 @@ struct MangaReaderPresentationInfrastructureTests {
     @MainActor
     @Test func pageImageLoaderDoesNotCacheInvalidImageData() async throws {
         let loader = RecordingMangaPipelineDataLoader(outputs: [
-            .success(Data([0, 1, 2])),
-            .success(Self.pngData)
+            Data([0, 1, 2]),
+            Self.pngData
         ])
         let pageImageLoader = makeMangaReaderPageImageLoader(dataLoader: loader)
         let page = try makePipelinePage()
 
-        await #expect(throws: MangaReaderPageImageLoaderError.invalidImageData) {
+        await #expect(throws: YamiboError.invalidImageData) {
             _ = try await pageImageLoader.image(for: page)
         }
-        let image = try await pageImageLoader.image(for: page)
-
-        #expect(image.size.width > 0)
-        #expect(await loader.callCount == 2)
-    }
-
-    @MainActor
-    @Test func pageImageLoaderDoesNotCacheLoaderFailures() async throws {
-        let loader = RecordingMangaPipelineDataLoader(outputs: [
-            .failure(MangaPipelineTestError.loaderFailure),
-            .success(Self.pngData)
-        ])
-        let pageImageLoader = makeMangaReaderPageImageLoader(dataLoader: loader)
-        let page = try makePipelinePage()
-
-        await #expect(throws: MangaPipelineTestError.loaderFailure) {
-            _ = try await pageImageLoader.image(for: page)
-        }
-        #expect(pageImageLoader.cachedImage(for: page) == nil)
         let image = try await pageImageLoader.image(for: page)
 
         #expect(image.size.width > 0)
@@ -228,31 +195,34 @@ private final class FakeMangaPhotoLibraryWriter: MangaImagePhotoLibraryWriting {
     }
 }
 
-private actor RecordingMangaPipelineDataLoader: MangaImageDataLoading {
-    private var outputs: [Result<Data, Error>]
+private actor RecordingMangaPipelineDataLoader: YamiboOfflineImageDataProviding {
+    private var outputs: [Data]
     private let delayNanoseconds: UInt64
     private(set) var callCount = 0
 
-    init(outputs: [Result<Data, Error>], delayNanoseconds: UInt64 = 0) {
+    init(outputs: [Data], delayNanoseconds: UInt64 = 0) {
         self.outputs = outputs
         self.delayNanoseconds = delayNanoseconds
     }
 
-    func imageData(for request: YamiboImageRequest) async throws -> Data {
+    func offlineImageData(url _: URL, scope _: YamiboImageOfflineScope) async -> Data? {
         callCount += 1
         if delayNanoseconds > 0 {
             try? await Task.sleep(nanoseconds: delayNanoseconds)
         }
-        let output = outputs.isEmpty ? .success(Data()) : outputs.removeFirst()
-        return try output.get()
+        return outputs.isEmpty ? nil : outputs.removeFirst()
     }
 }
 
 @MainActor
-private func makeMangaReaderPageImageLoader(dataLoader: any MangaImageDataLoading) -> MangaReaderPageImageLoader {
+private func makeMangaReaderPageImageLoader(dataLoader: RecordingMangaPipelineDataLoader) -> MangaReaderPageImageLoader {
     MangaReaderPageImageLoader(
-        dataLoader: dataLoader,
-        uiImagePipeline: YamiboUIImagePipeline()
+        imageSource: { page in
+            page.mangaReaderImageSource(offlineScope: YamiboImageOfflineScope(tid: page.tid, ownerName: "favorite-a"))
+        },
+        uiImagePipeline: YamiboUIImagePipeline(
+            core: YamiboImagePipeline(offlineImages: dataLoader)
+        )
     )
 }
 

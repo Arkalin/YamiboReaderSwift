@@ -41,16 +41,16 @@ public final class OfflineCacheBackgroundDownloadTransport: NSObject, OfflineCac
         return configuration
     }
 
-    public func downloadImageData(for request: YamiboImageRequest) async throws -> Data {
+    public func downloadImageData(for source: YamiboImageSource) async throws -> Data {
         let taskBox = URLSessionTaskBox()
         return try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { continuation in
-                var urlRequest = URLRequest(url: request.url)
-                if let refererURL = request.refererURL {
-                    urlRequest.setValue(refererURL.absoluteString, forHTTPHeaderField: "Referer")
+                var urlRequest = URLRequest(url: source.url)
+                if let refererPageURL = source.refererPageURL {
+                    urlRequest.setValue(refererPageURL.absoluteString, forHTTPHeaderField: "Referer")
                 }
                 let task = session.downloadTask(with: urlRequest)
-                task.taskDescription = request.url.absoluteString
+                task.taskDescription = source.url.absoluteString
                 taskBox.setTask(task)
                 register(
                     taskIdentifier: task.taskIdentifier,

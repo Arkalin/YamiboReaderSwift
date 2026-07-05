@@ -105,32 +105,3 @@ public protocol MangaDirectoryRenaming: Sendable {
     ) async throws
 }
 
-public protocol MangaImageDataLoading: YamiboImageDataLoading {
-    func imageData(
-        for request: YamiboImageRequest,
-        offlineCacheContext: MangaImageOfflineCacheContext?
-    ) async throws -> Data
-}
-
-public struct MangaImageOfflineCacheContext: Hashable, Sendable {
-    public var ownerName: String
-    public var tid: String
-
-    public init?(ownerName: String?, tid: String) {
-        guard let ownerName = ownerName?.mangaReaderTrimmedNonEmpty,
-              let tid = tid.mangaReaderTrimmedNonEmpty else {
-            return nil
-        }
-        self.ownerName = ownerName
-        self.tid = tid
-    }
-}
-
-public extension MangaImageDataLoading {
-    func imageData(
-        for request: YamiboImageRequest,
-        offlineCacheContext: MangaImageOfflineCacheContext?
-    ) async throws -> Data {
-        try await imageData(for: request)
-    }
-}

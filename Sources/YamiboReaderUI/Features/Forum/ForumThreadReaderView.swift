@@ -27,7 +27,6 @@ struct ForumThreadReaderView: View {
             isLoading: model.isLoading,
             errorMessage: model.errorMessage,
             isFavorited: model.isFavorited,
-            inlineImageLoadingContext: model.inlineImageLoadingContext,
             refresh: refresh,
             retry: model.retry,
             goToPage: goToPage,
@@ -117,7 +116,6 @@ private struct ForumThreadReaderBodyView: View {
     let isLoading: Bool
     let errorMessage: String?
     let isFavorited: Bool
-    let inlineImageLoadingContext: NovelInlineImageLoadingContext?
     let refresh: () async -> Void
     let retry: () -> Void
     let goToPage: (Int) -> Void
@@ -134,17 +132,14 @@ private struct ForumThreadReaderBodyView: View {
     var body: some View {
         contentWithSheets
             .fullScreenCover(item: $imageBrowserRequest) { request in
-                if let inlineImageLoadingContext {
-                    ImageBrowserView(
-                        items: request.items,
-                        initialItemID: request.initialItemID,
-                        mode: .multiple,
-                        imageDataLoader: inlineImageLoadingContext.loader,
-                        onDismiss: {
-                            imageBrowserRequest = nil
-                        }
-                    )
-                }
+                ImageBrowserView(
+                    items: request.items,
+                    initialItemID: request.initialItemID,
+                    mode: .multiple,
+                    onDismiss: {
+                        imageBrowserRequest = nil
+                    }
+                )
             }
     }
 
@@ -189,7 +184,6 @@ private struct ForumThreadReaderBodyView: View {
                                 currentPage: currentPage,
                                 forumID: page.forumID,
                                 formHash: page.formHash,
-                                inlineImageLoadingContext: inlineImageLoadingContext,
                                 onUserTap: onUserTap,
                                 onImageTap: openImageBrowser,
                                 onShowRatingResults: showRatingResults,
@@ -262,7 +256,7 @@ private struct ForumThreadReaderBodyView: View {
     }
 
     private func openImageBrowser(_ imageID: String, _ url: URL, _ title: String?, _ refererURL: URL) {
-        guard inlineImageLoadingContext != nil, let page else {
+        guard let page else {
             onURLTap(url)
             return
         }
@@ -274,7 +268,7 @@ private struct ForumThreadReaderBodyView: View {
         )
         let fallbackItem = ImageBrowserItem(
             id: imageID,
-            request: YamiboImageRequest(url: url, refererURL: refererURL),
+            source: YamiboImageSource(url: url, refererPageURL: refererURL),
             title: imageBrowserTitle(from: title),
         )
         imageBrowserRequest = ForumThreadImageBrowserRequest(
@@ -695,7 +689,6 @@ private struct ForumThreadPostCard: View {
     let currentPage: Int
     let forumID: String?
     let formHash: String?
-    let inlineImageLoadingContext: NovelInlineImageLoadingContext?
     let onUserTap: (String, String?) -> Void
     let onImageTap: (String, URL, String?, URL) -> Void
     let onShowRatingResults: (String, String) -> Void
@@ -726,7 +719,6 @@ private struct ForumThreadPostCard: View {
                 blocks: post.contentBlocks,
                 fallbackText: post.contentText,
                 refererURL: refererURL,
-                inlineImageLoadingContext: inlineImageLoadingContext,
                 onImageTap: onImageTap,
                 onURLTap: onURLTap
             )
@@ -1446,7 +1438,6 @@ private struct ForumThreadContentBlocksView: View {
     let blocks: [ForumThreadContentBlock]
     let fallbackText: String
     let refererURL: URL
-    let inlineImageLoadingContext: NovelInlineImageLoadingContext?
     let onImageTap: (String, URL, String?, URL) -> Void
     let onURLTap: (URL) -> Void
 
@@ -1462,7 +1453,6 @@ private struct ForumThreadContentBlocksView: View {
                     ForumThreadContentBlockView(
                         block: block,
                         refererURL: refererURL,
-                        inlineImageLoadingContext: inlineImageLoadingContext,
                         onImageTap: onImageTap,
                         onURLTap: onURLTap
                     )
@@ -1476,7 +1466,6 @@ private struct ForumThreadContentBlocksView: View {
 private struct ForumThreadContentBlockView: View {
     let block: ForumThreadContentBlock
     let refererURL: URL
-    let inlineImageLoadingContext: NovelInlineImageLoadingContext?
     let onImageTap: (String, URL, String?, URL) -> Void
     let onURLTap: (URL) -> Void
 
@@ -1489,7 +1478,6 @@ private struct ForumThreadContentBlockView: View {
                 blockID: block.id,
                 block: imageBlock,
                 refererURL: refererURL,
-                inlineImageLoadingContext: inlineImageLoadingContext,
                 onImageTap: onImageTap,
                 onURLTap: onURLTap
             )
@@ -1501,7 +1489,6 @@ private struct ForumThreadContentBlockView: View {
                     blocks: blocks,
                     fallbackText: "",
                     refererURL: refererURL,
-                    inlineImageLoadingContext: inlineImageLoadingContext,
                     onImageTap: onImageTap,
                     onURLTap: onURLTap
                 )
@@ -1516,7 +1503,6 @@ private struct ForumThreadContentBlockView: View {
                 title: title ?? L10n.string("forum.thread.collapse_title"),
                 blocks: blocks,
                 refererURL: refererURL,
-                inlineImageLoadingContext: inlineImageLoadingContext,
                 onImageTap: onImageTap,
                 onURLTap: onURLTap
             )
@@ -1525,7 +1511,6 @@ private struct ForumThreadContentBlockView: View {
                 cost: cost,
                 blocks: blocks,
                 refererURL: refererURL,
-                inlineImageLoadingContext: inlineImageLoadingContext,
                 onImageTap: onImageTap,
                 onURLTap: onURLTap
             )
@@ -1533,7 +1518,6 @@ private struct ForumThreadContentBlockView: View {
             ForumThreadTableBlockView(
                 rows: rows,
                 refererURL: refererURL,
-                inlineImageLoadingContext: inlineImageLoadingContext,
                 onImageTap: onImageTap,
                 onURLTap: onURLTap
             )
@@ -1852,7 +1836,6 @@ private struct ForumThreadImageBlockView: View {
     let blockID: String
     let block: ForumThreadImageBlock
     let refererURL: URL
-    let inlineImageLoadingContext: NovelInlineImageLoadingContext?
     let onImageTap: (String, URL, String?, URL) -> Void
     let onURLTap: (URL) -> Void
 
@@ -1881,26 +1864,17 @@ private struct ForumThreadImageBlockView: View {
         }
     }
 
-    @ViewBuilder
     private var image: some View {
-        if let inlineImageLoadingContext {
-            ForumThreadAuthenticatedImage(
-                url: block.url,
-                refererURL: refererURL,
-                imageDataLoader: inlineImageLoadingContext.loader
-            )
-        } else {
-            YamiboRemoteImage(
-                request: YamiboImageRequest(url: block.url, refererURL: refererURL)
-            ) { image in
-                image
-                    .resizable()
-                    .scaledToFit()
-            } placeholder: {
-                ForumThreadImagePlaceholderView()
-            } failure: {
-                ForumThreadImageFailureView()
-            }
+        YamiboRemoteImage(
+            source: YamiboImageSource(url: block.url, refererPageURL: refererURL)
+        ) { image in
+            image
+                .resizable()
+                .scaledToFit()
+        } placeholder: {
+            ForumThreadImagePlaceholderView()
+        } failure: { _ in
+            ForumThreadImageFailureView()
         }
     }
 }
@@ -1926,40 +1900,6 @@ private struct ForumThreadImageFailureView: View {
                     .font(.caption)
                     .foregroundStyle(ForumColors.secondaryText)
             }
-    }
-}
-
-private struct ForumThreadAuthenticatedImage: View {
-    @StateObject private var loader: NovelReaderImageLoader
-
-    init(
-        url: URL,
-        refererURL: URL,
-        imageDataLoader: any YamiboImageDataLoading
-    ) {
-        _loader = StateObject(
-            wrappedValue: NovelReaderImageLoader(
-                request: YamiboImageRequest(url: url, refererURL: refererURL),
-                imageDataLoader: imageDataLoader
-            )
-        )
-    }
-
-    var body: some View {
-        Group {
-            if let image = loader.image {
-                Image(uiImage: image)
-                    .resizable()
-                    .scaledToFit()
-            } else if loader.didFail {
-                ForumThreadImageFailureView()
-            } else {
-                ForumThreadImagePlaceholderView()
-            }
-        }
-        .task {
-            await loader.loadIfNeeded()
-        }
     }
 }
 
@@ -2008,12 +1948,12 @@ private struct ForumThreadAttachmentIconView: View {
     let iconURL: URL?
 
     var body: some View {
-        YamiboRemoteImage(request: iconURL.map { YamiboImageRequest(url: $0) }) { image in
+        YamiboRemoteImage(source: iconURL.map { YamiboImageSource(url: $0) }) { image in
             image.resizable().scaledToFit()
         } placeholder: {
             Image(systemName: "paperclip")
                 .foregroundStyle(ForumColors.brownPrimary)
-        } failure: {
+        } failure: { _ in
             Image(systemName: "paperclip")
                 .foregroundStyle(ForumColors.brownPrimary)
         }
@@ -2047,7 +1987,6 @@ private struct ForumThreadDisclosureBlockView: View {
     let title: String
     let blocks: [ForumThreadContentBlock]
     let refererURL: URL
-    let inlineImageLoadingContext: NovelInlineImageLoadingContext?
     let onImageTap: (String, URL, String?, URL) -> Void
     let onURLTap: (URL) -> Void
 
@@ -2059,7 +1998,6 @@ private struct ForumThreadDisclosureBlockView: View {
                 blocks: blocks,
                 fallbackText: "",
                 refererURL: refererURL,
-                inlineImageLoadingContext: inlineImageLoadingContext,
                 onImageTap: onImageTap,
                 onURLTap: onURLTap
             )
@@ -2078,7 +2016,6 @@ private struct ForumThreadLockedBlockView: View {
     let cost: Int?
     let blocks: [ForumThreadContentBlock]
     let refererURL: URL
-    let inlineImageLoadingContext: NovelInlineImageLoadingContext?
     let onImageTap: (String, URL, String?, URL) -> Void
     let onURLTap: (URL) -> Void
 
@@ -2092,7 +2029,6 @@ private struct ForumThreadLockedBlockView: View {
                     blocks: blocks,
                     fallbackText: "",
                     refererURL: refererURL,
-                    inlineImageLoadingContext: inlineImageLoadingContext,
                     onImageTap: onImageTap,
                     onURLTap: onURLTap
                 )
@@ -2129,7 +2065,6 @@ private struct ForumThreadCodeBlockView: View {
 private struct ForumThreadTableBlockView: View {
     let rows: [[ForumThreadTableCell]]
     let refererURL: URL
-    let inlineImageLoadingContext: NovelInlineImageLoadingContext?
     let onImageTap: (String, URL, String?, URL) -> Void
     let onURLTap: (URL) -> Void
 
@@ -2141,7 +2076,6 @@ private struct ForumThreadTableBlockView: View {
                         ForumThreadTableCellView(
                             cell: rows[rowIndex][cellIndex],
                             refererURL: refererURL,
-                            inlineImageLoadingContext: inlineImageLoadingContext,
                             onImageTap: onImageTap,
                             onURLTap: onURLTap
                         )
@@ -2160,7 +2094,6 @@ private struct ForumThreadTableBlockView: View {
 private struct ForumThreadTableCellView: View {
     let cell: ForumThreadTableCell
     let refererURL: URL
-    let inlineImageLoadingContext: NovelInlineImageLoadingContext?
     let onImageTap: (String, URL, String?, URL) -> Void
     let onURLTap: (URL) -> Void
 
@@ -2169,7 +2102,6 @@ private struct ForumThreadTableCellView: View {
             blocks: cell.blocks,
             fallbackText: "",
             refererURL: refererURL,
-            inlineImageLoadingContext: inlineImageLoadingContext,
             onImageTap: onImageTap,
             onURLTap: onURLTap
         )
@@ -2191,12 +2123,12 @@ private struct ForumThreadPostHeader: View {
 
     var body: some View {
         HStack(alignment: .center, spacing: 10) {
-            YamiboRemoteImage(request: post.author.avatarURL.map { YamiboImageRequest(url: $0) }) { image in
+            YamiboRemoteImage(source: post.author.avatarURL.map { YamiboImageSource(url: $0) }) { image in
                 image.resizable().scaledToFill()
             } placeholder: {
                 Image(systemName: "person.crop.circle")
                     .foregroundStyle(ForumColors.secondaryText)
-            } failure: {
+            } failure: { _ in
                 Image(systemName: "person.crop.circle")
                     .foregroundStyle(ForumColors.secondaryText)
             }

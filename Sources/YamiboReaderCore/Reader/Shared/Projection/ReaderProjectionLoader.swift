@@ -52,6 +52,7 @@ public enum ReaderProjectionFallbackPolicy {
         case .offline, .underlying, .invalidResponse, .unreadableBody, .emptyHTML:
             return true
         case .parsingFailed,
+             .invalidImageData,
              .floodControl,
              .notAuthenticated,
              .accountUIDUnavailable,

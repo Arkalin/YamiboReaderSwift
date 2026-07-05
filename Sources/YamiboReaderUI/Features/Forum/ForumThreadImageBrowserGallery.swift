@@ -50,7 +50,7 @@ struct ForumThreadImageBrowserGallery: Equatable {
             return [
                 ImageBrowserItem(
                     id: block.id,
-                    request: YamiboImageRequest(url: imageBlock.url, refererURL: refererURL),
+                    source: YamiboImageSource(url: imageBlock.url, refererPageURL: refererURL),
                     title: title(from: imageBlock.altText, defaultTitle: defaultTitle),
                 )
             ]

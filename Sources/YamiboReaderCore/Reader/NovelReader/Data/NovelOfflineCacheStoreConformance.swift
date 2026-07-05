@@ -1,1 +1,1 @@
-extension OfflineCacheStore: NovelOfflineCacheStoring, NovelOfflineImageDataProviding {}
+extension OfflineCacheStore: NovelOfflineCacheStoring {}
