@@ -75,7 +75,7 @@ public struct IOSForumWebView: UIViewRepresentable {
                 let sessionState = await appContext.sessionStore.load()
                 await synchronizeWebViewSession(sessionState, reloadIfNeeded: false)
                 if webView.url == nil {
-                    model.load(model.currentURL ?? YamiboRoute.baseURL)
+                    model.load(model.currentURL ?? YamiboDomain.baseURL)
                 }
             }
         }
@@ -166,8 +166,7 @@ public struct IOSForumWebView: UIViewRepresentable {
         }
 
         private func isInternal(_ url: URL) -> Bool {
-            guard let host = url.host?.lowercased() else { return false }
-            return host == "bbs.yamibo.com" || host.hasSuffix(".yamibo.com")
+            YamiboDomain.isYamiboHost(url)
         }
 
         private func startObservingSessionChanges() {
@@ -216,7 +215,7 @@ public struct IOSForumWebView: UIViewRepresentable {
         @MainActor
         private func reloadOrLoad(_ webView: WKWebView) {
             if webView.url == nil {
-                model.load(model.currentURL ?? YamiboRoute.baseURL)
+                model.load(model.currentURL ?? YamiboDomain.baseURL)
             } else if let url = webView.url, isInternal(url) {
                 webView.reload()
             }
@@ -229,7 +228,7 @@ public struct IOSForumWebView: UIViewRepresentable {
                     let pair = cookiePart.split(separator: "=", maxSplits: 1).map(String.init)
                     guard pair.count == 2 else { return nil }
                     return HTTPCookie(properties: [
-                        .domain: "bbs.yamibo.com",
+                        .domain: YamiboDomain.forumHost,
                         .path: "/",
                         .name: pair[0].trimmingCharacters(in: .whitespaces),
                         .value: pair[1].trimmingCharacters(in: .whitespaces),
@@ -249,7 +248,7 @@ public struct IOSForumWebView: UIViewRepresentable {
             let cookieStore = webView.configuration.websiteDataStore.httpCookieStore
             let storedCookies = await cookieStore.allCookies()
             for cookie in storedCookies
-                where cookie.domain.lowercased().contains("yamibo.com") &&
+                where YamiboDomain.containsYamiboDomain(cookie.domain) &&
                 incomingNames.contains(cookie.name) {
                 await cookieStore.deleteCookieAsync(cookie)
             }
@@ -258,7 +257,7 @@ public struct IOSForumWebView: UIViewRepresentable {
         private func clearYamiboCookies(in webView: WKWebView) async {
             let cookieStore = webView.configuration.websiteDataStore.httpCookieStore
             let cookies = await cookieStore.allCookies()
-            for cookie in cookies where cookie.domain.lowercased().contains("yamibo.com") {
+            for cookie in cookies where YamiboDomain.containsYamiboDomain(cookie.domain) {
                 await cookieStore.deleteCookieAsync(cookie)
             }
         }
@@ -266,7 +265,7 @@ public struct IOSForumWebView: UIViewRepresentable {
         private func persistCookies(from webView: WKWebView) async throws {
             let cookies = await webView.configuration.websiteDataStore.httpCookieStore.allCookies()
             let header = cookies
-                .filter { $0.domain.contains("yamibo.com") }
+                .filter { YamiboDomain.containsYamiboDomain($0.domain) }
                 .sorted { $0.name < $1.name }
                 .map { "\($0.name)=\($0.value)" }
                 .joined(separator: "; ")

@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 @testable import YamiboReaderCore
+import YamiboReaderTestSupport
 
 @MainActor
 @Test func appContinuityRestoreReconcilesNovelRouteWithReadingProgress() async throws {

@@ -1,16 +1,16 @@
 import Foundation
 import YamiboReaderCore
 
-typealias TestOfflineCacheStoring = OfflineCacheStoreCore & MangaOfflineCacheStoring & NovelOfflineCacheStoring & YamiboOfflineImageDataProviding
+public typealias TestOfflineCacheStoring = OfflineCacheStoreCore & MangaOfflineCacheStoring & NovelOfflineCacheStoring & YamiboOfflineImageDataProviding
 
-extension OfflineCacheQueueWorkProjection {
+public extension OfflineCacheQueueWorkProjection {
     var workID: String { id.rawValue }
     var ownerName: String { entryID.ownerKey }
     var tid: String { entryID.entryKey }
     var chapterTitle: String { title }
 }
 
-extension OfflineCacheProcessingWork {
+public extension OfflineCacheProcessingWork {
     var workID: String { id.rawValue }
     var ownerName: String { entryID.ownerKey }
     var tid: String { entryID.entryKey }
@@ -23,7 +23,7 @@ extension OfflineCacheProcessingWork {
     }
 }
 
-extension OfflineCacheQueueStoring {
+public extension OfflineCacheQueueStoring {
     func mangaQueueWorkProjections() async -> [OfflineCacheQueueWorkProjection] {
         await offlineCacheQueueWorks().filter { $0.id.readerKind == .manga }
     }

@@ -2,13 +2,13 @@ import Foundation
 
 public enum YamiboThreadURLCanonicalizer {
     public static func canonicalThreadURL(from url: URL) -> URL {
-        let resolvedURL = URL(string: url.absoluteString, relativeTo: YamiboRoute.baseURL)?.absoluteURL ?? url.absoluteURL
+        let resolvedURL = URL(string: url.absoluteString, relativeTo: YamiboDomain.baseURL)?.absoluteURL ?? url.absoluteURL
         let threadID = threadID(from: resolvedURL)
 
         var components = URLComponents(url: resolvedURL, resolvingAgainstBaseURL: false)
-            ?? URLComponents(url: YamiboRoute.baseURL, resolvingAgainstBaseURL: false)!
-        components.scheme = components.scheme ?? YamiboRoute.baseURL.scheme
-        components.host = components.host ?? YamiboRoute.baseURL.host
+            ?? URLComponents(url: YamiboDomain.baseURL, resolvingAgainstBaseURL: false)!
+        components.scheme = components.scheme ?? YamiboDomain.baseURL.scheme
+        components.host = components.host ?? YamiboDomain.baseURL.host
         components.path = "/forum.php"
 
         var retainedItems: [URLQueryItem] = [.init(name: "mod", value: "viewthread")]
@@ -24,7 +24,7 @@ public enum YamiboThreadURLCanonicalizer {
     }
 
     public static func threadID(from url: URL) -> String? {
-        let resolvedURL = URL(string: url.absoluteString, relativeTo: YamiboRoute.baseURL)?.absoluteURL ?? url.absoluteURL
+        let resolvedURL = URL(string: url.absoluteString, relativeTo: YamiboDomain.baseURL)?.absoluteURL ?? url.absoluteURL
         if let value = URLComponents(url: resolvedURL, resolvingAgainstBaseURL: false)?
             .queryItems?
             .first(where: { $0.name == "tid" || $0.name == "ptid" })?

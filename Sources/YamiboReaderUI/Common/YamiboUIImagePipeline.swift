@@ -106,19 +106,18 @@ struct YamiboRemoteImage<Content: View, Placeholder: View, Failure: View>: View 
     private let pipeline: YamiboUIImagePipeline
     private let content: (Image) -> Content
     private let placeholder: () -> Placeholder
-    private let failure: (@escaping () -> Void) -> Failure
+    private let failure: () -> Failure
 
     @State private var image: YamiboPlatformImage?
     @State private var didFail = false
     @State private var loadedKey: String?
-    @State private var attempt = 0
 
     init(
         source: YamiboImageSource?,
         pipeline: YamiboUIImagePipeline = .shared,
         @ViewBuilder content: @escaping (Image) -> Content,
         @ViewBuilder placeholder: @escaping () -> Placeholder,
-        @ViewBuilder failure: @escaping (@escaping () -> Void) -> Failure
+        @ViewBuilder failure: @escaping () -> Failure
     ) {
         self.source = source
         self.pipeline = pipeline
@@ -132,7 +131,7 @@ struct YamiboRemoteImage<Content: View, Placeholder: View, Failure: View>: View 
             if let image {
                 content(Image(uiImage: image))
             } else if didFail {
-                failure(retry)
+                failure()
             } else {
                 placeholder()
             }
@@ -143,13 +142,7 @@ struct YamiboRemoteImage<Content: View, Placeholder: View, Failure: View>: View 
     }
 
     private var taskIdentity: String {
-        "\(source?.cacheKey ?? "yamibo-image:no-source")#\(attempt)"
-    }
-
-    private func retry() {
-        didFail = false
-        loadedKey = nil
-        attempt += 1
+        source?.cacheKey ?? "yamibo-image:no-source"
     }
 
     private func load() async {

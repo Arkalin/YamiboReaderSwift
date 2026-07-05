@@ -42,7 +42,7 @@ public enum MangaHTMLParser {
 
     public static func extractSamePageLinks(
         from html: String,
-        baseURL: URL = YamiboRoute.baseURL
+        baseURL: URL = YamiboDomain.baseURL
     ) -> [MangaChapter] {
         guard let document = try? KannaSoup.parse(html) else { return [] }
         guard let message = try? document.select(".message").first() else { return [] }
@@ -114,7 +114,7 @@ public enum MangaHTMLParser {
         return label.contains("公告")
     }
 
-    public static func extractImageURLs(from html: String, baseURL: URL = YamiboRoute.baseURL) -> [URL] {
+    public static func extractImageURLs(from html: String, baseURL: URL = YamiboDomain.baseURL) -> [URL] {
         guard let document = try? KannaSoup.parse(html) else { return [] }
         let images = (try? document.select(".img_one img, .message img:not([src*='smiley'])")) ?? Elements()
         var urls: [URL] = []

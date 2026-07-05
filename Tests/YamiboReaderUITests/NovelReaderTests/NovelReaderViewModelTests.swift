@@ -2,6 +2,7 @@ import Foundation
 import CoreGraphics
 import XCTest
 @testable import YamiboReaderCore
+import YamiboReaderTestSupport
 @testable import YamiboReaderUI
 
 private typealias NovelTextLayoutFixture = @Sendable (

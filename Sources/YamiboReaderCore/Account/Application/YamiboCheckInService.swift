@@ -32,7 +32,7 @@ public protocol YamiboCheckInServicing: Sendable {
 }
 
 public struct YamiboCheckInService: YamiboCheckInServicing, Sendable {
-    public static let checkInPageURL = URL(string: "https://bbs.yamibo.com/plugin.php?id=zqlj_sign&mobile=2")!
+    public static let checkInPageURL = YamiboDomain.url(forSitePath: "plugin.php?id=zqlj_sign&mobile=2")!
 
     private let sessionStore: SessionStore
     private let checkInStore: YamiboCheckInStore
@@ -135,6 +135,6 @@ public struct YamiboCheckInService: YamiboCheckInServicing, Sendable {
         }
 
         let path = String(html[range]).replacingOccurrences(of: "&amp;", with: "&")
-        return URL(string: path, relativeTo: YamiboRoute.baseURL)?.absoluteURL
+        return URL(string: path, relativeTo: YamiboDomain.baseURL)?.absoluteURL
     }
 }

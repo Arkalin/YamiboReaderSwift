@@ -46,17 +46,7 @@ public struct ContentCover: Codable, Hashable, Sendable {
     }
 }
 
-public protocol ContentCoverStoring: Sendable {
-    func cover(for key: ContentCoverKey) async -> ContentCover?
-    @discardableResult
-    func setAutomaticCover(_ url: URL, for key: ContentCoverKey, date: Date) async throws -> Bool
-    @discardableResult
-    func setManualCover(_ url: URL, for key: ContentCoverKey, date: Date) async throws -> Bool
-    func setDynamicEnabled(_ enabled: Bool, for key: ContentCoverKey, date: Date) async throws
-    func clearAll() async throws
-}
-
-public actor ContentCoverStore: ContentCoverStoring {
+public actor ContentCoverStore {
     private let defaults: UserDefaults
     private let key: String
     private let encoder = JSONEncoder()
@@ -136,10 +126,7 @@ public actor ContentCoverStore: ContentCoverStoring {
         if value.hasPrefix("//") {
             return URL(string: "https:\(value)")
         }
-        if value.hasPrefix("/") {
-            return URL(string: "https://bbs.yamibo.com\(value)")
-        }
-        return URL(string: "https://bbs.yamibo.com/\(value)")
+        return YamiboDomain.url(forSitePath: value)
     }
 
     private func loadCovers() -> [ContentCoverKey: ContentCover] {

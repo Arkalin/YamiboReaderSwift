@@ -65,7 +65,7 @@ public enum ChapterCommentsHTMLParser {
         else {
             return nil
         }
-        return URL(string: href, relativeTo: YamiboRoute.baseURL)?.absoluteURL
+        return URL(string: href, relativeTo: YamiboDomain.baseURL)?.absoluteURL
     }
 
     public static func parseFullRatingReasonsPage(

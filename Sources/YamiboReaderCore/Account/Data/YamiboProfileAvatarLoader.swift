@@ -1,10 +1,6 @@
 import Foundation
 
-public protocol YamiboProfileAvatarLoading: Sendable {
-    func avatarData(for profile: YamiboProfile) async throws -> Data?
-}
-
-public actor YamiboProfileAvatarLoader: YamiboProfileAvatarLoading {
+public actor YamiboProfileAvatarLoader {
     private let sessionStore: any SessionStoring
     private let imageData: @Sendable (YamiboImageSource) async throws -> Data
     private var cachedData: [RequestKey: Data] = [:]

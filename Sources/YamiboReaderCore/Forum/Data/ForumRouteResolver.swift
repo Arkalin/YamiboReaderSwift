@@ -18,7 +18,7 @@ public enum ForumResolvedRoute: Equatable, Hashable, Sendable {
 
 public enum ForumRouteResolver {
     public static func resolve(url: URL, source: ForumNavigationSource = .external) -> ForumResolvedRoute {
-        let resolvedURL = URL(string: url.absoluteString, relativeTo: YamiboRoute.baseURL)?.absoluteURL ?? url.absoluteURL
+        let resolvedURL = URL(string: url.absoluteString, relativeTo: YamiboDomain.baseURL)?.absoluteURL ?? url.absoluteURL
 
         if let board = boardRoute(from: resolvedURL) {
             return .board(fid: board.fid, title: nil, page: board.page)
@@ -52,7 +52,7 @@ public enum ForumRouteResolver {
     }
 
     public static func boardURL(fid: String, page: Int? = nil) -> URL {
-        var components = URLComponents(url: YamiboRoute.baseURL, resolvingAgainstBaseURL: false)!
+        var components = URLComponents(url: YamiboDomain.baseURL, resolvingAgainstBaseURL: false)!
         components.path = "/forum.php"
         components.queryItems = [
             .init(name: "mod", value: "forumdisplay"),
@@ -167,7 +167,7 @@ public enum ForumRouteResolver {
     }
 
     private static func isForumHomeURL(_ url: URL) -> Bool {
-        guard url.host == YamiboRoute.baseURL.host else { return false }
+        guard url.host == YamiboDomain.baseURL.host else { return false }
         let path = url.path.isEmpty ? "/" : url.path
         if path == "/" || path == "/index.php" {
             return true

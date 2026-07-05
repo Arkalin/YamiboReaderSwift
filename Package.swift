@@ -9,7 +9,8 @@ let package = Package(
     ],
     products: [
         .library(name: "YamiboReaderCore", targets: ["YamiboReaderCore"]),
-        .library(name: "YamiboReaderUI", targets: ["YamiboReaderUI"])
+        .library(name: "YamiboReaderUI", targets: ["YamiboReaderUI"]),
+        .library(name: "YamiboReaderTestSupport", targets: ["YamiboReaderTestSupport"])
     ],
     dependencies: [
         .package(url: "https://github.com/groue/GRDB.swift.git", exact: "7.11.1"),
@@ -35,11 +36,18 @@ let package = Package(
                 .product(name: "NukeUI", package: "Nuke"),
             ]
         ),
+        .target(
+            name: "YamiboReaderTestSupport",
+            dependencies: [
+                "YamiboReaderCore",
+            ]
+        ),
         .testTarget(
             name: "YamiboReaderCoreTests",
             dependencies: [
                 .product(name: "GRDB", package: "GRDB.swift"),
                 "YamiboReaderCore",
+                "YamiboReaderTestSupport",
             ]
         ),
         .testTarget(
@@ -47,6 +55,7 @@ let package = Package(
             dependencies: [
                 "YamiboReaderCore",
                 "YamiboReaderUI",
+                "YamiboReaderTestSupport",
             ]
         )
     ]

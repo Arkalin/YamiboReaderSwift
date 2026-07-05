@@ -1,4 +1,5 @@
 import Foundation
+import YamiboReaderCore
 
 public struct ClipboardForumLinkDetector: Sendable {
     private var lastPromptedURLString: String?
@@ -21,9 +22,9 @@ public struct ClipboardForumLinkDetector: Sendable {
         guard let text, !text.isEmpty else { return nil }
 
         let prefixes = [
-            "https://bbs.yamibo.com",
-            "http://bbs.yamibo.com",
-            "bbs.yamibo.com"
+            "https://\(YamiboDomain.forumHost)",
+            "http://\(YamiboDomain.forumHost)",
+            YamiboDomain.forumHost
         ]
         let matches = prefixes.flatMap { prefix -> [(range: Range<String.Index>, prefix: String)] in
             var ranges: [(range: Range<String.Index>, prefix: String)] = []
@@ -55,7 +56,7 @@ public struct ClipboardForumLinkDetector: Sendable {
             guard let url = URL(string: rawCandidate),
                   let scheme = url.scheme?.lowercased(),
                   scheme == "http" || scheme == "https",
-                  url.host?.lowercased() == "bbs.yamibo.com" else {
+                  YamiboDomain.isForumHost(url) else {
                 continue
             }
             return mobileForumURL(from: url)

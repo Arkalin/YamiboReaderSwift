@@ -51,7 +51,7 @@ enum HTMLTextExtractor {
         return value
     }
 
-    static func absoluteURL(from href: String, baseURL: URL = YamiboRoute.baseURL) -> URL? {
+    static func absoluteURL(from href: String, baseURL: URL = YamiboDomain.baseURL) -> URL? {
         URL(string: decodeHTMLEntities(href), relativeTo: baseURL)?.absoluteURL
     }
 }

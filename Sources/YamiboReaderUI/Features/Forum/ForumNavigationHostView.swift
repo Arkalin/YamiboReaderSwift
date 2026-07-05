@@ -314,7 +314,7 @@ public struct ForumNavigationHostView: View {
     }
 
     private func openPostThreadFallback(fid: String) {
-        var components = URLComponents(url: YamiboRoute.baseURL, resolvingAgainstBaseURL: false)!
+        var components = URLComponents(url: YamiboDomain.baseURL, resolvingAgainstBaseURL: false)!
         components.path = "/forum.php"
         components.queryItems = [
             .init(name: "mod", value: "post"),

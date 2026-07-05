@@ -2,6 +2,7 @@
 import Testing
 @preconcurrency import GRDB
 @testable import YamiboReaderCore
+import YamiboReaderTestSupport
 
 @MainActor
 @Test func appContextFreshStartupUsesSeededGRDBAndIgnoresLegacyJSONDefaults() async throws {

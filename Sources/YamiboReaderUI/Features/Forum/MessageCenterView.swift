@@ -301,7 +301,7 @@ private struct MessageCenterAvatarView: View {
             Image(systemName: systemImage)
                 .font(.title3)
                 .foregroundStyle(ForumColors.secondaryText)
-        } failure: { _ in
+        } failure: {
             Image(systemName: systemImage)
                 .font(.title3)
                 .foregroundStyle(ForumColors.secondaryText)

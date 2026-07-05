@@ -4,11 +4,7 @@
 import WebKit
 #endif
 
-public protocol FavoriteRepositoryProviding {
-    func makeFavoriteRepository() async -> FavoriteRepository
-}
-
-public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
+public final class YamiboAppContext: Sendable {
     private static let resettableUserDefaultsKeys = [
         "yamibo.favorite.filter",
         "yamibo.favorite.sort",
@@ -28,9 +24,9 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
     public let contentCoverStore: ContentCoverStore
     public let novelReaderCacheStore: NovelReaderProjectionStore
     public let favoriteBackgroundImageStore: FavoriteBackgroundImageStore
-    public let mangaDirectoryStore: any MangaDirectoryPersisting & MangaDirectoryStorageReporting & MangaDirectoryClearing
+    public let mangaDirectoryStore: MangaDirectoryStore
     public let mangaDirectorySearchCooldownState: MangaDirectorySearchCooldownState
-    public let mangaReaderProjectionStore: any MangaReaderProjectionPersisting & MangaReaderProjectionStorageReporting
+    public let mangaReaderProjectionStore: MangaReaderProjectionStore
     public let offlineCacheStore: any OfflineCacheStoreCore & MangaOfflineCacheStoring & NovelOfflineCacheStoring & YamiboOfflineImageDataProviding
     public let forumCacheStore: ForumCacheStore
     public let ordinaryImageCache: any YamiboOrdinaryImageCacheClearing
@@ -54,9 +50,9 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
         contentCoverStore: ContentCoverStore = ContentCoverStore(),
         novelReaderCacheStore: NovelReaderProjectionStore? = nil,
         favoriteBackgroundImageStore: FavoriteBackgroundImageStore? = nil,
-        mangaDirectoryStore: (any MangaDirectoryPersisting & MangaDirectoryStorageReporting & MangaDirectoryClearing)? = nil,
+        mangaDirectoryStore: MangaDirectoryStore? = nil,
         mangaDirectorySearchCooldownState: MangaDirectorySearchCooldownState = MangaDirectorySearchCooldownState(),
-        mangaReaderProjectionStore: (any MangaReaderProjectionPersisting & MangaReaderProjectionStorageReporting)? = nil,
+        mangaReaderProjectionStore: MangaReaderProjectionStore? = nil,
         offlineCacheStore: (any OfflineCacheStoreCore & MangaOfflineCacheStoring & NovelOfflineCacheStoring & YamiboOfflineImageDataProviding)? = nil,
         forumCacheStore: ForumCacheStore? = nil,
         ordinaryImageCache: any YamiboOrdinaryImageCacheClearing = YamiboImageDataPipeline.shared,
@@ -150,7 +146,7 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
         return ReaderChapterCommentsRepository(client: client)
     }
 
-    public func makeProfileAvatarLoader() -> any YamiboProfileAvatarLoading {
+    public func makeProfileAvatarLoader() -> YamiboProfileAvatarLoader {
         YamiboProfileAvatarLoader(sessionStore: sessionStore)
     }
 

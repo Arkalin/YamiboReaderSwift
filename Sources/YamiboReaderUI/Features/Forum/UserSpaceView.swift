@@ -349,7 +349,7 @@ private struct UserSpaceProfileHeaderView: View {
                         .scaledToFill()
                 } placeholder: {
                     Rectangle().fill(ForumColors.brownDeep.opacity(0.24))
-                } failure: { _ in
+                } failure: {
                     Rectangle().fill(ForumColors.brownDeep.opacity(0.24))
                 }
                 .frame(height: 172)
@@ -367,7 +367,7 @@ private struct UserSpaceProfileHeaderView: View {
                         Image(systemName: "person.crop.circle.fill")
                             .resizable()
                             .foregroundStyle(.white.opacity(0.8))
-                    } failure: { _ in
+                    } failure: {
                         Image(systemName: "person.crop.circle.fill")
                             .resizable()
                             .foregroundStyle(.white.opacity(0.8))
@@ -873,7 +873,7 @@ private struct UserSpaceFriendRowView: View {
             } placeholder: {
                 Image(systemName: "person.crop.circle")
                     .foregroundStyle(ForumColors.secondaryText)
-            } failure: { _ in
+            } failure: {
                 Image(systemName: "person.crop.circle")
                     .foregroundStyle(ForumColors.secondaryText)
             }
@@ -972,7 +972,7 @@ private struct UserSpaceAddFriendFormView: View {
                         Image(systemName: "person.crop.circle")
                             .font(.largeTitle)
                             .foregroundStyle(ForumColors.secondaryText)
-                    } failure: { _ in
+                    } failure: {
                         Image(systemName: "person.crop.circle")
                             .font(.largeTitle)
                             .foregroundStyle(ForumColors.secondaryText)

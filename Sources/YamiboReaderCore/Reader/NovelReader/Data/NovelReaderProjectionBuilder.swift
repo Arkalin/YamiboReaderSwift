@@ -243,7 +243,7 @@ private enum NovelReaderPostHTMLProjectionParser {
     }
 
     static func project(post: ForumThreadPost) throws -> NovelReaderProjectedPost {
-        let fragment = try KannaSoup.parseBodyFragment(post.contentHTML, baseURL: YamiboRoute.baseURL.absoluteString)
+        let fragment = try KannaSoup.parseBodyFragment(post.contentHTML, baseURL: YamiboDomain.baseURL.absoluteString)
         let body = fragment.body() ?? fragment
         let isReplyToOther = try isReplyToOther(in: body)
         try body.select("i").remove()
@@ -306,7 +306,7 @@ private enum NovelReaderPostHTMLProjectionParser {
             return false
         }
 
-        let remainingFragment = try KannaSoup.parseBodyFragment(try body.html(), baseURL: YamiboRoute.baseURL.absoluteString)
+        let remainingFragment = try KannaSoup.parseBodyFragment(try body.html(), baseURL: YamiboDomain.baseURL.absoluteString)
         let remainingBody = remainingFragment.body() ?? remainingFragment
         try remainingBody.select(".quote").remove()
         for blockquote in try remainingBody.select("blockquote") where isDiscuzReplyQuote(blockquote) {
@@ -1002,8 +1002,7 @@ private enum NovelPostContentProjector {
         chapterTitle: String?,
         emittedImageURLs: inout Set<String>
     ) {
-        let lowercased = url.absoluteString.lowercased()
-        guard !lowercased.contains("smiley/"),
+        guard !YamiboImageReferenceExtractor.isEmoticonURL(url),
               emittedImageURLs.insert(url.absoluteString).inserted else {
             return
         }

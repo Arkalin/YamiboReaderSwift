@@ -3856,7 +3856,7 @@ private struct LocalFavoriteCoverThumbnail: View {
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } placeholder: {
                     ProgressView()
-                } failure: { _ in
+                } failure: {
                     fallbackIcon
                 }
             } else {

@@ -1,16 +1,16 @@
 import Foundation
 import YamiboReaderCore
 
-enum YamiboTestDefaults {
-    static func suiteName(prefix: String) -> String {
+public enum YamiboTestDefaults {
+    public static func suiteName(prefix: String) -> String {
         "yamibo-tests.\(prefix).\(UUID().uuidString)"
     }
 
-    static func make(prefix: String) throws -> UserDefaults {
+    public static func make(prefix: String) throws -> UserDefaults {
         try make(suiteName: suiteName(prefix: prefix))
     }
 
-    static func make(suiteName: String) throws -> UserDefaults {
+    public static func make(suiteName: String) throws -> UserDefaults {
         guard let defaults = UserDefaults(suiteName: suiteName) else {
             throw NSError(
                 domain: "YamiboTestDefaults",
@@ -22,7 +22,7 @@ enum YamiboTestDefaults {
         return defaults
     }
 
-    static func defaults(suiteName: String) throws -> UserDefaults {
+    public static func defaults(suiteName: String) throws -> UserDefaults {
         guard let defaults = UserDefaults(suiteName: suiteName) else {
             throw NSError(
                 domain: "YamiboTestDefaults",
@@ -34,7 +34,7 @@ enum YamiboTestDefaults {
     }
 }
 
-extension ReadingProgressStore {
+public extension ReadingProgressStore {
     init(testSuiteName suiteName: String, key: String) throws {
         self.init(
             defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
@@ -43,31 +43,31 @@ extension ReadingProgressStore {
     }
 }
 
-extension ReaderResumeRouteStore {
+public extension ReaderResumeRouteStore {
     convenience init(testSuiteName suiteName: String, key: String) throws {
         self.init(defaults: try YamiboTestDefaults.defaults(suiteName: suiteName), key: key)
     }
 }
 
-extension SessionStore {
+public extension SessionStore {
     init(testSuiteName suiteName: String, key: String) throws {
         self.init(defaults: try YamiboTestDefaults.defaults(suiteName: suiteName), key: key)
     }
 }
 
-extension SettingsStore {
+public extension SettingsStore {
     init(testSuiteName suiteName: String, key: String) throws {
         self.init(defaults: try YamiboTestDefaults.defaults(suiteName: suiteName), key: key)
     }
 }
 
-extension WebDAVSyncSettingsStore {
+public extension WebDAVSyncSettingsStore {
     init(testSuiteName suiteName: String, key: String) throws {
         self.init(defaults: try YamiboTestDefaults.defaults(suiteName: suiteName), key: key)
     }
 }
 
-extension YamiboProfileStore {
+public extension YamiboProfileStore {
     init(testSuiteName suiteName: String, key: String) throws {
         self.init(defaults: try YamiboTestDefaults.defaults(suiteName: suiteName), key: key)
     }

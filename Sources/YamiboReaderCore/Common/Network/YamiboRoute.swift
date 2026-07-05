@@ -1,13 +1,11 @@
 import Foundation
 
 public enum YamiboRoute: Sendable {
-    public static let baseURL = URL(string: "https://bbs.yamibo.com")!
-
     public static func findPostURL(threadURL: URL, postID: String?) -> URL? {
         let normalizedPostID = postID?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         guard !normalizedPostID.isEmpty else { return nil }
 
-        let resolvedURL = URL(string: threadURL.absoluteString, relativeTo: Self.baseURL)?.absoluteURL ?? threadURL.absoluteURL
+        let resolvedURL = URL(string: threadURL.absoluteString, relativeTo: YamiboDomain.baseURL)?.absoluteURL ?? threadURL.absoluteURL
         let queryThreadID = URLComponents(url: resolvedURL, resolvingAgainstBaseURL: false)?
             .queryItems?
             .first(where: { $0.name == "tid" })?
@@ -19,9 +17,9 @@ public enum YamiboRoute: Sendable {
         guard let threadID, !threadID.isEmpty else { return nil }
 
         var components = URLComponents(url: resolvedURL, resolvingAgainstBaseURL: false)
-            ?? URLComponents(url: Self.baseURL, resolvingAgainstBaseURL: false)!
-        components.scheme = components.scheme ?? Self.baseURL.scheme
-        components.host = components.host ?? Self.baseURL.host
+            ?? URLComponents(url: YamiboDomain.baseURL, resolvingAgainstBaseURL: false)!
+        components.scheme = components.scheme ?? YamiboDomain.baseURL.scheme
+        components.host = components.host ?? YamiboDomain.baseURL.host
         components.path = "/forum.php"
         components.queryItems = [
             .init(name: "goto", value: "findpost"),
@@ -90,7 +88,7 @@ public enum YamiboRoute: Sendable {
     public var url: URL {
         switch self {
         case let .favorites(page):
-            var components = URLComponents(url: Self.baseURL, resolvingAgainstBaseURL: false)!
+            var components = URLComponents(url: YamiboDomain.baseURL, resolvingAgainstBaseURL: false)!
             components.path = "/home.php"
             components.queryItems = [
                 .init(name: "mod", value: "space"),
@@ -102,14 +100,14 @@ public enum YamiboRoute: Sendable {
             ]
             return components.url!
         case .favoriteDeleteForm:
-            var components = URLComponents(url: Self.baseURL, resolvingAgainstBaseURL: false)!
+            var components = URLComponents(url: YamiboDomain.baseURL, resolvingAgainstBaseURL: false)!
             components.path = "/misc.php"
             components.queryItems = [
                 .init(name: "mod", value: "faq")
             ]
             return components.url!
         case .favoriteDelete:
-            var components = URLComponents(url: Self.baseURL, resolvingAgainstBaseURL: false)!
+            var components = URLComponents(url: YamiboDomain.baseURL, resolvingAgainstBaseURL: false)!
             components.path = "/home.php"
             components.queryItems = [
                 .init(name: "mod", value: "spacecp"),
@@ -120,7 +118,7 @@ public enum YamiboRoute: Sendable {
             ]
             return components.url!
         case let .threadFavorite(tid, formHash):
-            var components = URLComponents(url: Self.baseURL, resolvingAgainstBaseURL: false)!
+            var components = URLComponents(url: YamiboDomain.baseURL, resolvingAgainstBaseURL: false)!
             components.path = "/home.php"
             components.queryItems = [
                 .init(name: "mod", value: "spacecp"),
@@ -133,7 +131,7 @@ public enum YamiboRoute: Sendable {
             ]
             return components.url!
         case .login:
-            var components = URLComponents(url: Self.baseURL, resolvingAgainstBaseURL: false)!
+            var components = URLComponents(url: YamiboDomain.baseURL, resolvingAgainstBaseURL: false)!
             components.path = "/member.php"
             components.queryItems = [
                 .init(name: "mod", value: "logging"),
@@ -142,7 +140,7 @@ public enum YamiboRoute: Sendable {
             ]
             return components.url!
         case .currentProfile:
-            var components = URLComponents(url: Self.baseURL, resolvingAgainstBaseURL: false)!
+            var components = URLComponents(url: YamiboDomain.baseURL, resolvingAgainstBaseURL: false)!
             components.path = "/home.php"
             components.queryItems = [
                 .init(name: "mod", value: "space"),
@@ -152,7 +150,7 @@ public enum YamiboRoute: Sendable {
             ]
             return components.url!
         case let .logout(formHash):
-            var components = URLComponents(url: Self.baseURL, resolvingAgainstBaseURL: false)!
+            var components = URLComponents(url: YamiboDomain.baseURL, resolvingAgainstBaseURL: false)!
             components.path = "/member.php"
             components.queryItems = [
                 .init(name: "mod", value: "logging"),
@@ -162,7 +160,7 @@ public enum YamiboRoute: Sendable {
             ]
             return components.url!
         case let .tag(id, page):
-            var components = URLComponents(url: Self.baseURL, resolvingAgainstBaseURL: false)!
+            var components = URLComponents(url: YamiboDomain.baseURL, resolvingAgainstBaseURL: false)!
             components.path = "/misc.php"
             components.queryItems = [
                 .init(name: "mod", value: "tag"),
@@ -173,7 +171,7 @@ public enum YamiboRoute: Sendable {
             ]
             return components.url!
         case let .search(keyword, forumID):
-            var components = URLComponents(url: Self.baseURL, resolvingAgainstBaseURL: false)!
+            var components = URLComponents(url: YamiboDomain.baseURL, resolvingAgainstBaseURL: false)!
             components.path = "/search.php"
             components.percentEncodedQuery = [
                 "mod=forum",
@@ -185,7 +183,7 @@ public enum YamiboRoute: Sendable {
             ].joined(separator: "&")
             return components.url!
         case let .searchPage(searchID, page):
-            var components = URLComponents(url: Self.baseURL, resolvingAgainstBaseURL: false)!
+            var components = URLComponents(url: YamiboDomain.baseURL, resolvingAgainstBaseURL: false)!
             components.path = "/search.php"
             components.queryItems = [
                 .init(name: "mod", value: "forum"),
@@ -198,7 +196,7 @@ public enum YamiboRoute: Sendable {
             ]
             return components.url!
         case let .forumSearch(keyword, forumID, formHash):
-            var components = URLComponents(url: Self.baseURL, resolvingAgainstBaseURL: false)!
+            var components = URLComponents(url: YamiboDomain.baseURL, resolvingAgainstBaseURL: false)!
             components.path = "/search.php"
             var items: [URLQueryItem] = [
                 .init(name: "mod", value: "forum"),
@@ -214,7 +212,7 @@ public enum YamiboRoute: Sendable {
             components.queryItems = items
             return components.url!
         case let .forumSearchPage(searchID, page):
-            var components = URLComponents(url: Self.baseURL, resolvingAgainstBaseURL: false)!
+            var components = URLComponents(url: YamiboDomain.baseURL, resolvingAgainstBaseURL: false)!
             components.path = "/search.php"
             components.queryItems = [
                 .init(name: "mod", value: "forum"),
@@ -229,12 +227,12 @@ public enum YamiboRoute: Sendable {
         case let .thread(url, page, authorID):
             let decodedURLString = HTMLTextExtractor.decodeHTMLEntities(url.absoluteString)
             var components = URLComponents(
-                url: URL(string: decodedURLString, relativeTo: Self.baseURL)?.absoluteURL ?? url.absoluteURL,
+                url: URL(string: decodedURLString, relativeTo: YamiboDomain.baseURL)?.absoluteURL ?? url.absoluteURL,
                 resolvingAgainstBaseURL: false
-            ) ?? URLComponents(url: Self.baseURL, resolvingAgainstBaseURL: false)!
+            ) ?? URLComponents(url: YamiboDomain.baseURL, resolvingAgainstBaseURL: false)!
             if components.host == nil {
-                components.scheme = Self.baseURL.scheme
-                components.host = Self.baseURL.host
+                components.scheme = YamiboDomain.baseURL.scheme
+                components.host = YamiboDomain.baseURL.host
             }
             if components.path.isEmpty {
                 components.path = "/forum.php"
@@ -256,7 +254,7 @@ public enum YamiboRoute: Sendable {
                 .sorted { $0.name < $1.name }
             return components.url!
         case let .threadByID(tid, page, authorID, reverse):
-            var components = URLComponents(url: Self.baseURL, resolvingAgainstBaseURL: false)!
+            var components = URLComponents(url: YamiboDomain.baseURL, resolvingAgainstBaseURL: false)!
             components.path = "/forum.php"
             var items: [URLQueryItem] = [
                 .init(name: "mobile", value: "2"),
@@ -273,14 +271,14 @@ public enum YamiboRoute: Sendable {
             components.queryItems = items.sorted { $0.name < $1.name }
             return components.url!
         case .forumHome:
-            var components = URLComponents(url: Self.baseURL, resolvingAgainstBaseURL: false)!
+            var components = URLComponents(url: YamiboDomain.baseURL, resolvingAgainstBaseURL: false)!
             components.path = "/forum.php"
             components.queryItems = [
                 .init(name: "mobile", value: "2")
             ]
             return components.url!
         case let .forumBoard(fid, page, filterID, orderFilter, orderBy):
-            var components = URLComponents(url: Self.baseURL, resolvingAgainstBaseURL: false)!
+            var components = URLComponents(url: YamiboDomain.baseURL, resolvingAgainstBaseURL: false)!
             components.path = "/forum.php"
             var items: [URLQueryItem] = [
                 .init(name: "mod", value: "forumdisplay"),
@@ -301,7 +299,7 @@ public enum YamiboRoute: Sendable {
             components.queryItems = items
             return components.url!
         case let .forumBoardFavorite(fid, formHash):
-            var components = URLComponents(url: Self.baseURL, resolvingAgainstBaseURL: false)!
+            var components = URLComponents(url: YamiboDomain.baseURL, resolvingAgainstBaseURL: false)!
             components.path = "/home.php"
             components.queryItems = [
                 .init(name: "mod", value: "spacecp"),
@@ -346,7 +344,7 @@ public enum YamiboRoute: Sendable {
         case let .userSpaceAddFriendForm(uid), let .userSpaceAddFriendSubmit(uid):
             return userSpaceAddFriendURL(uid: uid)
         case .userSpaceBlogEditor:
-            var components = URLComponents(url: Self.baseURL, resolvingAgainstBaseURL: false)!
+            var components = URLComponents(url: YamiboDomain.baseURL, resolvingAgainstBaseURL: false)!
             components.path = "/home.php"
             components.queryItems = [
                 .init(name: "mod", value: "spacecp"),
@@ -359,7 +357,7 @@ public enum YamiboRoute: Sendable {
         case let .userSpaceNotices(page):
             return userSpaceURL(uid: nil, doValue: "notice", page: page)
         case .userSpaceSendPrivateMessage:
-            var components = URLComponents(url: Self.baseURL, resolvingAgainstBaseURL: false)!
+            var components = URLComponents(url: YamiboDomain.baseURL, resolvingAgainstBaseURL: false)!
             components.path = "/home.php"
             components.queryItems = [
                 .init(name: "mod", value: "spacecp"),
@@ -373,7 +371,7 @@ public enum YamiboRoute: Sendable {
         case let .privateMessageSend(privateMessageID, uid):
             return privateMessageSendURL(privateMessageID: privateMessageID, uid: uid)
         case let .blog(blogID, uid, page):
-            var components = URLComponents(url: Self.baseURL, resolvingAgainstBaseURL: false)!
+            var components = URLComponents(url: YamiboDomain.baseURL, resolvingAgainstBaseURL: false)!
             components.path = "/home.php"
             var items: [URLQueryItem] = [
                 .init(name: "mod", value: "space"),
@@ -388,7 +386,7 @@ public enum YamiboRoute: Sendable {
             components.queryItems = items
             return components.url!
         case let .blogComment(blogID, uid):
-            var components = URLComponents(url: Self.baseURL, resolvingAgainstBaseURL: false)!
+            var components = URLComponents(url: YamiboDomain.baseURL, resolvingAgainstBaseURL: false)!
             components.path = "/home.php"
             components.queryItems = [
                 .init(name: "mod", value: "spacecp"),
@@ -401,7 +399,7 @@ public enum YamiboRoute: Sendable {
             ]
             return components.url!
         case let .threadRateOptions(tid, pid):
-            var components = URLComponents(url: Self.baseURL, resolvingAgainstBaseURL: false)!
+            var components = URLComponents(url: YamiboDomain.baseURL, resolvingAgainstBaseURL: false)!
             components.path = "/forum.php"
             components.queryItems = [
                 .init(name: "mod", value: "misc"),
@@ -415,7 +413,7 @@ public enum YamiboRoute: Sendable {
             ]
             return components.url!
         case let .threadRatingResults(tid, pid):
-            var components = URLComponents(url: Self.baseURL, resolvingAgainstBaseURL: false)!
+            var components = URLComponents(url: YamiboDomain.baseURL, resolvingAgainstBaseURL: false)!
             components.path = "/forum.php"
             components.queryItems = [
                 .init(name: "mod", value: "misc"),
@@ -427,7 +425,7 @@ public enum YamiboRoute: Sendable {
             ]
             return components.url!
         case .threadRateSubmit:
-            var components = URLComponents(url: Self.baseURL, resolvingAgainstBaseURL: false)!
+            var components = URLComponents(url: YamiboDomain.baseURL, resolvingAgainstBaseURL: false)!
             components.path = "/forum.php"
             components.queryItems = [
                 .init(name: "mod", value: "misc"),
@@ -440,7 +438,7 @@ public enum YamiboRoute: Sendable {
             ]
             return components.url!
         case let .threadPostComment(tid, pid, page):
-            var components = URLComponents(url: Self.baseURL, resolvingAgainstBaseURL: false)!
+            var components = URLComponents(url: YamiboDomain.baseURL, resolvingAgainstBaseURL: false)!
             components.path = "/forum.php"
             components.queryItems = [
                 .init(name: "mod", value: "post"),
@@ -458,7 +456,7 @@ public enum YamiboRoute: Sendable {
             ]
             return components.url!
         case let .threadPollVoters(tid, pollOptionID, page):
-            var components = URLComponents(url: Self.baseURL, resolvingAgainstBaseURL: false)!
+            var components = URLComponents(url: YamiboDomain.baseURL, resolvingAgainstBaseURL: false)!
             components.path = "/forum.php"
             var items: [URLQueryItem] = [
                 .init(name: "mod", value: "misc"),
@@ -477,7 +475,7 @@ public enum YamiboRoute: Sendable {
             components.queryItems = items
             return components.url!
         case let .threadPollVote(fid, tid):
-            var components = URLComponents(url: Self.baseURL, resolvingAgainstBaseURL: false)!
+            var components = URLComponents(url: YamiboDomain.baseURL, resolvingAgainstBaseURL: false)!
             components.path = "/forum.php"
             components.queryItems = [
                 .init(name: "mod", value: "misc"),
@@ -488,7 +486,7 @@ public enum YamiboRoute: Sendable {
             ]
             return components.url!
         case let .threadReply(tid, page):
-            var components = URLComponents(url: Self.baseURL, resolvingAgainstBaseURL: false)!
+            var components = URLComponents(url: YamiboDomain.baseURL, resolvingAgainstBaseURL: false)!
             components.path = "/forum.php"
             components.queryItems = [
                 .init(name: "mod", value: "post"),
@@ -500,7 +498,7 @@ public enum YamiboRoute: Sendable {
             ]
             return components.url!
         case let .threadPostReply(tid, pid, page):
-            var components = URLComponents(url: Self.baseURL, resolvingAgainstBaseURL: false)!
+            var components = URLComponents(url: YamiboDomain.baseURL, resolvingAgainstBaseURL: false)!
             components.path = "/forum.php"
             components.queryItems = [
                 .init(name: "mod", value: "post"),
@@ -522,7 +520,7 @@ public enum YamiboRoute: Sendable {
         view: String? = nil,
         extraItems: [URLQueryItem] = []
     ) -> URL {
-        var components = URLComponents(url: Self.baseURL, resolvingAgainstBaseURL: false)!
+        var components = URLComponents(url: YamiboDomain.baseURL, resolvingAgainstBaseURL: false)!
         components.path = "/home.php"
         var items: [URLQueryItem] = [
             .init(name: "mod", value: "space"),
@@ -546,7 +544,7 @@ public enum YamiboRoute: Sendable {
     }
 
     private func userSpaceAddFriendURL(uid: String) -> URL {
-        var components = URLComponents(url: Self.baseURL, resolvingAgainstBaseURL: false)!
+        var components = URLComponents(url: YamiboDomain.baseURL, resolvingAgainstBaseURL: false)!
         components.path = "/home.php"
         components.queryItems = [
             .init(name: "mod", value: "spacecp"),
@@ -561,7 +559,7 @@ public enum YamiboRoute: Sendable {
     }
 
     private func privateMessageURL(uid: String, page: Int?) -> URL {
-        var components = URLComponents(url: Self.baseURL, resolvingAgainstBaseURL: false)!
+        var components = URLComponents(url: YamiboDomain.baseURL, resolvingAgainstBaseURL: false)!
         components.path = "/home.php"
         var items: [URLQueryItem] = [
             .init(name: "mod", value: "spacecp"),
@@ -578,7 +576,7 @@ public enum YamiboRoute: Sendable {
     }
 
     private func privateMessageSendURL(privateMessageID: String, uid: String) -> URL {
-        var components = URLComponents(url: Self.baseURL, resolvingAgainstBaseURL: false)!
+        var components = URLComponents(url: YamiboDomain.baseURL, resolvingAgainstBaseURL: false)!
         components.path = "/home.php"
         components.queryItems = [
             .init(name: "mod", value: "spacecp"),

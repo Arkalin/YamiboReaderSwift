@@ -5,7 +5,7 @@ import UIKit
 
 struct MineAvatarView: View {
     let profile: YamiboProfile
-    let avatarLoader: any YamiboProfileAvatarLoading
+    let avatarLoader: YamiboProfileAvatarLoader
     let avatarReloadDate: Date?
 
     @State private var image: Image?

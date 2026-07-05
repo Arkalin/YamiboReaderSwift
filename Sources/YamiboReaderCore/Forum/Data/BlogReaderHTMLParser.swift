@@ -3,7 +3,7 @@ import Foundation
 public enum BlogReaderHTMLParser {
     public static func parsePage(from html: String, blogID: String, uidHint: String? = nil, titleHint: String? = nil) throws -> BlogReaderPage {
         try validate(html)
-        let document = try KannaSoup.parse(html, baseURL: YamiboRoute.baseURL.absoluteString)
+        let document = try KannaSoup.parse(html, baseURL: YamiboDomain.baseURL.absoluteString)
         let title = firstNonBlank([
             try? document.select(".blog_tit, .mtit, .bm_h h1, .vw .ph, h1").first()?.text(),
             titleHint,
@@ -38,7 +38,7 @@ public enum BlogReaderHTMLParser {
 
     public static func parseCommentResult(from html: String) throws -> String {
         try validate(html)
-        let document = try KannaSoup.parse(html, baseURL: YamiboRoute.baseURL.absoluteString)
+        let document = try KannaSoup.parse(html, baseURL: YamiboDomain.baseURL.absoluteString)
         let message = firstNonBlank([
             try? document.select(".jump_c, .alert_info, .messagetext, .showmessage, .wp, body").first()?.text()
         ])

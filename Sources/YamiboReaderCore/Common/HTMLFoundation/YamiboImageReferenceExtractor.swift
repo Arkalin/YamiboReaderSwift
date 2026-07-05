@@ -33,13 +33,12 @@ struct YamiboImageReferenceExtractor: Sendable {
         return nil
     }
 
-    func url(from element: Element, baseURL: URL = YamiboRoute.baseURL) -> URL? {
+    func url(from element: Element, baseURL: URL = YamiboDomain.baseURL) -> URL? {
         guard let raw = rawReference(from: element) else { return nil }
         return HTMLTextExtractor.absoluteURL(from: raw, baseURL: baseURL)
     }
 
     static func isEmoticonURL(_ url: URL) -> Bool {
-        let lowercased = url.absoluteString.lowercased()
-        return lowercased.contains("/smiley/") || lowercased.contains("static/image/smiley/")
+        url.absoluteString.lowercased().contains("smiley/")
     }
 }

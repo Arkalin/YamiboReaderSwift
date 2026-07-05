@@ -4,11 +4,12 @@ import Foundation
 
 extension OfflineCacheStore: YamiboOfflineImageDataProviding {
     public func offlineImageData(url: URL, scope: YamiboImageOfflineScope) async -> Data? {
-        if let ownerName = scope.ownerName,
-           let membership = await mangaOfflineCacheMembership(ownerName: ownerName, tid: scope.tid),
-           membership.imageURLs.contains(where: { $0.absoluteString == url.absoluteString }),
-           let data = await offlineImageData(for: url) {
-            return data
+        if let ownerName = scope.ownerName {
+            guard let membership = await mangaOfflineCacheMembership(ownerName: ownerName, tid: scope.tid),
+                  membership.imageURLs.contains(where: { $0.absoluteString == url.absoluteString }) else {
+                return nil
+            }
+            return await offlineImageData(for: url)
         }
         return await novelOfflineImageData(for: url, threadID: scope.tid)
     }

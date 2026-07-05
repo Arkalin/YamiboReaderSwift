@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 @testable import YamiboReaderCore
+import YamiboReaderTestSupport
 
 @Suite("ReaderSharedTests: Offline Cache Queue Executor")
 struct ReaderSharedTestsOfflineCacheQueueExecutor {

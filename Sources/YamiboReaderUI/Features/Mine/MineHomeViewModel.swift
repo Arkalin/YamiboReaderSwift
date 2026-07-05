@@ -38,7 +38,7 @@ final class MineHomeViewModel {
     var isOfflineCacheQueueSelectionMode = false
 
     let loginQuestions = YamiboLoginQuestion.defaultQuestions
-    @ObservationIgnored let profileAvatarLoader: any YamiboProfileAvatarLoading
+    @ObservationIgnored let profileAvatarLoader: YamiboProfileAvatarLoader
 
     private let appContext: YamiboAppContext
     @ObservationIgnored private let checkInService: any YamiboCheckInServicing

@@ -1,7 +1,7 @@
 import Foundation
 @preconcurrency import GRDB
 
-public actor MangaReaderProjectionStore: MangaReaderProjectionPersisting, MangaReaderProjectionStorageReporting {
+public actor MangaReaderProjectionStore: MangaReaderProjectionPersisting {
     public static let projectionNamespace = "manga_reader_projections"
 
     private let cacheStore: DiskCacheStore

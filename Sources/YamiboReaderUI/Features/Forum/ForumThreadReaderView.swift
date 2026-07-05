@@ -1873,7 +1873,7 @@ private struct ForumThreadImageBlockView: View {
                 .scaledToFit()
         } placeholder: {
             ForumThreadImagePlaceholderView()
-        } failure: { _ in
+        } failure: {
             ForumThreadImageFailureView()
         }
     }
@@ -1953,7 +1953,7 @@ private struct ForumThreadAttachmentIconView: View {
         } placeholder: {
             Image(systemName: "paperclip")
                 .foregroundStyle(ForumColors.brownPrimary)
-        } failure: { _ in
+        } failure: {
             Image(systemName: "paperclip")
                 .foregroundStyle(ForumColors.brownPrimary)
         }
@@ -2128,7 +2128,7 @@ private struct ForumThreadPostHeader: View {
             } placeholder: {
                 Image(systemName: "person.crop.circle")
                     .foregroundStyle(ForumColors.secondaryText)
-            } failure: { _ in
+            } failure: {
                 Image(systemName: "person.crop.circle")
                     .foregroundStyle(ForumColors.secondaryText)
             }

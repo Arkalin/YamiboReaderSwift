@@ -464,7 +464,7 @@ private struct ForumNovelDetailHeader: View {
                         ProgressView()
                             .controlSize(.small)
                             .tint(ForumColors.brownPrimary)
-                } failure: { _ in
+                } failure: {
                     coverPlaceholder(systemImage: "book.closed")
                 }
             } else {

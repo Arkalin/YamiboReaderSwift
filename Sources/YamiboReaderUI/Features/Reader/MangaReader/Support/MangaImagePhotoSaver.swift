@@ -4,10 +4,6 @@ import Foundation
 import Photos
 import UIKit
 
-protocol MangaImagePhotoSaving {
-    func saveImageData(_ data: Data) async throws
-}
-
 enum MangaImagePhotoSaveError: Error, Equatable {
     case authorizationDenied
 }
@@ -18,7 +14,7 @@ protocol MangaImagePhotoLibraryWriting {
     func performChanges(_ changes: @escaping () -> Void) async throws
 }
 
-struct MangaImagePhotoSaver: MangaImagePhotoSaving {
+struct MangaImagePhotoSaver {
     private let photoLibrary: any MangaImagePhotoLibraryWriting
 
     init(photoLibrary: any MangaImagePhotoLibraryWriting = SystemMangaImagePhotoLibraryWriter()) {

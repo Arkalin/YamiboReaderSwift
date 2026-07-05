@@ -1,6 +1,7 @@
 import XCTest
 import GRDB
 @testable import YamiboReaderCore
+import YamiboReaderTestSupport
 @testable import YamiboReaderUI
 
 @MainActor

@@ -8,7 +8,7 @@ public actor YamiboThreadRouteResolver {
     }
 
     public func resolve(_ request: YamiboThreadRouteRequest) async throws -> YamiboThreadRouteTarget {
-        let requestURL = URL(string: request.threadURL.absoluteString, relativeTo: YamiboRoute.baseURL)?.absoluteURL
+        let requestURL = URL(string: request.threadURL.absoluteString, relativeTo: YamiboDomain.baseURL)?.absoluteURL
             ?? request.threadURL.absoluteURL
         let canonicalURL = canonicalThreadURL(from: requestURL) ?? requestURL
         let targetPostID = request.targetPostID ?? postID(from: requestURL)
@@ -181,7 +181,7 @@ public actor YamiboThreadRouteResolver {
         if url.host == nil {
             return YamiboThreadURLCanonicalizer.canonicalThreadURL(from: url)
         }
-        if url.host?.contains("yamibo.com") == true {
+        if let host = url.host, YamiboDomain.containsYamiboDomain(host) {
             return YamiboThreadURLCanonicalizer.canonicalThreadURL(from: url)
         }
         return nil

@@ -345,7 +345,7 @@ public actor WebDAVSyncService {
     private let localFavoriteLibraryStore: FavoriteLibraryStore
     private let readingProgressStore: ReadingProgressStore
     private let sessionStore: SessionStore
-    private let appSettingsStore: (any SettingsStoring)?
+    private let appSettingsStore: SettingsStore?
     private let client: WebDAVClient
     private let policyModule: WebDAVSyncPolicyModule
 
@@ -354,7 +354,7 @@ public actor WebDAVSyncService {
         localFavoriteLibraryStore: FavoriteLibraryStore,
         readingProgressStore: ReadingProgressStore,
         sessionStore: SessionStore,
-        appSettingsStore: (any SettingsStoring)? = nil,
+        appSettingsStore: SettingsStore? = nil,
         client: WebDAVClient = WebDAVClient(),
         policyModule: WebDAVSyncPolicyModule = WebDAVSyncPolicyModule()
     ) {

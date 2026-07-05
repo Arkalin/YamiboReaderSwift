@@ -4,7 +4,7 @@ import YamiboReaderCore
 
 struct MineProfileSection: View {
     let profile: YamiboProfile?
-    let avatarLoader: any YamiboProfileAvatarLoading
+    let avatarLoader: YamiboProfileAvatarLoader
     let avatarReloadDate: Date?
     let isRefreshing: Bool
     let isInteractionDisabled: Bool
@@ -83,7 +83,7 @@ private struct MineLoggedOutProfileCard: View {
 
 private struct MineProfileCard: View {
     let profile: YamiboProfile
-    let avatarLoader: any YamiboProfileAvatarLoading
+    let avatarLoader: YamiboProfileAvatarLoader
     let avatarReloadDate: Date?
 
     var body: some View {

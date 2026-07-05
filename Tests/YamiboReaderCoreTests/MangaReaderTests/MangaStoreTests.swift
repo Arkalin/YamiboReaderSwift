@@ -205,13 +205,6 @@ struct MangaReaderTestsMangaStores {
         #expect(loadedFirst != loadedSecond)
     }
 
-    @Test func appContextDefaultsUseMangaDirectoryAndProjectionStores() {
-        let appContext = YamiboAppContext()
-
-        #expect(appContext.mangaDirectoryStore is MangaDirectoryStore)
-        #expect(appContext.mangaReaderProjectionStore is MangaReaderProjectionStore)
-    }
-
     @Test func readerResumeRoutePersistsMangaNativeContextByTidWithoutThreadURLs() async throws {
         let suiteName = "GRDBMangaContextNative.\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: suiteName))

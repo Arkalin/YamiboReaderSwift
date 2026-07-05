@@ -1,7 +1,7 @@
 import Foundation
 @preconcurrency import GRDB
 
-public actor MangaDirectoryStore: MangaDirectoryPersisting, MangaDirectoryStorageReporting, MangaDirectoryClearing, MangaDirectoryRenaming {
+public actor MangaDirectoryStore: MangaDirectoryPersisting, MangaDirectoryRenaming {
     private let database: DatabasePool
 
     public init(databasePool: DatabasePool? = nil) {

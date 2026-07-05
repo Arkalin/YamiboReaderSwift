@@ -50,10 +50,6 @@ public protocol MangaReaderProjectionPersisting: Sendable {
     func clearAll() async throws
 }
 
-public protocol MangaReaderProjectionStorageReporting: Sendable {
-    func totalDiskUsageBytes() async -> Int
-}
-
 public struct MangaDirectorySeed: Hashable, Sendable {
     public var currentChapter: MangaChapter
     public var tagIDs: [String]
@@ -88,14 +84,6 @@ public protocol MangaDirectoryPersisting: Sendable {
     func directory(containingTID tid: String) async throws -> MangaDirectory?
     func saveDirectory(_ directory: MangaDirectory) async throws
     func deleteDirectory(named name: String) async throws
-}
-
-public protocol MangaDirectoryStorageReporting: Sendable {
-    func totalDiskUsageBytes() async -> Int
-}
-
-public protocol MangaDirectoryClearing: Sendable {
-    func clearAll() async throws
 }
 
 public protocol MangaDirectoryRenaming: Sendable {
