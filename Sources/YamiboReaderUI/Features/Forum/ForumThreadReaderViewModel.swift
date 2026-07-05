@@ -3,8 +3,8 @@ import Observation
 import YamiboReaderCore
 
 protocol ForumThreadPageLoading: Sendable {
-    func cachedThreadPage(context: ThreadReaderLaunchContext, page: Int) async -> ForumThreadPage?
-    func fetchThreadPage(context: ThreadReaderLaunchContext, page: Int) async throws -> ForumThreadPage
+    func cachedThreadPage(context: ThreadNovelLaunchContext, page: Int) async -> ForumThreadPage?
+    func fetchThreadPage(context: ThreadNovelLaunchContext, page: Int) async throws -> ForumThreadPage
     func fetchRatingResults(threadID: String, postID: String) async throws -> ForumThreadRatingResultsPage
     func fetchRateOptions(threadID: String, postID: String) async throws -> ForumThreadRateOptionsPage
     func fetchPollVoters(threadID: String, optionID: String?, page: Int) async throws -> ForumThreadPollVotersPage
@@ -34,7 +34,7 @@ final class ForumThreadReaderViewModel {
     var favoriteErrorMessage: String?
     var inlineImageLoadingContext: NovelInlineImageLoadingContext?
 
-    let context: ThreadReaderLaunchContext
+    let context: ThreadNovelLaunchContext
 
     @ObservationIgnored private let repositoryProvider: @Sendable () async -> any ForumThreadPageLoading
     @ObservationIgnored private let localFavoriteLibraryStoreProvider: @Sendable () async -> FavoriteLibraryStore?
@@ -42,7 +42,7 @@ final class ForumThreadReaderViewModel {
     @ObservationIgnored private let favoriteRepositoryProvider: @Sendable () async -> (any ForumThreadFavoriteRemoteOperating)?
     @ObservationIgnored private let inlineImageLoadingContextProvider: @Sendable () async -> NovelInlineImageLoadingContext?
 
-    init(context: ThreadReaderLaunchContext, appContext: YamiboAppContext) {
+    init(context: ThreadNovelLaunchContext, appContext: YamiboAppContext) {
         self.context = context
         repositoryProvider = {
             await appContext.makeForumThreadReaderRepository()
@@ -62,7 +62,7 @@ final class ForumThreadReaderViewModel {
     }
 
     init(
-        context: ThreadReaderLaunchContext,
+        context: ThreadNovelLaunchContext,
         repository: any ForumThreadPageLoading,
         localFavoriteLibraryStore: FavoriteLibraryStore? = nil,
         readingProgressStore: ReadingProgressStore? = nil,

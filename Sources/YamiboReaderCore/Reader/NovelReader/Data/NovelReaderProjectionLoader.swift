@@ -23,7 +23,7 @@ public actor NovelReaderProjectionLoader {
         client: YamiboClient,
         projectionStore: NovelReaderProjectionStore = NovelReaderProjectionStore(),
         forumCacheStore: ForumCacheStore = ForumCacheStore(),
-        offlineCacheStore: (any OfflineCacheStoring)? = nil
+        offlineCacheStore: (any NovelOfflineCacheStoring)? = nil
     ) {
         loader = ReaderProjectionLoader(
             strategy: NovelProjectionLoadingStrategy(
@@ -35,23 +35,23 @@ public actor NovelReaderProjectionLoader {
         )
     }
 
-    public func loadProjection(_ request: ReaderPageRequest) async throws -> NovelReaderProjectionLoadedPage {
+    public func loadProjection(_ request: NovelPageRequest) async throws -> NovelReaderProjectionLoadedPage {
         try await loadProjection(request, ignoresCache: false)
     }
 
-    public func loadProjectionIgnoringCache(_ request: ReaderPageRequest) async throws -> NovelReaderProjectionLoadedPage {
+    public func loadProjectionIgnoringCache(_ request: NovelPageRequest) async throws -> NovelReaderProjectionLoadedPage {
         try await loadProjection(request, ignoresCache: true)
     }
 
     public func loadOnlineProjection(
-        _ request: ReaderPageRequest,
+        _ request: NovelPageRequest,
         ignoresCache: Bool
     ) async throws -> ReaderProjectionPreparedSourcePage<NovelReaderProjection, ForumThreadPage> {
         try await loader.loadOnlineOnly(request, ignoresCache: ignoresCache)
     }
 
     private func loadProjection(
-        _ request: ReaderPageRequest,
+        _ request: NovelPageRequest,
         ignoresCache: Bool
     ) async throws -> NovelReaderProjectionLoadedPage {
         let loaded = try await loader.load(request, ignoresCache: ignoresCache)
@@ -70,7 +70,7 @@ private struct NovelProjectionIdentity: Hashable, Sendable {
 }
 
 private struct NovelProjectionLoadingStrategy: ReaderProjectionLoadingStrategy {
-    typealias Request = ReaderPageRequest
+    typealias Request = NovelPageRequest
     typealias Identity = NovelProjectionIdentity
     typealias Projection = NovelReaderProjection
     typealias SourcePage = ForumThreadPage
@@ -80,16 +80,16 @@ private struct NovelProjectionLoadingStrategy: ReaderProjectionLoadingStrategy {
     let client: YamiboClient
     let projectionStore: NovelReaderProjectionStore
     let forumCacheStore: ForumCacheStore
-    let offlineCacheStore: (any OfflineCacheStoring)?
+    let offlineCacheStore: (any NovelOfflineCacheStoring)?
 
-    func identity(for request: ReaderPageRequest, ignoresCache: Bool) async throws -> NovelProjectionIdentity {
+    func identity(for request: NovelPageRequest, ignoresCache: Bool) async throws -> NovelProjectionIdentity {
         let thread = ThreadIdentity(tid: request.threadID)
         let authorID = try await resolveAuthorID(for: request, thread: thread, ignoresCache: ignoresCache)
         return NovelProjectionIdentity(threadID: request.threadID, view: request.view, authorID: authorID)
     }
 
     func onlineSourcePage(
-        for request: ReaderPageRequest,
+        for request: NovelPageRequest,
         identity: NovelProjectionIdentity,
         ignoresCache: Bool
     ) async throws -> ReaderProjectionSourcePageLoad<ForumThreadPage> {
@@ -103,11 +103,11 @@ private struct NovelProjectionLoadingStrategy: ReaderProjectionLoadingStrategy {
     }
 
     func offlineSourcePage(
-        for request: ReaderPageRequest
+        for request: NovelPageRequest
     ) async -> ReaderProjectionOfflineSourcePageLoad<NovelProjectionIdentity, ForumThreadPage>? {
         guard let offlineCacheStore else { return nil }
         let normalizedRequestAuthorID = normalizedAuthorID(request.authorID)
-        let contentSource: ReaderContentSource = normalizedRequestAuthorID == nil ? .fallbackUnfilteredPage : .authorFilteredPage
+        let contentSource: ReaderProjectionContentSource = normalizedRequestAuthorID == nil ? .fallbackUnfilteredPage : .authorFilteredPage
         guard let sourceSnapshot = await offlineCacheStore.novelOfflineSourcePageSnapshot(
             threadID: request.threadID,
             view: request.view,
@@ -142,7 +142,7 @@ private struct NovelProjectionLoadingStrategy: ReaderProjectionLoadingStrategy {
 
     func cachedProjection(for identity: NovelProjectionIdentity) async -> NovelReaderProjection? {
         await projectionStore.loadProjection(
-            for: ReaderPageRequest(threadID: identity.threadID, view: identity.view, authorID: identity.authorID),
+            for: NovelPageRequest(threadID: identity.threadID, view: identity.view, authorID: identity.authorID),
             contentSource: .authorFilteredPage
         )
     }
@@ -166,7 +166,7 @@ private struct NovelProjectionLoadingStrategy: ReaderProjectionLoadingStrategy {
     ) throws -> NovelReaderProjection {
         try NovelReaderProjectionBuilder.build(
             from: sourcePage,
-            request: ReaderPageRequest(threadID: identity.threadID, view: identity.view, authorID: identity.authorID),
+            request: NovelPageRequest(threadID: identity.threadID, view: identity.view, authorID: identity.authorID),
             authorID: identity.authorID,
             projectionSourceFingerprint: fingerprint,
             projectionSchemaVersion: Self.projectionSchemaVersion
@@ -178,7 +178,7 @@ private struct NovelProjectionLoadingStrategy: ReaderProjectionLoadingStrategy {
     }
 
     private func resolveAuthorID(
-        for request: ReaderPageRequest,
+        for request: NovelPageRequest,
         thread: ThreadIdentity,
         ignoresCache: Bool
     ) async throws -> String {
@@ -200,7 +200,7 @@ private struct NovelProjectionLoadingStrategy: ReaderProjectionLoadingStrategy {
             try? await forumCacheStore.saveThreadPage(discoveryPage, thread: thread, pageNumber: 1, authorID: nil)
             if let onlyAuthorID = YamiboThreadHTMLFacts.onlyAuthorID(
                 from: html,
-                request: ReaderPageRequest(threadID: thread.tid, view: 1)
+                request: NovelPageRequest(threadID: thread.tid, view: 1)
             ) {
                 return onlyAuthorID
             }

@@ -9,7 +9,7 @@ public actor ForumThreadReaderRepository: ThreadCoverPageResolving {
         self.cacheStore = cacheStore
     }
 
-    public func fetchThreadPage(context: ThreadReaderLaunchContext, page: Int = 1) async throws -> ForumThreadPage {
+    public func fetchThreadPage(context: ThreadNovelLaunchContext, page: Int = 1) async throws -> ForumThreadPage {
         let html = try await client.fetchThreadById(
             tid: context.thread.tid,
             page: page,
@@ -42,7 +42,7 @@ public actor ForumThreadReaderRepository: ThreadCoverPageResolving {
         return parsed
     }
 
-    public func cachedThreadPage(context: ThreadReaderLaunchContext, page: Int = 1) async -> ForumThreadPage? {
+    public func cachedThreadPage(context: ThreadNovelLaunchContext, page: Int = 1) async -> ForumThreadPage? {
         await cacheStore.loadThreadPage(thread: context.thread, page: page, authorID: nil)
     }
 

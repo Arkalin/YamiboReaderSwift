@@ -6,8 +6,8 @@ import XCTest
 #if canImport(UIKit)
 private typealias NovelTextLayoutFixture = (
     NovelReaderProjection,
-    ReaderAppearanceSettings,
-    ReaderContainerLayout
+    NovelReaderAppearanceSettings,
+    NovelReaderLayout
 ) throws -> NovelTextLayoutResult
 
 @MainActor
@@ -63,8 +63,8 @@ private extension NovelReadingWorkflow {
 
     @discardableResult
     func requestRuntimeUpdate(
-        settings: ReaderAppearanceSettings,
-        layout: ReaderContainerLayout,
+        settings: NovelReaderAppearanceSettings,
+        layout: NovelReaderLayout,
         usesPadPresentation: Bool = false
     ) async throws -> NovelReadingWorkflowState? {
         try await requestRuntimeUpdate(
@@ -97,15 +97,15 @@ final class NovelReadingWorkflowTests: XCTestCase {
             1: makeNovelDocument(threadID: threadID, view: 1, maxView: 1, authorID: "author-1")
         ])
         let workflow = NovelReadingWorkflow(
-            context: ReaderLaunchContext(
+            context: NovelLaunchContext(
                 threadID: threadID,
                 threadTitle: "Thread",
                 source: .forum,
                 initialView: 1,
                 authorID: "author-1"
             ),
-            settings: ReaderAppearanceSettings(readingMode: .paged),
-            layout: ReaderContainerLayout(width: 320, height: 568),
+            settings: NovelReaderAppearanceSettings(readingMode: .paged),
+            layout: NovelReaderLayout(width: 320, height: 568),
             repository: repository
         )
 
@@ -140,15 +140,15 @@ final class NovelReadingWorkflowTests: XCTestCase {
             ]
         )
         let workflow = NovelReadingWorkflow(
-            context: ReaderLaunchContext(
+            context: NovelLaunchContext(
                 threadID: threadID,
                 threadTitle: "Thread",
                 source: .forum,
                 initialView: 1,
                 authorID: "42"
             ),
-            settings: ReaderAppearanceSettings(readingMode: .paged),
-            layout: ReaderContainerLayout(width: 320, height: 568),
+            settings: NovelReaderAppearanceSettings(readingMode: .paged),
+            layout: NovelReaderLayout(width: 320, height: 568),
             repository: repository
         )
 
@@ -167,15 +167,15 @@ final class NovelReadingWorkflowTests: XCTestCase {
             1: makeNovelDocument(threadID: threadID, view: 1, maxView: 1, authorID: "author-1")
         ])
         let workflow = NovelReadingWorkflow(
-            context: ReaderLaunchContext(
+            context: NovelLaunchContext(
                 threadID: threadID,
                 threadTitle: "Thread",
                 source: .forum,
                 initialView: 1,
                 authorID: "author-1"
             ),
-            settings: ReaderAppearanceSettings(readingMode: .vertical),
-            layout: ReaderContainerLayout(width: 320, height: 568, readingMode: .vertical),
+            settings: NovelReaderAppearanceSettings(readingMode: .vertical),
+            layout: NovelReaderLayout(width: 320, height: 568, readingMode: .vertical),
             repository: repository
         )
 
@@ -184,8 +184,8 @@ final class NovelReadingWorkflowTests: XCTestCase {
         let oldReference = try XCTUnwrap(workflow.displayReference(for: surfaceOrdinal))
 
         _ = try await workflow.requestRuntimeUpdate(
-            settings: ReaderAppearanceSettings(fontScale: 1.15, readingMode: .vertical),
-            layout: ReaderContainerLayout(width: 320, height: 568, readingMode: .vertical)
+            settings: NovelReaderAppearanceSettings(fontScale: 1.15, readingMode: .vertical),
+            layout: NovelReaderLayout(width: 320, height: 568, readingMode: .vertical)
         )
         let currentReference = try XCTUnwrap(workflow.displayReference(for: surfaceOrdinal))
 
@@ -219,15 +219,15 @@ final class NovelReadingWorkflowTests: XCTestCase {
             1: document
         ])
         let workflow = NovelReadingWorkflow(
-            context: ReaderLaunchContext(
+            context: NovelLaunchContext(
                 threadID: threadID,
                 threadTitle: "Thread",
                 source: .forum,
                 initialView: 1,
                 authorID: "author-1"
             ),
-            settings: ReaderAppearanceSettings(readingMode: .vertical),
-            layout: ReaderContainerLayout(width: 393, height: 852, readingMode: .vertical),
+            settings: NovelReaderAppearanceSettings(readingMode: .vertical),
+            layout: NovelReaderLayout(width: 393, height: 852, readingMode: .vertical),
             repository: repository
         )
 
@@ -236,7 +236,7 @@ final class NovelReadingWorkflowTests: XCTestCase {
         let firstRange = try XCTUnwrap(laterPage.ranges.first)
         let reference = try XCTUnwrap(workflow.displayReference(for: laterPage.surfaceOrdinal))
 #if canImport(UIKit)
-        let referencePosition = ReaderResumePoint(
+        let referencePosition = NovelResumePoint(
             view: laterPage.documentView,
             textSegmentIdentity: try XCTUnwrap(document.semantics(forSegmentIndex: firstRange.segmentIndex)?.textSegmentIdentity),
             displayedTextOffset: firstRange.startOffset,
@@ -273,16 +273,16 @@ final class NovelReadingWorkflowTests: XCTestCase {
             ]
         )
         let repository = RecordingNovelReadingRepository(documents: [1: document])
-        let layout = ReaderContainerLayout(width: 320, height: 500, readingMode: .vertical)
+        let layout = NovelReaderLayout(width: 320, height: 500, readingMode: .vertical)
         let workflow = NovelReadingWorkflow(
-            context: ReaderLaunchContext(
+            context: NovelLaunchContext(
                 threadID: threadID,
                 threadTitle: "Thread",
                 source: .forum,
                 initialView: 1,
                 authorID: "author-1"
             ),
-            settings: ReaderAppearanceSettings(readingMode: .vertical),
+            settings: NovelReaderAppearanceSettings(readingMode: .vertical),
             layout: layout,
             repository: repository,
             pagination: { document, settings, layout in
@@ -352,15 +352,15 @@ final class NovelReadingWorkflowTests: XCTestCase {
         )
         let repository = RecordingNovelReadingRepository(documents: [1: document])
         let workflow = NovelReadingWorkflow(
-            context: ReaderLaunchContext(
+            context: NovelLaunchContext(
                 threadID: threadID,
                 threadTitle: "Thread",
                 source: .forum,
                 initialView: 1,
                 authorID: "author-1"
             ),
-            settings: ReaderAppearanceSettings(readingMode: .vertical),
-            layout: ReaderContainerLayout(width: 320, height: 568, readingMode: .vertical),
+            settings: NovelReaderAppearanceSettings(readingMode: .vertical),
+            layout: NovelReaderLayout(width: 320, height: 568, readingMode: .vertical),
             repository: repository,
             pagination: { document, settings, layout in
                 try NovelTextLayout.layout(
@@ -435,21 +435,21 @@ final class NovelReadingWorkflowTests: XCTestCase {
         )
         let repository = RecordingNovelReadingRepository(documents: [1: document])
         let workflow = NovelReadingWorkflow(
-            context: ReaderLaunchContext(
+            context: NovelLaunchContext(
                 threadID: threadID,
                 threadTitle: "Thread",
                 source: .forum,
                 initialView: 1,
                 authorID: "author-1"
             ),
-            settings: ReaderAppearanceSettings(readingMode: .vertical),
-            layout: ReaderContainerLayout(width: 320, height: 568, readingMode: .vertical),
+            settings: NovelReaderAppearanceSettings(readingMode: .vertical),
+            layout: NovelReaderLayout(width: 320, height: 568, readingMode: .vertical),
             repository: repository
         )
 
         let state = try await workflow.start(initial: NovelReadingInitialPosition())
         let surface: NovelTextViewportIndexSurface = try XCTUnwrap(workflow.debugState.viewportSurfaces.dropFirst().first { !$0.ranges.isEmpty })
-        let range: ReaderRenderedTextRange = try XCTUnwrap(surface.ranges.first)
+        let range: NovelRenderedTextRange = try XCTUnwrap(surface.ranges.first)
         let segmentIdentity = try XCTUnwrap(document.semantics(forSegmentIndex: range.segmentIndex)?.textSegmentIdentity)
         let surfaceIdentity = try XCTUnwrap(state.presentation?.surfaces.first(where: {
             $0.identity.ordinal == surface.surfaceOrdinal
@@ -483,18 +483,18 @@ final class NovelReadingWorkflowTests: XCTestCase {
         )
         let repository = RecordingNovelReadingRepository(documents: [1: document])
         let workflow = NovelReadingWorkflow(
-            context: ReaderLaunchContext(
+            context: NovelLaunchContext(
                 threadID: threadID,
                 threadTitle: "Thread",
                 source: .forum,
                 initialView: 1,
                 authorID: "author-1"
             ),
-            settings: ReaderAppearanceSettings(
+            settings: NovelReaderAppearanceSettings(
                 showsTwoPagesInLandscapeOnPad: true,
                 readingMode: .paged
             ),
-            layout: ReaderContainerLayout(width: 1024, height: 768, readingMode: .paged),
+            layout: NovelReaderLayout(width: 1024, height: 768, readingMode: .paged),
             repository: repository,
             usesPadPresentation: true,
             pagination: currentWebpageViewportPagination
@@ -538,8 +538,8 @@ final class NovelReadingWorkflowTests: XCTestCase {
         XCTAssertEqual(workflow.displayReference(for: initialSurface)?.generation, initialPresentation.generation)
 
         let replacement = try await workflow.requestRuntimeUpdate(
-            settings: ReaderAppearanceSettings(fontScale: 1.1, readingMode: .paged),
-            layout: ReaderContainerLayout(width: 320, height: 568, readingMode: .paged)
+            settings: NovelReaderAppearanceSettings(fontScale: 1.1, readingMode: .paged),
+            layout: NovelReaderLayout(width: 320, height: 568, readingMode: .paged)
         )
         let replacementState = try XCTUnwrap(replacement)
         let replacementPresentation = try XCTUnwrap(replacementState.presentation)
@@ -570,7 +570,7 @@ final class NovelReadingWorkflowTests: XCTestCase {
             selectedSurfaceIdentity: selectedIdentity,
             spreads: [],
             chapters: [],
-            committedSettings: ReaderAppearanceSettings(readingMode: .vertical),
+            committedSettings: NovelReaderAppearanceSettings(readingMode: .vertical),
             readingState: NovelReaderReadingState(
                 currentView: 1,
                 maxView: 1,
@@ -692,7 +692,7 @@ final class NovelReadingWorkflowTests: XCTestCase {
         let repository = RecordingNovelReadingRepository(documents: [
             3: resumeDocument
         ])
-        let resumePoint = ReaderResumePoint(
+        let resumePoint = NovelResumePoint(
             view: 3,
             textSegmentIdentity: try XCTUnwrap(resumeDocument.semantics(forSegmentIndex: 0)?.textSegmentIdentity),
             displayedTextOffset: 0,
@@ -703,15 +703,15 @@ final class NovelReadingWorkflowTests: XCTestCase {
             readingModeHint: .vertical
         )
         let workflow = NovelReadingWorkflow(
-            context: ReaderLaunchContext(
+            context: NovelLaunchContext(
                 threadID: threadID,
                 threadTitle: "Thread",
                 source: .favorites,
                 initialView: 2,
                 authorID: "launch-author"
             ),
-            settings: ReaderAppearanceSettings(readingMode: .vertical),
-            layout: ReaderContainerLayout(width: 320, height: 568),
+            settings: NovelReaderAppearanceSettings(readingMode: .vertical),
+            layout: NovelReaderLayout(width: 320, height: 568),
             repository: repository
         )
 
@@ -723,7 +723,7 @@ final class NovelReadingWorkflowTests: XCTestCase {
         )
 
         XCTAssertEqual(repository.loadRequests, [
-            ReaderPageRequest(threadID: threadID, view: 3, authorID: "resume-author")
+            NovelPageRequest(threadID: threadID, view: 3, authorID: "resume-author")
         ])
         XCTAssertEqual(state.snapshot.currentView, 3)
         XCTAssertEqual(state.presentation?.readingState.authorID, "resume-author")
@@ -736,15 +736,15 @@ final class NovelReadingWorkflowTests: XCTestCase {
             2: makeNovelDocument(threadID: threadID, view: 2, maxView: 5, authorID: "favorite-author")
         ])
         let workflow = NovelReadingWorkflow(
-            context: ReaderLaunchContext(
+            context: NovelLaunchContext(
                 threadID: threadID,
                 threadTitle: "Thread",
                 source: .favorites,
                 initialView: 2,
                 authorID: "launch-author"
             ),
-            settings: ReaderAppearanceSettings(readingMode: .paged),
-            layout: ReaderContainerLayout(width: 320, height: 568),
+            settings: NovelReaderAppearanceSettings(readingMode: .paged),
+            layout: NovelReaderLayout(width: 320, height: 568),
             repository: repository
         )
 
@@ -753,7 +753,7 @@ final class NovelReadingWorkflowTests: XCTestCase {
         )
 
         XCTAssertEqual(repository.loadRequests, [
-            ReaderPageRequest(threadID: threadID, view: 2, authorID: "favorite-author")
+            NovelPageRequest(threadID: threadID, view: 2, authorID: "favorite-author")
         ])
         XCTAssertEqual(state.snapshot.currentView, 2)
         XCTAssertEqual(state.snapshot.selectedSurfaceOrdinal, 0)
@@ -766,15 +766,15 @@ final class NovelReadingWorkflowTests: XCTestCase {
             1: makeNovelDocument(threadID: threadID, view: 1, maxView: 1, authorID: "author-1")
         ])
         let workflow = NovelReadingWorkflow(
-            context: ReaderLaunchContext(
+            context: NovelLaunchContext(
                 threadID: threadID,
                 threadTitle: "Thread",
                 source: .forum,
                 initialView: 1,
                 authorID: "author-1"
             ),
-            settings: ReaderAppearanceSettings(readingMode: .paged),
-            layout: ReaderContainerLayout(width: 320, height: 568),
+            settings: NovelReaderAppearanceSettings(readingMode: .paged),
+            layout: NovelReaderLayout(width: 320, height: 568),
             repository: repository,
             pagination: { document, settings, layout in
                 if settings.fontScale > 1 {
@@ -795,8 +795,8 @@ final class NovelReadingWorkflowTests: XCTestCase {
 
         do {
             _ = try await workflow.requestRuntimeUpdate(
-                settings: ReaderAppearanceSettings(fontScale: 1.2, readingMode: .paged),
-                layout: ReaderContainerLayout(width: 320, height: 568, readingMode: .paged)
+                settings: NovelReaderAppearanceSettings(fontScale: 1.2, readingMode: .paged),
+                layout: NovelReaderLayout(width: 320, height: 568, readingMode: .paged)
             )
             XCTFail("Expected Novel Text Layout failure")
         } catch let failure as NovelTextLayoutFailure {
@@ -828,15 +828,15 @@ final class NovelReadingWorkflowTests: XCTestCase {
         ])
         let runtimeAdapter = TestNovelTextLayoutRuntimeAdapter()
         let workflow = NovelReadingWorkflow(
-            context: ReaderLaunchContext(
+            context: NovelLaunchContext(
                 threadID: threadID,
                 threadTitle: "Thread",
                 source: .forum,
                 initialView: 1,
                 authorID: "author-1"
             ),
-            settings: ReaderAppearanceSettings(readingMode: .paged),
-            layout: ReaderContainerLayout(width: 320, height: 568),
+            settings: NovelReaderAppearanceSettings(readingMode: .paged),
+            layout: NovelReaderLayout(width: 320, height: 568),
             repository: repository,
             runtimeAdapter: runtimeAdapter
         )
@@ -847,8 +847,8 @@ final class NovelReadingWorkflowTests: XCTestCase {
         runtimeAdapter.failNextCandidate(with: NovelTextLayoutFailure.textKitIndexing)
         do {
             _ = try await workflow.requestRuntimeUpdate(
-                settings: ReaderAppearanceSettings(fontScale: 1.2, readingMode: .paged),
-                layout: ReaderContainerLayout(width: 320, height: 568, readingMode: .paged)
+                settings: NovelReaderAppearanceSettings(fontScale: 1.2, readingMode: .paged),
+                layout: NovelReaderLayout(width: 320, height: 568, readingMode: .paged)
             )
             XCTFail("Expected runtime adapter failure")
         } catch let failure as NovelTextLayoutFailure {
@@ -860,8 +860,8 @@ final class NovelReadingWorkflowTests: XCTestCase {
         XCTAssertEqual(workflow.displayReference(for: surfaceOrdinal)?.generation, initialReference.generation)
 
         let replacementUpdate = try await workflow.requestRuntimeUpdate(
-            settings: ReaderAppearanceSettings(fontScale: 1.3, readingMode: .paged),
-            layout: ReaderContainerLayout(width: 320, height: 568, readingMode: .paged)
+            settings: NovelReaderAppearanceSettings(fontScale: 1.3, readingMode: .paged),
+            layout: NovelReaderLayout(width: 320, height: 568, readingMode: .paged)
         )
         let replacementState = try XCTUnwrap(replacementUpdate)
         let replacementIdentity = try firstSurfaceOrdinal(in: replacementState)
@@ -886,8 +886,8 @@ final class NovelReadingWorkflowTests: XCTestCase {
         func preparedInput(fontScale: Double = 1) throws -> NovelTextLayoutPreparedInput {
             try NovelTextLayout.prepareInput(
                 document: document,
-                settings: ReaderAppearanceSettings(fontScale: fontScale, readingMode: .paged),
-                layout: ReaderContainerLayout(width: 320, height: 568)
+                settings: NovelReaderAppearanceSettings(fontScale: fontScale, readingMode: .paged),
+                layout: NovelReaderLayout(width: 320, height: 568)
             )
         }
 
@@ -931,15 +931,15 @@ final class NovelReadingWorkflowTests: XCTestCase {
             1: makeNovelDocument(threadID: threadID, view: 1, maxView: 1, authorID: "author-1")
         ])
         let workflow = NovelReadingWorkflow(
-            context: ReaderLaunchContext(
+            context: NovelLaunchContext(
                 threadID: threadID,
                 threadTitle: "Thread",
                 source: .forum,
                 initialView: 1,
                 authorID: "author-1"
             ),
-            settings: ReaderAppearanceSettings(readingMode: .paged),
-            layout: ReaderContainerLayout(width: 320, height: 568, readingMode: .paged),
+            settings: NovelReaderAppearanceSettings(readingMode: .paged),
+            layout: NovelReaderLayout(width: 320, height: 568, readingMode: .paged),
             repository: repository,
             usesPadPresentation: false,
             pagination: currentWebpageViewportPagination
@@ -957,9 +957,9 @@ final class NovelReadingWorkflowTests: XCTestCase {
             )
         )
 
-        let rotatedLayout = ReaderContainerLayout(width: 568, height: 320, readingMode: .paged)
+        let rotatedLayout = NovelReaderLayout(width: 568, height: 320, readingMode: .paged)
         let rotatedUpdate = try await workflow.requestRuntimeUpdate(
-            settings: ReaderAppearanceSettings(readingMode: .paged),
+            settings: NovelReaderAppearanceSettings(readingMode: .paged),
             layout: rotatedLayout
         )
         let rotatedState = try XCTUnwrap(rotatedUpdate)
@@ -969,7 +969,7 @@ final class NovelReadingWorkflowTests: XCTestCase {
         XCTAssertEqual(workflow.runtimeTransactionDiagnostics.semanticAttributedDocumentBuildCount, 1)
         XCTAssertEqual(workflow.runtimeTransactionDiagnostics.semanticAttributedDocumentReuseCount, 1)
 
-        let fontSettings = ReaderAppearanceSettings(
+        let fontSettings = NovelReaderAppearanceSettings(
             fontScale: 1.15,
             fontFamily: .systemSerif,
             lineHeightScale: 1.6,
@@ -998,14 +998,14 @@ final class NovelReadingWorkflowTests: XCTestCase {
         XCTAssertEqual(workflow.runtimeTransactionDiagnostics.committedTransactionCount, 4)
 
         let verticalUpdate = try await workflow.requestRuntimeUpdate(
-            settings: ReaderAppearanceSettings(
+            settings: NovelReaderAppearanceSettings(
                 fontScale: 1.15,
                 fontFamily: .systemSerif,
                 lineHeightScale: 1.6,
                 showsTwoPagesInLandscapeOnPad: true,
                 readingMode: .vertical
             ),
-            layout: ReaderContainerLayout(width: 568, height: 320, readingMode: .vertical),
+            layout: NovelReaderLayout(width: 568, height: 320, readingMode: .vertical),
             usesPadPresentation: true
         )
         let verticalState = try XCTUnwrap(verticalUpdate)
@@ -1027,17 +1027,17 @@ final class NovelReadingWorkflowTests: XCTestCase {
         _ = try await workflow.start(initial: NovelReadingInitialPosition())
         let initialTransactionCount = workflow.runtimeTransactionDiagnostics.committedTransactionCount
         let firstUpdate = NovelReadingWorkflowRuntimeUpdate(
-            settings: ReaderAppearanceSettings(fontScale: 1.1, readingMode: .paged),
-            layout: ReaderContainerLayout(width: 390, height: 844, readingMode: .paged),
+            settings: NovelReaderAppearanceSettings(fontScale: 1.1, readingMode: .paged),
+            layout: NovelReaderLayout(width: 390, height: 844, readingMode: .paged),
             usesPadPresentation: false
         )
         let latestUpdate = NovelReadingWorkflowRuntimeUpdate(
-            settings: ReaderAppearanceSettings(
+            settings: NovelReaderAppearanceSettings(
                 fontScale: 1.3,
                 lineHeightScale: 1.7,
                 readingMode: .vertical
             ),
-            layout: ReaderContainerLayout(width: 844, height: 390, readingMode: .vertical),
+            layout: NovelReaderLayout(width: 844, height: 390, readingMode: .vertical),
             usesPadPresentation: true
         )
         let preparationGate = RuntimeUpdatePreparationGate()
@@ -1078,8 +1078,8 @@ final class NovelReadingWorkflowTests: XCTestCase {
         let firstTask = Task {
             try? await workflow.requestRuntimeUpdate(
                 NovelReadingWorkflowRuntimeUpdate(
-                    settings: ReaderAppearanceSettings(fontScale: 1.1, readingMode: .paged),
-                    layout: ReaderContainerLayout(width: 390, height: 844),
+                    settings: NovelReaderAppearanceSettings(fontScale: 1.1, readingMode: .paged),
+                    layout: NovelReaderLayout(width: 390, height: 844),
                     usesPadPresentation: false
                 )
             ) { update in
@@ -1092,8 +1092,8 @@ final class NovelReadingWorkflowTests: XCTestCase {
         do {
             _ = try await workflow.requestRuntimeUpdate(
                 NovelReadingWorkflowRuntimeUpdate(
-                    settings: ReaderAppearanceSettings(fontScale: 1.4, readingMode: .vertical),
-                    layout: ReaderContainerLayout(width: 844, height: 390, readingMode: .vertical),
+                    settings: NovelReaderAppearanceSettings(fontScale: 1.4, readingMode: .vertical),
+                    layout: NovelReaderLayout(width: 844, height: 390, readingMode: .vertical),
                     usesPadPresentation: true
                 )
             ) { _ in
@@ -1121,8 +1121,8 @@ final class NovelReadingWorkflowTests: XCTestCase {
         let updateTask = Task {
             try? await workflow.requestRuntimeUpdate(
                 NovelReadingWorkflowRuntimeUpdate(
-                    settings: ReaderAppearanceSettings(fontScale: 1.5, readingMode: .vertical),
-                    layout: ReaderContainerLayout(width: 844, height: 390, readingMode: .vertical),
+                    settings: NovelReaderAppearanceSettings(fontScale: 1.5, readingMode: .vertical),
+                    layout: NovelReaderLayout(width: 844, height: 390, readingMode: .vertical),
                     usesPadPresentation: true
                 )
             ) { update in
@@ -1153,15 +1153,15 @@ final class NovelReadingWorkflowTests: XCTestCase {
             )
         ])
         let workflow = NovelReadingWorkflow(
-            context: ReaderLaunchContext(
+            context: NovelLaunchContext(
                 threadID: threadID,
                 threadTitle: "Thread",
                 source: .favorites,
                 initialView: 2,
                 authorID: "author-2"
             ),
-            settings: ReaderAppearanceSettings(readingMode: .paged),
-            layout: ReaderContainerLayout(width: 320, height: 568),
+            settings: NovelReaderAppearanceSettings(readingMode: .paged),
+            layout: NovelReaderLayout(width: 320, height: 568),
             repository: repository
         )
         _ = try await workflow.start(initial: NovelReadingInitialPosition())
@@ -1181,7 +1181,7 @@ final class NovelReadingWorkflowTests: XCTestCase {
             )
         ])
         XCTAssertEqual(repository.ignoringCacheRequests, [
-            ReaderPageRequest(threadID: threadID, view: 2, authorID: "author-2")
+            NovelPageRequest(threadID: threadID, view: 2, authorID: "author-2")
         ])
     }
 
@@ -1192,15 +1192,15 @@ final class NovelReadingWorkflowTests: XCTestCase {
             2: makeNovelDocument(threadID: threadID, view: 2, maxView: 2, authorID: "author-1")
         ])
         let workflow = NovelReadingWorkflow(
-            context: ReaderLaunchContext(
+            context: NovelLaunchContext(
                 threadID: threadID,
                 threadTitle: "Thread",
                 source: .forum,
                 initialView: 1,
                 authorID: "author-1"
             ),
-            settings: ReaderAppearanceSettings(readingMode: .vertical),
-            layout: ReaderContainerLayout(width: 320, height: 568),
+            settings: NovelReaderAppearanceSettings(readingMode: .vertical),
+            layout: NovelReaderLayout(width: 320, height: 568),
             repository: repository
         )
         let initialState = try await workflow.start(initial: NovelReadingInitialPosition())
@@ -1209,8 +1209,8 @@ final class NovelReadingWorkflowTests: XCTestCase {
         let state = try XCTUnwrap(prefetchState)
 
         XCTAssertEqual(repository.loadRequests, [
-            ReaderPageRequest(threadID: threadID, view: 1, authorID: "author-1"),
-            ReaderPageRequest(threadID: threadID, view: 2, authorID: "author-1")
+            NovelPageRequest(threadID: threadID, view: 1, authorID: "author-1"),
+            NovelPageRequest(threadID: threadID, view: 2, authorID: "author-1")
         ])
         XCTAssertEqual(state.snapshot.currentView, 1)
         XCTAssertEqual(documentViews(in: state), [1])
@@ -1229,15 +1229,15 @@ final class NovelReadingWorkflowTests: XCTestCase {
             1: document
         ])
         let workflow = NovelReadingWorkflow(
-            context: ReaderLaunchContext(
+            context: NovelLaunchContext(
                 threadID: threadID,
                 threadTitle: "Thread",
                 source: .forum,
                 initialView: 1,
                 authorID: "author-1"
             ),
-            settings: ReaderAppearanceSettings(readingMode: .vertical),
-            layout: ReaderContainerLayout(width: 320, height: 568),
+            settings: NovelReaderAppearanceSettings(readingMode: .vertical),
+            layout: NovelReaderLayout(width: 320, height: 568),
             repository: repository,
             pagination: { document, _, _ in
                 layoutResult(
@@ -1249,7 +1249,7 @@ final class NovelReadingWorkflowTests: XCTestCase {
                                     "第一页",
                                     chapterTitle: "第一章",
                                     ranges: [
-                                        ReaderRenderedTextRange(segmentIndex: 0, startOffset: 0, endOffset: 20)
+                                        NovelRenderedTextRange(segmentIndex: 0, startOffset: 0, endOffset: 20)
                                     ]
                                 )
                             ],
@@ -1264,7 +1264,7 @@ final class NovelReadingWorkflowTests: XCTestCase {
                                     "第二页",
                                     chapterTitle: "第一章",
                                     ranges: [
-                                        ReaderRenderedTextRange(segmentIndex: 2, startOffset: 40, endOffset: 80)
+                                        NovelRenderedTextRange(segmentIndex: 2, startOffset: 40, endOffset: 80)
                                     ]
                                 )
                             ],
@@ -1274,7 +1274,7 @@ final class NovelReadingWorkflowTests: XCTestCase {
                         )
                     ],
                     chapters: [
-                        ReaderChapter(ordinal: 0, title: "第一章", startIndex: 0)
+                        NovelReaderChapter(ordinal: 0, title: "第一章", startIndex: 0)
                     ],
                     viewportIndex: NovelTextViewportIndex(
                         documentView: document.view,
@@ -1286,7 +1286,7 @@ final class NovelReadingWorkflowTests: XCTestCase {
                                 chapterOrdinal: 0,
                                 chapterTitle: "第一章",
                                 ranges: [
-                                    ReaderRenderedTextRange(segmentIndex: 0, startOffset: 0, endOffset: 20)
+                                    NovelRenderedTextRange(segmentIndex: 0, startOffset: 0, endOffset: 20)
                                 ]
                             ),
                             NovelTextViewportIndexSurface(
@@ -1295,7 +1295,7 @@ final class NovelReadingWorkflowTests: XCTestCase {
                                 chapterOrdinal: 0,
                                 chapterTitle: "第一章",
                                 ranges: [
-                                    ReaderRenderedTextRange(segmentIndex: 2, startOffset: 40, endOffset: 80)
+                                    NovelRenderedTextRange(segmentIndex: 2, startOffset: 40, endOffset: 80)
                                 ]
                             )
                         ],
@@ -1337,15 +1337,15 @@ final class NovelReadingWorkflowTests: XCTestCase {
             1: document
         ])
         let workflow = NovelReadingWorkflow(
-            context: ReaderLaunchContext(
+            context: NovelLaunchContext(
                 threadID: threadID,
                 threadTitle: "Thread",
                 source: .forum,
                 initialView: 1,
                 authorID: "author-1"
             ),
-            settings: ReaderAppearanceSettings(readingMode: .vertical),
-            layout: ReaderContainerLayout(width: 320, height: 568),
+            settings: NovelReaderAppearanceSettings(readingMode: .vertical),
+            layout: NovelReaderLayout(width: 320, height: 568),
             repository: repository,
             pagination: { document, _, _ in
                 layoutResult(
@@ -1357,7 +1357,7 @@ final class NovelReadingWorkflowTests: XCTestCase {
                                     "第一页",
                                     chapterTitle: "第一章",
                                     ranges: [
-                                        ReaderRenderedTextRange(segmentIndex: 0, startOffset: 0, endOffset: 20)
+                                        NovelRenderedTextRange(segmentIndex: 0, startOffset: 0, endOffset: 20)
                                     ]
                                 )
                             ],
@@ -1372,7 +1372,7 @@ final class NovelReadingWorkflowTests: XCTestCase {
                                     "第二页",
                                     chapterTitle: "第一章",
                                     ranges: [
-                                        ReaderRenderedTextRange(segmentIndex: 2, startOffset: 40, endOffset: 80)
+                                        NovelRenderedTextRange(segmentIndex: 2, startOffset: 40, endOffset: 80)
                                     ]
                                 )
                             ],
@@ -1382,7 +1382,7 @@ final class NovelReadingWorkflowTests: XCTestCase {
                         )
                     ],
                     chapters: [
-                        ReaderChapter(ordinal: 0, title: "第一章", startIndex: 0)
+                        NovelReaderChapter(ordinal: 0, title: "第一章", startIndex: 0)
                     ],
                     viewportIndex: NovelTextViewportIndex(
                         documentView: document.view,
@@ -1394,7 +1394,7 @@ final class NovelReadingWorkflowTests: XCTestCase {
                                 chapterOrdinal: 0,
                                 chapterTitle: "第一章",
                                 ranges: [
-                                    ReaderRenderedTextRange(segmentIndex: 0, startOffset: 0, endOffset: 20)
+                                    NovelRenderedTextRange(segmentIndex: 0, startOffset: 0, endOffset: 20)
                                 ]
                             ),
                             NovelTextViewportIndexSurface(
@@ -1403,7 +1403,7 @@ final class NovelReadingWorkflowTests: XCTestCase {
                                 chapterOrdinal: 0,
                                 chapterTitle: "第一章",
                                 ranges: [
-                                    ReaderRenderedTextRange(segmentIndex: 2, startOffset: 40, endOffset: 80)
+                                    NovelRenderedTextRange(segmentIndex: 2, startOffset: 40, endOffset: 80)
                                 ]
                             )
                         ],
@@ -1449,20 +1449,20 @@ final class NovelReadingWorkflowTests: XCTestCase {
             1: document
         ])
         let workflow = NovelReadingWorkflow(
-            context: ReaderLaunchContext(
+            context: NovelLaunchContext(
                 threadID: threadID,
                 threadTitle: "Thread",
                 source: .forum,
                 initialView: 1,
                 authorID: "author-1"
             ),
-            settings: ReaderAppearanceSettings(readingMode: .vertical),
-            layout: ReaderContainerLayout(width: 320, height: 568),
+            settings: NovelReaderAppearanceSettings(readingMode: .vertical),
+            layout: NovelReaderLayout(width: 320, height: 568),
             repository: repository,
             pagination: { document, _, _ in
                 let ranges = [
-                    ReaderRenderedTextRange(segmentIndex: 15, startOffset: 0, endOffset: 2_000),
-                    ReaderRenderedTextRange(segmentIndex: 16, startOffset: 1_101, endOffset: 2_000)
+                    NovelRenderedTextRange(segmentIndex: 15, startOffset: 0, endOffset: 2_000),
+                    NovelRenderedTextRange(segmentIndex: 16, startOffset: 1_101, endOffset: 2_000)
                 ]
                 return layoutResult(
                     pages: [
@@ -1481,7 +1481,7 @@ final class NovelReadingWorkflowTests: XCTestCase {
                         )
                     ],
                     chapters: [
-                        ReaderChapter(ordinal: 1, title: "第二章", startIndex: 0)
+                        NovelReaderChapter(ordinal: 1, title: "第二章", startIndex: 0)
                     ],
                     viewportIndex: NovelTextViewportIndex(
                         documentView: document.view,
@@ -1536,15 +1536,15 @@ final class NovelReadingWorkflowTests: XCTestCase {
             1: document
         ])
         let workflow = NovelReadingWorkflow(
-            context: ReaderLaunchContext(
+            context: NovelLaunchContext(
                 threadID: threadID,
                 threadTitle: "Thread",
                 source: .forum,
                 initialView: 1,
                 authorID: "author-1"
             ),
-            settings: ReaderAppearanceSettings(readingMode: .vertical),
-            layout: ReaderContainerLayout(width: 320, height: 568),
+            settings: NovelReaderAppearanceSettings(readingMode: .vertical),
+            layout: NovelReaderLayout(width: 320, height: 568),
             repository: repository,
             pagination: { document, _, _ in
                 layoutResult(
@@ -1556,7 +1556,7 @@ final class NovelReadingWorkflowTests: XCTestCase {
                                     "前文正文",
                                     chapterTitle: "第一章",
                                     ranges: [
-                                        ReaderRenderedTextRange(segmentIndex: 0, startOffset: 0, endOffset: 30)
+                                        NovelRenderedTextRange(segmentIndex: 0, startOffset: 0, endOffset: 30)
                                     ]
                                 )
                             ],
@@ -1580,7 +1580,7 @@ final class NovelReadingWorkflowTests: XCTestCase {
                                     "后文正文",
                                     chapterTitle: "第一章",
                                     ranges: [
-                                        ReaderRenderedTextRange(segmentIndex: 2, startOffset: 40, endOffset: 80)
+                                        NovelRenderedTextRange(segmentIndex: 2, startOffset: 40, endOffset: 80)
                                     ]
                                 )
                             ],
@@ -1590,7 +1590,7 @@ final class NovelReadingWorkflowTests: XCTestCase {
                         )
                     ],
                     chapters: [
-                        ReaderChapter(ordinal: 0, title: "第一章", startIndex: 0)
+                        NovelReaderChapter(ordinal: 0, title: "第一章", startIndex: 0)
                     ],
                     viewportIndex: NovelTextViewportIndex(
                         documentView: document.view,
@@ -1602,7 +1602,7 @@ final class NovelReadingWorkflowTests: XCTestCase {
                                 chapterOrdinal: 0,
                                 chapterTitle: "第一章",
                                 ranges: [
-                                    ReaderRenderedTextRange(segmentIndex: 0, startOffset: 0, endOffset: 30)
+                                    NovelRenderedTextRange(segmentIndex: 0, startOffset: 0, endOffset: 30)
                                 ]
                             ),
                             NovelTextViewportIndexSurface(
@@ -1618,7 +1618,7 @@ final class NovelReadingWorkflowTests: XCTestCase {
                                 chapterOrdinal: 0,
                                 chapterTitle: "第一章",
                                 ranges: [
-                                    ReaderRenderedTextRange(segmentIndex: 2, startOffset: 40, endOffset: 80)
+                                    NovelRenderedTextRange(segmentIndex: 2, startOffset: 40, endOffset: 80)
                                 ]
                             )
                         ],
@@ -1685,15 +1685,15 @@ final class NovelReadingWorkflowTests: XCTestCase {
             2: secondDocument
         ])
         let workflow = NovelReadingWorkflow(
-            context: ReaderLaunchContext(
+            context: NovelLaunchContext(
                 threadID: threadID,
                 threadTitle: "Thread",
                 source: .forum,
                 initialView: 1,
                 authorID: "author-1"
             ),
-            settings: ReaderAppearanceSettings(readingMode: .vertical),
-            layout: ReaderContainerLayout(width: 320, height: 568),
+            settings: NovelReaderAppearanceSettings(readingMode: .vertical),
+            layout: NovelReaderLayout(width: 320, height: 568),
             repository: repository,
             pagination: { document, _, _ in
                 if document.view == 1 {
@@ -1706,7 +1706,7 @@ final class NovelReadingWorkflowTests: XCTestCase {
                                         "有正文的网页",
                                         chapterTitle: "第一章",
                                         ranges: [
-                                            ReaderRenderedTextRange(segmentIndex: 0, startOffset: 0, endOffset: 40)
+                                            NovelRenderedTextRange(segmentIndex: 0, startOffset: 0, endOffset: 40)
                                         ]
                                     )
                                 ],
@@ -1716,7 +1716,7 @@ final class NovelReadingWorkflowTests: XCTestCase {
                             )
                         ],
                         chapters: [
-                            ReaderChapter(ordinal: 0, title: "第一章", startIndex: 0)
+                            NovelReaderChapter(ordinal: 0, title: "第一章", startIndex: 0)
                         ],
                         viewportIndex: NovelTextViewportIndex(
                             documentView: document.view,
@@ -1728,7 +1728,7 @@ final class NovelReadingWorkflowTests: XCTestCase {
                                     chapterOrdinal: 0,
                                     chapterTitle: "第一章",
                                     ranges: [
-                                        ReaderRenderedTextRange(segmentIndex: 0, startOffset: 0, endOffset: 40)
+                                        NovelRenderedTextRange(segmentIndex: 0, startOffset: 0, endOffset: 40)
                                     ]
                                 )
                             ],
@@ -1751,7 +1751,7 @@ final class NovelReadingWorkflowTests: XCTestCase {
                         )
                     ],
                     chapters: [
-                        ReaderChapter(ordinal: 1, title: "第二章", startIndex: 0)
+                        NovelReaderChapter(ordinal: 1, title: "第二章", startIndex: 0)
                     ]
                 )
             }
@@ -1792,15 +1792,15 @@ final class NovelReadingWorkflowTests: XCTestCase {
             )
         ])
         let workflow = NovelReadingWorkflow(
-            context: ReaderLaunchContext(
+            context: NovelLaunchContext(
                 threadID: threadID,
                 threadTitle: "Thread",
                 source: .forum,
                 initialView: 2,
                 authorID: "launch-author"
             ),
-            settings: ReaderAppearanceSettings(readingMode: .vertical),
-            layout: ReaderContainerLayout(width: 320, height: 568),
+            settings: NovelReaderAppearanceSettings(readingMode: .vertical),
+            layout: NovelReaderLayout(width: 320, height: 568),
             repository: repository,
             pagination: { document, _, _ in
                 layoutResult(
@@ -1812,7 +1812,7 @@ final class NovelReadingWorkflowTests: XCTestCase {
                                     "第一页",
                                     chapterTitle: "第一章",
                                     ranges: [
-                                        ReaderRenderedTextRange(segmentIndex: 0, startOffset: 0, endOffset: 20)
+                                        NovelRenderedTextRange(segmentIndex: 0, startOffset: 0, endOffset: 20)
                                     ]
                                 )
                             ],
@@ -1827,7 +1827,7 @@ final class NovelReadingWorkflowTests: XCTestCase {
                                     "第二页",
                                     chapterTitle: "第二章",
                                     ranges: [
-                                        ReaderRenderedTextRange(segmentIndex: 1, startOffset: 20, endOffset: 60)
+                                        NovelRenderedTextRange(segmentIndex: 1, startOffset: 20, endOffset: 60)
                                     ]
                                 )
                             ],
@@ -1837,8 +1837,8 @@ final class NovelReadingWorkflowTests: XCTestCase {
                         )
                     ],
                     chapters: [
-                        ReaderChapter(ordinal: 0, title: "第一章", startIndex: 0),
-                        ReaderChapter(ordinal: 1, title: "第二章", startIndex: 1)
+                        NovelReaderChapter(ordinal: 0, title: "第一章", startIndex: 0),
+                        NovelReaderChapter(ordinal: 1, title: "第二章", startIndex: 1)
                     ],
                     viewportIndex: NovelTextViewportIndex(
                         documentView: document.view,
@@ -1850,7 +1850,7 @@ final class NovelReadingWorkflowTests: XCTestCase {
                                 chapterOrdinal: 0,
                                 chapterTitle: "第一章",
                                 ranges: [
-                                    ReaderRenderedTextRange(segmentIndex: 0, startOffset: 0, endOffset: 20)
+                                    NovelRenderedTextRange(segmentIndex: 0, startOffset: 0, endOffset: 20)
                                 ]
                             ),
                             NovelTextViewportIndexSurface(
@@ -1859,7 +1859,7 @@ final class NovelReadingWorkflowTests: XCTestCase {
                                 chapterOrdinal: 1,
                                 chapterTitle: "第二章",
                                 ranges: [
-                                    ReaderRenderedTextRange(segmentIndex: 1, startOffset: 20, endOffset: 60)
+                                    NovelRenderedTextRange(segmentIndex: 1, startOffset: 20, endOffset: 60)
                                 ]
                             )
                         ],
@@ -1901,15 +1901,15 @@ final class NovelReadingWorkflowTests: XCTestCase {
             )
         ])
         let workflow = NovelReadingWorkflow(
-            context: ReaderLaunchContext(
+            context: NovelLaunchContext(
                 threadID: threadID,
                 threadTitle: "Thread",
                 source: .forum,
                 initialView: 1,
                 authorID: "author-1"
             ),
-            settings: ReaderAppearanceSettings(readingMode: .paged),
-            layout: ReaderContainerLayout(width: 320, height: 568),
+            settings: NovelReaderAppearanceSettings(readingMode: .paged),
+            layout: NovelReaderLayout(width: 320, height: 568),
             repository: repository,
             pagination: workflowRepaginationRanges(
                 defaultRanges: [0 ..< 100, 100 ..< 200, 200 ..< 300],
@@ -1928,16 +1928,16 @@ final class NovelReadingWorkflowTests: XCTestCase {
         XCTAssertEqual(navigatedPosition.resumePoint?.displayedTextOffset, 100)
 
         _ = try await workflow.requestRuntimeUpdate(
-            settings: ReaderAppearanceSettings(fontScale: 1.25, readingMode: .paged),
-            layout: ReaderContainerLayout(width: 320, height: 568, readingMode: .paged)
+            settings: NovelReaderAppearanceSettings(fontScale: 1.25, readingMode: .paged),
+            layout: NovelReaderLayout(width: 320, height: 568, readingMode: .paged)
         )
         let settingsPosition = workflow.currentProgressPosition()
 
         XCTAssertEqual(settingsPosition.resumePoint?.displayedTextOffset, 100)
 
         _ = try await workflow.requestRuntimeUpdate(
-            settings: ReaderAppearanceSettings(fontScale: 1.25, readingMode: .paged),
-            layout: ReaderContainerLayout(width: 390, height: 844, readingMode: .paged)
+            settings: NovelReaderAppearanceSettings(fontScale: 1.25, readingMode: .paged),
+            layout: NovelReaderLayout(width: 390, height: 844, readingMode: .paged)
         )
         let layoutPosition = workflow.currentProgressPosition()
 
@@ -1960,19 +1960,19 @@ final class NovelReadingWorkflowTests: XCTestCase {
         )
         let repository = RecordingNovelReadingRepository(documents: [1: document])
         let workflow = NovelReadingWorkflow(
-            context: ReaderLaunchContext(
+            context: NovelLaunchContext(
                 threadID: threadID,
                 threadTitle: "Thread",
                 source: .favorites,
                 initialView: 1,
                 authorID: "author-1"
             ),
-            settings: ReaderAppearanceSettings(readingMode: .vertical),
-            layout: ReaderContainerLayout(width: 320, height: 568),
+            settings: NovelReaderAppearanceSettings(readingMode: .vertical),
+            layout: NovelReaderLayout(width: 320, height: 568),
             repository: repository,
             pagination: previewSourcePagination
         )
-        let resumePoint = ReaderResumePoint(
+        let resumePoint = NovelResumePoint(
             view: 1,
             textSegmentIdentity: try XCTUnwrap(document.semantics(forSegmentIndex: 1)?.textSegmentIdentity),
             displayedTextOffset: 10,
@@ -2007,15 +2007,15 @@ final class NovelReadingWorkflowTests: XCTestCase {
         )
         let repository = RecordingNovelReadingRepository(documents: [1: document])
         let workflow = NovelReadingWorkflow(
-            context: ReaderLaunchContext(
+            context: NovelLaunchContext(
                 threadID: threadID,
                 threadTitle: "Thread",
                 source: .forum,
                 initialView: 1,
                 authorID: "author-1"
             ),
-            settings: ReaderAppearanceSettings(readingMode: .vertical),
-            layout: ReaderContainerLayout(width: 320, height: 568),
+            settings: NovelReaderAppearanceSettings(readingMode: .vertical),
+            layout: NovelReaderLayout(width: 320, height: 568),
             repository: repository,
             pagination: previewSourcePagination
         )
@@ -2039,15 +2039,15 @@ final class NovelReadingWorkflowTests: XCTestCase {
             2: makeNovelDocument(threadID: threadID, view: 2, maxView: 2, authorID: "author-1")
         ])
         let workflow = NovelReadingWorkflow(
-            context: ReaderLaunchContext(
+            context: NovelLaunchContext(
                 threadID: threadID,
                 threadTitle: "Thread",
                 source: .forum,
                 initialView: 1,
                 authorID: "author-1"
             ),
-            settings: ReaderAppearanceSettings(readingMode: .vertical),
-            layout: ReaderContainerLayout(width: 320, height: 568),
+            settings: NovelReaderAppearanceSettings(readingMode: .vertical),
+            layout: NovelReaderLayout(width: 320, height: 568),
             repository: repository
         )
         let initialState = try await workflow.start(initial: NovelReadingInitialPosition())
@@ -2091,15 +2091,15 @@ final class NovelReadingWorkflowTests: XCTestCase {
             )
         ])
         let workflow = NovelReadingWorkflow(
-            context: ReaderLaunchContext(
+            context: NovelLaunchContext(
                 threadID: threadID,
                 threadTitle: "Thread",
                 source: .forum,
                 initialView: 1,
                 authorID: "author-1"
             ),
-            settings: ReaderAppearanceSettings(readingMode: .paged),
-            layout: ReaderContainerLayout(width: 320, height: 568),
+            settings: NovelReaderAppearanceSettings(readingMode: .paged),
+            layout: NovelReaderLayout(width: 320, height: 568),
             repository: repository
         )
 
@@ -2123,15 +2123,15 @@ final class NovelReadingWorkflowTests: XCTestCase {
             2: makeNovelDocument(threadID: threadID, view: 2, maxView: 2, authorID: "author-1")
         ])
         let workflow = NovelReadingWorkflow(
-            context: ReaderLaunchContext(
+            context: NovelLaunchContext(
                 threadID: threadID,
                 threadTitle: "Thread",
                 source: .forum,
                 initialView: 1,
                 authorID: "author-1"
             ),
-            settings: ReaderAppearanceSettings(readingMode: .paged),
-            layout: ReaderContainerLayout(width: 320, height: 568),
+            settings: NovelReaderAppearanceSettings(readingMode: .paged),
+            layout: NovelReaderLayout(width: 320, height: 568),
             repository: repository,
             pagination: { document, settings, layout in
                 guard document.view == 1 else {
@@ -2220,15 +2220,15 @@ final class NovelReadingWorkflowTests: XCTestCase {
             2: makeNovelDocument(threadID: threadID, view: 2, maxView: 2, authorID: "author-1")
         ])
         let workflow = NovelReadingWorkflow(
-            context: ReaderLaunchContext(
+            context: NovelLaunchContext(
                 threadID: threadID,
                 threadTitle: "Thread",
                 source: .forum,
                 initialView: 1,
                 authorID: "author-1"
             ),
-            settings: ReaderAppearanceSettings(readingMode: .paged),
-            layout: ReaderContainerLayout(width: 320, height: 568),
+            settings: NovelReaderAppearanceSettings(readingMode: .paged),
+            layout: NovelReaderLayout(width: 320, height: 568),
             repository: repository
         )
         let initialState = try await workflow.start(initial: NovelReadingInitialPosition())
@@ -2247,15 +2247,15 @@ final class NovelReadingWorkflowTests: XCTestCase {
             2: makeNovelDocument(threadID: threadID, view: 2, maxView: 2, authorID: "author-1")
         ])
         let workflow = NovelReadingWorkflow(
-            context: ReaderLaunchContext(
+            context: NovelLaunchContext(
                 threadID: threadID,
                 threadTitle: "Thread",
                 source: .forum,
                 initialView: 1,
                 authorID: "author-1"
             ),
-            settings: ReaderAppearanceSettings(readingMode: .vertical),
-            layout: ReaderContainerLayout(width: 320, height: 568),
+            settings: NovelReaderAppearanceSettings(readingMode: .vertical),
+            layout: NovelReaderLayout(width: 320, height: 568),
             repository: repository
         )
         let initialState = try await workflow.start(initial: NovelReadingInitialPosition())
@@ -2265,8 +2265,8 @@ final class NovelReadingWorkflowTests: XCTestCase {
         _ = await workflow.prefetchIfNeeded(nearSurfaceOrdinal: nearEndPage)
 
         XCTAssertEqual(repository.loadRequests, [
-            ReaderPageRequest(threadID: threadID, view: 1, authorID: "author-1"),
-            ReaderPageRequest(threadID: threadID, view: 2, authorID: "author-1")
+            NovelPageRequest(threadID: threadID, view: 1, authorID: "author-1"),
+            NovelPageRequest(threadID: threadID, view: 2, authorID: "author-1")
         ])
     }
 
@@ -2279,15 +2279,15 @@ final class NovelReadingWorkflowTests: XCTestCase {
             failingViews: [2]
         )
         let workflow = NovelReadingWorkflow(
-            context: ReaderLaunchContext(
+            context: NovelLaunchContext(
                 threadID: threadID,
                 threadTitle: "Thread",
                 source: .forum,
                 initialView: 1,
                 authorID: "author-1"
             ),
-            settings: ReaderAppearanceSettings(readingMode: .vertical),
-            layout: ReaderContainerLayout(width: 320, height: 568),
+            settings: NovelReaderAppearanceSettings(readingMode: .vertical),
+            layout: NovelReaderLayout(width: 320, height: 568),
             repository: repository
         )
         let initialState = try await workflow.start(initial: NovelReadingInitialPosition())
@@ -2318,15 +2318,15 @@ final class NovelReadingWorkflowTests: XCTestCase {
             )
         ])
         let workflow = NovelReadingWorkflow(
-            context: ReaderLaunchContext(
+            context: NovelLaunchContext(
                 threadID: threadID,
                 threadTitle: "Thread",
                 source: .forum,
                 initialView: 1,
                 authorID: nil
             ),
-            settings: ReaderAppearanceSettings(readingMode: .vertical),
-            layout: ReaderContainerLayout(width: 320, height: 568),
+            settings: NovelReaderAppearanceSettings(readingMode: .vertical),
+            layout: NovelReaderLayout(width: 320, height: 568),
             repository: repository
         )
         let initialState = try await workflow.start(initial: NovelReadingInitialPosition())
@@ -2355,15 +2355,15 @@ final class NovelReadingWorkflowTests: XCTestCase {
         )
         let repository = RecordingNovelReadingRepository(documents: [1: document])
         let workflow = NovelReadingWorkflow(
-            context: ReaderLaunchContext(
+            context: NovelLaunchContext(
                 threadID: threadID,
                 threadTitle: "测试线程",
                 source: .forum,
                 initialView: 1,
                 authorID: "author-152"
             ),
-            settings: ReaderAppearanceSettings(readingMode: .paged),
-            layout: ReaderContainerLayout(width: 320, height: 568),
+            settings: NovelReaderAppearanceSettings(readingMode: .paged),
+            layout: NovelReaderLayout(width: 320, height: 568),
             repository: repository,
             pagination: currentWebpageViewportPagination
         )
@@ -2405,8 +2405,8 @@ final class NovelReadingWorkflowTests: XCTestCase {
         XCTAssertEqual(resumePoint.readingModeHint, .paged)
 
         let appearanceUpdate = try await workflow.requestRuntimeUpdate(
-            settings: ReaderAppearanceSettings(fontScale: 1.2, readingMode: .paged),
-            layout: ReaderContainerLayout(width: 320, height: 568, readingMode: .paged)
+            settings: NovelReaderAppearanceSettings(fontScale: 1.2, readingMode: .paged),
+            layout: NovelReaderLayout(width: 320, height: 568, readingMode: .paged)
         )
         let appearanceState = try XCTUnwrap(appearanceUpdate)
         assertLongCurrentWebpageViewportState(
@@ -2418,8 +2418,8 @@ final class NovelReadingWorkflowTests: XCTestCase {
         )
 
         let rotatedUpdate = try await workflow.requestRuntimeUpdate(
-            settings: ReaderAppearanceSettings(fontScale: 1.2, readingMode: .paged),
-            layout: ReaderContainerLayout(width: 568, height: 320, readingMode: .paged)
+            settings: NovelReaderAppearanceSettings(fontScale: 1.2, readingMode: .paged),
+            layout: NovelReaderLayout(width: 568, height: 320, readingMode: .paged)
         )
         let rotatedState = try XCTUnwrap(rotatedUpdate)
         assertLongCurrentWebpageViewportState(
@@ -2431,8 +2431,8 @@ final class NovelReadingWorkflowTests: XCTestCase {
         )
 
         let verticalUpdate = try await workflow.requestRuntimeUpdate(
-            settings: ReaderAppearanceSettings(fontScale: 1.2, readingMode: .vertical),
-            layout: ReaderContainerLayout(width: 568, height: 320, readingMode: .vertical)
+            settings: NovelReaderAppearanceSettings(fontScale: 1.2, readingMode: .vertical),
+            layout: NovelReaderLayout(width: 568, height: 320, readingMode: .vertical)
         )
         let verticalState = try XCTUnwrap(verticalUpdate)
         assertLongCurrentWebpageViewportState(
@@ -2444,8 +2444,8 @@ final class NovelReadingWorkflowTests: XCTestCase {
         )
 
         let translatedUpdate = try await workflow.requestRuntimeUpdate(
-            settings: ReaderAppearanceSettings(fontScale: 1.2, readingMode: .vertical, translationMode: .simplified),
-            layout: ReaderContainerLayout(width: 568, height: 320, readingMode: .vertical)
+            settings: NovelReaderAppearanceSettings(fontScale: 1.2, readingMode: .vertical, translationMode: .simplified),
+            layout: NovelReaderLayout(width: 568, height: 320, readingMode: .vertical)
         )
         let translatedState = try XCTUnwrap(translatedUpdate)
         assertLongCurrentWebpageViewportState(
@@ -2465,15 +2465,15 @@ private func makeWorkflow(
     repository: RecordingNovelReadingRepository
 ) -> NovelReadingWorkflow {
     NovelReadingWorkflow(
-        context: ReaderLaunchContext(
+        context: NovelLaunchContext(
             threadID: threadID,
             threadTitle: "Thread",
             source: .forum,
             initialView: 1,
             authorID: "author-1"
         ),
-        settings: ReaderAppearanceSettings(readingMode: .paged),
-        layout: ReaderContainerLayout(width: 320, height: 568),
+        settings: NovelReaderAppearanceSettings(readingMode: .paged),
+        layout: NovelReaderLayout(width: 320, height: 568),
         repository: repository,
         pagination: previewSourcePagination
     )
@@ -2553,9 +2553,9 @@ private final class FixtureNovelTextLayoutRuntimeAdapter: NovelTextLayoutRuntime
 @MainActor
 private extension NovelReadingWorkflow {
     convenience init(
-        context: ReaderLaunchContext,
-        settings: ReaderAppearanceSettings,
-        layout: ReaderContainerLayout,
+        context: NovelLaunchContext,
+        settings: NovelReaderAppearanceSettings,
+        layout: NovelReaderLayout,
         repository: any NovelReadingPageRepository,
         usesPadPresentation: Bool = false,
         pagination: @escaping NovelTextLayoutFixture
@@ -2576,14 +2576,14 @@ private final class RecordingNovelReadingRepository: NovelReadingPageRepository,
         var views: Set<Int>
         var threadID: String
         var authorID: String?
-        var contentSource: ReaderContentSource?
+        var contentSource: ReaderProjectionContentSource?
     }
 
     private let documents: [Int: NovelReaderProjection]
     private let loadSources: [Int: NovelReaderProjectionLoadSource]
     private let failingViews: Set<Int>
-    private(set) var loadRequests: [ReaderPageRequest] = []
-    private(set) var ignoringCacheRequests: [ReaderPageRequest] = []
+    private(set) var loadRequests: [NovelPageRequest] = []
+    private(set) var ignoringCacheRequests: [NovelPageRequest] = []
     private(set) var deletedViews: [DeletedViews] = []
 
     init(
@@ -2596,22 +2596,22 @@ private final class RecordingNovelReadingRepository: NovelReadingPageRepository,
         self.failingViews = failingViews
     }
 
-    func loadPage(_ request: ReaderPageRequest) async throws -> NovelReaderProjection {
+    func loadPage(_ request: NovelPageRequest) async throws -> NovelReaderProjection {
         loadRequests.append(request)
         return try document(for: request)
     }
 
-    func loadPageIgnoringCache(_ request: ReaderPageRequest) async throws -> NovelReaderProjection {
+    func loadPageIgnoringCache(_ request: NovelPageRequest) async throws -> NovelReaderProjection {
         ignoringCacheRequests.append(request)
         return try document(for: request)
     }
 
-    func loadPageResult(_ request: ReaderPageRequest) async throws -> NovelReaderProjectionLoad {
+    func loadPageResult(_ request: NovelPageRequest) async throws -> NovelReaderProjectionLoad {
         loadRequests.append(request)
         return try load(for: request)
     }
 
-    func loadPageIgnoringCacheResult(_ request: ReaderPageRequest) async throws -> NovelReaderProjectionLoad {
+    func loadPageIgnoringCacheResult(_ request: NovelPageRequest) async throws -> NovelReaderProjectionLoad {
         ignoringCacheRequests.append(request)
         return try load(for: request)
     }
@@ -2619,7 +2619,7 @@ private final class RecordingNovelReadingRepository: NovelReadingPageRepository,
     func cachedViews(
         for threadID: String,
         authorID: String?,
-        contentSource: ReaderContentSource?
+        contentSource: ReaderProjectionContentSource?
     ) async -> Set<Int> {
         []
     }
@@ -2628,7 +2628,7 @@ private final class RecordingNovelReadingRepository: NovelReadingPageRepository,
         _ views: Set<Int>,
         for threadID: String,
         authorID: String?,
-        contentSource: ReaderContentSource?
+        contentSource: ReaderProjectionContentSource?
     ) async throws {
         deletedViews.append(DeletedViews(
             views: views,
@@ -2638,11 +2638,11 @@ private final class RecordingNovelReadingRepository: NovelReadingPageRepository,
         ))
     }
 
-    private func document(for request: ReaderPageRequest) throws -> NovelReaderProjection {
+    private func document(for request: NovelPageRequest) throws -> NovelReaderProjection {
         try load(for: request).projection
     }
 
-    private func load(for request: ReaderPageRequest) throws -> NovelReaderProjectionLoad {
+    private func load(for request: NovelPageRequest) throws -> NovelReaderProjectionLoad {
         if failingViews.contains(request.view) {
             throw URLError(.cannotLoadFromNetwork)
         }
@@ -2661,7 +2661,7 @@ private func makeNovelDocument(
     view: Int,
     maxView: Int,
     authorID: String? = nil,
-    contentSource: ReaderContentSource = .authorFilteredPage
+    contentSource: ReaderProjectionContentSource = .authorFilteredPage
 ) -> NovelReaderProjection {
     NovelReaderProjection(
         threadID: threadID,
@@ -2699,7 +2699,7 @@ private func makeSegmentedNovelDocument(
 
 private func layoutResult(
     pages: [NovelTextViewportIndexSurface],
-    chapters: [ReaderChapter],
+    chapters: [NovelReaderChapter],
     viewportIndex: NovelTextViewportIndex? = nil,
     viewportContext: NovelTextViewportContext? = nil
 ) -> NovelTextLayoutResult {
@@ -2730,8 +2730,8 @@ private func layoutResult(
             maxView: index.documentView,
             fetchedAt: Date(timeIntervalSince1970: 0),
             contentSource: .fallbackUnfilteredPage,
-            appearance: ReaderAppearanceSettings(readingMode: index.readingMode),
-            layout: ReaderContainerLayout(width: 320, height: 568, readingMode: index.readingMode)
+            appearance: NovelReaderAppearanceSettings(readingMode: index.readingMode),
+            layout: NovelReaderLayout(width: 320, height: 568, readingMode: index.readingMode)
         ),
         document: NovelTextViewportDocument(
             text: "",
@@ -2748,7 +2748,7 @@ private func layoutResult(
 }
 
 private enum ViewportTestBlock {
-    case text(String, chapterTitle: String?, ranges: [ReaderRenderedTextRange] = [])
+    case text(String, chapterTitle: String?, ranges: [NovelRenderedTextRange] = [])
     case image(URL, chapterTitle: String?)
 }
 
@@ -2760,7 +2760,7 @@ private func viewportTestPage(
     chapterTitle: String? = nil,
     chapterCommentTarget: ReaderChapterCommentTarget? = nil
 ) -> NovelTextViewportIndexSurface {
-    let ranges = blocks.flatMap { block -> [ReaderRenderedTextRange] in
+    let ranges = blocks.flatMap { block -> [NovelRenderedTextRange] in
         if case let .text(_, _, ranges) = block {
             return ranges
         }
@@ -2789,11 +2789,11 @@ private func viewportTestPage(
 
 private func previewSourcePagination(
     document: NovelReaderProjection,
-    settings: ReaderAppearanceSettings,
-    layout: ReaderContainerLayout
+    settings: NovelReaderAppearanceSettings,
+    layout: NovelReaderLayout
 ) -> NovelTextLayoutResult {
     var documentText = ""
-    var textRangesBySegment: [Int: ReaderRenderedTextRange] = [:]
+    var textRangesBySegment: [Int: NovelRenderedTextRange] = [:]
     for (index, segment) in document.segments.enumerated() {
         guard case let .text(text, _) = segment else { continue }
         if !documentText.isEmpty {
@@ -2801,7 +2801,7 @@ private func previewSourcePagination(
         }
         let startOffset = documentText.count
         documentText += text
-        textRangesBySegment[index] = ReaderRenderedTextRange(
+        textRangesBySegment[index] = NovelRenderedTextRange(
             segmentIndex: index,
             startOffset: startOffset,
             endOffset: documentText.count
@@ -2836,7 +2836,7 @@ private func previewSourcePagination(
             )
         },
         chapters: document.segments.enumerated().map { index, segment in
-            ReaderChapter(
+            NovelReaderChapter(
                 ordinal: index,
                 title: segment.chapterTitle ?? "Chapter \(index + 1)",
                 startIndex: index
@@ -2859,7 +2859,7 @@ private func previewSourcePagination(
                     chapterTitle: segment.chapterTitle,
                     ranges: text.isEmpty
                         ? []
-                        : [ReaderRenderedTextRange(segmentIndex: index, startOffset: 0, endOffset: text.count)]
+                        : [NovelRenderedTextRange(segmentIndex: index, startOffset: 0, endOffset: text.count)]
                 )
             },
             chapters: document.segments.enumerated().map { index, segment in
@@ -2893,7 +2893,7 @@ private func workflowRepaginationRanges(
                 )
             },
             chapters: [
-                ReaderChapter(ordinal: 0, title: "第一章", startIndex: 0)
+                NovelReaderChapter(ordinal: 0, title: "第一章", startIndex: 0)
             ],
             viewportIndex: NovelTextViewportIndex(
                 documentView: document.view,
@@ -2905,7 +2905,7 @@ private func workflowRepaginationRanges(
                         chapterOrdinal: 0,
                         chapterTitle: "第一章",
                         ranges: [
-                            ReaderRenderedTextRange(
+                            NovelRenderedTextRange(
                                 segmentIndex: 0,
                                 startOffset: range.lowerBound,
                                 endOffset: range.upperBound
@@ -2923,8 +2923,8 @@ private func workflowRepaginationRanges(
 
 private func currentWebpageViewportPagination(
     document: NovelReaderProjection,
-    settings: ReaderAppearanceSettings,
-    layout: ReaderContainerLayout
+    settings: NovelReaderAppearanceSettings,
+    layout: NovelReaderLayout
 ) throws -> NovelTextLayoutResult {
     try NovelTextLayout.layout(
         document: document,

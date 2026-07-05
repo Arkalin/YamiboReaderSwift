@@ -8,16 +8,18 @@ struct ReaderSharedTestsOfflineCacheQueueExecutor {
         let store = try makeTestOfflineCacheStore(rootDirectory: try makeTemporaryExecutorDirectory())
         let firstChapterImages = try makeImageURLs(tid: "100", count: 4)
         let secondChapterImages = try makeImageURLs(tid: "200", count: 2)
-        _ = try await store.enqueueOfflineCacheWork(
+        _ = try await store.enqueueMangaOfflineCacheWork(
             try makeExecutorWorkRequest(ownerName: "favorite-a", tid: "100", targetImageURLs: firstChapterImages)
         )
-        _ = try await store.enqueueOfflineCacheWork(
+        _ = try await store.enqueueMangaOfflineCacheWork(
             try makeExecutorWorkRequest(ownerName: "favorite-a", tid: "200", targetImageURLs: secondChapterImages)
         )
         let acquirer = RecordingOfflineImageAcquirer(delayNanoseconds: 20_000_000)
         await acquirer.setData(for: firstChapterImages + secondChapterImages)
         let executor = OfflineCacheQueueExecutor(
             store: store,
+            mangaCacheStore: store,
+            novelCacheStore: store,
             readerProjectionLoader: RecordingReaderProjectionLoader(documents: [
                 try makeDocument(tid: "100", imageURLs: firstChapterImages),
                 try makeDocument(tid: "200", imageURLs: secondChapterImages)
@@ -33,16 +35,16 @@ struct ReaderSharedTestsOfflineCacheQueueExecutor {
         let lastFirstChapterIndex = try #require(firstChapterImages.compactMap { requestedURLs.firstIndex(of: $0) }.max())
         #expect(lastFirstChapterIndex < firstSecondChapterIndex)
         #expect(await acquirer.maxActiveCount <= 3)
-        #expect(await store.offlineCacheWork(ownerName: "favorite-a", tid: "100") == nil)
-        #expect(await store.offlineCacheWork(ownerName: "favorite-a", tid: "200") == nil)
-        #expect(await store.offlineCacheState(ownerName: "favorite-a", tid: "100") == .cached)
-        #expect(await store.offlineCacheState(ownerName: "favorite-a", tid: "200") == .cached)
+        #expect(await store.mangaQueueWork(ownerName: "favorite-a", tid: "100") == nil)
+        #expect(await store.mangaQueueWork(ownerName: "favorite-a", tid: "200") == nil)
+        #expect(await store.mangaOfflineCacheState(ownerName: "favorite-a", tid: "100") == .cached)
+        #expect(await store.mangaOfflineCacheState(ownerName: "favorite-a", tid: "200") == .cached)
     }
 
     @Test func continueLoadsReaderProjectionBeforeImageCountProgressUsingTid() async throws {
         let store = try makeTestOfflineCacheStore(rootDirectory: try makeTemporaryExecutorDirectory())
         let imageURLs = try makeImageURLs(tid: "300", count: 2)
-        _ = try await store.enqueueOfflineCacheWork(
+        _ = try await store.enqueueMangaOfflineCacheWork(
             MangaOfflineCacheWorkRequest(
                 ownerName: "favorite-a",
                 tid: "300",
@@ -59,6 +61,8 @@ struct ReaderSharedTestsOfflineCacheQueueExecutor {
         await acquirer.setData(for: imageURLs)
         let executor = OfflineCacheQueueExecutor(
             store: store,
+            mangaCacheStore: store,
+            novelCacheStore: store,
             readerProjectionLoader: projectionLoader,
             imageAcquirer: acquirer
         )
@@ -67,17 +71,17 @@ struct ReaderSharedTestsOfflineCacheQueueExecutor {
         await executor.waitForIdle()
 
         #expect(await projectionLoader.requestedThreadIDs == ["300"])
-        let completedWork = await store.offlineCacheWork(ownerName: "favorite-a", tid: "300")
+        let completedWork = await store.mangaQueueWork(ownerName: "favorite-a", tid: "300")
         #expect(completedWork == nil)
-        #expect(await store.offlineCacheState(ownerName: "favorite-a", tid: "300") == .cached)
-        #expect(await store.membership(ownerName: "favorite-a", tid: "300")?.sourcePage.thread == ThreadIdentity(tid: "300"))
+        #expect(await store.mangaOfflineCacheState(ownerName: "favorite-a", tid: "300") == .cached)
+        #expect(await store.mangaOfflineCacheMembership(ownerName: "favorite-a", tid: "300")?.sourcePage.thread == ThreadIdentity(tid: "300"))
     }
 
     @Test func continueLoadsSnapshotEvenWhenWorkAlreadyHasTargetImages() async throws {
         let store = try makeTestOfflineCacheStore(rootDirectory: try makeTemporaryExecutorDirectory())
         let staleImages = try makeImageURLs(tid: "310", count: 1)
         let projectionImages = try makeImageURLs(tid: "311", count: 2)
-        _ = try await store.enqueueOfflineCacheWork(
+        _ = try await store.enqueueMangaOfflineCacheWork(
             try makeExecutorWorkRequest(ownerName: "favorite-a", tid: "310", targetImageURLs: staleImages)
         )
         let projectionLoader = RecordingReaderProjectionLoader(documents: [
@@ -87,6 +91,8 @@ struct ReaderSharedTestsOfflineCacheQueueExecutor {
         await acquirer.setData(for: projectionImages)
         let executor = OfflineCacheQueueExecutor(
             store: store,
+            mangaCacheStore: store,
+            novelCacheStore: store,
             readerProjectionLoader: projectionLoader,
             imageAcquirer: acquirer
         )
@@ -96,7 +102,7 @@ struct ReaderSharedTestsOfflineCacheQueueExecutor {
 
         #expect(await projectionLoader.requestedThreadIDs == ["310"])
         #expect(await acquirer.requestedURLs == projectionImages)
-        let membership = try #require(await store.membership(ownerName: "favorite-a", tid: "310"))
+        let membership = try #require(await store.mangaOfflineCacheMembership(ownerName: "favorite-a", tid: "310"))
         #expect(membership.imageURLs == projectionImages)
         #expect(membership.sourcePage.thread == ThreadIdentity(tid: "310"))
     }
@@ -104,11 +110,13 @@ struct ReaderSharedTestsOfflineCacheQueueExecutor {
     @Test func snapshotLoadFailureFailsWorkWithoutCreatingMembership() async throws {
         let store = try makeTestOfflineCacheStore(rootDirectory: try makeTemporaryExecutorDirectory())
         let imageURLs = try makeImageURLs(tid: "320", count: 1)
-        _ = try await store.enqueueOfflineCacheWork(
+        _ = try await store.enqueueMangaOfflineCacheWork(
             try makeExecutorWorkRequest(ownerName: "favorite-a", tid: "320", targetImageURLs: imageURLs)
         )
         let executor = OfflineCacheQueueExecutor(
             store: store,
+            mangaCacheStore: store,
+            novelCacheStore: store,
             readerProjectionLoader: RecordingReaderProjectionLoader(),
             imageAcquirer: RecordingOfflineImageAcquirer()
         )
@@ -116,18 +124,20 @@ struct ReaderSharedTestsOfflineCacheQueueExecutor {
         try await executor.continueQueue()
         await executor.waitForIdle()
 
-        let failedWork = try #require(await store.offlineCacheWork(ownerName: "favorite-a", tid: "320"))
+        let failedWork = try #require(await store.mangaQueueWork(ownerName: "favorite-a", tid: "320"))
         #expect(failedWork.state == .failed)
-        #expect(await store.membership(ownerName: "favorite-a", tid: "320") == nil)
+        #expect(await store.mangaOfflineCacheMembership(ownerName: "favorite-a", tid: "320") == nil)
     }
 
     @Test func emptyProjectionImageListFailsWorkWithoutCreatingMembership() async throws {
         let store = try makeTestOfflineCacheStore(rootDirectory: try makeTemporaryExecutorDirectory())
-        _ = try await store.enqueueOfflineCacheWork(
+        _ = try await store.enqueueMangaOfflineCacheWork(
             try makeExecutorWorkRequest(ownerName: "favorite-a", tid: "330", targetImageURLs: [])
         )
         let executor = OfflineCacheQueueExecutor(
             store: store,
+            mangaCacheStore: store,
+            novelCacheStore: store,
             readerProjectionLoader: RecordingReaderProjectionLoader(documents: [
                 try makeDocument(tid: "330", imageURLs: [])
             ]),
@@ -137,9 +147,9 @@ struct ReaderSharedTestsOfflineCacheQueueExecutor {
         try await executor.continueQueue()
         await executor.waitForIdle()
 
-        let failedWork = try #require(await store.offlineCacheWork(ownerName: "favorite-a", tid: "330"))
+        let failedWork = try #require(await store.mangaQueueWork(ownerName: "favorite-a", tid: "330"))
         #expect(failedWork.state == .failed)
-        #expect(await store.membership(ownerName: "favorite-a", tid: "330") == nil)
+        #expect(await store.mangaOfflineCacheMembership(ownerName: "favorite-a", tid: "330") == nil)
     }
 
     @Test func cacheCompletionDoesNotUpdateReadingProgressResumeRouteOrRecentReading() async throws {
@@ -158,24 +168,26 @@ struct ReaderSharedTestsOfflineCacheQueueExecutor {
             locations: [.category(favoriteLibrary.defaultCategory.id)]
         )
         favoriteLibrary.addItem(favorite)
-        let resumeRoute = ReaderResumeRoute.manga(.native(MangaLaunchContext(
+        let resumeRoute = ReaderResumeRoute.manga(MangaLaunchContext(
             originalThreadID: "350",
             chapterTID: "350",
             displayTitle: "阅读进度漫画",
             source: .resume,
             chapterView: 2,
             initialPage: 5
-        )))
+        ))
         let imageURLs = try makeImageURLs(tid: "350", count: 2)
         try await localFavoriteLibraryStore.save(favoriteLibrary)
         try await resumeRouteStore.save(resumeRoute)
-        _ = try await store.enqueueOfflineCacheWork(
+        _ = try await store.enqueueMangaOfflineCacheWork(
             try makeExecutorWorkRequest(ownerName: favorite.id, tid: "350", targetImageURLs: imageURLs)
         )
         let acquirer = RecordingOfflineImageAcquirer()
         await acquirer.setData(for: imageURLs)
         let executor = OfflineCacheQueueExecutor(
             store: store,
+            mangaCacheStore: store,
+            novelCacheStore: store,
             readerProjectionLoader: RecordingReaderProjectionLoader(documents: [
                 try makeDocument(tid: "350", imageURLs: imageURLs)
             ]),
@@ -185,27 +197,29 @@ struct ReaderSharedTestsOfflineCacheQueueExecutor {
         try await executor.continueQueue()
         await executor.waitForIdle()
 
-        #expect(await store.offlineCacheState(ownerName: favorite.id, tid: "350") == .cached)
+        #expect(await store.mangaOfflineCacheState(ownerName: favorite.id, tid: "350") == .cached)
         #expect(await localFavoriteLibraryStore.load() == favoriteLibrary)
-        #expect(await resumeRouteStore.load() == .manga(.native(MangaLaunchContext(
+        #expect(await resumeRouteStore.load() == .manga(MangaLaunchContext(
             originalThreadID: "350",
             chapterTID: "350",
             displayTitle: "阅读进度漫画",
             source: .resume,
             chapterView: 2,
             initialPage: 5
-        ))))
+        )))
     }
 
     @Test func pauseCancelsInFlightTransfersAndPreservesCompletedProgress() async throws {
         let store = try makeTestOfflineCacheStore(rootDirectory: try makeTemporaryExecutorDirectory())
         let imageURLs = try makeImageURLs(tid: "400", count: 4)
-        _ = try await store.enqueueOfflineCacheWork(
+        _ = try await store.enqueueMangaOfflineCacheWork(
             try makeExecutorWorkRequest(ownerName: "favorite-a", tid: "400", targetImageURLs: imageURLs)
         )
         let acquirer = FirstImageOnlyImmediateAcquirer(firstImageURL: imageURLs[0])
         let executor = OfflineCacheQueueExecutor(
             store: store,
+            mangaCacheStore: store,
+            novelCacheStore: store,
             readerProjectionLoader: RecordingReaderProjectionLoader(documents: [
                 try makeDocument(tid: "400", imageURLs: imageURLs)
             ]),
@@ -214,14 +228,14 @@ struct ReaderSharedTestsOfflineCacheQueueExecutor {
 
         try await executor.continueQueue()
         try await waitUntil {
-            await store.offlineCacheWork(ownerName: "favorite-a", tid: "400")?.completedImageURLs == [imageURLs[0]]
+            await store.mangaQueueWork(ownerName: "favorite-a", tid: "400")?.completedImageURLs == [imageURLs[0]]
         }
         try await executor.pauseQueue()
         await executor.waitForIdle()
 
-        let work = try #require(await store.offlineCacheWork(ownerName: "favorite-a", tid: "400"))
+        let work = try #require(await store.mangaQueueWork(ownerName: "favorite-a", tid: "400"))
         #expect(work.completedImageURLs == [imageURLs[0]])
-        #expect(work.progress == MangaOfflineCacheProgress(completedImageCount: 1, targetImageCount: 4))
+        #expect(work.progress == OfflineCacheProgress(completedUnitCount: 1, targetUnitCount: 4))
         #expect(work.currentBytesPerSecond == 0)
         #expect(await store.offlineCacheQueueRunState() == .paused)
         #expect(await store.offlineImageData(for: imageURLs[0]) == Data([1]))
@@ -231,12 +245,14 @@ struct ReaderSharedTestsOfflineCacheQueueExecutor {
     @Test func failedWorkRemainsQueuedAndContinueRetriesFromRetainedProgress() async throws {
         let store = try makeTestOfflineCacheStore(rootDirectory: try makeTemporaryExecutorDirectory())
         let imageURLs = try makeImageURLs(tid: "500", count: 2)
-        _ = try await store.enqueueOfflineCacheWork(
+        _ = try await store.enqueueMangaOfflineCacheWork(
             try makeExecutorWorkRequest(ownerName: "favorite-a", tid: "500", targetImageURLs: imageURLs)
         )
         let acquirer = RetryOfflineImageAcquirer(failingImageURL: imageURLs[1])
         let executor = OfflineCacheQueueExecutor(
             store: store,
+            mangaCacheStore: store,
+            novelCacheStore: store,
             readerProjectionLoader: RecordingReaderProjectionLoader(documents: [
                 try makeDocument(tid: "500", imageURLs: imageURLs)
             ]),
@@ -247,7 +263,7 @@ struct ReaderSharedTestsOfflineCacheQueueExecutor {
         try await executor.continueQueue()
         await executor.waitForIdle()
 
-        let failedWork = try #require(await store.offlineCacheWork(ownerName: "favorite-a", tid: "500"))
+        let failedWork = try #require(await store.mangaQueueWork(ownerName: "favorite-a", tid: "500"))
         #expect(failedWork.state == .failed)
         #expect(failedWork.completedImageURLs == [imageURLs[0]])
         #expect(await store.offlineImageData(for: imageURLs[0]) == Data([1]))
@@ -256,20 +272,22 @@ struct ReaderSharedTestsOfflineCacheQueueExecutor {
         try await executor.continueQueue()
         await executor.waitForIdle()
 
-        #expect(await store.offlineCacheWork(ownerName: "favorite-a", tid: "500") == nil)
-        #expect(await store.offlineCacheState(ownerName: "favorite-a", tid: "500") == .cached)
+        #expect(await store.mangaQueueWork(ownerName: "favorite-a", tid: "500") == nil)
+        #expect(await store.mangaOfflineCacheState(ownerName: "favorite-a", tid: "500") == .cached)
         #expect(await acquirer.requestedURLs == [imageURLs[1]])
     }
 
     @Test func emptyImageDataFailsWorkWithoutAdvancingProgress() async throws {
         let store = try makeTestOfflineCacheStore(rootDirectory: try makeTemporaryExecutorDirectory())
         let imageURLs = try makeImageURLs(tid: "550", count: 2)
-        _ = try await store.enqueueOfflineCacheWork(
+        _ = try await store.enqueueMangaOfflineCacheWork(
             try makeExecutorWorkRequest(ownerName: "favorite-a", tid: "550", targetImageURLs: imageURLs)
         )
         let acquirer = EmptyImageThenFailingAcquirer(emptyImageURL: imageURLs[0])
         let executor = OfflineCacheQueueExecutor(
             store: store,
+            mangaCacheStore: store,
+            novelCacheStore: store,
             readerProjectionLoader: RecordingReaderProjectionLoader(documents: [
                 try makeDocument(tid: "550", imageURLs: imageURLs)
             ]),
@@ -280,10 +298,10 @@ struct ReaderSharedTestsOfflineCacheQueueExecutor {
         try await executor.continueQueue()
         await executor.waitForIdle()
 
-        let failedWork = try #require(await store.offlineCacheWork(ownerName: "favorite-a", tid: "550"))
+        let failedWork = try #require(await store.mangaQueueWork(ownerName: "favorite-a", tid: "550"))
         #expect(failedWork.state == .failed)
         #expect(failedWork.completedImageURLs.isEmpty)
-        #expect(failedWork.progress == MangaOfflineCacheProgress(completedImageCount: 0, targetImageCount: 2))
+        #expect(failedWork.progress == OfflineCacheProgress(completedUnitCount: 0, targetUnitCount: 2))
         #expect(await store.offlineImageData(for: imageURLs[0]) == nil)
         #expect(await acquirer.requestedURLs == [imageURLs[0]])
     }
@@ -291,7 +309,7 @@ struct ReaderSharedTestsOfflineCacheQueueExecutor {
     @Test func continueReconcilesPersistedProgressAgainstOfflineImageStorage() async throws {
         let store = try makeTestOfflineCacheStore(rootDirectory: try makeTemporaryExecutorDirectory())
         let imageURLs = try makeImageURLs(tid: "600", count: 2)
-        _ = try await store.enqueueOfflineCacheWork(
+        _ = try await store.enqueueMangaOfflineCacheWork(
             try makeExecutorWorkRequest(ownerName: "favorite-a", tid: "600", targetImageURLs: imageURLs)
         )
         try await store.saveOfflineImageData(Data([1]), for: imageURLs[0])
@@ -306,6 +324,8 @@ struct ReaderSharedTestsOfflineCacheQueueExecutor {
         await acquirer.setData(for: [imageURLs[1]])
         let executor = OfflineCacheQueueExecutor(
             store: store,
+            mangaCacheStore: store,
+            novelCacheStore: store,
             readerProjectionLoader: RecordingReaderProjectionLoader(documents: [
                 try makeDocument(tid: "600", imageURLs: imageURLs)
             ]),
@@ -316,13 +336,13 @@ struct ReaderSharedTestsOfflineCacheQueueExecutor {
         await executor.waitForIdle()
 
         #expect(await acquirer.requestedURLs == [imageURLs[1]])
-        #expect(await store.offlineCacheState(ownerName: "favorite-a", tid: "600") == .cached)
+        #expect(await store.mangaOfflineCacheState(ownerName: "favorite-a", tid: "600") == .cached)
     }
 
     @Test func queueWritesNetworkAcquiredBytesToOfflineStorage() async throws {
         let store = try makeTestOfflineCacheStore(rootDirectory: try makeTemporaryExecutorDirectory())
         let imageURLs = try makeImageURLs(tid: "700", count: 2)
-        _ = try await store.enqueueOfflineCacheWork(
+        _ = try await store.enqueueMangaOfflineCacheWork(
             try makeExecutorWorkRequest(ownerName: "favorite-a", tid: "700", targetImageURLs: imageURLs)
         )
         let networkLoader = RecordingNetworkImageLoader(dataByURL: [
@@ -331,6 +351,8 @@ struct ReaderSharedTestsOfflineCacheQueueExecutor {
         ])
         let executor = OfflineCacheQueueExecutor(
             store: store,
+            mangaCacheStore: store,
+            novelCacheStore: store,
             readerProjectionLoader: RecordingReaderProjectionLoader(documents: [
                 try makeDocument(tid: "700", imageURLs: imageURLs)
             ]),
@@ -357,17 +379,18 @@ struct ReaderSharedTestsOfflineCacheQueueExecutor {
         )
         let refererURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?tid=710"))
 
-        let acquisition = try await acquirer.acquireImageData(for: imageURL, refererURL: refererURL)
+        let request = YamiboImageRequest(url: imageURL, refererURL: refererURL)
+        let acquisition = try await acquirer.acquireImageData(for: request)
 
         #expect(acquisition == OfflineCacheImageAcquisition(data: Data([8]), source: .network))
-        #expect(await transport.requests == [ImageTransportRequest(imageURL: imageURL, refererURL: refererURL)])
+        #expect(await transport.requests == [request])
         #expect(await networkLoader.requestedURLs.isEmpty)
     }
 
     @Test func observerReceivesSubmissionProgressAndSuccessfulFinish() async throws {
         let store = try makeTestOfflineCacheStore(rootDirectory: try makeTemporaryExecutorDirectory())
         let imageURLs = try makeImageURLs(tid: "720", count: 2)
-        _ = try await store.enqueueOfflineCacheWork(
+        _ = try await store.enqueueMangaOfflineCacheWork(
             try makeExecutorWorkRequest(ownerName: "favorite-a", tid: "720", targetImageURLs: imageURLs)
         )
         let acquirer = RecordingOfflineImageAcquirer()
@@ -375,6 +398,8 @@ struct ReaderSharedTestsOfflineCacheQueueExecutor {
         let observer = RecordingQueueRunObserver()
         let executor = OfflineCacheQueueExecutor(
             store: store,
+            mangaCacheStore: store,
+            novelCacheStore: store,
             readerProjectionLoader: RecordingReaderProjectionLoader(documents: [
                 try makeDocument(tid: "720", imageURLs: imageURLs)
             ]),
@@ -388,9 +413,9 @@ struct ReaderSharedTestsOfflineCacheQueueExecutor {
 
         #expect(await observer.submissionCount == 1)
         #expect(await observer.progressUpdates == [
-            MangaOfflineCacheProgress(completedImageCount: 0, targetImageCount: 2),
-            MangaOfflineCacheProgress(completedImageCount: 1, targetImageCount: 2),
-            MangaOfflineCacheProgress(completedImageCount: 2, targetImageCount: 2)
+            OfflineCacheProgress(completedUnitCount: 0, targetUnitCount: 2),
+            OfflineCacheProgress(completedUnitCount: 1, targetUnitCount: 2),
+            OfflineCacheProgress(completedUnitCount: 2, targetUnitCount: 2)
         ])
         #expect(await observer.finishResults == [true])
     }
@@ -398,7 +423,7 @@ struct ReaderSharedTestsOfflineCacheQueueExecutor {
     @Test func observerIsNotResubmittedForSystemContinuedProcessingLaunch() async throws {
         let store = try makeTestOfflineCacheStore(rootDirectory: try makeTemporaryExecutorDirectory())
         let imageURLs = try makeImageURLs(tid: "730", count: 1)
-        _ = try await store.enqueueOfflineCacheWork(
+        _ = try await store.enqueueMangaOfflineCacheWork(
             try makeExecutorWorkRequest(ownerName: "favorite-a", tid: "730", targetImageURLs: imageURLs)
         )
         let acquirer = RecordingOfflineImageAcquirer()
@@ -406,6 +431,8 @@ struct ReaderSharedTestsOfflineCacheQueueExecutor {
         let observer = RecordingQueueRunObserver()
         let executor = OfflineCacheQueueExecutor(
             store: store,
+            mangaCacheStore: store,
+            novelCacheStore: store,
             readerProjectionLoader: RecordingReaderProjectionLoader(documents: [
                 try makeDocument(tid: "730", imageURLs: imageURLs)
             ]),
@@ -423,13 +450,15 @@ struct ReaderSharedTestsOfflineCacheQueueExecutor {
     @Test func continueWhileAlreadyRunningDoesNotSubmitAnotherContinuedProcessingRun() async throws {
         let store = try makeTestOfflineCacheStore(rootDirectory: try makeTemporaryExecutorDirectory())
         let imageURLs = try makeImageURLs(tid: "735", count: 2)
-        _ = try await store.enqueueOfflineCacheWork(
+        _ = try await store.enqueueMangaOfflineCacheWork(
             try makeExecutorWorkRequest(ownerName: "favorite-a", tid: "735", targetImageURLs: imageURLs)
         )
         let acquirer = FirstImageOnlyImmediateAcquirer(firstImageURL: imageURLs[0])
         let observer = RecordingQueueRunObserver()
         let executor = OfflineCacheQueueExecutor(
             store: store,
+            mangaCacheStore: store,
+            novelCacheStore: store,
             readerProjectionLoader: RecordingReaderProjectionLoader(documents: [
                 try makeDocument(tid: "735", imageURLs: imageURLs)
             ]),
@@ -439,7 +468,7 @@ struct ReaderSharedTestsOfflineCacheQueueExecutor {
 
         try await executor.continueQueue()
         try await waitUntil {
-            await store.offlineCacheWork(ownerName: "favorite-a", tid: "735")?.completedImageURLs == [imageURLs[0]]
+            await store.mangaQueueWork(ownerName: "favorite-a", tid: "735")?.completedImageURLs == [imageURLs[0]]
         }
         try await executor.continueQueue()
         try await executor.pauseQueue()
@@ -463,7 +492,7 @@ struct ReaderSharedTestsOfflineCacheQueueExecutor {
         configuration.httpAdditionalHeaders = ["X-Manga-Test-ID": harness.testID]
         let transport = OfflineCacheBackgroundDownloadTransport(configuration: configuration)
 
-        let data = try await transport.downloadImageData(for: imageURL, refererURL: refererURL)
+        let data = try await transport.downloadImageData(for: YamiboImageRequest(url: imageURL, refererURL: refererURL))
 
         #expect(data == Data([7, 4, 0]))
         #expect(harness.requests.count == 1)
@@ -472,7 +501,7 @@ struct ReaderSharedTestsOfflineCacheQueueExecutor {
     @Test func chapterCancellationRemovesPartialOfflineBytesForCanceledWork() async throws {
         let store = try makeTestOfflineCacheStore(rootDirectory: try makeTemporaryExecutorDirectory())
         let imageURLs = try makeImageURLs(tid: "800", count: 2)
-        _ = try await store.enqueueOfflineCacheWork(
+        _ = try await store.enqueueMangaOfflineCacheWork(
             try makeExecutorWorkRequest(ownerName: "作品A", tid: "800", targetImageURLs: imageURLs)
         )
         try await store.saveOfflineImageData(Data([1]), for: imageURLs[0])
@@ -485,13 +514,15 @@ struct ReaderSharedTestsOfflineCacheQueueExecutor {
         )
         let executor = OfflineCacheQueueExecutor(
             store: store,
+            mangaCacheStore: store,
+            novelCacheStore: store,
             readerProjectionLoader: RecordingReaderProjectionLoader(),
             imageAcquirer: RecordingOfflineImageAcquirer()
         )
 
         try await executor.cancelChapter(ownerName: "作品A", tid: "800")
 
-        #expect(await store.offlineCacheWork(ownerName: "作品A", tid: "800") == nil)
+        #expect(await store.mangaQueueWork(ownerName: "作品A", tid: "800") == nil)
         #expect(await store.offlineImageData(for: imageURLs[0]) == nil)
     }
 
@@ -499,10 +530,10 @@ struct ReaderSharedTestsOfflineCacheQueueExecutor {
         let store = try makeTestOfflineCacheStore(rootDirectory: try makeTemporaryExecutorDirectory())
         let canceledImages = try makeImageURLs(tid: "900", count: 1)
         let retainedImages = try makeImageURLs(tid: "901", count: 1)
-        _ = try await store.enqueueOfflineCacheWork(
+        _ = try await store.enqueueMangaOfflineCacheWork(
             try makeExecutorWorkRequest(ownerName: "作品A", tid: "900", targetImageURLs: canceledImages)
         )
-        _ = try await store.enqueueOfflineCacheWork(
+        _ = try await store.enqueueMangaOfflineCacheWork(
             try makeExecutorWorkRequest(ownerName: "作品B", tid: "901", targetImageURLs: retainedImages)
         )
         try await store.saveOfflineImageData(Data([9]), for: canceledImages[0])
@@ -523,14 +554,16 @@ struct ReaderSharedTestsOfflineCacheQueueExecutor {
         )
         let executor = OfflineCacheQueueExecutor(
             store: store,
+            mangaCacheStore: store,
+            novelCacheStore: store,
             readerProjectionLoader: RecordingReaderProjectionLoader(),
             imageAcquirer: RecordingOfflineImageAcquirer()
         )
 
         try await executor.cancelOwnerGroup(ownerName: "作品A")
 
-        #expect(await store.offlineCacheWork(ownerName: "作品A", tid: "900") == nil)
-        #expect(await store.offlineCacheWork(ownerName: "作品B", tid: "901") != nil)
+        #expect(await store.mangaQueueWork(ownerName: "作品A", tid: "900") == nil)
+        #expect(await store.mangaQueueWork(ownerName: "作品B", tid: "901") != nil)
         #expect(await store.offlineImageData(for: canceledImages[0]) == nil)
         #expect(await store.offlineImageData(for: retainedImages[0]) == Data([1]))
     }
@@ -549,6 +582,8 @@ struct ReaderSharedTestsOfflineCacheQueueExecutor {
         await acquirer.setData(for: imageURLs)
         let executor = OfflineCacheQueueExecutor(
             store: store,
+            mangaCacheStore: store,
+            novelCacheStore: store,
             readerProjectionLoader: RecordingReaderProjectionLoader(),
             novelSourcePageLoader: sourceLoader,
             imageAcquirer: acquirer
@@ -586,6 +621,8 @@ struct ReaderSharedTestsOfflineCacheQueueExecutor {
         await acquirer.setData(for: imageURLs)
         let executor = OfflineCacheQueueExecutor(
             store: store,
+            mangaCacheStore: store,
+            novelCacheStore: store,
             readerProjectionLoader: RecordingReaderProjectionLoader(),
             novelSourcePageLoader: sourceLoader,
             imageAcquirer: acquirer,
@@ -618,6 +655,8 @@ struct ReaderSharedTestsOfflineCacheQueueExecutor {
         let acquirer = RetryOfflineImageAcquirer(failingImageURL: imageURLs[1])
         let executor = OfflineCacheQueueExecutor(
             store: store,
+            mangaCacheStore: store,
+            novelCacheStore: store,
             readerProjectionLoader: RecordingReaderProjectionLoader(),
             novelSourcePageLoader: sourceLoader,
             imageAcquirer: acquirer,
@@ -670,6 +709,8 @@ struct ReaderSharedTestsOfflineCacheQueueExecutor {
         )
         let executor = OfflineCacheQueueExecutor(
             store: store,
+            mangaCacheStore: store,
+            novelCacheStore: store,
             readerProjectionLoader: RecordingReaderProjectionLoader(),
             novelSourcePageLoader: sourceLoader,
             imageAcquirer: RecordingOfflineImageAcquirer()
@@ -691,7 +732,7 @@ struct ReaderSharedTestsOfflineCacheQueueExecutor {
     @Test func workProcessorDownloadsOnlyMissingImagesAndReportsOrderedProgress() async throws {
         let store = try makeTestOfflineCacheStore(rootDirectory: try makeTemporaryExecutorDirectory())
         let imageURLs = try makeImageURLs(tid: "1200", count: 3)
-        _ = try await store.enqueueOfflineCacheWork(
+        _ = try await store.enqueueMangaOfflineCacheWork(
             try makeExecutorWorkRequest(ownerName: "processor", tid: "1200", targetImageURLs: [])
         )
         try await store.saveOfflineImageData(Data([9]), for: imageURLs[0])
@@ -715,9 +756,9 @@ struct ReaderSharedTestsOfflineCacheQueueExecutor {
         #expect(await store.offlineImageData(for: imageURLs[1]) == Data([1]))
         #expect(await store.offlineImageData(for: imageURLs[2]) == Data([2]))
         #expect(await observer.progressUpdates == [
-            MangaOfflineCacheProgress(completedImageCount: 1, targetImageCount: 3),
-            MangaOfflineCacheProgress(completedImageCount: 2, targetImageCount: 3),
-            MangaOfflineCacheProgress(completedImageCount: 3, targetImageCount: 3)
+            OfflineCacheProgress(completedUnitCount: 1, targetUnitCount: 3),
+            OfflineCacheProgress(completedUnitCount: 2, targetUnitCount: 3),
+            OfflineCacheProgress(completedUnitCount: 3, targetUnitCount: 3)
         ])
         #expect(await strategy.persistCount == 1)
         #expect(await strategy.finishCount == 1)
@@ -726,7 +767,7 @@ struct ReaderSharedTestsOfflineCacheQueueExecutor {
     @Test func workProcessorFinishesEmptyTargetWithoutPreparingTransferProgress() async throws {
         let store = try makeTestOfflineCacheStore(rootDirectory: try makeTemporaryExecutorDirectory())
         let staleImageURLs = try makeImageURLs(tid: "1210", count: 1)
-        _ = try await store.enqueueOfflineCacheWork(
+        _ = try await store.enqueueMangaOfflineCacheWork(
             try makeExecutorWorkRequest(ownerName: "processor", tid: "1210", targetImageURLs: staleImageURLs)
         )
         let work = try #require(await store.nextOfflineCacheProcessingWork())
@@ -754,7 +795,7 @@ struct ReaderSharedTestsOfflineCacheQueueExecutor {
     @Test func workProcessorRejectsEmptyImageDataWithoutAdvancingProgress() async throws {
         let store = try makeTestOfflineCacheStore(rootDirectory: try makeTemporaryExecutorDirectory())
         let imageURLs = try makeImageURLs(tid: "1220", count: 2)
-        _ = try await store.enqueueOfflineCacheWork(
+        _ = try await store.enqueueMangaOfflineCacheWork(
             try makeExecutorWorkRequest(ownerName: "processor", tid: "1220", targetImageURLs: [])
         )
         let work = try #require(await store.nextOfflineCacheProcessingWork())
@@ -783,7 +824,7 @@ struct ReaderSharedTestsOfflineCacheQueueExecutor {
     @Test func workProcessorCancelsWhenWorkIsRemovedDuringTransfer() async throws {
         let store = try makeTestOfflineCacheStore(rootDirectory: try makeTemporaryExecutorDirectory())
         let imageURLs = try makeImageURLs(tid: "1230", count: 1)
-        _ = try await store.enqueueOfflineCacheWork(
+        _ = try await store.enqueueMangaOfflineCacheWork(
             try makeExecutorWorkRequest(ownerName: "processor", tid: "1230", targetImageURLs: [])
         )
         let work = try #require(await store.nextOfflineCacheProcessingWork())
@@ -810,7 +851,7 @@ struct ReaderSharedTestsOfflineCacheQueueExecutor {
 }
 
 private func makeRecordingWorkProcessor(
-    store: any OfflineCacheStoring,
+    store: any TestOfflineCacheStoring,
     imageAcquirer: any OfflineCacheImageAcquiring,
     runObserver: (any OfflineCacheQueueRunObserving)? = nil,
     strategy: RecordingOfflineCacheWorkStrategy,
@@ -849,17 +890,11 @@ private actor RecordingOfflineCacheWorkStrategy: OfflineCacheWorkProcessingStrat
         )
     }
 
-    func persistPreparedSource(
-        _ preparedWork: OfflineCachePreparedWork<RecordingOfflineCachePayload>,
-        in store: any OfflineCacheStoring
-    ) async throws {
+    func persistPreparedSource(_ preparedWork: OfflineCachePreparedWork<RecordingOfflineCachePayload>) async throws {
         persistCount += 1
     }
 
-    func finish(
-        _ preparedWork: OfflineCachePreparedWork<RecordingOfflineCachePayload>,
-        in store: any OfflineCacheStoring
-    ) async throws {
+    func finish(_ preparedWork: OfflineCachePreparedWork<RecordingOfflineCachePayload>) async throws {
         finishCount += 1
     }
 }
@@ -931,15 +966,15 @@ private actor RecordingOfflineImageAcquirer: OfflineCacheImageAcquiring {
         }
     }
 
-    func acquireImageData(for imageURL: URL, refererURL: URL?) async throws -> OfflineCacheImageAcquisition {
-        requestedURLs.append(imageURL)
+    func acquireImageData(for request: YamiboImageRequest) async throws -> OfflineCacheImageAcquisition {
+        requestedURLs.append(request.url)
         activeCount += 1
         maxActiveCount = max(maxActiveCount, activeCount)
         defer { activeCount -= 1 }
         if delayNanoseconds > 0 {
             try await Task.sleep(nanoseconds: delayNanoseconds)
         }
-        guard let data = dataByURL[imageURL] else {
+        guard let data = dataByURL[request.url] else {
             throw YamiboError.invalidResponse(statusCode: 404)
         }
         return OfflineCacheImageAcquisition(data: data, source: .network)
@@ -953,8 +988,8 @@ private actor FirstImageOnlyImmediateAcquirer: OfflineCacheImageAcquiring {
         self.firstImageURL = firstImageURL
     }
 
-    func acquireImageData(for imageURL: URL, refererURL: URL?) async throws -> OfflineCacheImageAcquisition {
-        if imageURL == firstImageURL {
+    func acquireImageData(for request: YamiboImageRequest) async throws -> OfflineCacheImageAcquisition {
+        if request.url == firstImageURL {
             return OfflineCacheImageAcquisition(data: Data([1]), source: .network)
         }
         try await Task.sleep(nanoseconds: 5_000_000_000)
@@ -976,12 +1011,12 @@ private actor RetryOfflineImageAcquirer: OfflineCacheImageAcquiring {
         requestedURLs.removeAll()
     }
 
-    func acquireImageData(for imageURL: URL, refererURL: URL?) async throws -> OfflineCacheImageAcquisition {
-        requestedURLs.append(imageURL)
-        if imageURL == failingImageURL, shouldFail {
+    func acquireImageData(for request: YamiboImageRequest) async throws -> OfflineCacheImageAcquisition {
+        requestedURLs.append(request.url)
+        if request.url == failingImageURL, shouldFail {
             throw YamiboError.offline
         }
-        return OfflineCacheImageAcquisition(data: imageURL == failingImageURL ? Data([2]) : Data([1]), source: .network)
+        return OfflineCacheImageAcquisition(data: request.url == failingImageURL ? Data([2]) : Data([1]), source: .network)
     }
 }
 
@@ -993,9 +1028,9 @@ private actor EmptyImageThenFailingAcquirer: OfflineCacheImageAcquiring {
         self.emptyImageURL = emptyImageURL
     }
 
-    func acquireImageData(for imageURL: URL, refererURL: URL?) async throws -> OfflineCacheImageAcquisition {
-        requestedURLs.append(imageURL)
-        if imageURL == emptyImageURL {
+    func acquireImageData(for request: YamiboImageRequest) async throws -> OfflineCacheImageAcquisition {
+        requestedURLs.append(request.url)
+        if request.url == emptyImageURL {
             return OfflineCacheImageAcquisition(data: Data(), source: .network)
         }
         throw YamiboError.offline
@@ -1003,15 +1038,15 @@ private actor EmptyImageThenFailingAcquirer: OfflineCacheImageAcquiring {
 }
 
 private actor CancelingOfflineImageAcquirer: OfflineCacheImageAcquiring {
-    private let store: any OfflineCacheStoring
+    private let store: any TestOfflineCacheStoring
     private let workID: OfflineCacheWorkID
 
-    init(store: any OfflineCacheStoring, workID: OfflineCacheWorkID) {
+    init(store: any TestOfflineCacheStoring, workID: OfflineCacheWorkID) {
         self.store = store
         self.workID = workID
     }
 
-    func acquireImageData(for imageURL: URL, refererURL: URL?) async throws -> OfflineCacheImageAcquisition {
+    func acquireImageData(for request: YamiboImageRequest) async throws -> OfflineCacheImageAcquisition {
         try await store.cancelOfflineCacheWork(id: workID)
         return OfflineCacheImageAcquisition(data: Data([1]), source: .network)
     }
@@ -1038,22 +1073,17 @@ private actor RecordingNetworkImageLoader: YamiboImageDataLoading {
     }
 }
 
-private struct ImageTransportRequest: Hashable, Sendable {
-    var imageURL: URL
-    var refererURL: URL?
-}
-
 private actor RecordingImageTransport: OfflineCacheImageTransporting {
-    private(set) var requests: [ImageTransportRequest] = []
+    private(set) var requests: [YamiboImageRequest] = []
     private let dataByURL: [URL: Data]
 
     init(dataByURL: [URL: Data]) {
         self.dataByURL = dataByURL
     }
 
-    func downloadImageData(for imageURL: URL, refererURL: URL?) async throws -> Data {
-        requests.append(ImageTransportRequest(imageURL: imageURL, refererURL: refererURL))
-        guard let data = dataByURL[imageURL] else {
+    func downloadImageData(for request: YamiboImageRequest) async throws -> Data {
+        requests.append(request)
+        guard let data = dataByURL[request.url] else {
             throw YamiboError.invalidResponse(statusCode: 404)
         }
         return data
@@ -1062,7 +1092,7 @@ private actor RecordingImageTransport: OfflineCacheImageTransporting {
 
 private actor RecordingQueueRunObserver: OfflineCacheQueueRunObserving {
     private(set) var submissionCount = 0
-    private(set) var progressUpdates: [MangaOfflineCacheProgress] = []
+    private(set) var progressUpdates: [OfflineCacheProgress] = []
     private(set) var finishResults: [Bool] = []
 
     func submitUserInitiatedRun() async {
@@ -1071,9 +1101,9 @@ private actor RecordingQueueRunObserver: OfflineCacheQueueRunObserving {
 
     func queueRunDidUpdateProgress(completedImageCount: Int, targetImageCount: Int) async {
         progressUpdates.append(
-            MangaOfflineCacheProgress(
-                completedImageCount: completedImageCount,
-                targetImageCount: targetImageCount
+            OfflineCacheProgress(
+                completedUnitCount: completedImageCount,
+                targetUnitCount: targetImageCount
             )
         )
     }
@@ -1145,7 +1175,7 @@ private func makeNovelExecutorPreparedSourcePage(
     imageURLs: [URL]
 ) throws -> NovelOfflineCachePreparedSourcePage {
     let segments = [.text("正文\(view)", chapterTitle: "第\(view)章")]
-        + imageURLs.map { ReaderSegment.image($0, chapterTitle: nil) }
+        + imageURLs.map { NovelReaderSegment.image($0, chapterTitle: nil) }
     let sourcePage = ForumThreadPage(
         thread: ThreadIdentity(tid: tid),
         title: "小说\(tid)",

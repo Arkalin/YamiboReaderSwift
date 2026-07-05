@@ -8,7 +8,7 @@ struct MangaReaderTestsMangaOfflineCacheQueue {
         let directory = try makeTemporaryOfflineCacheQueueDirectory()
         let firstStore = try makeTestOfflineCacheStore(rootDirectory: directory)
 
-        let result = try await firstStore.enqueueOfflineCacheWork(
+        let result = try await firstStore.enqueueMangaOfflineCacheWork(
             makeOfflineCacheWorkRequest(
                 ownerName: " favorite-a ",
                 tid: " 100 ",
@@ -26,9 +26,7 @@ struct MangaReaderTestsMangaOfflineCacheQueue {
         #expect(enqueued.state == .queued)
 
         let secondStore = try makeTestOfflineCacheStore(rootDirectory: directory)
-        let persisted = await secondStore.allOfflineCacheWorks()
-
-        #expect(persisted == [enqueued])
+        #expect(await secondStore.mangaQueueWorkProjections() == [enqueued])
     }
 
     @Test func enqueueIsIdempotentForExistingQueueWorkAndCachedMembership() async throws {
@@ -40,18 +38,18 @@ struct MangaReaderTestsMangaOfflineCacheQueue {
             targetImageURLs: [try #require(URL(string: "https://img.example.com/cached.jpg"))]
         )
 
-        let firstResult = try await store.enqueueOfflineCacheWork(firstRequest)
-        let secondResult = try await store.enqueueOfflineCacheWork(firstRequest)
+        let firstResult = try await store.enqueueMangaOfflineCacheWork(firstRequest)
+        let secondResult = try await store.enqueueMangaOfflineCacheWork(firstRequest)
 
         let firstWork = try #require(firstResult.enqueuedWork)
         #expect(secondResult == .alreadyQueued(firstWork))
-        #expect(await store.allOfflineCacheWorks() == [firstWork])
+        #expect(await store.mangaQueueWorkProjections() == [firstWork])
 
         let cachedMembership = try makeOfflineCacheMembership(ownerName: "favorite-a", tid: "200", imageURLs: secondRequest.targetImageURLs)
         try await store.saveOfflineImageData(Data([1, 2, 3]), for: secondRequest.targetImageURLs[0])
-        try await store.saveMembership(cachedMembership)
+        try await store.saveMangaOfflineCacheMembership(cachedMembership)
 
-        let cachedResult = try await store.enqueueOfflineCacheWork(secondRequest)
+        let cachedResult = try await store.enqueueMangaOfflineCacheWork(secondRequest)
 
         guard case let .alreadyCached(loadedMembership) = cachedResult else {
             Issue.record("Expected existing cached membership")
@@ -60,7 +58,7 @@ struct MangaReaderTestsMangaOfflineCacheQueue {
         #expect(loadedMembership.id == cachedMembership.id)
         #expect(loadedMembership.chapterTitle == cachedMembership.chapterTitle)
         #expect(loadedMembership.imageURLs == cachedMembership.imageURLs)
-        #expect(await store.allOfflineCacheWorks() == [firstWork])
+        #expect(await store.mangaQueueWorkProjections() == [firstWork])
     }
 
     @Test func failedQueueWorkPersistsUntilCanceledAndProjectsAsCaching() async throws {
@@ -68,7 +66,7 @@ struct MangaReaderTestsMangaOfflineCacheQueue {
         let writingStore = try makeTestOfflineCacheStore(rootDirectory: directory)
         let request = try makeOfflineCacheWorkRequest(ownerName: "favorite-a", tid: "100")
 
-        _ = try await writingStore.enqueueOfflineCacheWork(request)
+        _ = try await writingStore.enqueueMangaOfflineCacheWork(request)
         try await writingStore.markOfflineCacheWorkFailed(
             ownerName: "favorite-a",
             tid: "100",
@@ -76,16 +74,20 @@ struct MangaReaderTestsMangaOfflineCacheQueue {
         )
 
         let readingStore = try makeTestOfflineCacheStore(rootDirectory: directory)
-        let failedWork = try #require(await readingStore.offlineCacheWork(ownerName: "favorite-a", tid: "100"))
+        let failedWork = try #require(await readingStore.mangaQueueWork(ownerName: "favorite-a", tid: "100"))
 
         #expect(failedWork.state == .failed)
         #expect(failedWork.failureMessage == "Network unavailable")
-        #expect(await readingStore.offlineCacheState(ownerName: "favorite-a", tid: "100") == .caching)
+        #expect(await readingStore.mangaOfflineCacheState(ownerName: "favorite-a", tid: "100") == .caching)
 
-        try await readingStore.cancelOfflineCacheWork(ownerName: "favorite-a", tid: "100")
+        try await readingStore.cancelOfflineCacheEntry(OfflineCacheEntryID(
+            readerKind: .manga,
+            ownerKey: "favorite-a",
+            entryKey: "100"
+        ))
 
-        #expect(await readingStore.offlineCacheWork(ownerName: "favorite-a", tid: "100") == nil)
-        #expect(await readingStore.offlineCacheState(ownerName: "favorite-a", tid: "100") == .uncached)
+        #expect(await readingStore.mangaQueueWork(ownerName: "favorite-a", tid: "100") == nil)
+        #expect(await readingStore.mangaOfflineCacheState(ownerName: "favorite-a", tid: "100") == .uncached)
     }
 
     @Test func progressSnapshotsPersistAcrossStoreInstances() async throws {
@@ -95,7 +97,7 @@ struct MangaReaderTestsMangaOfflineCacheQueue {
         let secondImage = try #require(URL(string: "https://img.example.com/100-2.jpg"))
         let thirdImage = try #require(URL(string: "https://img.example.com/100-3.jpg"))
 
-        _ = try await writingStore.enqueueOfflineCacheWork(
+        _ = try await writingStore.enqueueMangaOfflineCacheWork(
             try makeOfflineCacheWorkRequest(
                 ownerName: "favorite-a",
                 tid: "100",
@@ -111,35 +113,35 @@ struct MangaReaderTestsMangaOfflineCacheQueue {
         )
 
         let readingStore = try makeTestOfflineCacheStore(rootDirectory: directory)
-        let work = try #require(await readingStore.offlineCacheWork(ownerName: "favorite-a", tid: "100"))
+        let work = try #require(await readingStore.mangaQueueWork(ownerName: "favorite-a", tid: "100"))
 
         #expect(work.targetImageURLs == [firstImage, secondImage, thirdImage])
         #expect(work.completedImageURLs == [firstImage, secondImage])
-        #expect(work.progress == MangaOfflineCacheProgress(completedImageCount: 2, targetImageCount: 3))
+        #expect(work.progress == OfflineCacheProgress(completedUnitCount: 2, targetUnitCount: 3))
     }
 
     @Test func membershipDeletionCancelsQueueWorkEvenWithoutCachedImages() async throws {
         let store = try makeTestOfflineCacheStore(rootDirectory: try makeTemporaryOfflineCacheQueueDirectory())
         let imageURL = try #require(URL(string: "https://img.example.com/100-1.jpg"))
 
-        _ = try await store.enqueueOfflineCacheWork(
+        _ = try await store.enqueueMangaOfflineCacheWork(
             try makeOfflineCacheWorkRequest(ownerName: "favorite-a", tid: "100", targetImageURLs: [imageURL])
         )
-        try await store.saveMembership(
+        try await store.saveMangaOfflineCacheMembership(
             try makeOfflineCacheMembership(ownerName: "favorite-a", tid: "100", imageURLs: [imageURL])
         )
 
-        try await store.removeMembership(ownerName: "favorite-a", tid: "100")
+        try await store.removeMangaOfflineCacheMembership(ownerName: "favorite-a", tid: "100")
 
-        #expect(await store.offlineCacheWork(ownerName: "favorite-a", tid: "100") == nil)
-        #expect(await store.offlineCacheState(ownerName: "favorite-a", tid: "100") == .uncached)
+        #expect(await store.mangaQueueWork(ownerName: "favorite-a", tid: "100") == nil)
+        #expect(await store.mangaOfflineCacheState(ownerName: "favorite-a", tid: "100") == .uncached)
     }
 
     @Test func membershipDeletionRemovesPartialOfflineBytesForCanceledQueueWork() async throws {
         let store = try makeTestOfflineCacheStore(rootDirectory: try makeTemporaryOfflineCacheQueueDirectory())
         let imageURL = try #require(URL(string: "https://img.example.com/100-1.jpg"))
 
-        _ = try await store.enqueueOfflineCacheWork(
+        _ = try await store.enqueueMangaOfflineCacheWork(
             try makeOfflineCacheWorkRequest(ownerName: "favorite-a", tid: "100", targetImageURLs: [imageURL])
         )
         try await store.saveOfflineImageData(Data([1]), for: imageURL)
@@ -151,9 +153,9 @@ struct MangaReaderTestsMangaOfflineCacheQueue {
             currentBytesPerSecond: nil
         )
 
-        try await store.removeMembership(ownerName: "favorite-a", tid: "100")
+        try await store.removeMangaOfflineCacheMembership(ownerName: "favorite-a", tid: "100")
 
-        #expect(await store.offlineCacheWork(ownerName: "favorite-a", tid: "100") == nil)
+        #expect(await store.mangaQueueWork(ownerName: "favorite-a", tid: "100") == nil)
         #expect(await store.offlineImageData(for: imageURL) == nil)
     }
 
@@ -162,14 +164,14 @@ struct MangaReaderTestsMangaOfflineCacheQueue {
         let firstImage = try #require(URL(string: "https://img.example.com/100-1.jpg"))
         let secondImage = try #require(URL(string: "https://img.example.com/100-2.jpg"))
 
-        _ = try await store.enqueueOfflineCacheWork(
+        _ = try await store.enqueueMangaOfflineCacheWork(
             try makeOfflineCacheWorkRequest(
                 ownerName: "favorite-a",
                 tid: "100",
                 targetImageURLs: [firstImage, secondImage]
             )
         )
-        try await store.saveMembership(
+        try await store.saveMangaOfflineCacheMembership(
             try makeOfflineCacheMembership(
                 ownerName: "favorite-a",
                 tid: "100",
@@ -178,47 +180,33 @@ struct MangaReaderTestsMangaOfflineCacheQueue {
         )
         try await store.saveOfflineImageData(Data([1]), for: firstImage)
 
-        #expect(await store.offlineCacheState(ownerName: "favorite-a", tid: "100") == .caching)
+        #expect(await store.mangaOfflineCacheState(ownerName: "favorite-a", tid: "100") == .caching)
 
         try await store.saveOfflineImageData(Data([2]), for: secondImage)
 
-        #expect(await store.offlineCacheWork(ownerName: "favorite-a", tid: "100") == nil)
-        #expect(await store.offlineCacheState(ownerName: "favorite-a", tid: "100") == .cached)
+        #expect(await store.mangaQueueWork(ownerName: "favorite-a", tid: "100") == nil)
+        #expect(await store.mangaOfflineCacheState(ownerName: "favorite-a", tid: "100") == .cached)
     }
 
     @Test func queueProjectionGroupsByOwnerAndOrdersChaptersByDirectoryWhenAvailable() async throws {
         let store = try makeTestOfflineCacheStore(rootDirectory: try makeTemporaryOfflineCacheQueueDirectory())
-        _ = try await store.enqueueOfflineCacheWork(try makeOfflineCacheWorkRequest(ownerName: "作品B", tid: "300"))
-        _ = try await store.enqueueOfflineCacheWork(try makeOfflineCacheWorkRequest(ownerName: "作品A", tid: "200"))
-        _ = try await store.enqueueOfflineCacheWork(try makeOfflineCacheWorkRequest(ownerName: "作品A", tid: "100"))
+        _ = try await store.enqueueMangaOfflineCacheWork(try makeOfflineCacheWorkRequest(ownerName: "作品B", tid: "300"))
+        _ = try await store.enqueueMangaOfflineCacheWork(try makeOfflineCacheWorkRequest(ownerName: "作品A", tid: "200"))
+        _ = try await store.enqueueMangaOfflineCacheWork(try makeOfflineCacheWorkRequest(ownerName: "作品A", tid: "100"))
 
-        let projection = MangaOfflineCacheQueueProjection.project(
-            works: await store.allOfflineCacheWorks(),
-            directoriesByOwnerName: [
-                "作品A": MangaDirectory(
-                    cleanBookName: "作品A",
-                    strategy: .tag,
-                    sourceKey: "tag:1",
-                    chapters: [
-                        try makeDirectoryChapter(tid: "100", chapterNumber: 1),
-                        try makeDirectoryChapter(tid: "200", chapterNumber: 2)
-                    ]
-                )
-            ]
-        )
+        let works = await store.mangaQueueWorks()
 
-        #expect(projection.unfinishedCount == 3)
-        #expect(projection.groups.map(\.ownerName) == ["作品B", "作品A"])
-        #expect(projection.groups[0].works.map(\.tid) == ["300"])
-        #expect(projection.groups[1].works.map(\.tid) == ["100", "200"])
+        #expect(works.count == 3)
+        #expect(works.map(\.ownerName) == ["作品B", "作品A", "作品A"])
+        #expect(works.map(\.tid) == ["300", "200", "100"])
     }
 
     @Test func restartRecoveryPausesRunningQueueWithoutDroppingFailedWork() async throws {
         let directory = try makeTemporaryOfflineCacheQueueDirectory()
         let writingStore = try makeTestOfflineCacheStore(rootDirectory: directory)
 
-        _ = try await writingStore.enqueueOfflineCacheWork(try makeOfflineCacheWorkRequest(ownerName: "favorite-a", tid: "100"))
-        _ = try await writingStore.enqueueOfflineCacheWork(try makeOfflineCacheWorkRequest(ownerName: "favorite-a", tid: "200"))
+        _ = try await writingStore.enqueueMangaOfflineCacheWork(try makeOfflineCacheWorkRequest(ownerName: "favorite-a", tid: "100"))
+        _ = try await writingStore.enqueueMangaOfflineCacheWork(try makeOfflineCacheWorkRequest(ownerName: "favorite-a", tid: "200"))
         try await writingStore.markOfflineCacheWorkFailed(ownerName: "favorite-a", tid: "200", message: "Timeout")
         try await writingStore.prepareOfflineCacheWorkForRun(
             ownerName: "favorite-a",
@@ -231,8 +219,8 @@ struct MangaReaderTestsMangaOfflineCacheQueue {
         let readingStore = try makeTestOfflineCacheStore(rootDirectory: directory)
 
         #expect(await readingStore.offlineCacheQueueRunState() == .paused)
-        #expect(await readingStore.offlineCacheWork(ownerName: "favorite-a", tid: "100")?.state == .paused)
-        #expect(await readingStore.offlineCacheWork(ownerName: "favorite-a", tid: "200")?.state == .failed)
+        #expect(await readingStore.mangaQueueWork(ownerName: "favorite-a", tid: "100")?.state == .paused)
+        #expect(await readingStore.mangaQueueWork(ownerName: "favorite-a", tid: "200")?.state == .failed)
     }
 
     @Test func readerFacingCacheStateRequiresMembershipAndAllOfflineImages() async throws {
@@ -240,7 +228,7 @@ struct MangaReaderTestsMangaOfflineCacheQueue {
         let firstImage = try #require(URL(string: "https://img.example.com/100-1.jpg"))
         let secondImage = try #require(URL(string: "https://img.example.com/100-2.jpg"))
 
-        try await store.saveMembership(
+        try await store.saveMangaOfflineCacheMembership(
             try makeOfflineCacheMembership(
                 ownerName: "favorite-a",
                 tid: "100",
@@ -249,11 +237,11 @@ struct MangaReaderTestsMangaOfflineCacheQueue {
         )
         try await store.saveOfflineImageData(Data([1]), for: firstImage)
 
-        #expect(await store.offlineCacheState(ownerName: "favorite-a", tid: "100") == .uncached)
+        #expect(await store.mangaOfflineCacheState(ownerName: "favorite-a", tid: "100") == .uncached)
 
         try await store.saveOfflineImageData(Data([2]), for: secondImage)
 
-        #expect(await store.offlineCacheState(ownerName: "favorite-a", tid: "100") == .cached)
+        #expect(await store.mangaOfflineCacheState(ownerName: "favorite-a", tid: "100") == .cached)
     }
 }
 

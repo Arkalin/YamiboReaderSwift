@@ -1,20 +1,20 @@
 import Foundation
 
 package struct NovelChapterAnchor: Hashable, Sendable {
-    package let resumePoint: ReaderResumePoint
+    package let resumePoint: NovelResumePoint
 
-    package init(resumePoint: ReaderResumePoint) {
+    package init(resumePoint: NovelResumePoint) {
         self.resumePoint = resumePoint
     }
 }
 
 package struct NovelChapterDirectoryEntry: Hashable, Sendable {
-    package let chapter: ReaderChapter
+    package let chapter: NovelReaderChapter
     package let anchor: NovelChapterAnchor?
     package let ownerPostID: String?
 
     package init(
-        chapter: ReaderChapter,
+        chapter: NovelReaderChapter,
         anchor: NovelChapterAnchor?,
         ownerPostID: String?
     ) {
@@ -27,7 +27,7 @@ package struct NovelChapterDirectoryEntry: Hashable, Sendable {
 package enum NovelChapterDirectoryExtractor {
     package static func entries(
         from document: NovelReaderProjection,
-        settings: ReaderAppearanceSettings
+        settings: NovelReaderAppearanceSettings
     ) -> [NovelChapterDirectoryEntry] {
         var seenIdentities: Set<NovelChapterIdentity> = []
         return document.segments.indices.compactMap { index in
@@ -46,7 +46,7 @@ package enum NovelChapterDirectoryExtractor {
             let title = segment.chapterTitle ?? ""
             let anchor = semantics.textSegmentIdentity.map {
                 NovelChapterAnchor(
-                    resumePoint: ReaderResumePoint(
+                    resumePoint: NovelResumePoint(
                         view: document.view,
                         chapterIdentity: chapterIdentity,
                         textSegmentIdentity: $0,
@@ -60,7 +60,7 @@ package enum NovelChapterDirectoryExtractor {
                 )
             }
             return NovelChapterDirectoryEntry(
-                chapter: ReaderChapter(
+                chapter: NovelReaderChapter(
                     ordinal: ordinal,
                     title: title,
                     startIndex: ordinal

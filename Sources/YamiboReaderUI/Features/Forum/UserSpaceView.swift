@@ -343,7 +343,7 @@ private struct UserSpaceProfileHeaderView: View {
     var body: some View {
         VStack(spacing: 0) {
             ZStack {
-                YamiboRemoteImage(url: profile.avatarBackgroundURL ?? profile.avatarURL) { image in
+                YamiboRemoteImage(request: (profile.avatarBackgroundURL ?? profile.avatarURL).map { YamiboImageRequest(url: $0) }) { image in
                     image
                         .resizable()
                         .scaledToFill()
@@ -359,7 +359,7 @@ private struct UserSpaceProfileHeaderView: View {
                     .fill(.black.opacity(0.38))
 
                 VStack(spacing: 10) {
-                    YamiboRemoteImage(url: profile.avatarURL) { image in
+                    YamiboRemoteImage(request: profile.avatarURL.map { YamiboImageRequest(url: $0) }) { image in
                         image
                             .resizable()
                             .scaledToFill()
@@ -868,7 +868,7 @@ private struct UserSpaceFriendRowView: View {
 
     private var friendContent: some View {
         HStack(spacing: 10) {
-            YamiboRemoteImage(url: friend.avatarURL) { image in
+            YamiboRemoteImage(request: friend.avatarURL.map { YamiboImageRequest(url: $0) }) { image in
                 image.resizable().scaledToFill()
             } placeholder: {
                 Image(systemName: "person.crop.circle")
@@ -966,7 +966,7 @@ private struct UserSpaceAddFriendFormView: View {
         Form {
             Section {
                 HStack(spacing: 12) {
-                    YamiboRemoteImage(url: avatarURL) { image in
+                    YamiboRemoteImage(request: avatarURL.map { YamiboImageRequest(url: $0) }) { image in
                         image.resizable().scaledToFill()
                     } placeholder: {
                         Image(systemName: "person.crop.circle")

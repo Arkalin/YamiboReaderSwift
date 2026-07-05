@@ -92,7 +92,7 @@ import Testing
         maxView: 7,
         chapterTitle: "第二章",
         authorID: "42",
-        resumePoint: ReaderResumePoint(
+        resumePoint: NovelResumePoint(
             view: 2,
             displayedTextOffset: 120,
             chapterOrdinal: 1,

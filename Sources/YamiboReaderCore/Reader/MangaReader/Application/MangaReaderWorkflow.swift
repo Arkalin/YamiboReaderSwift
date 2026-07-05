@@ -35,20 +35,20 @@ public final class MangaReaderWorkflow {
     private let context: MangaLaunchContext
     private let projectionLoader: any MangaReaderProjectionLoading
     private let directoryWorkflow: MangaDirectoryWorkflow
-    private let offlineCacheStore: (any OfflineCacheStoring)?
+    private let offlineCacheStore: (any MangaOfflineCacheStoring)?
     private let adjacentPrefetchPolicy: MangaAdjacentChapterPrefetchPolicy
     private var window: MangaChapterWindow?
     private var settings: MangaReaderSettings
     private var directoryPanelCommandState = MangaDirectoryPanelCommandState()
     private var viewportPlacementRevision = 0
-    private var currentViewportPlacement: MangaReaderViewportPlacement?
+    private var currentViewportPlacement: MangaNovelReaderViewportPlacement?
 
     public init(
         context: MangaLaunchContext,
         projectionLoader: any MangaReaderProjectionLoading,
         directoryRepository: any MangaDirectoryRepository,
         directoryStore: any MangaDirectoryPersisting,
-        offlineCacheStore: (any OfflineCacheStoring)? = nil,
+        offlineCacheStore: (any MangaOfflineCacheStoring)? = nil,
         settings: MangaReaderSettings = MangaReaderSettings(),
         directoryWorkflowConfiguration: MangaDirectoryWorkflowConfiguration = MangaDirectoryWorkflowConfiguration(),
         directorySearchCooldownState: MangaDirectorySearchCooldownState = MangaDirectorySearchCooldownState(),
@@ -136,7 +136,7 @@ public final class MangaReaderWorkflow {
     private func offlineReadableCurrentChapterDirectory(for document: MangaReaderProjection) async -> MangaDirectory? {
         guard let offlineCacheStore,
               let ownerName = context.directoryName?.mangaReaderTrimmedNonEmpty,
-              let membership = await offlineCacheStore.membership(ownerName: ownerName, tid: document.tid),
+              let membership = await offlineCacheStore.mangaOfflineCacheMembership(ownerName: ownerName, tid: document.tid),
               membership.imageURLs.map(\.absoluteString) == document.imageURLs.map(\.absoluteString),
               !membership.imageURLs.isEmpty
         else {
@@ -603,9 +603,9 @@ public final class MangaReaderWorkflow {
         )
     }
 
-    private func nextViewportPlacement(targetPageIndex: Int, animated: Bool = false) -> MangaReaderViewportPlacement {
+    private func nextViewportPlacement(targetPageIndex: Int, animated: Bool = false) -> MangaNovelReaderViewportPlacement {
         viewportPlacementRevision += 1
-        let placement = MangaReaderViewportPlacement(
+        let placement = MangaNovelReaderViewportPlacement(
             targetPageIndex: targetPageIndex,
             animated: animated,
             revision: viewportPlacementRevision

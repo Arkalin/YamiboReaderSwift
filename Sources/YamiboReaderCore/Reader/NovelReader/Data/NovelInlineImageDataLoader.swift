@@ -1,18 +1,14 @@
 import Foundation
 
-public protocol NovelInlineImageDataLoading: Sendable {
-    func imageData(for imageURL: URL, refererURL: URL) async throws -> Data
-}
-
 public struct NovelInlineImageLoadingContext: Sendable {
-    public let loader: any NovelInlineImageDataLoading
+    public let loader: any YamiboImageDataLoading
 
-    public init(loader: any NovelInlineImageDataLoading) {
+    public init(loader: any YamiboImageDataLoading) {
         self.loader = loader
     }
 }
 
-public actor YamiboNovelInlineImageDataLoader: NovelInlineImageDataLoading {
+public actor YamiboNovelInlineImageDataLoader: YamiboImageDataLoading {
     private let imageDataLoader: any YamiboImageDataLoading
 
     public init(client: YamiboClient) {
@@ -23,23 +19,18 @@ public actor YamiboNovelInlineImageDataLoader: NovelInlineImageDataLoading {
         self.imageDataLoader = imageDataLoader
     }
 
-    public func imageData(for imageURL: URL, refererURL: URL) async throws -> Data {
-        try await imageDataLoader.imageData(
-            for: YamiboImageRequest(
-                url: imageURL,
-                refererURL: refererURL
-            )
-        )
+    public func imageData(for request: YamiboImageRequest) async throws -> Data {
+        try await imageDataLoader.imageData(for: request)
     }
 }
 
-public actor CachedNovelInlineImageDataLoader: NovelInlineImageDataLoading {
-    private let imageDataLoader: any NovelInlineImageDataLoading
+public actor CachedNovelInlineImageDataLoader: YamiboImageDataLoading {
+    private let imageDataLoader: any YamiboImageDataLoading
     private let offlineCacheStore: (any NovelOfflineImageDataProviding)?
     private let threadID: String?
 
     public init(
-        imageDataLoader: any NovelInlineImageDataLoading,
+        imageDataLoader: any YamiboImageDataLoading,
         offlineCacheStore: (any NovelOfflineImageDataProviding)? = nil,
         threadID: String? = nil
     ) {
@@ -48,15 +39,15 @@ public actor CachedNovelInlineImageDataLoader: NovelInlineImageDataLoading {
         self.threadID = threadID?.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    public func imageData(for imageURL: URL, refererURL: URL) async throws -> Data {
-        if let offline = await offlineImageData(for: imageURL, refererURL: refererURL) {
+    public func imageData(for request: YamiboImageRequest) async throws -> Data {
+        if let offline = await offlineImageData(for: request) {
             return offline
         }
-        return try await imageDataLoader.imageData(for: imageURL, refererURL: refererURL)
+        return try await imageDataLoader.imageData(for: request)
     }
 
-    private func offlineImageData(for imageURL: URL, refererURL _: URL) async -> Data? {
+    private func offlineImageData(for request: YamiboImageRequest) async -> Data? {
         guard let threadID, !threadID.isEmpty else { return nil }
-        return await offlineCacheStore?.novelOfflineImageData(for: imageURL, threadID: threadID)
+        return await offlineCacheStore?.novelOfflineImageData(for: request.url, threadID: threadID)
     }
 }

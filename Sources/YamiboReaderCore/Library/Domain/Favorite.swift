@@ -10,7 +10,7 @@ public struct Favorite: Codable, Hashable, Identifiable, Sendable {
     public var lastView: Int
     public var lastChapter: String?
     public var authorID: String?
-    public var novelResumePoint: ReaderResumePoint?
+    public var novelResumePoint: NovelResumePoint?
     public var novelMaxView: Int?
     public var novelDocumentSurfaceProgressPercent: Int?
     public var type: FavoriteType
@@ -49,7 +49,7 @@ public struct Favorite: Codable, Hashable, Identifiable, Sendable {
         lastView: Int = 1,
         lastChapter: String? = nil,
         authorID: String? = nil,
-        novelResumePoint: ReaderResumePoint? = nil,
+        novelResumePoint: NovelResumePoint? = nil,
         novelMaxView: Int? = nil,
         novelDocumentSurfaceProgressPercent: Int? = nil,
         type: FavoriteType = .unknown,
@@ -95,7 +95,7 @@ public struct Favorite: Codable, Hashable, Identifiable, Sendable {
         lastView = try container.decodeIfPresent(Int.self, forKey: .lastView) ?? 1
         lastChapter = try container.decodeIfPresent(String.self, forKey: .lastChapter)
         authorID = try container.decodeIfPresent(String.self, forKey: .authorID)
-        novelResumePoint = try container.decodeIfPresent(ReaderResumePoint.self, forKey: .novelResumePoint)
+        novelResumePoint = try container.decodeIfPresent(NovelResumePoint.self, forKey: .novelResumePoint)
         novelMaxView = try container.decodeIfPresent(Int.self, forKey: .novelMaxView).map { max(1, $0) }
         novelDocumentSurfaceProgressPercent = try container.decodeIfPresent(
             Int.self,

@@ -91,7 +91,7 @@ extension OfflineCacheStore {
                     arguments: [imageURLString, fileName, data.count]
                 )
 
-                let memberships = try Self.allMemberships(
+                let memberships = try Self.allMangaMemberships(
                     fileManager: fileManager,
                     mangaSourcePagesDirectory: mangaSourcePagesDirectory,
                     in: db
@@ -108,12 +108,12 @@ extension OfflineCacheStore {
         }
     }
 
-    public func diskUsageByOwner() async -> [MangaOfflineCacheOwnerUsage] {
+    public func mangaOfflineCacheDiskUsageByOwner() async -> [MangaOfflineCacheOwnerUsage] {
         try? await recoverQueueStateAfterRestart()
         return (try? await database.read { db in
             var imageURLsByOwner: [String: Set<String>] = [:]
             var byteCountByOwner: [String: Int] = [:]
-            for membership in try Self.allMemberships(
+            for membership in try Self.allMangaMemberships(
                 fileManager: fileManager,
                 mangaSourcePagesDirectory: mangaSourcePagesDirectory,
                 in: db
@@ -125,8 +125,8 @@ extension OfflineCacheStore {
                     in: db
                 )
             }
-            for work in try Self.allWorks(in: db) {
-                imageURLsByOwner[work.ownerName, default: []].formUnion((work.targetImageURLs + work.completedImageURLs).map(\.absoluteString))
+            for work in try Self.allRawWorks(in: db) where work.readerKind == .manga {
+                imageURLsByOwner[work.ownerKey, default: []].formUnion((work.targetImageURLs + work.completedImageURLs).map(\.absoluteString))
             }
 
             var usage: [MangaOfflineCacheOwnerUsage] = []

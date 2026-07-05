@@ -10,7 +10,7 @@ public struct NovelReadingProgressRecord: Codable, Hashable, Sendable {
     public var lastView: Int
     public var lastChapter: String?
     public var authorID: String?
-    public var novelResumePoint: ReaderResumePoint?
+    public var novelResumePoint: NovelResumePoint?
     public var novelMaxView: Int?
     public var novelDocumentSurfaceProgressPercent: Int?
     public var threadCoverURL: URL?
@@ -19,7 +19,7 @@ public struct NovelReadingProgressRecord: Codable, Hashable, Sendable {
         lastView: Int = 1,
         lastChapter: String? = nil,
         authorID: String? = nil,
-        novelResumePoint: ReaderResumePoint? = nil,
+        novelResumePoint: NovelResumePoint? = nil,
         novelMaxView: Int? = nil,
         novelDocumentSurfaceProgressPercent: Int? = nil,
         threadCoverURL: URL? = nil
@@ -440,10 +440,10 @@ public actor ReadingProgressStore {
 
     private static func novelRecord(from row: Row) throws -> NovelReadingProgressRecord? {
         guard (row["novel_last_view"] as Int?) != nil else { return nil }
-        let resumePoint: ReaderResumePoint?
+        let resumePoint: NovelResumePoint?
         if let resumeJSON = row["novel_resume_point_json"] as String?,
            let data = resumeJSON.data(using: .utf8) {
-            resumePoint = try? JSONDecoder().decode(ReaderResumePoint.self, from: data)
+            resumePoint = try? JSONDecoder().decode(NovelResumePoint.self, from: data)
         } else {
             resumePoint = nil
         }

@@ -63,7 +63,7 @@ struct MangaReaderCacheSheet: View {
                 }
 
                 ToolbarItem(placement: .topBarTrailing) {
-                    MangaReaderCacheQueueToolbarButton(
+                    MangaNovelReaderCacheQueueToolbarButton(
                         entryCount: model.offlineCacheQueueEntryCount,
                         action: {
                             isQueuePresented = true
@@ -131,7 +131,7 @@ struct MangaReaderCacheSheet: View {
         }
     }
 
-    private var selectionState: MangaReaderCacheSelectionState {
+    private var selectionState: MangaNovelReaderCacheSelectionState {
         model.selectionState(for: selectedTIDs)
     }
 
@@ -346,7 +346,7 @@ private struct MangaReaderCacheQueueFlightBadge: View {
     }
 }
 
-private struct MangaReaderCacheQueueToolbarButton: View {
+private struct MangaNovelReaderCacheQueueToolbarButton: View {
     let entryCount: Int
     let action: () -> Void
 
@@ -590,7 +590,7 @@ private struct MangaReaderCacheStateBadge: View {
 }
 
 private struct MangaReaderCacheSelectionToolbar: View {
-    let selectionState: MangaReaderCacheSelectionState
+    let selectionState: MangaNovelReaderCacheSelectionState
     let onCache: () -> Void
     let onDelete: () -> Void
 
@@ -646,7 +646,7 @@ private struct MangaReaderCacheSelectionToolbar: View {
 }
 
 private struct MangaReaderCacheSelectionActionBar: View {
-    let selectionState: MangaReaderCacheSelectionState
+    let selectionState: MangaNovelReaderCacheSelectionState
     let onCache: () -> Void
     let onDelete: () -> Void
 

@@ -107,11 +107,11 @@ public struct ForumNavigationHostView: View {
                     ForumNovelDetailView(
                         model: ForumNovelDetailViewModel(context: context, appContext: appContext),
                         onChapterTap: { launchContext in
-                            appModel.presentReader(launchContext)
+                            appModel.presentNovelReader(launchContext)
                         },
                         onUserTap: openUserSpace,
                         onViewThread: {
-                            path.append(.threadReader(ThreadReaderLaunchContext(thread: context.thread, title: context.title, authorID: context.authorID)))
+                            path.append(.threadReader(ThreadNovelLaunchContext(thread: context.thread, title: context.title, authorID: context.authorID)))
                         }
                     )
                     .forumNavigationBarStyle()
@@ -119,12 +119,10 @@ public struct ForumNavigationHostView: View {
                     ForumMangaDetailView(
                         model: ForumMangaDetailViewModel(context: context, appContext: appContext),
                         onChapterTap: { launchContext in
-                            Task {
-                                await appModel.openManga(launchContext)
-                            }
+                            appModel.presentMangaReader(launchContext)
                         },
                         onViewThread: {
-                            path.append(.threadReader(ThreadReaderLaunchContext(thread: context.thread, title: context.title)))
+                            path.append(.threadReader(ThreadNovelLaunchContext(thread: context.thread, title: context.title)))
                         }
                     )
                     .forumNavigationBarStyle()
@@ -290,7 +288,7 @@ public struct ForumNavigationHostView: View {
             )
             path.append(.mangaDetail(context))
         case let .thread(payload):
-            let context = ThreadReaderLaunchContext(
+            let context = ThreadNovelLaunchContext(
                 thread: payload.thread,
                 title: payload.title,
                 initialPage: payload.initialPage,
@@ -356,6 +354,6 @@ private enum ForumDestination: Hashable {
     case blog(blogID: String, uid: String?, title: String?)
     case novelDetail(NovelDetailLaunchContext)
     case mangaDetail(MangaDetailLaunchContext)
-    case threadReader(ThreadReaderLaunchContext)
+    case threadReader(ThreadNovelLaunchContext)
     case web(URL)
 }

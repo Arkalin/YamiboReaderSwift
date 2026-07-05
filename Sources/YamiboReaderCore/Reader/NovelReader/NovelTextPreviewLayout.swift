@@ -8,8 +8,8 @@ enum NovelTextPreviewLayout {
     static func textFits(
         _ text: String,
         chapterTitle: String?,
-        settings: ReaderAppearanceSettings,
-        layout: ReaderContainerLayout
+        settings: NovelReaderAppearanceSettings,
+        layout: NovelReaderLayout
     ) -> Bool {
         let pageSize = layout.readableFrame.size
         guard pageSize.width >= 120,
@@ -22,7 +22,7 @@ enum NovelTextPreviewLayout {
             startsAtParagraphBoundary: true,
             settings: settings,
             width: pageSize.width,
-            baseFontSize: ReaderAttributedTextFactory.defaultBaseFontSize
+            baseFontSize: NovelAttributedTextFactory.defaultBaseFontSize
         )
         return height > 0 && height <= pageSize.height
     }
@@ -31,11 +31,11 @@ enum NovelTextPreviewLayout {
         _ text: String,
         chapterTitle: String?,
         startsAtParagraphBoundary: Bool,
-        settings: ReaderAppearanceSettings,
+        settings: NovelReaderAppearanceSettings,
         width: CGFloat,
         baseFontSize: Double
     ) -> CGFloat {
-        let attributedText = ReaderAttributedTextFactory.makeAttributedText(
+        let attributedText = NovelAttributedTextFactory.makeAttributedText(
             text: text,
             chapterTitle: chapterTitle,
             startsAtParagraphBoundary: startsAtParagraphBoundary,
@@ -70,11 +70,11 @@ enum NovelTextPreviewLayout {
     }
 
     private static func minimumUsablePageHeight(
-        settings: ReaderAppearanceSettings
+        settings: NovelReaderAppearanceSettings
     ) -> CGFloat {
         let fontSize = max(
             14,
-            ReaderAttributedTextFactory.defaultBaseFontSize * settings.fontScale
+            NovelAttributedTextFactory.defaultBaseFontSize * settings.fontScale
         )
         return CGFloat(fontSize * max(settings.lineHeightScale, 1.35) * 2)
     }

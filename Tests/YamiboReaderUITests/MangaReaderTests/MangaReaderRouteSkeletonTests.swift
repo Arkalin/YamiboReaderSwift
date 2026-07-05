@@ -6,34 +6,22 @@ import Testing
 @Suite("MangaReaderTests: UI Route Contracts")
 struct MangaReaderTestsUIRouteContracts {
     @MainActor
-    @Test func openMangaRoutesDirectlyToNativeReader() async throws {
+    @Test func presentMangaReaderRoutesDirectlyToNativeReader() throws {
         let appModel = try makeAppModel()
         let context = try makeLaunchContext(tid: "700")
 
-        await appModel.openManga(
-            context,
-            currentHTML: "<html></html>",
-            currentTitle: "Ignored"
-        )
+        appModel.presentMangaReader(context)
 
-        #expect(appModel.activeMangaRoute == .native(context))
-        #expect(appModel.suspendedMangaWebContext == nil)
+        #expect(appModel.activeMangaContext == context)
     }
 
     @MainActor
-    @Test func mangaReaderAndWebFallbackViewsAreConstructible() throws {
+    @Test func mangaReaderViewIsConstructible() throws {
         #if os(iOS)
         let appModel = try makeAppModel()
         let nativeContext = try makeLaunchContext(tid: "700")
-        let webContext = MangaWebContext(
-            currentThreadID: nativeContext.chapterTID,
-            currentPage: nativeContext.chapterView,
-            originalThreadID: nativeContext.originalThreadID,
-            source: .forum
-        )
 
         _ = MangaReaderView(context: nativeContext, appModel: appModel)
-        _ = MangaWebFallbackView(context: webContext, appModel: appModel)
         #else
         #expect(true)
         #endif

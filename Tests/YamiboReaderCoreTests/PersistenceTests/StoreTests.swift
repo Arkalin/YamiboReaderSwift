@@ -153,7 +153,7 @@ import Testing
     defaults.removePersistentDomain(forName: "settings-store-tests")
     let store = SettingsStore(defaults: defaults, key: "settings")
     let settings = AppSettings(
-        reader: ReaderAppearanceSettings(
+        novelReader: NovelReaderAppearanceSettings(
             fontScale: 1.1,
             fontFamily: .rounded,
             lineHeightScale: 1.6,
@@ -304,7 +304,7 @@ import Testing
     }
     """
 
-    let decoded = try JSONDecoder().decode(ReaderAppearanceSettings.self, from: Data(legacy.utf8))
+    let decoded = try JSONDecoder().decode(NovelReaderAppearanceSettings.self, from: Data(legacy.utf8))
 
     #expect(decoded.fontFamily == .systemSans)
     #expect(decoded.characterSpacingScale == 0)
@@ -318,14 +318,14 @@ import Testing
 }
 
 @Test func readerAppearanceSettingsEncodesAndDecodesPagedTurnOptions() throws {
-    let settings = ReaderAppearanceSettings(
+    let settings = NovelReaderAppearanceSettings(
         readingMode: .paged,
         pagedTurnStyle: .pageCurl,
         pageTurnDirection: .rightToLeft
     )
 
     let encoded = try JSONEncoder().encode(settings)
-    let decoded = try JSONDecoder().decode(ReaderAppearanceSettings.self, from: encoded)
+    let decoded = try JSONDecoder().decode(NovelReaderAppearanceSettings.self, from: encoded)
 
     #expect(decoded.readingMode == .paged)
     #expect(decoded.pagedTurnStyle == .pageCurl)
@@ -422,7 +422,7 @@ import Testing
 @Test func readerResumeRouteStorePersistsNovelRouteAndClearsIt() async throws {
     let defaults = try makeIsolatedDefaults(prefix: "reader-resume-novel-tests")
     let store = ReaderResumeRouteStore(defaults: defaults, key: "reader-route")
-    let resumePoint = ReaderResumePoint(
+    let resumePoint = NovelResumePoint(
         view: 2,
         displayedTextOffset: 20,
         chapterOrdinal: 3,
@@ -431,7 +431,7 @@ import Testing
         authorID: "42",
         readingModeHint: .vertical
     )
-    let context = ReaderLaunchContext(
+    let context = NovelLaunchContext(
         threadID: "611",
         threadTitle: "测试小说",
         source: .resume,
@@ -449,23 +449,21 @@ import Testing
     #expect(await store.load() == nil)
 }
 
-@Test func readerResumeRouteStorePersistsMangaRouteAndIgnoresInvalidData() async throws {
+@Test func readerResumeRouteStorePersistsMangaContextAndIgnoresInvalidData() async throws {
     let defaults = try makeIsolatedDefaults(prefix: "reader-resume-manga-tests")
     let store = ReaderResumeRouteStore(defaults: defaults, key: "reader-route")
-    let route = MangaPresentationRoute.native(
-        MangaLaunchContext(
-            originalThreadID: "612",
-            chapterTID: "613",
-            displayTitle: "测试漫画",
-            source: .resume,
-            initialPage: 7,
-            directoryName: "测试漫画"
-        )
+    let context = MangaLaunchContext(
+        originalThreadID: "612",
+        chapterTID: "613",
+        displayTitle: "测试漫画",
+        source: .resume,
+        initialPage: 7,
+        directoryName: "测试漫画"
     )
 
-    try await store.save(.manga(route))
+    try await store.save(.manga(context))
 
-    let persistedRoute = try persistedResumeRoute(.manga(route))
+    let persistedRoute = try persistedResumeRoute(.manga(context))
     #expect(await store.load() == persistedRoute)
 
     let invalidDefaults = try makeIsolatedDefaults(prefix: "reader-resume-invalid-tests")
@@ -484,14 +482,14 @@ private func persistedResumeRoute(_ route: ReaderResumeRoute) throws -> ReaderRe
     let defaults = try makeIsolatedDefaults(prefix: "reader-resume-suppression-tests")
     let store = ReaderResumeRouteStore(defaults: defaults, key: "reader-route")
     let firstRoute = ReaderResumeRoute.novel(
-        ReaderLaunchContext(
+        NovelLaunchContext(
             threadID: "614",
             threadTitle: "第一本",
             source: .resume
         )
     )
     let secondRoute = ReaderResumeRoute.novel(
-        ReaderLaunchContext(
+        NovelLaunchContext(
             threadID: "615",
             threadTitle: "第二本",
             source: .resume
@@ -525,7 +523,7 @@ private func persistedResumeRoute(_ route: ReaderResumeRoute) throws -> ReaderRe
         databasePool: database
     )
     let threadCoverURL = try #require(URL(string: "https://img.example.com/thread-cover.jpg"))
-    let resumePoint = ReaderResumePoint(
+    let resumePoint = NovelResumePoint(
         view: 3,
         displayedTextOffset: 128,
         chapterOrdinal: 2,
@@ -622,7 +620,7 @@ private func persistedResumeRoute(_ route: ReaderResumeRoute) throws -> ReaderRe
     #expect(progress?.novel?.lastChapter == "第二十五章")
 }
 
-@Test func readerCacheStoreReportsUsageAndCanClearAll() async throws {
+@Test func novelReaderCacheStoreReportsUsageAndCanClearAll() async throws {
     let baseDirectory = makeTemporaryDirectory(prefix: "reader-cache-tests")
     let store = NovelReaderProjectionStore(baseDirectory: baseDirectory)
 
@@ -670,11 +668,11 @@ private func persistedResumeRoute(_ route: ReaderResumeRoute) throws -> ReaderRe
 
 @Test func clearingReaderCacheDoesNotDeleteFavoriteBackground() async throws {
     let rootDirectory = makeTemporaryDirectory(prefix: "cache-clear-background-root")
-    let readerCacheStore = NovelReaderProjectionStore(baseDirectory: rootDirectory.appendingPathComponent("reader-cache", isDirectory: true))
+    let novelReaderCacheStore = NovelReaderProjectionStore(baseDirectory: rootDirectory.appendingPathComponent("reader-cache", isDirectory: true))
     let backgroundStore = FavoriteBackgroundImageStore(baseDirectory: rootDirectory.appendingPathComponent("favorite-background", isDirectory: true))
     let backgroundData = Data(repeating: 4, count: 64)
 
-    try await readerCacheStore.save(
+    try await novelReaderCacheStore.save(
         NovelReaderProjection(
             threadID: "701",
             view: 1,
@@ -684,7 +682,7 @@ private func persistedResumeRoute(_ route: ReaderResumeRoute) throws -> ReaderRe
     )
     try await backgroundStore.save(backgroundData, imageID: "background")
 
-    try await readerCacheStore.clearAll()
+    try await novelReaderCacheStore.clearAll()
 
     #expect(await backgroundStore.loadData(imageID: "background") == backgroundData)
 }
@@ -732,7 +730,7 @@ private func persistedResumeRoute(_ route: ReaderResumeRoute) throws -> ReaderRe
         defaults: try #require(UserDefaults(suiteName: suiteName)),
         key: "content-covers"
     )
-    let readerCacheStore = NovelReaderProjectionStore(baseDirectory: rootDirectory.appendingPathComponent("reader-cache", isDirectory: true))
+    let novelReaderCacheStore = NovelReaderProjectionStore(baseDirectory: rootDirectory.appendingPathComponent("reader-cache", isDirectory: true))
     let favoriteBackgroundImageStore = FavoriteBackgroundImageStore(
         baseDirectory: rootDirectory.appendingPathComponent("favorite-background", isDirectory: true)
     )
@@ -745,7 +743,7 @@ private func persistedResumeRoute(_ route: ReaderResumeRoute) throws -> ReaderRe
         readerResumeRouteStore: readerResumeRouteStore,
         localFavoriteLibraryStore: localFavoriteLibraryStore,
         contentCoverStore: contentCoverStore,
-        readerCacheStore: readerCacheStore,
+        novelReaderCacheStore: novelReaderCacheStore,
         favoriteBackgroundImageStore: favoriteBackgroundImageStore,
         mangaDirectoryStore: mangaDirectoryStore,
         mangaReaderProjectionStore: mangaReaderProjectionStore,
@@ -755,7 +753,7 @@ private func persistedResumeRoute(_ route: ReaderResumeRoute) throws -> ReaderRe
     try await settingsStore.save(AppSettings(webBrowser: WebBrowserSettings(showsNavigationBar: false)))
     try await readerResumeRouteStore.save(
             .novel(
-                ReaderLaunchContext(
+                NovelLaunchContext(
                     threadID: "700",
                     threadTitle: "测试小说",
                     source: .resume
@@ -772,7 +770,7 @@ private func persistedResumeRoute(_ route: ReaderResumeRoute) throws -> ReaderRe
         )
     )
     try await localFavoriteLibraryStore.save(localLibrary)
-    try await readerCacheStore.save(
+    try await novelReaderCacheStore.save(
         NovelReaderProjection(
             threadID: "700",
             view: 1,
@@ -813,7 +811,7 @@ private func persistedResumeRoute(_ route: ReaderResumeRoute) throws -> ReaderRe
         Data(repeating: 7, count: 64),
         for: offlineImageURL
     )
-    try await offlineCacheStore.saveMembership(
+    try await offlineCacheStore.saveMangaOfflineCacheMembership(
         MangaOfflineCacheMembership(
             ownerName: "测试漫画",
             tid: "700",
@@ -822,7 +820,7 @@ private func persistedResumeRoute(_ route: ReaderResumeRoute) throws -> ReaderRe
             sourcePage: makeStoreTestMangaOfflineSourcePage(tid: "700")
         )
     )
-    _ = try await offlineCacheStore.enqueueOfflineCacheWork(
+    _ = try await offlineCacheStore.enqueueMangaOfflineCacheWork(
         MangaOfflineCacheWorkRequest(
             ownerName: "测试漫画",
             tid: "701",
@@ -868,13 +866,13 @@ private func persistedResumeRoute(_ route: ReaderResumeRoute) throws -> ReaderRe
     let readerResumeRoute = await readerResumeRouteStore.load()
     let localFavoriteLibrary = await localFavoriteLibraryStore.load()
     let contentCover = await contentCoverStore.cover(for: coverKey)
-    let readerCacheBytes = await readerCacheStore.totalDiskUsageBytes()
+    let readerCacheBytes = await novelReaderCacheStore.totalDiskUsageBytes()
     let backgroundData = await favoriteBackgroundImageStore.loadData(imageID: "background")
     let mangaDirectoryBytes = await mangaDirectoryStore.totalDiskUsageBytes()
     let mangaReaderProjectionBytes = await mangaReaderProjectionStore.totalDiskUsageBytes()
     let mangaOfflineCacheBytes = await offlineCacheStore.totalDiskUsageBytes()
-    let mangaOfflineMemberships = await offlineCacheStore.allMemberships()
-    let mangaOfflineWorks = await offlineCacheStore.allOfflineCacheWorks()
+    let mangaOfflineMemberships = await offlineCacheStore.allMangaOfflineCacheMemberships()
+    let mangaOfflineWorks = await offlineCacheStore.mangaQueueWorks()
     let novelOfflineEntries = await offlineCacheStore.allNovelOfflineCacheEntries()
     let offlineQueueWorks = await offlineCacheStore.offlineCacheQueueWorks()
     let mangaOfflineQueueState = await offlineCacheStore.offlineCacheQueueRunState()

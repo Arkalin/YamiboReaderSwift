@@ -229,7 +229,7 @@ struct MangaReaderTestsNovelOfflineCacheStore {
     @Test func deletingNovelOfflineEntryPreservesTransparentThreadPageAndProjectionCaches() async throws {
         let root = try makeTemporaryNovelOfflineCacheDirectory()
         let offlineStore = try makeTestOfflineCacheStore(rootDirectory: root)
-        let readerCacheStore = NovelReaderProjectionStore(baseDirectory: root.appendingPathComponent("reader-cache", isDirectory: true))
+        let novelReaderCacheStore = NovelReaderProjectionStore(baseDirectory: root.appendingPathComponent("reader-cache", isDirectory: true))
         let forumCacheStore = ForumCacheStore(baseDirectory: root.appendingPathComponent("forum-cache", isDirectory: true))
         let request = try makeNovelWorkRequest(tid: "7004", view: 1)
         let sourcePage = try makeNovelSourcePage(tid: "7004", view: 1, totalPages: 2)
@@ -237,7 +237,7 @@ struct MangaReaderTestsNovelOfflineCacheStore {
         let thread = sourcePage.thread
 
         try await forumCacheStore.saveThreadPage(sourcePage, thread: thread, pageNumber: 1, authorID: "42")
-        try await readerCacheStore.save(projection)
+        try await novelReaderCacheStore.save(projection)
         try await offlineStore.saveNovelOfflineSourcePage(
             sourcePage,
             request: request,
@@ -262,8 +262,8 @@ struct MangaReaderTestsNovelOfflineCacheStore {
         ) == nil)
         #expect(await offlineStore.offlineCacheQueueWorks().isEmpty)
         #expect(await forumCacheStore.loadThreadPage(thread: thread, page: 1, authorID: "42") == sourcePage)
-        let retainedProjection = await readerCacheStore.loadProjection(
-            for: ReaderPageRequest(threadID: request.threadID, view: 1, authorID: "42"),
+        let retainedProjection = await novelReaderCacheStore.loadProjection(
+            for: NovelPageRequest(threadID: request.threadID, view: 1, authorID: "42"),
             contentSource: .authorFilteredPage
         )
         #expect(retainedProjection?.view == projection.view)

@@ -231,14 +231,14 @@ package struct NovelTextViewportRuntimeTransactionDiagnostics: Equatable, Sendab
 package struct NovelTextLayoutRuntimeAdapterInput {
     var preparedInput: NovelTextLayoutPreparedInput
     var precomputedResult: NovelTextLayoutResult?
-    var settings: ReaderAppearanceSettings
-    var layout: ReaderContainerLayout
+    var settings: NovelReaderAppearanceSettings
+    var layout: NovelReaderLayout
     var cachedSemanticAttributedDocument: NSAttributedString?
 
     init(
         preparedInput: NovelTextLayoutPreparedInput,
-        settings: ReaderAppearanceSettings,
-        layout: ReaderContainerLayout,
+        settings: NovelReaderAppearanceSettings,
+        layout: NovelReaderLayout,
         cachedSemanticAttributedDocument: NSAttributedString?,
         precomputedResult: NovelTextLayoutResult? = nil
     ) {
@@ -404,7 +404,7 @@ package final class DefaultNovelTextLayoutRuntimeAdapter: NovelTextLayoutRuntime
         if reusesSemanticDocument, let cached = input.cachedSemanticAttributedDocument {
             attributedDocument = cached
         } else {
-            attributedDocument = ReaderAttributedTextFactory.makeAttributedDocument(
+            attributedDocument = NovelAttributedTextFactory.makeAttributedDocument(
                 from: input.preparedInput
             )
         }
@@ -445,7 +445,7 @@ package final class DefaultNovelTextLayoutRuntimeAdapter: NovelTextLayoutRuntime
             from: input.preparedInput,
             surfaceRanges: surfaceRanges
         )
-        result.fingerprints.font = ReaderAttributedTextFactory.resolvedFontFingerprint(
+        result.fingerprints.font = NovelAttributedTextFactory.resolvedFontFingerprint(
             settings: input.settings
         )
         let platformName = "UIKit"
@@ -959,7 +959,7 @@ public final class NovelTextViewportDisplayReference {
 #endif
     }
 
-    package func referenceY(for position: ReaderResumePoint) -> CGFloat? {
+    package func referenceY(for position: NovelResumePoint) -> CGFloat? {
 #if canImport(UIKit)
         runtimeOwner?.referenceY(
             surfaceIdentity: surfaceIdentity,
@@ -1048,8 +1048,8 @@ final class NovelTextViewportRuntimeTransaction {
     let generation: UInt64
     let result: NovelTextLayoutResult
     let document: NovelReaderProjection?
-    let settings: ReaderAppearanceSettings
-    let layout: ReaderContainerLayout
+    let settings: NovelReaderAppearanceSettings
+    let layout: NovelReaderLayout
     private(set) var semanticAttributedDocument: NSAttributedString?
     let reusedSemanticAttributedDocument: Bool
     let fullDocumentLayoutPassCount: Int
@@ -1070,8 +1070,8 @@ final class NovelTextViewportRuntimeTransaction {
         generation: UInt64,
         result: NovelTextLayoutResult,
         document: NovelReaderProjection?,
-        settings: ReaderAppearanceSettings,
-        layout: ReaderContainerLayout,
+        settings: NovelReaderAppearanceSettings,
+        layout: NovelReaderLayout,
         candidate: NovelTextLayoutRuntimeCandidate
     ) {
         self.generation = generation
@@ -1138,8 +1138,8 @@ final class NovelTextViewportRuntimeOwner {
     private var nextGeneration: UInt64 = 1
     private var result: NovelTextLayoutResult?
     private var document: NovelReaderProjection?
-    private var settings = ReaderAppearanceSettings()
-    private var layout = ReaderContainerLayout(width: 1, height: 1)
+    private var settings = NovelReaderAppearanceSettings()
+    private var layout = NovelReaderLayout(width: 1, height: 1)
     private var visibleSurfaceOrdinals = Set<Int>()
     private var semanticAttributedDocumentCache: NSAttributedString?
     private var transactionDiagnostics = NovelTextViewportRuntimeTransactionDiagnostics()
@@ -1504,7 +1504,7 @@ final class NovelTextViewportRuntimeOwner {
 
     func referenceY(
         surfaceIdentity: NovelReaderSurfaceIdentity,
-        position: ReaderResumePoint
+        position: NovelResumePoint
     ) -> CGFloat? {
         let surfaceOrdinal = surfaceIdentity.ordinal
         guard isCurrent(surfaceIdentity),

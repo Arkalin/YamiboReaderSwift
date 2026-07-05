@@ -34,7 +34,6 @@ Sources/YamiboReaderUI/Features/MangaReaderNew/
   Chrome/
   Directory/
   Settings/
-  WebFallback/
 ```
 
 `MangaReaderNew` is a temporary parallel rewrite workspace. It is not a production feature route during phase 1.
@@ -53,7 +52,7 @@ Phase 2 changes the refactor policy from behavior-preserving seam extraction aro
 - App-level manga route/context contracts remain source code, because Favorites, resume route, and app presentation use them outside the legacy reader implementation.
 - Phase 2 should deliver a compiling vertical skeleton for the new reader, not complete continuous reading parity.
 - Legacy manga reader tests should move to `docs/reference/manga-reader-legacy/Tests/`; new tests should cover the phase 2 route surface and retained app-level route/context contracts.
-- Phase 2 retains Web route types such as `MangaWebContext`, but does not implement WebKit fallback, hidden probing, JavaScript extraction, or automatic return-to-native behavior.
+- Manga-specific Web route types and fallback views have been removed from the production reader. Forum/web routing belongs to caller-owned forum navigation, not to the manga reader.
 - `MangaReaderSettings` remains a persisted settings contract during phase 2, but it is not the internal state model for the new reader UI.
 - Manga progress and resume contracts remain source code, but the phase 2 reader skeleton should not write progress until real **Manga Reading Position** updates exist.
 - Phase 2 Data seams should expose repository operations, not raw HTML or full reader workflows. HTML parsing details stay hidden behind repositories.
@@ -65,7 +64,7 @@ Phase 2 changes the refactor policy from behavior-preserving seam extraction aro
 - Phase 2 should rewrite only a minimal **Manga Chapter Window** skeleton that can hold documents, expose page projections, and resolve/clamp a **Manga Reading Position**. Adjacent insertion, trimming, directory refresh, and continuous-reading behavior belong to later phases.
 - The phase 2 SwiftUI reader was scoped as a routeable presentation surface only. It was not expected to perform real network loading, progress writes, WebKit fallback, image caching, or continuous-reading recovery.
 - Existing manga entry points should route to the phase 2 route surface rather than disabling manga opening. That route surface keeps the public `MangaReaderView(context:appModel:)` entry shape so app routing can stay narrow.
-- During phase 2, `YamiboAppModel.openManga` should route directly to the native skeleton and should not invoke legacy probing or automatically fall back to Web.
+- During phase 2, `YamiboAppModel.presentMangaReader` should route directly to the native skeleton and should not invoke legacy probing or automatically fall back to Web.
 - Legacy probe support types and behavior, including `MangaProbePayload`, `MangaProbeOutcome`, and `MangaProbeDecision`, should move to reference with the old probe implementation. Phase 2 keeps Web route context only as an app-level route contract.
 - `YamiboThreadRouteResolver` remains source code because it classifies Yamibo threads; callers decide whether a manga target opens Manga Detail, native manga reading, or another app-level route rather than relying on legacy manga reader code.
 
@@ -124,19 +123,6 @@ Target examples:
 
 The future model should publish one core `MangaReaderPresentation` snapshot plus minimal UI-only transient state, rather than many independently synchronized content fields.
 
-### UI WebFallback
-
-UI WebFallback owns WebKit-specific adapters and visible fallback views.
-
-Target examples:
-
-- `MangaWebFallbackView`
-- `MangaProbeService`
-- WebKit JavaScript extraction and hidden probe web view handling.
-- A future `WebKitMangaProbeAdapter`.
-
-Core may own probe decisions and policy, but it must not depend on `WKWebView`.
-
 ## Specific Boundary Decisions
 
 - **Manga Chapter Document** must not carry raw HTML. Chapter HTML parsing belongs behind repository boundaries.
@@ -182,7 +168,7 @@ Phase 1 identified the following useful characterization coverage. Under the pha
 - **Manga Directory** initialization from tag, same-page links, and pending search cases.
 - **Manga Directory** update through tag success, tag empty to search fallback, forced search, and search cooldown.
 - **Manga Chapter Window** adjacent insertion, non-adjacent reset, trimming, and **Manga Reading Position** resolution.
-- Native/Web manga routing, including fallback web, return to native, suspended web context, and `waitingForNativeReturn`.
+- Native manga reader app presentation, without manga-owned web fallback routing.
 - Existing `MangaReaderModel` parity behavior until cutover.
 
 ## Consequences

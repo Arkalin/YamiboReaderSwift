@@ -205,7 +205,7 @@ private struct BlogReaderAuthorRow: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            YamiboRemoteImage(url: user.avatarURL) { image in
+            YamiboRemoteImage(request: user.avatarURL.map { YamiboImageRequest(url: $0) }) { image in
                 image.resizable().scaledToFill()
             } placeholder: {
                 Image(systemName: "person.crop.circle")
@@ -401,7 +401,7 @@ private struct BlogReaderCommentRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .top, spacing: 10) {
-                YamiboRemoteImage(url: comment.author.avatarURL) { image in
+                YamiboRemoteImage(request: comment.author.avatarURL.map { YamiboImageRequest(url: $0) }) { image in
                     image.resizable().scaledToFill()
                 } placeholder: {
                     Image(systemName: "person.crop.circle")

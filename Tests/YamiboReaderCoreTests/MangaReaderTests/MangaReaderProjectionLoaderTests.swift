@@ -220,7 +220,7 @@ struct MangaReaderTestsReaderProjectionLoader {
                 "https://img.example.com/offline-705-2.jpg",
             ]
         )
-        try await fixtures.offlineCacheStore.saveMembership(MangaOfflineCacheMembership(
+        try await fixtures.offlineCacheStore.saveMangaOfflineCacheMembership(MangaOfflineCacheMembership(
             ownerName: "离线漫画",
             tid: "705",
             chapterTitle: "离线章节 第5话",
@@ -261,7 +261,7 @@ struct MangaReaderTestsReaderProjectionLoader {
             title: "预热章节 第6话 - 中文百合漫画区 - 百合会",
             imageURLs: ["https://img.example.com/offline-706.jpg"]
         )
-        try await fixtures.offlineCacheStore.saveMembership(MangaOfflineCacheMembership(
+        try await fixtures.offlineCacheStore.saveMangaOfflineCacheMembership(MangaOfflineCacheMembership(
             ownerName: "离线漫画",
             tid: "706",
             chapterTitle: "预热章节 第6话",
@@ -305,7 +305,7 @@ struct MangaReaderTestsReaderProjectionLoader {
             title: "重建章节 第7话 - 中文百合漫画区 - 百合会",
             imageURLs: ["https://img.example.com/offline-707.jpg"]
         )
-        try await fixtures.offlineCacheStore.saveMembership(MangaOfflineCacheMembership(
+        try await fixtures.offlineCacheStore.saveMangaOfflineCacheMembership(MangaOfflineCacheMembership(
             ownerName: "离线漫画",
             tid: "707",
             chapterTitle: "重建章节 第7话",
@@ -382,7 +382,7 @@ struct MangaReaderTestsReaderProjectionLoader {
             imageURLs: ["https://img.example.com/offline-709.jpg"]
         )
         sourcePage.pageNavigation = ForumPageNavigation(currentPage: 2, totalPages: 2)
-        try await fixtures.offlineCacheStore.saveMembership(MangaOfflineCacheMembership(
+        try await fixtures.offlineCacheStore.saveMangaOfflineCacheMembership(MangaOfflineCacheMembership(
             ownerName: "离线漫画",
             tid: "709",
             chapterTitle: "第二页 第9话",
@@ -419,7 +419,7 @@ struct MangaReaderTestsReaderProjectionLoader {
             title: "离线可读 第10话 - 中文百合漫画区 - 百合会",
             imageURLs: ["https://img.example.com/offline-710.jpg"]
         )
-        try await fixtures.offlineCacheStore.saveMembership(MangaOfflineCacheMembership(
+        try await fixtures.offlineCacheStore.saveMangaOfflineCacheMembership(MangaOfflineCacheMembership(
             ownerName: "离线漫画",
             tid: "710",
             chapterTitle: "离线可读 第10话",
@@ -454,7 +454,7 @@ struct MangaReaderTestsReaderProjectionLoader {
             title: "强刷离线 第11话 - 中文百合漫画区 - 百合会",
             imageURLs: ["https://img.example.com/offline-711.jpg"]
         )
-        try await fixtures.offlineCacheStore.saveMembership(MangaOfflineCacheMembership(
+        try await fixtures.offlineCacheStore.saveMangaOfflineCacheMembership(MangaOfflineCacheMembership(
             ownerName: "离线漫画",
             tid: "711",
             chapterTitle: "强刷离线 第11话",

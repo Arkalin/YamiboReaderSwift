@@ -9,7 +9,7 @@ import Testing
       <div class="t_f" id="postmessage_100">第一章<br>正文</div>
     </body></html>
     """
-    let request = ReaderPageRequest(
+    let request = NovelPageRequest(
         threadID: "42",
         view: 3,
         authorID: "7"
@@ -18,8 +18,8 @@ import Testing
     let document = try chapterCommentsNovelProjection(from: html, request: request)
     let pagination = try NovelTextLayout.layout(
         document: document,
-        settings: ReaderAppearanceSettings(),
-        layout: ReaderContainerLayout(width: 390, height: 844)
+        settings: NovelReaderAppearanceSettings(),
+        layout: NovelReaderLayout(width: 390, height: 844)
     )
 
     #expect(pagination.viewportIndex.surfaces.first?.chapterCommentTarget?.ownerPostID == "100")
@@ -37,7 +37,7 @@ import Testing
       </div>
     </body></html>
     """
-    let request = ReaderPageRequest(
+    let request = NovelPageRequest(
         threadID: "557752",
         view: 1,
         authorID: "595655"
@@ -46,8 +46,8 @@ import Testing
     let document = try chapterCommentsNovelProjection(from: html, request: request)
     let pagination = try NovelTextLayout.layout(
         document: document,
-        settings: ReaderAppearanceSettings(),
-        layout: ReaderContainerLayout(width: 390, height: 844)
+        settings: NovelReaderAppearanceSettings(),
+        layout: NovelReaderLayout(width: 390, height: 844)
     )
 
     #expect(document.segments.count == 1)
@@ -63,7 +63,7 @@ import Testing
       </div>
     </body></html>
     """
-    let request = ReaderPageRequest(
+    let request = NovelPageRequest(
         threadID: "557752",
         view: 1,
         authorID: "595655"
@@ -72,8 +72,8 @@ import Testing
     let document = try chapterCommentsNovelProjection(from: html, request: request)
     let pagination = try NovelTextLayout.layout(
         document: document,
-        settings: ReaderAppearanceSettings(),
-        layout: ReaderContainerLayout(width: 390, height: 844)
+        settings: NovelReaderAppearanceSettings(),
+        layout: NovelReaderLayout(width: 390, height: 844)
     )
 
     #expect(pagination.viewportIndex.surfaces.first?.chapterCommentTarget?.ownerPostID == "41257246")
@@ -132,7 +132,7 @@ import Testing
 
 private func chapterCommentsNovelProjection(
     from html: String,
-    request: ReaderPageRequest
+    request: NovelPageRequest
 ) throws -> NovelReaderProjection {
     let page = try ForumThreadPageHTMLParser.parsePage(
         from: html,

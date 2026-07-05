@@ -26,12 +26,12 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
     public let favoriteUpdateStore: FavoriteUpdateStore
     public let readingProgressStore: ReadingProgressStore
     public let contentCoverStore: ContentCoverStore
-    public let readerCacheStore: NovelReaderProjectionStore
+    public let novelReaderCacheStore: NovelReaderProjectionStore
     public let favoriteBackgroundImageStore: FavoriteBackgroundImageStore
     public let mangaDirectoryStore: any MangaDirectoryPersisting & MangaDirectoryStorageReporting & MangaDirectoryClearing
     public let mangaDirectorySearchCooldownState: MangaDirectorySearchCooldownState
     public let mangaReaderProjectionStore: any MangaReaderProjectionPersisting & MangaReaderProjectionStorageReporting
-    public let offlineCacheStore: any OfflineCacheStoring
+    public let offlineCacheStore: any OfflineCacheStoreCore & MangaOfflineCacheStoring & NovelOfflineCacheStoring & NovelOfflineImageDataProviding
     public let forumCacheStore: ForumCacheStore
     public let ordinaryImageCache: any YamiboOrdinaryImageCacheClearing
     public let offlineCacheBackgroundDownloadTransport: OfflineCacheBackgroundDownloadTransport
@@ -53,12 +53,12 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
         favoriteUpdateStore: FavoriteUpdateStore = FavoriteUpdateStore(),
         readingProgressStore: ReadingProgressStore? = nil,
         contentCoverStore: ContentCoverStore = ContentCoverStore(),
-        readerCacheStore: NovelReaderProjectionStore? = nil,
+        novelReaderCacheStore: NovelReaderProjectionStore? = nil,
         favoriteBackgroundImageStore: FavoriteBackgroundImageStore? = nil,
         mangaDirectoryStore: (any MangaDirectoryPersisting & MangaDirectoryStorageReporting & MangaDirectoryClearing)? = nil,
         mangaDirectorySearchCooldownState: MangaDirectorySearchCooldownState = MangaDirectorySearchCooldownState(),
         mangaReaderProjectionStore: (any MangaReaderProjectionPersisting & MangaReaderProjectionStorageReporting)? = nil,
-        offlineCacheStore: (any OfflineCacheStoring)? = nil,
+        offlineCacheStore: (any OfflineCacheStoreCore & MangaOfflineCacheStoring & NovelOfflineCacheStoring & NovelOfflineImageDataProviding)? = nil,
         forumCacheStore: ForumCacheStore? = nil,
         ordinaryImageCache: any YamiboOrdinaryImageCacheClearing = YamiboImageDataPipeline.shared,
         offlineCacheBackgroundDownloadTransport: OfflineCacheBackgroundDownloadTransport = OfflineCacheBackgroundDownloadTransport(),
@@ -91,7 +91,7 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
         self.favoriteUpdateStore = favoriteUpdateStore
         self.readingProgressStore = readingProgressStore ?? ReadingProgressStore(databasePool: resolvedGRDBDatabasePool)
         self.contentCoverStore = contentCoverStore
-        self.readerCacheStore = readerCacheStore ?? NovelReaderProjectionStore(
+        self.novelReaderCacheStore = novelReaderCacheStore ?? NovelReaderProjectionStore(
             diskCacheStore: diskCacheStore
         )
         self.favoriteBackgroundImageStore = favoriteBackgroundImageStore ?? FavoriteBackgroundImageStore(
@@ -130,7 +130,7 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
         )
         return NovelReaderRepository(
             client: client,
-            cacheStore: readerCacheStore,
+            cacheStore: novelReaderCacheStore,
             forumCacheStore: forumCacheStore,
             offlineCacheStore: offlineCacheStore,
             novelOfflineAutoRefreshEnabled: { [settingsStore] in
@@ -290,7 +290,7 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
         )
     }
 
-    public func makeOfflineCacheStore() -> any OfflineCacheStoring {
+    public func makeOfflineCacheStore() -> any OfflineCacheStoreCore & MangaOfflineCacheStoring & NovelOfflineCacheStoring & NovelOfflineImageDataProviding {
         offlineCacheStore
     }
 
@@ -307,6 +307,8 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
         )
         let executor = OfflineCacheQueueExecutor(
             store: offlineCacheStore,
+            mangaCacheStore: offlineCacheStore,
+            novelCacheStore: offlineCacheStore,
             readerProjectionLoader: await makeMangaReaderProjectionLoader(),
             novelSourcePageLoader: await makeNovelReaderRepository(),
             imageAcquirer: OfflineCacheImageAcquirer(
@@ -367,7 +369,7 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
         try await localFavoriteLibraryStore.clearAll()
         try await readingProgressStore.clearAll()
         try await contentCoverStore.clearAll()
-        try await readerCacheStore.clearAll()
+        try await novelReaderCacheStore.clearAll()
         try await mangaDirectoryStore.clearAll()
         await mangaDirectorySearchCooldownState.clear()
         try await mangaReaderProjectionStore.clearAll()

@@ -128,7 +128,7 @@ private struct ForumCarouselImageButton: View {
         Button {
             onTap(item)
         } label: {
-            YamiboRemoteImage(url: item.imageURL) { image in
+            YamiboRemoteImage(request: YamiboImageRequest(url: item.imageURL)) { image in
                 image
                     .resizable()
                     .scaledToFill()
@@ -275,7 +275,7 @@ private struct ForumBoardIconView: View {
     let name: String
 
     var body: some View {
-        YamiboRemoteImage(url: iconURL) { image in
+        YamiboRemoteImage(request: iconURL.map { YamiboImageRequest(url: $0) }) { image in
             image
                 .resizable()
                 .scaledToFit()

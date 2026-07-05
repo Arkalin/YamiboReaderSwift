@@ -65,13 +65,13 @@ private struct ForumThreadReaderRepositoryTests {
     }
 
     let loaded = try await repository.fetchThreadPage(
-        context: ThreadReaderLaunchContext(thread: thread, title: "上下文标题"),
+        context: ThreadNovelLaunchContext(thread: thread, title: "上下文标题"),
         page: 2
     )
 
     #expect(loaded.title == "普通缓存页")
     #expect(await repository.cachedThreadPage(
-        context: ThreadReaderLaunchContext(thread: thread, title: "上下文标题"),
+        context: ThreadNovelLaunchContext(thread: thread, title: "上下文标题"),
         page: 2
     )?.title == "普通缓存页")
     #expect(await repository.cachedThreadPage(thread: thread, title: "上下文标题", authorID: nil, page: 2)?.title == "普通缓存页")

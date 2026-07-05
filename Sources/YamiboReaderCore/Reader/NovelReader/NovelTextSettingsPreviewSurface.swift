@@ -9,11 +9,11 @@ package final class NovelTextSettingsPreviewSurface {
 
     package init(
         text: String,
-        settings: ReaderAppearanceSettings,
-        baseFontSize: Double = ReaderAttributedTextFactory.defaultBaseFontSize,
+        settings: NovelReaderAppearanceSettings,
+        baseFontSize: Double = NovelAttributedTextFactory.defaultBaseFontSize,
         textColor: ReaderPlatformColor? = nil
     ) {
-        attributedText = ReaderAttributedTextFactory.makeAttributedText(
+        attributedText = NovelAttributedTextFactory.makeAttributedText(
             text: text,
             chapterTitle: nil,
             startsAtParagraphBoundary: true,

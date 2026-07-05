@@ -4,14 +4,14 @@ import Foundation
 
 typealias NovelTextViewportSurfaceLayout = @Sendable (
     _ viewportContext: NovelTextViewportContext,
-    _ settings: ReaderAppearanceSettings,
-    _ layout: ReaderContainerLayout
+    _ settings: NovelReaderAppearanceSettings,
+    _ layout: NovelReaderLayout
 ) -> [NovelTextViewportDocumentSurfaceRange]
 
 struct NovelTextLayoutPreparedInput: Sendable {
     let document: NovelReaderProjection
-    let settings: ReaderAppearanceSettings
-    let layout: ReaderContainerLayout
+    let settings: NovelReaderAppearanceSettings
+    let layout: NovelReaderLayout
     let annotatedSegments: [NovelAnnotatedSegment]
     let viewportContextSeed: NovelTextViewportContext
 }
@@ -65,8 +65,8 @@ public enum NovelTextLayoutFailure: LocalizedError, Equatable, Sendable {
 public enum NovelTextLayout {
     static func prepareInput(
         document: NovelReaderProjection,
-        settings: ReaderAppearanceSettings,
-        layout: ReaderContainerLayout
+        settings: NovelReaderAppearanceSettings,
+        layout: NovelReaderLayout
     ) throws -> NovelTextLayoutPreparedInput {
         let annotatedSegments = annotatedSegments(from: document, settings: settings)
         guard annotatedSegments.contains(where: { annotatedSegment in
@@ -123,16 +123,16 @@ public enum NovelTextLayout {
 
     package static func layout(
         document: NovelReaderProjection,
-        settings: ReaderAppearanceSettings,
-        layout: ReaderContainerLayout
+        settings: NovelReaderAppearanceSettings,
+        layout: NovelReaderLayout
     ) throws -> NovelTextLayoutResult {
         try standaloneRuntimeLayout(document: document, settings: settings, layout: layout)
     }
 
     private static func standaloneRuntimeLayout(
         document: NovelReaderProjection,
-        settings: ReaderAppearanceSettings,
-        layout: ReaderContainerLayout
+        settings: NovelReaderAppearanceSettings,
+        layout: NovelReaderLayout
     ) throws -> NovelTextLayoutResult {
         let operation: () throws -> NovelTextLayoutResult = {
             try MainActor.assumeIsolated {
@@ -155,7 +155,7 @@ public enum NovelTextLayout {
 
     static func viewportSample(
         displayOffset: Int,
-        ranges: [ReaderRenderedTextRange],
+        ranges: [NovelRenderedTextRange],
         document: NovelReaderProjection,
         surfaceOrdinal: Int
     ) -> NovelTextViewportSample? {
@@ -174,7 +174,7 @@ public enum NovelTextLayout {
         for textSegmentIdentity: NovelTextSegmentIdentity,
         displayedTextOffset: Int,
         in document: NovelReaderProjection,
-        ranges: [ReaderRenderedTextRange]
+        ranges: [NovelRenderedTextRange]
     ) -> Int? {
         NovelTextViewportIndexSurface(
             surfaceOrdinal: 0,
@@ -193,8 +193,8 @@ public enum NovelTextLayout {
 
     static func layout(
         document: NovelReaderProjection,
-        settings: ReaderAppearanceSettings,
-        layout: ReaderContainerLayout,
+        settings: NovelReaderAppearanceSettings,
+        layout: NovelReaderLayout,
         viewportSurfaceLayout: NovelTextViewportSurfaceLayout
     ) throws -> NovelTextLayoutResult {
         let preparedInput = try prepareInput(
@@ -224,10 +224,10 @@ public enum NovelTextLayout {
     private static func render(
         annotatedSegments: [NovelAnnotatedSegment],
         document: NovelReaderProjection,
-        settings: ReaderAppearanceSettings,
-        layout: ReaderContainerLayout,
+        settings: NovelReaderAppearanceSettings,
+        layout: NovelReaderLayout,
         viewportContextSeed: NovelTextViewportContext,
-        viewportSurfaceLayout: (NovelTextViewportContext, ReaderAppearanceSettings, ReaderContainerLayout) throws -> [NovelTextViewportDocumentSurfaceRange]
+        viewportSurfaceLayout: (NovelTextViewportContext, NovelReaderAppearanceSettings, NovelReaderLayout) throws -> [NovelTextViewportDocumentSurfaceRange]
     ) throws -> NovelTextLayoutResult {
         var indexSurfaces: [NovelTextViewportIndexSurface] = []
         var chapters: [NovelTextViewportIndexChapter] = []
@@ -406,8 +406,8 @@ public enum NovelTextLayout {
     private static func fingerprints(
         annotatedSegments: [NovelAnnotatedSegment],
         viewportDocument: NovelTextViewportDocument,
-        settings: ReaderAppearanceSettings,
-        layout: ReaderContainerLayout
+        settings: NovelReaderAppearanceSettings,
+        layout: NovelReaderLayout
     ) -> NovelTextLayoutFingerprints {
         let semanticPayload = annotatedSegments.map { segment in
             let inlineStyles = (segment.semantics?.inlineTextStyles ?? []).map { inlineStyle in
@@ -466,7 +466,7 @@ public enum NovelTextLayout {
 
     private static func layoutMetrics(
         viewportIndex: NovelTextViewportIndex,
-        layout: ReaderContainerLayout
+        layout: NovelReaderLayout
     ) -> NovelTextViewportLayoutMetrics {
         let surfaceMetrics = Dictionary(
             uniqueKeysWithValues: viewportIndex.surfaces.map { page in
@@ -500,7 +500,7 @@ public enum NovelTextLayout {
         return nil
     }
 
-    private static func frozenExternalBlockFrame(layout: ReaderContainerLayout) -> NovelTextViewportExternalBlockFrame {
+    private static func frozenExternalBlockFrame(layout: NovelReaderLayout) -> NovelTextViewportExternalBlockFrame {
         let contentWidth = max(layout.readableFrame.width, 1)
         let height = externalBlockPresentationHeight(layout: layout)
         return NovelTextViewportExternalBlockFrame(
@@ -511,7 +511,7 @@ public enum NovelTextLayout {
         )
     }
 
-    private static func externalBlockPresentationHeight(layout: ReaderContainerLayout) -> CGFloat {
+    private static func externalBlockPresentationHeight(layout: NovelReaderLayout) -> CGFloat {
         let readableHeight = max(layout.readableFrame.height, 160)
         guard layout.readingMode == .vertical else {
             let contentWidth = max(layout.readableFrame.width, 1)
@@ -523,14 +523,14 @@ public enum NovelTextLayout {
     private static func makeViewportContext(
         annotatedSegments: [NovelAnnotatedSegment],
         document: NovelReaderProjection,
-        settings: ReaderAppearanceSettings,
-        layout: ReaderContainerLayout
+        settings: NovelReaderAppearanceSettings,
+        layout: NovelReaderLayout
     ) -> NovelTextViewportContext {
         var composedText = ""
-        var textRangesBySegment: [Int: ReaderRenderedTextRange] = [:]
-        var insertedSeparatorRanges: [ReaderRenderedTextRange] = []
-        var inlineTextStylesBySegment: [Int: [ReaderInlineTextStyleRange]] = [:]
-        var blockTextStyles: [ReaderBlockTextStyleRange] = []
+        var textRangesBySegment: [Int: NovelRenderedTextRange] = [:]
+        var insertedSeparatorRanges: [NovelRenderedTextRange] = []
+        var inlineTextStylesBySegment: [Int: [NovelInlineTextStyleRange]] = [:]
+        var blockTextStyles: [NovelBlockTextStyleRange] = []
         var externalBlocks: [NovelTextViewportExternalBlock] = []
         var lastTextSegmentIndex: Int?
 
@@ -542,7 +542,7 @@ public enum NovelTextLayout {
                     composedText.append("\n\n")
                     if let lastTextSegmentIndex {
                         insertedSeparatorRanges.append(
-                            ReaderRenderedTextRange(
+                            NovelRenderedTextRange(
                                 segmentIndex: lastTextSegmentIndex,
                                 startOffset: separatorStart,
                                 endOffset: composedText.count
@@ -552,7 +552,7 @@ public enum NovelTextLayout {
                 }
                 let startOffset = composedText.count
                 composedText.append(text)
-                textRangesBySegment[annotatedSegment.index] = ReaderRenderedTextRange(
+                textRangesBySegment[annotatedSegment.index] = NovelRenderedTextRange(
                     segmentIndex: annotatedSegment.index,
                     startOffset: startOffset,
                     endOffset: composedText.count
@@ -567,9 +567,9 @@ public enum NovelTextLayout {
                               blockStyle.range.upperBound <= text.count else {
                             return nil
                         }
-                        return ReaderBlockTextStyleRange(
+                        return NovelBlockTextStyleRange(
                             style: blockStyle.style,
-                            range: ReaderCharacterRange(
+                            range: NovelCharacterRange(
                                 location: startOffset + blockStyle.range.location,
                                 length: blockStyle.range.length
                             )
@@ -630,20 +630,20 @@ public enum NovelTextLayout {
     private static func segmentRanges(
         for surfaceRange: NovelTextViewportDocumentSurfaceRange,
         viewportDocument: NovelTextViewportDocument
-    ) -> [ReaderRenderedTextRange] {
+    ) -> [NovelRenderedTextRange] {
         viewportDocument.surfaceRanges(for: surfaceRange)
     }
 
     private static func splitTextRanges(
-        _ ranges: [ReaderRenderedTextRange],
+        _ ranges: [NovelRenderedTextRange],
         aroundImageSegmentIndexes imageSegmentIndexes: Set<Int>,
         annotatedSegmentByIndex: [Int: NovelAnnotatedSegment],
         document: NovelReaderProjection
-    ) -> [[ReaderRenderedTextRange]] {
+    ) -> [[NovelRenderedTextRange]] {
         guard !ranges.isEmpty else { return [] }
 
-        var groups: [[ReaderRenderedTextRange]] = []
-        var currentGroup: [ReaderRenderedTextRange] = []
+        var groups: [[NovelRenderedTextRange]] = []
+        var currentGroup: [NovelRenderedTextRange] = []
         var previousSegmentIndex: Int?
 
         for range in ranges {
@@ -689,7 +689,7 @@ public enum NovelTextLayout {
     }
 
     private static func text(
-        for range: ReaderRenderedTextRange,
+        for range: NovelRenderedTextRange,
         annotatedTextBySegment: [Int: String]
     ) -> String? {
         guard let text = annotatedTextBySegment[range.segmentIndex] else { return nil }
@@ -712,7 +712,7 @@ public enum NovelTextLayout {
 
     private static func annotatedSegments(
         from document: NovelReaderProjection,
-        settings: ReaderAppearanceSettings
+        settings: NovelReaderAppearanceSettings
     ) -> [NovelAnnotatedSegment] {
         var results: [NovelAnnotatedSegment] = []
         var currentChapterIdentity: NovelChapterIdentity?
@@ -785,10 +785,10 @@ public enum NovelTextLayout {
     }
 
     private static func transformedSegment(
-        from segment: ReaderSegment,
-        semantics: ReaderSegmentSemantics?,
-        settings: ReaderAppearanceSettings
-    ) -> (segment: ReaderSegment, semantics: ReaderSegmentSemantics?)? {
+        from segment: NovelReaderSegment,
+        semantics: NovelReaderSegmentSemantics?,
+        settings: NovelReaderAppearanceSettings
+    ) -> (segment: NovelReaderSegment, semantics: NovelReaderSegmentSemantics?)? {
         switch segment {
         case let .text(text, chapterTitle):
             let transformed = transformTextAndStyles(
@@ -808,24 +808,24 @@ public enum NovelTextLayout {
 
     private static func transformTextAndStyles(
         text: String,
-        inlineTextStyles: [ReaderInlineTextStyleRange],
-        blockTextStyles: [ReaderBlockTextStyleRange],
+        inlineTextStyles: [NovelInlineTextStyleRange],
+        blockTextStyles: [NovelBlockTextStyleRange],
         mode: ReaderTranslationMode
     ) -> (
         text: String,
-        inlineTextStyles: [ReaderInlineTextStyleRange],
-        blockTextStyles: [ReaderBlockTextStyleRange]
+        inlineTextStyles: [NovelInlineTextStyleRange],
+        blockTextStyles: [NovelBlockTextStyleRange]
     ) {
         guard mode != .none else {
             return (
-                ReaderTextTransformer.transform(text, mode: mode),
+                NovelTextTransformer.transform(text, mode: mode),
                 inlineTextStyles,
                 blockTextStyles
             )
         }
 
         guard !inlineTextStyles.isEmpty || !blockTextStyles.isEmpty else {
-            return (ReaderTextTransformer.transform(text, mode: mode), inlineTextStyles, blockTextStyles)
+            return (NovelTextTransformer.transform(text, mode: mode), inlineTextStyles, blockTextStyles)
         }
 
         let boundaries = styleBoundaries(
@@ -840,7 +840,7 @@ public enum NovelTextLayout {
             let start = boundaries[index]
             let end = boundaries[index + 1]
             transformedOffsets[start] = output.count
-            output += ReaderTextTransformer.transform(
+            output += NovelTextTransformer.transform(
                 substring(in: text, range: start ..< end),
                 mode: mode
             )
@@ -856,8 +856,8 @@ public enum NovelTextLayout {
 
     private static func styleBoundaries(
         textCount: Int,
-        inlineTextStyles: [ReaderInlineTextStyleRange],
-        blockTextStyles: [ReaderBlockTextStyleRange]
+        inlineTextStyles: [NovelInlineTextStyleRange],
+        blockTextStyles: [NovelBlockTextStyleRange]
     ) -> [Int] {
         var boundaries = Set([0, textCount])
         for range in inlineTextStyles.map(\.range) + blockTextStyles.map(\.range) {
@@ -870,17 +870,17 @@ public enum NovelTextLayout {
     }
 
     private static func transformedInlineStyle(
-        _ style: ReaderInlineTextStyleRange,
+        _ style: NovelInlineTextStyleRange,
         transformedOffsets: [Int: Int]
-    ) -> ReaderInlineTextStyleRange? {
+    ) -> NovelInlineTextStyleRange? {
         guard let transformedStart = transformedOffsets[style.range.location],
               let transformedEnd = transformedOffsets[style.range.upperBound],
               transformedEnd > transformedStart else {
             return nil
         }
-        return ReaderInlineTextStyleRange(
+        return NovelInlineTextStyleRange(
             style: style.style,
-            range: ReaderCharacterRange(
+            range: NovelCharacterRange(
                 location: transformedStart,
                 length: transformedEnd - transformedStart
             )
@@ -888,17 +888,17 @@ public enum NovelTextLayout {
     }
 
     private static func transformedBlockStyle(
-        _ style: ReaderBlockTextStyleRange,
+        _ style: NovelBlockTextStyleRange,
         transformedOffsets: [Int: Int]
-    ) -> ReaderBlockTextStyleRange? {
+    ) -> NovelBlockTextStyleRange? {
         guard let transformedStart = transformedOffsets[style.range.location],
               let transformedEnd = transformedOffsets[style.range.upperBound],
               transformedEnd > transformedStart else {
             return nil
         }
-        return ReaderBlockTextStyleRange(
+        return NovelBlockTextStyleRange(
             style: style.style,
-            range: ReaderCharacterRange(
+            range: NovelCharacterRange(
                 location: transformedStart,
                 length: transformedEnd - transformedStart
             )
@@ -931,8 +931,8 @@ public enum NovelTextLayout {
     static func textFits(
         _ text: String,
         chapterTitle: String?,
-        settings: ReaderAppearanceSettings,
-        layout: ReaderContainerLayout
+        settings: NovelReaderAppearanceSettings,
+        layout: NovelReaderLayout
     ) -> Bool {
 #if canImport(UIKit)
         NovelTextPreviewLayout.textFits(
@@ -970,9 +970,9 @@ package struct NovelTextViewportDocumentSurfaceRange: Hashable, Sendable {
 
 struct NovelAnnotatedSegment: Sendable {
     let index: Int
-    let segment: ReaderSegment
-    let semantics: ReaderSegmentSemantics?
-    let source: ReaderSegmentSource?
+    let segment: NovelReaderSegment
+    let semantics: NovelReaderSegmentSemantics?
+    let source: NovelReaderSegmentSource?
     let chapterOrdinal: Int?
     let chapterTitle: String?
 
@@ -989,6 +989,6 @@ private struct NovelViewportSurfaceDraft {
 }
 
 private enum NovelViewportSurfaceDraftKind {
-    case text([ReaderRenderedTextRange], frozenGeometry: NovelTextViewportFrozenGeometry?)
+    case text([NovelRenderedTextRange], frozenGeometry: NovelTextViewportFrozenGeometry?)
     case image(url: URL, chapterTitle: String?, externalBlock: NovelTextViewportExternalBlock)
 }

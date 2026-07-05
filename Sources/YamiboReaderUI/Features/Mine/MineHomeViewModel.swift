@@ -29,7 +29,7 @@ final class MineHomeViewModel {
     var isCheckingIn = false
     var hasCheckedInToday = false
     var checkInResultMessage: String?
-    var offlineCacheQueueRunState = MangaOfflineCacheQueueRunState.paused
+    var offlineCacheQueueRunState = OfflineCacheQueueRunState.paused
     var offlineCacheQueueGroups: [MineOfflineCacheQueueOwnerGroup] = []
     var offlineCacheQueueEntryCount = 0
     var isLoadingOfflineCacheQueue = false

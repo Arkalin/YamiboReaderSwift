@@ -172,6 +172,10 @@ extension OfflineCacheStore {
         }
     }
 
+    public func finishNovelOfflineCacheWork(id: OfflineCacheWorkID) async throws {
+        try await finishOfflineCacheWork(id: id)
+    }
+
     public func markOfflineCacheWorkFailed(id: OfflineCacheWorkID, message: String?) async throws {
         try await recoverQueueStateAfterRestart()
         do {
@@ -220,13 +224,34 @@ extension OfflineCacheStore {
         }
     }
 
-    public func cancelOfflineCacheGroup(_ id: OfflineCacheGroupID) async throws {
-        switch id.readerKind {
-        case .manga:
-            try await cancelOfflineCacheWorks(forOwnerName: id.ownerKey)
-        case .novel:
-            try await cancelOfflineCacheWorks(readerKind: id.readerKind, ownerKey: id.ownerKey)
+    public func cancelOfflineCacheEntry(_ id: OfflineCacheEntryID) async throws {
+        try await recoverQueueStateAfterRestart()
+        do {
+            try await database.write { db in
+                guard let canceled = try Self.rawWork(readerKind: id.readerKind, ownerKey: id.ownerKey, entryKey: id.entryKey, in: db) else {
+                    return
+                }
+                try Self.deleteWork(
+                    readerKind: canceled.readerKind.rawValue,
+                    ownerName: canceled.ownerKey,
+                    tid: canceled.entryKey,
+                    in: db
+                )
+                try Self.removeUnreferencedImages(
+                    candidateImageURLs: canceled.targetImageURLs + canceled.completedImageURLs,
+                    fileManager: fileManager,
+                    imagesDirectory: imagesDirectory,
+                    in: db
+                )
+            }
+            notifyOfflineCacheDidChange()
+        } catch {
+            throw offlineCachePersistenceError(from: error)
         }
+    }
+
+    public func cancelOfflineCacheGroup(_ id: OfflineCacheGroupID) async throws {
+        try await cancelOfflineCacheWorks(readerKind: id.readerKind, ownerKey: id.ownerKey)
     }
 
     private func cancelOfflineCacheWorks(readerKind: OfflineCacheReaderKind, ownerKey: String) async throws {

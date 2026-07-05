@@ -1,13 +1,13 @@
 import Foundation
 
 public enum ReaderResumeRoute: Codable, Hashable, Sendable {
-    case novel(ReaderLaunchContext)
-    case manga(MangaPresentationRoute)
+    case novel(NovelLaunchContext)
+    case manga(MangaLaunchContext)
 
     private enum CodingKeys: String, CodingKey {
         case kind
         case novelContext
-        case mangaRoute
+        case mangaContext
     }
 
     private enum Kind: String, Codable {
@@ -21,9 +21,9 @@ public enum ReaderResumeRoute: Codable, Hashable, Sendable {
         case let .novel(context):
             try container.encode(Kind.novel, forKey: .kind)
             try container.encode(context, forKey: .novelContext)
-        case let .manga(route):
+        case let .manga(context):
             try container.encode(Kind.manga, forKey: .kind)
-            try container.encode(route, forKey: .mangaRoute)
+            try container.encode(context, forKey: .mangaContext)
         }
     }
 
@@ -31,9 +31,9 @@ public enum ReaderResumeRoute: Codable, Hashable, Sendable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         switch try container.decode(Kind.self, forKey: .kind) {
         case .novel:
-            self = .novel(try container.decode(ReaderLaunchContext.self, forKey: .novelContext))
+            self = .novel(try container.decode(NovelLaunchContext.self, forKey: .novelContext))
         case .manga:
-            self = .manga(try container.decode(MangaPresentationRoute.self, forKey: .mangaRoute))
+            self = .manga(try container.decode(MangaLaunchContext.self, forKey: .mangaContext))
         }
     }
 }

@@ -9,13 +9,13 @@ struct ForumNovelDetailView: View {
     @State private var model: ForumNovelDetailViewModel
     @State private var copiedTextMessage: String?
 
-    let onChapterTap: (ReaderLaunchContext) -> Void
+    let onChapterTap: (NovelLaunchContext) -> Void
     let onUserTap: (String, String?) -> Void
     let onViewThread: () -> Void
 
     init(
         model: ForumNovelDetailViewModel,
-        onChapterTap: @escaping (ReaderLaunchContext) -> Void,
+        onChapterTap: @escaping (NovelLaunchContext) -> Void,
         onUserTap: @escaping (String, String?) -> Void,
         onViewThread: @escaping () -> Void
     ) {
@@ -447,13 +447,15 @@ private struct ForumNovelDetailHeader: View {
 
             if let coverURL = summary.coverURL {
                 YamiboRemoteImage(
-                    url: coverURL,
-                    refererURL: YamiboRoute.threadByID(
-                        tid: summary.threadID,
-                        page: 1,
-                        authorID: nil,
-                        reverse: false
-                    ).url
+                    request: YamiboImageRequest(
+                        url: coverURL,
+                        refererURL: YamiboRoute.threadByID(
+                            tid: summary.threadID,
+                            page: 1,
+                            authorID: nil,
+                            reverse: false
+                        ).url
+                    )
                 ) { image in
                     image
                         .resizable()

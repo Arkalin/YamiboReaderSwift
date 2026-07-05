@@ -240,7 +240,7 @@ enum ReaderPagedPageTurnCornerRadius {
     }
 }
 
-final class ReaderPagedViewportCollectionView: UICollectionView {
+final class ReaderPagedCollectionView: UICollectionView {
     var onLayoutSubviews: (() -> Void)?
 
     override func layoutSubviews() {
@@ -322,7 +322,7 @@ struct ReaderPagedScrollAnimationRequest: Equatable {
     }
 }
 
-struct ReaderPagedViewportPagingInputs: @unchecked Sendable {
+struct ReaderPagedPagingInputs: @unchecked Sendable {
     var itemCount: Int
     var selectionIndex: Int
     var pagedTurnStyle: ReaderPagedTurnStyle
@@ -340,7 +340,7 @@ struct ReaderPagedViewportPagingInputs: @unchecked Sendable {
 }
 
 @MainActor
-final class ReaderPagedViewportPagingDriver {
+final class ReaderPagedPagingDriver {
     private static let quickFadeDuration: TimeInterval = ReaderPagedQuickFadeTransition.duration
 
     let callbackScheduler = SwiftUIViewUpdateCallbackScheduler()
@@ -354,7 +354,7 @@ final class ReaderPagedViewportPagingDriver {
     func updateContentAndRequestSelectionScroll(
         in collectionView: UICollectionView,
         didChangeContentIdentity: Bool,
-        inputs: ReaderPagedViewportPagingInputs
+        inputs: ReaderPagedPagingInputs
     ) {
         let animationRequest = matchingScrollAnimationRequest(inputs: inputs)
         guard didChangeContentIdentity else {
@@ -381,7 +381,7 @@ final class ReaderPagedViewportPagingDriver {
     func reloadDataAndRequestSelectionScroll(
         in collectionView: UICollectionView,
         animated: Bool,
-        inputs: ReaderPagedViewportPagingInputs
+        inputs: ReaderPagedPagingInputs
     ) {
         pendingSelectionIndex = inputs.selectionIndex
         isReloadingDataForSelectionScroll = true
@@ -398,7 +398,7 @@ final class ReaderPagedViewportPagingDriver {
     func requestSelectionScroll(
         in collectionView: UICollectionView,
         animated: Bool,
-        inputs: ReaderPagedViewportPagingInputs,
+        inputs: ReaderPagedPagingInputs,
         onTransitionCompletion: (() -> Void)? = nil
     ) -> Bool {
         pendingSelectionIndex = inputs.selectionIndex
@@ -414,7 +414,7 @@ final class ReaderPagedViewportPagingDriver {
     func scrollToPendingSelectionIfPossible(
         in collectionView: UICollectionView,
         animated: Bool,
-        inputs: ReaderPagedViewportPagingInputs,
+        inputs: ReaderPagedPagingInputs,
         onTransitionCompletion: (() -> Void)? = nil
     ) -> Bool {
         guard let pendingSelectionIndex,
@@ -452,7 +452,7 @@ final class ReaderPagedViewportPagingDriver {
     func animateAdjacentSelection(
         for zone: ReaderPagedTapZone,
         in collectionView: UICollectionView,
-        inputs: ReaderPagedViewportPagingInputs
+        inputs: ReaderPagedPagingInputs
     ) -> Bool {
         let delta: Int
         switch zone {
@@ -477,14 +477,14 @@ final class ReaderPagedViewportPagingDriver {
         return scrollToPendingSelectionIfPossible(in: collectionView, animated: true, inputs: inputs)
     }
 
-    func updateGestureState(in collectionView: UICollectionView, inputs: ReaderPagedViewportPagingInputs) {
+    func updateGestureState(in collectionView: UICollectionView, inputs: ReaderPagedPagingInputs) {
         collectionView.panGestureRecognizer.isEnabled = inputs.pagedTurnStyle != .quickFade
         if inputs.pagedTurnStyle == .quickFade {
             resetPageTurnVisuals(in: collectionView, inputs: inputs)
         }
     }
 
-    func quickFadePanShouldBegin(_ recognizer: UIPanGestureRecognizer, inputs: ReaderPagedViewportPagingInputs) -> Bool {
+    func quickFadePanShouldBegin(_ recognizer: UIPanGestureRecognizer, inputs: ReaderPagedPagingInputs) -> Bool {
         guard inputs.pagedTurnStyle == .quickFade,
               inputs.itemCount > 0,
               let view = recognizer.view else {
@@ -494,7 +494,7 @@ final class ReaderPagedViewportPagingDriver {
         return abs(velocity.x) > abs(velocity.y)
     }
 
-    func handleQuickFadePan(_ recognizer: UIPanGestureRecognizer, inputs: ReaderPagedViewportPagingInputs) {
+    func handleQuickFadePan(_ recognizer: UIPanGestureRecognizer, inputs: ReaderPagedPagingInputs) {
         guard inputs.pagedTurnStyle == .quickFade,
               let collectionView = recognizer.view as? UICollectionView else {
             return
@@ -517,7 +517,7 @@ final class ReaderPagedViewportPagingDriver {
         }
     }
 
-    func scrollViewWillBeginDragging(_ scrollView: UIScrollView, inputs: ReaderPagedViewportPagingInputs) {
+    func scrollViewWillBeginDragging(_ scrollView: UIScrollView, inputs: ReaderPagedPagingInputs) {
         guard let collectionView = scrollView as? UICollectionView else { return }
         guard inputs.pagedTurnStyle != .quickFade else {
             resetPageTurnVisuals(in: collectionView, inputs: inputs)
@@ -526,7 +526,7 @@ final class ReaderPagedViewportPagingDriver {
         beginPageTurnVisuals(in: collectionView, inputs: inputs)
     }
 
-    func scrollViewDidScroll(_ scrollView: UIScrollView, inputs: ReaderPagedViewportPagingInputs) {
+    func scrollViewDidScroll(_ scrollView: UIScrollView, inputs: ReaderPagedPagingInputs) {
         guard let collectionView = scrollView as? UICollectionView else { return }
         guard inputs.pagedTurnStyle != .quickFade else {
             resetPageTurnVisuals(in: collectionView, inputs: inputs)
@@ -538,7 +538,7 @@ final class ReaderPagedViewportPagingDriver {
     func scrollViewDidEndDragging(
         _ scrollView: UIScrollView,
         willDecelerate decelerate: Bool,
-        inputs: ReaderPagedViewportPagingInputs
+        inputs: ReaderPagedPagingInputs
     ) {
         guard let collectionView = scrollView as? UICollectionView else { return }
         if publishBoundaryPageTurnIfPossible(from: collectionView.panGestureRecognizer, in: collectionView, inputs: inputs) {
@@ -551,7 +551,7 @@ final class ReaderPagedViewportPagingDriver {
         }
     }
 
-    func scrollViewDidEndDecelerating(_ scrollView: UIScrollView, inputs: ReaderPagedViewportPagingInputs) {
+    func scrollViewDidEndDecelerating(_ scrollView: UIScrollView, inputs: ReaderPagedPagingInputs) {
         updateSelection(from: scrollView, inputs: inputs)
         guard let collectionView = scrollView as? UICollectionView else { return }
         endPageTurnVisuals(in: collectionView, inputs: inputs)
@@ -561,7 +561,7 @@ final class ReaderPagedViewportPagingDriver {
     func publishBoundaryPageTurnIfPossible(
         from recognizer: UIPanGestureRecognizer,
         in view: UIView,
-        inputs: ReaderPagedViewportPagingInputs
+        inputs: ReaderPagedPagingInputs
     ) -> Bool {
         let translation = recognizer.translation(in: view)
         let velocity = recognizer.velocity(in: view)
@@ -580,7 +580,7 @@ final class ReaderPagedViewportPagingDriver {
         return true
     }
 
-    func scrollViewDidEndScrollingAnimation(_ scrollView: UIScrollView, inputs: ReaderPagedViewportPagingInputs) {
+    func scrollViewDidEndScrollingAnimation(_ scrollView: UIScrollView, inputs: ReaderPagedPagingInputs) {
         updateSelection(from: scrollView, inputs: inputs)
         guard let collectionView = scrollView as? UICollectionView else { return }
         endPageTurnVisuals(in: collectionView, inputs: inputs)
@@ -589,7 +589,7 @@ final class ReaderPagedViewportPagingDriver {
     private func schedulePendingSelectionScrollRetry(
         in collectionView: UICollectionView,
         animated: Bool,
-        inputs: ReaderPagedViewportPagingInputs
+        inputs: ReaderPagedPagingInputs
     ) {
         guard !isPendingSelectionScrollRetryScheduled else { return }
         isPendingSelectionScrollRetryScheduled = true
@@ -601,14 +601,14 @@ final class ReaderPagedViewportPagingDriver {
         }
     }
 
-    private func updateSelection(from scrollView: UIScrollView, inputs: ReaderPagedViewportPagingInputs) {
+    private func updateSelection(from scrollView: UIScrollView, inputs: ReaderPagedPagingInputs) {
         guard scrollView.bounds.width > 0 else { return }
         let item = Int((scrollView.contentOffset.x / scrollView.bounds.width).rounded())
         let clampedItem = min(max(item, 0), max(inputs.itemCount - 1, 0))
         publishSelectionIfNeeded(selectionIndex(forItemIndex: clampedItem, inputs: inputs), inputs: inputs)
     }
 
-    private func publishSelectionIfNeeded(_ selectionIndex: Int, inputs: ReaderPagedViewportPagingInputs) {
+    private func publishSelectionIfNeeded(_ selectionIndex: Int, inputs: ReaderPagedPagingInputs) {
         let clampedItem = min(max(selectionIndex, 0), max(inputs.itemCount - 1, 0))
         guard clampedItem != inputs.selectionIndex else { return }
         let onSelectionChange = inputs.onSelectionChange
@@ -623,7 +623,7 @@ final class ReaderPagedViewportPagingDriver {
         targetContentOffsetX: CGFloat,
         in collectionView: UICollectionView,
         animated: Bool,
-        inputs: ReaderPagedViewportPagingInputs,
+        inputs: ReaderPagedPagingInputs,
         onTransitionCompletion: (() -> Void)? = nil
     ) -> Bool {
         guard !animated || inputs.pagedTurnStyle != .quickFade || !isPerformingQuickFadeTransition else {
@@ -692,7 +692,7 @@ final class ReaderPagedViewportPagingDriver {
     private func horizontalPanDelta(
         for recognizer: UIPanGestureRecognizer,
         in collectionView: UICollectionView,
-        inputs: ReaderPagedViewportPagingInputs
+        inputs: ReaderPagedPagingInputs
     ) -> Int? {
         guard let physicalDelta = ReaderPagedBoundaryPageTurn.horizontalDelta(
             translation: recognizer.translation(in: collectionView),
@@ -707,7 +707,7 @@ final class ReaderPagedViewportPagingDriver {
         )
     }
 
-    private func publishBoundaryPageTurnIfPossible(_ delta: Int, inputs: ReaderPagedViewportPagingInputs) {
+    private func publishBoundaryPageTurnIfPossible(_ delta: Int, inputs: ReaderPagedPagingInputs) {
         guard inputs.canBoundaryPageTurn(delta) else { return }
         let onBoundaryPageTurn = inputs.onBoundaryPageTurn
         callbackScheduler.publish {
@@ -715,13 +715,13 @@ final class ReaderPagedViewportPagingDriver {
         }
     }
 
-    private func beginPageTurnVisuals(in collectionView: UICollectionView, inputs: ReaderPagedViewportPagingInputs) {
+    private func beginPageTurnVisuals(in collectionView: UICollectionView, inputs: ReaderPagedPagingInputs) {
         guard collectionView.bounds.width > 0 else { return }
         let currentIndex = Int((collectionView.contentOffset.x / collectionView.bounds.width).rounded())
         pageTurnRestingIndex = min(max(currentIndex, 0), max(inputs.itemCount - 1, 0))
     }
 
-    private func applyPageTurnVisuals(in collectionView: UICollectionView, inputs: ReaderPagedViewportPagingInputs) {
+    private func applyPageTurnVisuals(in collectionView: UICollectionView, inputs: ReaderPagedPagingInputs) {
         guard let metrics = ReaderPagedPageTurnPresentation.metrics(
             contentOffsetX: collectionView.contentOffset.x,
             pageWidth: collectionView.bounds.width,
@@ -758,32 +758,32 @@ final class ReaderPagedViewportPagingDriver {
         }
     }
 
-    private func endPageTurnVisuals(in collectionView: UICollectionView, inputs: ReaderPagedViewportPagingInputs) {
+    private func endPageTurnVisuals(in collectionView: UICollectionView, inputs: ReaderPagedPagingInputs) {
         pageTurnRestingIndex = nil
         resetPageTurnVisuals(in: collectionView, inputs: inputs)
     }
 
-    private func resetPageTurnVisuals(in collectionView: UICollectionView, inputs: ReaderPagedViewportPagingInputs) {
+    private func resetPageTurnVisuals(in collectionView: UICollectionView, inputs: ReaderPagedPagingInputs) {
         collectionView.backgroundColor = inputs.pageTurnRestingBackgroundColor(collectionView.traitCollection)
         for case let cell as ReaderPagedPageTurnCell in collectionView.visibleCells {
             cell.resetPageTurnVisuals()
         }
     }
 
-    private func itemIndex(for selectionIndex: Int, inputs: ReaderPagedViewportPagingInputs) -> Int {
+    private func itemIndex(for selectionIndex: Int, inputs: ReaderPagedPagingInputs) -> Int {
         min(max(inputs.itemIndexForSelectionIndex(selectionIndex), 0), max(inputs.itemCount - 1, 0))
     }
 
-    private func selectionIndex(forItemIndex itemIndex: Int, inputs: ReaderPagedViewportPagingInputs) -> Int {
+    private func selectionIndex(forItemIndex itemIndex: Int, inputs: ReaderPagedPagingInputs) -> Int {
         clampedSelectionIndex(inputs.selectionIndexForItemIndex(itemIndex), inputs: inputs)
     }
 
-    private func clampedSelectionIndex(_ selectionIndex: Int, inputs: ReaderPagedViewportPagingInputs) -> Int {
+    private func clampedSelectionIndex(_ selectionIndex: Int, inputs: ReaderPagedPagingInputs) -> Int {
         min(max(selectionIndex, 0), max(inputs.itemCount - 1, 0))
     }
 
     private func matchingScrollAnimationRequest(
-        inputs: ReaderPagedViewportPagingInputs
+        inputs: ReaderPagedPagingInputs
     ) -> ReaderPagedScrollAnimationRequest? {
         guard let request = inputs.scrollAnimationRequest,
               request.id != consumedScrollAnimationRequestID,
@@ -796,7 +796,7 @@ final class ReaderPagedViewportPagingDriver {
 
     private func consumeScrollAnimationRequest(
         _ request: ReaderPagedScrollAnimationRequest,
-        inputs: ReaderPagedViewportPagingInputs
+        inputs: ReaderPagedPagingInputs
     ) {
         consumedScrollAnimationRequestID = request.id
         let onScrollAnimationRequestConsumed = inputs.onScrollAnimationRequestConsumed

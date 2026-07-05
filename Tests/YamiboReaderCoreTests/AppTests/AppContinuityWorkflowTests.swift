@@ -13,14 +13,14 @@ import Testing
     let resumeRouteStore = try ReaderResumeRouteStore(testSuiteName: defaultsSuiteName, key: "resume")
     let threadID = "901"
     let staleRoute = ReaderResumeRoute.novel(
-        ReaderLaunchContext(
+        NovelLaunchContext(
             threadID: threadID,
             threadTitle: "旧标题",
             source: .resume,
             initialView: 1
         )
     )
-    let resumePoint = ReaderResumePoint(
+    let resumePoint = NovelResumePoint(
         view: 5,
         displayedTextOffset: 120,
         chapterOrdinal: 2,
@@ -59,7 +59,7 @@ import Testing
         reconcilesWithReadingProgress: true
     )
 
-    let expectedContext = ReaderLaunchContext(
+    let expectedContext = NovelLaunchContext(
         threadID: threadID,
         threadTitle: "远端小说",
         source: .resume,
@@ -72,20 +72,18 @@ import Testing
 }
 
 @MainActor
-@Test func appContinuityDoesNotRestoreOrphanMangaRouteWithoutReadingProgress() async throws {
+@Test func appContinuityDoesNotRestoreOrphanMangaContextWithoutReadingProgress() async throws {
     let defaultsSuiteName = YamiboTestDefaults.suiteName(prefix: "app-continuity-orphan-manga")
     let resumeRouteStore = try ReaderResumeRouteStore(testSuiteName: defaultsSuiteName, key: "resume")
     let originalURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=700&mobile=2"))
-    let route = MangaPresentationRoute.native(
-        MangaLaunchContext(
-            originalThreadID: "700",
-            chapterTID: "700",
-            displayTitle: "大家不可以忘記三之昔的一個貢獻",
-            source: .resume,
-            initialPage: 0
-        )
+    let context = MangaLaunchContext(
+        originalThreadID: "700",
+        chapterTID: "700",
+        displayTitle: "大家不可以忘記三之昔的一個貢獻",
+        source: .resume,
+        initialPage: 0
     )
-    try await resumeRouteStore.save(.manga(route))
+    try await resumeRouteStore.save(.manga(context))
     let workflow = AppContinuityWorkflow(
         appContext: YamiboAppContext(
             readerResumeRouteStore: resumeRouteStore
@@ -110,7 +108,7 @@ import Testing
     )
     let threadID = "902"
     let route = ReaderResumeRoute.novel(
-        ReaderLaunchContext(
+        NovelLaunchContext(
             threadID: threadID,
             threadTitle: "测试小说",
             source: .resume,

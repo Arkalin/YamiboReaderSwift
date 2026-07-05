@@ -4,7 +4,7 @@ public actor NovelReaderRepository {
     private let client: YamiboClient
     private let cacheStore: NovelReaderProjectionStore
     private let forumCacheStore: ForumCacheStore
-    private let offlineCacheStore: (any OfflineCacheStoring)?
+    private let offlineCacheStore: (any NovelOfflineCacheStoring)?
     private let projectionLoader: NovelReaderProjectionLoader
     private let novelOfflineAutoRefreshEnabled: @Sendable () async -> Bool
     private let novelOfflineRetainsInlineImages: @Sendable () async -> Bool
@@ -13,7 +13,7 @@ public actor NovelReaderRepository {
         client: YamiboClient,
         cacheStore: NovelReaderProjectionStore = NovelReaderProjectionStore(),
         forumCacheStore: ForumCacheStore = ForumCacheStore(),
-        offlineCacheStore: (any OfflineCacheStoring)? = nil,
+        offlineCacheStore: (any NovelOfflineCacheStoring)? = nil,
         projectionLoader: NovelReaderProjectionLoader? = nil,
         novelOfflineAutoRefreshEnabled: @escaping @Sendable () async -> Bool = { true },
         novelOfflineRetainsInlineImages: @escaping @Sendable () async -> Bool = { false }
@@ -32,19 +32,19 @@ public actor NovelReaderRepository {
         self.novelOfflineRetainsInlineImages = novelOfflineRetainsInlineImages
     }
 
-    public func loadPage(_ request: ReaderPageRequest) async throws -> NovelReaderProjection {
+    public func loadPage(_ request: NovelPageRequest) async throws -> NovelReaderProjection {
         try await loadPageResult(request).projection
     }
 
-    public func loadPageResult(_ request: ReaderPageRequest) async throws -> NovelReaderProjectionLoad {
+    public func loadPageResult(_ request: NovelPageRequest) async throws -> NovelReaderProjectionLoad {
         try await loadPage(request, ignoresCache: false)
     }
 
     public func loadPage(threadID: String, view: Int, authorID: String? = nil) async throws -> NovelReaderProjection {
-        try await loadPage(ReaderPageRequest(threadID: threadID, view: view, authorID: authorID))
+        try await loadPage(NovelPageRequest(threadID: threadID, view: view, authorID: authorID))
     }
 
-    public func prefetchNextPage(from request: ReaderPageRequest) async {
+    public func prefetchNextPage(from request: NovelPageRequest) async {
         let current: NovelReaderProjection
         do {
             current = try await loadPage(request)
@@ -54,7 +54,7 @@ public actor NovelReaderRepository {
 
         guard current.view < current.maxView else { return }
 
-        let nextRequest = ReaderPageRequest(
+        let nextRequest = NovelPageRequest(
             threadID: request.threadID,
             view: current.view + 1,
             authorID: current.resolvedAuthorID ?? request.authorID
@@ -65,7 +65,7 @@ public actor NovelReaderRepository {
     public func cachedViews(
         for threadID: String,
         authorID: String?,
-        contentSource: ReaderContentSource?
+        contentSource: ReaderProjectionContentSource?
     ) async -> Set<Int> {
         let normalizedThreadID = Self.normalizedThreadID(threadID)
         let projectionViews = await cacheStore.cachedViews(for: normalizedThreadID, authorID: authorID, contentSource: contentSource)
@@ -82,7 +82,7 @@ public actor NovelReaderRepository {
         _ views: Set<Int>,
         for threadID: String,
         authorID: String?,
-        contentSource: ReaderContentSource?
+        contentSource: ReaderProjectionContentSource?
     ) async throws {
         let normalizedThreadID = Self.normalizedThreadID(threadID)
         let source = contentSource ?? (normalizedAuthorID(authorID) == nil ? .fallbackUnfilteredPage : .authorFilteredPage)
@@ -98,7 +98,7 @@ public actor NovelReaderRepository {
         _ views: Set<Int>,
         for threadID: String,
         authorID: String?,
-        contentSource: ReaderContentSource?
+        contentSource: ReaderProjectionContentSource?
     ) async throws {
         let normalizedThreadID = Self.normalizedThreadID(threadID)
         let targets = views.isEmpty
@@ -110,7 +110,7 @@ public actor NovelReaderRepository {
             try await forumCacheStore.deleteThreadPages(targets, thread: thread, authorID: authorID)
         }
         for view in targets.sorted() {
-            let request = ReaderPageRequest(threadID: normalizedThreadID, view: view, authorID: authorID)
+            let request = NovelPageRequest(threadID: normalizedThreadID, view: view, authorID: authorID)
             _ = try await loadPageIgnoringCache(request)
         }
     }
@@ -119,14 +119,14 @@ public actor NovelReaderRepository {
         _ views: Set<Int>,
         for threadID: String,
         authorID: String?,
-        contentSource: ReaderContentSource?,
-        progress: (@Sendable (ReaderCacheBatchProgress) async -> Void)? = nil
-    ) async -> ReaderCacheBatchResult {
+        contentSource: ReaderProjectionContentSource?,
+        progress: (@Sendable (NovelReaderCacheBatchProgress) async -> Void)? = nil
+    ) async -> NovelReaderCacheBatchResult {
         let normalizedThreadID = Self.normalizedThreadID(threadID)
         let targets = views.sorted()
         guard !targets.isEmpty else {
-            let result = ReaderCacheBatchResult(totalCount: 0, completedViews: [], failedViews: [], wasCancelled: false)
-            await progress?(ReaderCacheBatchProgress(
+            let result = NovelReaderCacheBatchResult(totalCount: 0, completedViews: [], failedViews: [], wasCancelled: false)
+            await progress?(NovelReaderCacheBatchProgress(
                 totalCount: 0,
                 completedCount: 0,
                 currentView: nil,
@@ -147,7 +147,7 @@ public actor NovelReaderRepository {
                 break
             }
 
-            let request = ReaderPageRequest(threadID: normalizedThreadID, view: view, authorID: authorID)
+            let request = NovelPageRequest(threadID: normalizedThreadID, view: view, authorID: authorID)
             do {
                 _ = try await loadPageIgnoringCache(request)
                 completedViews.append(view)
@@ -161,7 +161,7 @@ public actor NovelReaderRepository {
                 failedViews.append(view)
             }
 
-            await progress?(ReaderCacheBatchProgress(
+            await progress?(NovelReaderCacheBatchProgress(
                 totalCount: targets.count,
                 completedCount: completedViews.count,
                 currentView: view,
@@ -171,14 +171,14 @@ public actor NovelReaderRepository {
             ))
         }
 
-        let status: ReaderCacheBatchProgress.Status = wasCancelled ? .cancelled : .completed
-        let result = ReaderCacheBatchResult(
+        let status: NovelReaderCacheBatchProgress.Status = wasCancelled ? .cancelled : .completed
+        let result = NovelReaderCacheBatchResult(
             totalCount: targets.count,
             completedViews: completedViews,
             failedViews: failedViews,
             wasCancelled: wasCancelled
         )
-        await progress?(ReaderCacheBatchProgress(
+        await progress?(NovelReaderCacheBatchProgress(
             totalCount: targets.count,
             completedCount: completedViews.count,
             currentView: nil,
@@ -189,22 +189,22 @@ public actor NovelReaderRepository {
         return result
     }
 
-    public func loadPageIgnoringCache(_ request: ReaderPageRequest) async throws -> NovelReaderProjection {
+    public func loadPageIgnoringCache(_ request: NovelPageRequest) async throws -> NovelReaderProjection {
         try await loadPageIgnoringCacheResult(request).projection
     }
 
-    public func loadPageIgnoringCacheResult(_ request: ReaderPageRequest) async throws -> NovelReaderProjectionLoad {
+    public func loadPageIgnoringCacheResult(_ request: NovelPageRequest) async throws -> NovelReaderProjectionLoad {
         try await loadPage(request, ignoresCache: true)
     }
 
     public func loadPageIgnoringCache(threadID: String, view: Int, authorID: String? = nil) async throws -> NovelReaderProjection {
-        try await loadPageIgnoringCache(ReaderPageRequest(threadID: threadID, view: view, authorID: authorID))
+        try await loadPageIgnoringCache(NovelPageRequest(threadID: threadID, view: view, authorID: authorID))
     }
 
     public func loadNovelOfflineCacheSourcePage(
         _ request: NovelOfflineCacheWorkRequest
     ) async throws -> NovelOfflineCachePreparedSourcePage {
-        let readerRequest = ReaderPageRequest(
+        let readerRequest = NovelPageRequest(
             threadID: request.threadID,
             view: request.view,
             authorID: request.authorID
@@ -224,7 +224,7 @@ public actor NovelReaderRepository {
         return title
     }
 
-    private func loadPage(_ request: ReaderPageRequest, ignoresCache: Bool) async throws -> NovelReaderProjectionLoad {
+    private func loadPage(_ request: NovelPageRequest, ignoresCache: Bool) async throws -> NovelReaderProjectionLoad {
         let loaded = ignoresCache
             ? try await projectionLoader.loadProjectionIgnoringCache(request)
             : try await projectionLoader.loadProjection(request)

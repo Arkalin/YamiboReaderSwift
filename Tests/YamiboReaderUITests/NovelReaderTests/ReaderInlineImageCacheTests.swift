@@ -16,7 +16,7 @@ final class ReaderInlineImageCacheTests: XCTestCase {
             url: imageURL,
             refererURL: URL(string: "https://bbs.yamibo.com/forum.php?tid=43")
         )
-        let pipeline = YamiboImagePipeline()
+        let pipeline = YamiboUIImagePipeline()
         let loader = SequencedImageDataLoader(outputs: [
             .success(testImageData(color: .red)),
             .success(testImageData(color: .blue))
@@ -38,7 +38,7 @@ final class ReaderInlineImageCacheTests: XCTestCase {
             url: URL(string: "https://img.example.com/dedupe.jpg")!,
             refererURL: URL(string: "https://bbs.yamibo.com/forum.php?tid=42")!
         )
-        let pipeline = YamiboImagePipeline()
+        let pipeline = YamiboUIImagePipeline()
         let loader = SequencedImageDataLoader(outputs: [.success(testImageData(color: .red))], delayNanoseconds: 50_000_000)
 
         async let first = pipeline.image(for: request, dataLoader: loader)
@@ -55,7 +55,7 @@ final class ReaderInlineImageCacheTests: XCTestCase {
             url: URL(string: "https://img.example.com/retry.jpg")!,
             refererURL: nil
         )
-        let pipeline = YamiboImagePipeline()
+        let pipeline = YamiboUIImagePipeline()
         let loader = SequencedImageDataLoader(outputs: [
             .success(Data([0, 1, 2])),
             .success(testImageData(color: .blue))
@@ -64,7 +64,7 @@ final class ReaderInlineImageCacheTests: XCTestCase {
         do {
             _ = try await pipeline.image(for: request, dataLoader: loader)
             XCTFail("Expected invalid image data")
-        } catch YamiboImagePipelineError.invalidImageData {
+        } catch YamiboUIImagePipelineError.invalidImageData {
         } catch {
             XCTFail("Unexpected error: \(error)")
         }

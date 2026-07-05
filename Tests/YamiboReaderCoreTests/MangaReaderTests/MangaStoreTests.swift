@@ -213,11 +213,11 @@ struct MangaReaderTestsMangaStores {
     }
 
     @Test func readerResumeRoutePersistsMangaNativeContextByTidWithoutThreadURLs() async throws {
-        let suiteName = "GRDBMangaRouteNative.\(UUID().uuidString)"
+        let suiteName = "GRDBMangaContextNative.\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: suiteName))
         defaults.removePersistentDomain(forName: suiteName)
         let store = ReaderResumeRouteStore(defaults: defaults, key: "resume")
-        let route = ReaderResumeRoute.manga(.native(MangaLaunchContext(
+        let route = ReaderResumeRoute.manga(MangaLaunchContext(
             originalThreadID: "930",
             chapterTID: "931",
             displayTitle: "测试漫画",
@@ -226,7 +226,7 @@ struct MangaReaderTestsMangaStores {
             initialPage: 4,
             directoryName: "测试漫画",
             offlineCacheFavoriteID: "favorite-1"
-        )))
+        ))
 
         try await store.save(route)
 
@@ -239,7 +239,7 @@ struct MangaReaderTestsMangaStores {
         #expect(payload.contains(#""originalThreadID":"930""#))
         #expect(payload.contains(#""chapterView":8"#))
         let loaded = try #require(await store.load())
-        #expect(loaded == .manga(.native(MangaLaunchContext(
+        #expect(loaded == .manga(MangaLaunchContext(
             originalThreadID: "930",
             chapterTID: "931",
             displayTitle: "测试漫画",
@@ -248,44 +248,9 @@ struct MangaReaderTestsMangaStores {
             initialPage: 4,
             directoryName: "测试漫画",
             offlineCacheFavoriteID: "favorite-1"
-        ))))
-    }
-
-    @Test func readerResumeRoutePersistsMangaWebContextByTidWithoutThreadURLs() async throws {
-        let suiteName = "GRDBMangaRouteWeb.\(UUID().uuidString)"
-        let defaults = try #require(UserDefaults(suiteName: suiteName))
-        defaults.removePersistentDomain(forName: suiteName)
-        let store = ReaderResumeRouteStore(defaults: defaults, key: "resume")
-        let route = ReaderResumeRoute.manga(.web(MangaWebContext(
-            currentThreadID: "941",
-            currentPage: 3,
-            originalThreadID: "940",
-            source: .forum,
-            initialPage: 2,
-            autoOpenNative: true,
-            waitingForNativeReturn: true
         )))
-
-        try await store.save(route)
-
-        let data = try #require(defaults.data(forKey: "resume"))
-        let payload = try #require(String(data: data, encoding: .utf8))
-        #expect(!payload.contains("forum.php"))
-        #expect(!payload.contains("currentURL"))
-        #expect(!payload.contains("originalThreadURL"))
-        #expect(payload.contains(#""currentTID":"941""#))
-        #expect(payload.contains(#""originalThreadID":"940""#))
-        let loaded = try #require(await store.load())
-        #expect(loaded == .manga(.web(MangaWebContext(
-            currentThreadID: "941",
-            currentPage: 3,
-            originalThreadID: "940",
-            source: .forum,
-            initialPage: 2,
-            autoOpenNative: true,
-            waitingForNativeReturn: true
-        ))))
     }
+
 }
 
 private func makeMangaStoreRoot() -> URL {

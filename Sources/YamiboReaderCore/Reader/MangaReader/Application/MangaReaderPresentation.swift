@@ -35,7 +35,7 @@ public struct MangaReaderLoadedPresentation: Hashable, Sendable {
     public var currentPageIndex: Int?
     public var readingPosition: MangaReadingPosition?
     public var directoryPanel: MangaDirectoryPanelPresentation
-    public var viewportPlacement: MangaReaderViewportPlacement?
+    public var viewportPlacement: MangaNovelReaderViewportPlacement?
 
     public init(
         title: String,
@@ -45,7 +45,7 @@ public struct MangaReaderLoadedPresentation: Hashable, Sendable {
         currentPageIndex: Int?,
         readingPosition: MangaReadingPosition?,
         directoryPanel: MangaDirectoryPanelPresentation = MangaDirectoryPanelPresentation(),
-        viewportPlacement: MangaReaderViewportPlacement? = nil
+        viewportPlacement: MangaNovelReaderViewportPlacement? = nil
     ) {
         self.title = title
         self.directoryTitle = directoryTitle
@@ -120,7 +120,7 @@ public struct MangaDirectoryPanelPresentation: Hashable, Sendable {
     }
 }
 
-public struct MangaReaderViewportPlacement: Hashable, Sendable {
+public struct MangaNovelReaderViewportPlacement: Hashable, Sendable {
     public var targetPageIndex: Int
     public var animated: Bool
     public var revision: Int

@@ -88,7 +88,7 @@ private struct ForumThreadSummaryAuthorView: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            YamiboRemoteImage(url: authorAvatarURL) { image in
+            YamiboRemoteImage(request: authorAvatarURL.map { YamiboImageRequest(url: $0) }) { image in
                 image
                     .resizable()
                     .scaledToFill()

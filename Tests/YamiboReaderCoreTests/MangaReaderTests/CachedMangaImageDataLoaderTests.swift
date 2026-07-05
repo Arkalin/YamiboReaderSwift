@@ -8,13 +8,12 @@ struct MangaReaderTestsCachedMangaImageDataLoader {
         let imageURL = try #require(URL(string: "https://img.example.com/offline.jpg"))
         let offlineStore = try makeTestOfflineCacheStore(rootDirectory: try makeTemporaryCachedMangaImageLoaderDirectory())
         try await offlineStore.saveOfflineImageData(Data([7]), for: imageURL)
-        try await offlineStore.saveMembership(makeCachedMangaImageLoaderMembership(imageURLs: [imageURL]))
+        try await offlineStore.saveMangaOfflineCacheMembership(makeCachedMangaImageLoaderMembership(imageURLs: [imageURL]))
         let upstream = RecordingYamiboImageDataLoader(results: [.success(Data([9]))])
         let loader = CachedMangaImageDataLoader(imageDataLoader: upstream, offlineCacheStore: offlineStore)
 
         let data = try await loader.imageData(
-            for: imageURL,
-            refererURL: nil,
+            for: YamiboImageRequest(url: imageURL),
             offlineCacheContext: MangaImageOfflineCacheContext(ownerName: "favorite-a", tid: "100")
         )
 
@@ -26,13 +25,12 @@ struct MangaReaderTestsCachedMangaImageDataLoader {
         let imageURL = try #require(URL(string: "https://img.example.com/fallback.jpg"))
         let refererURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?tid=100"))
         let offlineStore = try makeTestOfflineCacheStore(rootDirectory: try makeTemporaryCachedMangaImageLoaderDirectory())
-        try await offlineStore.saveMembership(makeCachedMangaImageLoaderMembership(imageURLs: [imageURL]))
+        try await offlineStore.saveMangaOfflineCacheMembership(makeCachedMangaImageLoaderMembership(imageURLs: [imageURL]))
         let upstream = RecordingYamiboImageDataLoader(results: [.success(Data([9]))])
         let loader = CachedMangaImageDataLoader(imageDataLoader: upstream, offlineCacheStore: offlineStore)
 
         let data = try await loader.imageData(
-            for: imageURL,
-            refererURL: refererURL,
+            for: YamiboImageRequest(url: imageURL, refererURL: refererURL),
             offlineCacheContext: MangaImageOfflineCacheContext(ownerName: "favorite-a", tid: "100")
         )
 
@@ -46,13 +44,12 @@ struct MangaReaderTestsCachedMangaImageDataLoader {
         let requestedImageURL = try #require(URL(string: "https://img.example.com/non-member.jpg"))
         let offlineStore = try makeTestOfflineCacheStore(rootDirectory: try makeTemporaryCachedMangaImageLoaderDirectory())
         try await offlineStore.saveOfflineImageData(Data([7]), for: requestedImageURL)
-        try await offlineStore.saveMembership(makeCachedMangaImageLoaderMembership(imageURLs: [memberImageURL]))
+        try await offlineStore.saveMangaOfflineCacheMembership(makeCachedMangaImageLoaderMembership(imageURLs: [memberImageURL]))
         let upstream = RecordingYamiboImageDataLoader(results: [.success(Data([3]))])
         let loader = CachedMangaImageDataLoader(imageDataLoader: upstream, offlineCacheStore: offlineStore)
 
         let data = try await loader.imageData(
-            for: requestedImageURL,
-            refererURL: nil,
+            for: YamiboImageRequest(url: requestedImageURL),
             offlineCacheContext: MangaImageOfflineCacheContext(ownerName: "favorite-a", tid: "100")
         )
 
@@ -64,11 +61,11 @@ struct MangaReaderTestsCachedMangaImageDataLoader {
         let imageURL = try #require(URL(string: "https://img.example.com/no-context.jpg"))
         let offlineStore = try makeTestOfflineCacheStore(rootDirectory: try makeTemporaryCachedMangaImageLoaderDirectory())
         try await offlineStore.saveOfflineImageData(Data([7]), for: imageURL)
-        try await offlineStore.saveMembership(makeCachedMangaImageLoaderMembership(imageURLs: [imageURL]))
+        try await offlineStore.saveMangaOfflineCacheMembership(makeCachedMangaImageLoaderMembership(imageURLs: [imageURL]))
         let upstream = RecordingYamiboImageDataLoader(results: [.success(Data([4]))])
         let loader = CachedMangaImageDataLoader(imageDataLoader: upstream, offlineCacheStore: offlineStore)
 
-        let data = try await loader.imageData(for: imageURL, refererURL: nil)
+        let data = try await loader.imageData(for: YamiboImageRequest(url: imageURL))
 
         #expect(data == Data([4]))
         #expect(await upstream.callCount == 1)
@@ -82,8 +79,9 @@ struct MangaReaderTestsCachedMangaImageDataLoader {
         ])
         let loader = CachedMangaImageDataLoader(imageDataLoader: upstream)
 
-        let first = try await loader.imageData(for: imageURL, refererURL: nil)
-        let second = try await loader.imageData(for: imageURL, refererURL: nil)
+        let request = YamiboImageRequest(url: imageURL)
+        let first = try await loader.imageData(for: request)
+        let second = try await loader.imageData(for: request)
 
         #expect(first == Data([1]))
         #expect(second == Data([2]))
@@ -96,7 +94,7 @@ struct MangaReaderTestsCachedMangaImageDataLoader {
         let loader = CachedMangaImageDataLoader(imageDataLoader: upstream)
 
         await #expect(throws: YamiboError.offline) {
-            _ = try await loader.imageData(for: imageURL, refererURL: nil)
+            _ = try await loader.imageData(for: YamiboImageRequest(url: imageURL))
         }
 
         #expect(await upstream.callCount == 1)

@@ -204,7 +204,7 @@ _Avoid_: attributed string helper, UI text style factory, platform text builder,
 - The HTML parser assigns each text segment a stable **Novel Text Segment Identity** from its **Novel Chapter Identity** and deterministic source occurrence within that chapter; current document array index is only an Implementation detail.
 - Refresh, author filtering, translation transformation, attributed-document preparation, and layout preserve the identity of every retained source text segment.
 - A **Novel Text Viewport Index** derives chapter ordinal only from the document order of explicit **Novel Chapter Identity** values in that committed generation; ordinal is a presentation projection rather than persisted identity.
-- Text segments, external image blocks, chapter comment targets, semantic chapter browsing, and restoration fallback reference the same **Novel Chapter Identity**.
+- Text segments, external image blocks, **Reader Chapter Comment Target** derivation, semantic chapter browsing, and restoration fallback reference the same **Novel Chapter Identity**.
 - New reader page document encoding writes the explicit chapter structure. Legacy `chapterTitle` decoding may synthesize a title range only when the normalized title unambiguously matches the segment prefix; otherwise it preserves chapter metadata without title styling.
 - Legacy reader page documents synthesize **Novel Chapter Identity** from reader page document identity and source occurrence, not by grouping equal chapter titles.
 - Reader page document persistence carries a schema version and upgrades legacy documents lazily on the next successful save; no eager disk migration is required.

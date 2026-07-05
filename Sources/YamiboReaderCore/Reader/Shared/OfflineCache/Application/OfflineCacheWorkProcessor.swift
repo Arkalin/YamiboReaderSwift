@@ -32,25 +32,19 @@ protocol OfflineCacheWorkProcessingStrategy: Sendable {
     associatedtype Payload: Sendable
 
     func prepare(_ work: OfflineCacheProcessingWork) async throws -> OfflineCachePreparedWork<Payload>
-    func persistPreparedSource(
-        _ preparedWork: OfflineCachePreparedWork<Payload>,
-        in store: any OfflineCacheStoring
-    ) async throws
-    func finish(
-        _ preparedWork: OfflineCachePreparedWork<Payload>,
-        in store: any OfflineCacheStoring
-    ) async throws
+    func persistPreparedSource(_ preparedWork: OfflineCachePreparedWork<Payload>) async throws
+    func finish(_ preparedWork: OfflineCachePreparedWork<Payload>) async throws
 }
 
 struct OfflineCacheWorkProcessor<Strategy: OfflineCacheWorkProcessingStrategy>: Sendable {
-    private let store: any OfflineCacheStoring
+    private let store: any OfflineCacheQueueStoring & OfflineCacheImageAssetStoring
     private let imageAcquirer: any OfflineCacheImageAcquiring
     private let runObserver: (any OfflineCacheQueueRunObserving)?
     private let maxConcurrentImageTransfers: Int
     private let strategy: Strategy
 
     init(
-        store: any OfflineCacheStoring,
+        store: any OfflineCacheQueueStoring & OfflineCacheImageAssetStoring,
         imageAcquirer: any OfflineCacheImageAcquiring,
         runObserver: (any OfflineCacheQueueRunObserving)? = nil,
         maxConcurrentImageTransfers: Int,
@@ -70,10 +64,10 @@ struct OfflineCacheWorkProcessor<Strategy: OfflineCacheWorkProcessingStrategy>: 
         }
 
         let preparedWork = try await strategy.prepare(work)
-        try await strategy.persistPreparedSource(preparedWork, in: store)
+        try await strategy.persistPreparedSource(preparedWork)
 
         guard !preparedWork.targetImageURLs.isEmpty else {
-            try await strategy.finish(preparedWork, in: store)
+            try await strategy.finish(preparedWork)
             return
         }
 
@@ -101,7 +95,7 @@ struct OfflineCacheWorkProcessor<Strategy: OfflineCacheWorkProcessingStrategy>: 
         guard await store.offlineCacheProcessingWork(id: preparedWork.workID) != nil else {
             throw CancellationError()
         }
-        try await strategy.finish(preparedWork, in: store)
+        try await strategy.finish(preparedWork)
     }
 
     private func reconciledCompletedImageURLs(_ targetImageURLs: [URL]) async -> [URL] {
@@ -139,7 +133,9 @@ struct OfflineCacheWorkProcessor<Strategy: OfflineCacheWorkProcessingStrategy>: 
                         throw CancellationError()
                     }
                     let startedAt = Date()
-                    let acquisition = try await imageAcquirer.acquireImageData(for: imageURL, refererURL: refererURL)
+                    let acquisition = try await imageAcquirer.acquireImageData(
+                        for: YamiboImageRequest(url: imageURL, refererURL: refererURL)
+                    )
                     guard !acquisition.data.isEmpty else {
                         throw YamiboError.invalidResponse(statusCode: nil)
                     }

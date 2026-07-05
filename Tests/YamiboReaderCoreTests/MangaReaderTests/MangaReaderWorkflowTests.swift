@@ -463,7 +463,7 @@ struct MangaReaderTestsWorkflow {
         for imageURL in document.imageURLs {
             try await offlineStore.saveOfflineImageData(Data([7]), for: imageURL)
         }
-        try await offlineStore.saveMembership(
+        try await offlineStore.saveMangaOfflineCacheMembership(
             MangaOfflineCacheMembership(
                 ownerName: "测试漫画",
                 tid: "700",

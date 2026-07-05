@@ -7,7 +7,7 @@ public actor MangaReaderProjectionLoader: MangaReaderProjectionSnapshotLoading {
         client: YamiboClient,
         projectionStore: any MangaReaderProjectionPersisting,
         forumCacheStore: ForumCacheStore,
-        offlineCacheStore: (any OfflineCacheStoring)? = nil
+        offlineCacheStore: (any MangaOfflineCacheStoring)? = nil
     ) {
         loader = ReaderProjectionLoader(
             strategy: MangaProjectionLoadingStrategy(
@@ -43,7 +43,7 @@ private struct MangaProjectionLoadingStrategy: ReaderProjectionLoadingStrategy {
     let client: YamiboClient
     let projectionStore: any MangaReaderProjectionPersisting
     let forumCacheStore: ForumCacheStore
-    let offlineCacheStore: (any OfflineCacheStoring)?
+    let offlineCacheStore: (any MangaOfflineCacheStoring)?
 
     func identity(for request: MangaReaderProjectionRequest, ignoresCache: Bool) async throws -> MangaReaderProjectionSourceIdentity {
         let thread = ThreadIdentity(tid: request.threadID)
@@ -79,7 +79,7 @@ private struct MangaProjectionLoadingStrategy: ReaderProjectionLoadingStrategy {
     ) async -> ReaderProjectionOfflineSourcePageLoad<MangaReaderProjectionSourceIdentity, ForumThreadPage>? {
         guard let offlineCacheStore,
               let ownerName = request.offlineOwnerName?.mangaReaderTrimmedNonEmpty,
-              let membership = await offlineCacheStore.membership(ownerName: ownerName, tid: request.threadID),
+              let membership = await offlineCacheStore.mangaOfflineCacheMembership(ownerName: ownerName, tid: request.threadID),
               membership.tid == request.threadID,
               membership.sourcePage.thread.tid == request.threadID,
               sourcePageMatchesRequestedView(membership.sourcePage, view: request.view) else {
@@ -182,7 +182,7 @@ private struct MangaProjectionLoadingStrategy: ReaderProjectionLoadingStrategy {
             try? await forumCacheStore.saveThreadPage(discoveryPage, thread: thread, pageNumber: 1, authorID: nil)
             if let onlyAuthorID = YamiboThreadHTMLFacts.onlyAuthorID(
                 from: html,
-                request: ReaderPageRequest(threadID: thread.tid, view: 1)
+                request: NovelPageRequest(threadID: thread.tid, view: 1)
             )?.mangaReaderTrimmedNonEmpty {
                 return onlyAuthorID
             }

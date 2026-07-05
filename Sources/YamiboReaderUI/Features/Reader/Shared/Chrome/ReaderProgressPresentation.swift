@@ -393,7 +393,7 @@ struct ReaderPagedPagerIdentity: Hashable {
         surfaceCount: Int,
         spreadCount: Int,
         usesTwoPageSpread: Bool,
-        layout: ReaderContainerLayout
+        layout: NovelReaderLayout
     ) {
         self.visibleView = visibleView
         self.surfaceCount = surfaceCount
@@ -420,61 +420,5 @@ enum ReaderPagedTapZone: Equatable {
             return .next
         }
         return .toggleChrome
-    }
-}
-
-enum ReaderImageHitTesting {
-    static func aspectFitImageFrame(imageSize: CGSize, containerSize: CGSize) -> CGRect {
-        guard imageSize.width > 0,
-              imageSize.height > 0,
-              containerSize.width > 0,
-              containerSize.height > 0 else {
-            return .zero
-        }
-
-        let scale = min(containerSize.width / imageSize.width, containerSize.height / imageSize.height)
-        let fittedSize = CGSize(width: imageSize.width * scale, height: imageSize.height * scale)
-        return CGRect(
-            x: (containerSize.width - fittedSize.width) / 2,
-            y: (containerSize.height - fittedSize.height) / 2,
-            width: fittedSize.width,
-            height: fittedSize.height
-        )
-    }
-
-    static func containsImagePoint(_ point: CGPoint, imageSize: CGSize, containerSize: CGSize) -> Bool {
-        aspectFitImageFrame(imageSize: imageSize, containerSize: containerSize).contains(point)
-    }
-}
-
-enum ReaderImageBrowserDismissGesture {
-    static let minimumTranslation: CGFloat = 90
-    static let committedTranslation: CGFloat = 150
-    static let minimumVelocity: CGFloat = 650
-
-    static func progress(for translationY: CGFloat) -> CGFloat {
-        min(max(translationY / committedTranslation, 0), 1)
-    }
-
-    static func imageScale(for progress: CGFloat) -> CGFloat {
-        1 - min(max(progress, 0), 1) * 0.08
-    }
-
-    static func backgroundOpacity(for progress: CGFloat) -> CGFloat {
-        1 - min(max(progress, 0), 1)
-    }
-
-    static func canBegin(translation: CGPoint, zoomScale: CGFloat, minimumZoomScale: CGFloat) -> Bool {
-        guard zoomScale <= minimumZoomScale + 0.01 else { return false }
-        guard translation.y > 0 else { return false }
-        return translation.y > abs(translation.x) * 1.2
-    }
-
-    static func shouldDismiss(translation: CGPoint, velocity: CGPoint, zoomScale: CGFloat, minimumZoomScale: CGFloat) -> Bool {
-        guard canBegin(translation: translation, zoomScale: zoomScale, minimumZoomScale: minimumZoomScale) else {
-            return false
-        }
-        guard translation.y >= minimumTranslation else { return false }
-        return translation.y >= committedTranslation || velocity.y >= minimumVelocity
     }
 }

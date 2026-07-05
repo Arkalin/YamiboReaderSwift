@@ -18,8 +18,10 @@ struct NovelInlineImageDataLoaderTests {
 
         let loader = YamiboNovelInlineImageDataLoader(imageDataLoader: imageDataLoader(harness: harness))
         let data = try await loader.imageData(
-            for: URL(string: "https://img.example.com/novel.jpg")!,
-            refererURL: URL(string: "https://bbs.yamibo.com/forum.php?tid=900")!
+            for: YamiboImageRequest(
+                url: URL(string: "https://img.example.com/novel.jpg")!,
+                refererURL: URL(string: "https://bbs.yamibo.com/forum.php?tid=900")!
+            )
         )
 
         #expect(data == Data([1, 2, 3]))
@@ -39,13 +41,12 @@ struct NovelInlineImageDataLoaderTests {
         let loader = YamiboNovelInlineImageDataLoader(imageDataLoader: imageDataLoader(harness: harness))
         let imageURL = URL(string: "https://img.example.com/shared.jpg")!
         let refererURL = URL(string: "https://bbs.yamibo.com/forum.php?tid=1")!
+        let request = YamiboImageRequest(url: imageURL, refererURL: refererURL)
         async let first = loader.imageData(
-            for: imageURL,
-            refererURL: refererURL
+            for: request
         )
         async let second = loader.imageData(
-            for: imageURL,
-            refererURL: refererURL
+            for: request
         )
 
         let values = try await [first, second]
@@ -68,12 +69,16 @@ struct NovelInlineImageDataLoaderTests {
         let loader = YamiboNovelInlineImageDataLoader(imageDataLoader: imageDataLoader(harness: harness))
         let imageURL = URL(string: "https://img.example.com/shared.jpg")!
         async let first = loader.imageData(
-            for: imageURL,
-            refererURL: URL(string: "https://bbs.yamibo.com/forum.php?tid=1")!
+            for: YamiboImageRequest(
+                url: imageURL,
+                refererURL: URL(string: "https://bbs.yamibo.com/forum.php?tid=1")!
+            )
         )
         async let second = loader.imageData(
-            for: imageURL,
-            refererURL: URL(string: "https://bbs.yamibo.com/forum.php?tid=2")!
+            for: YamiboImageRequest(
+                url: imageURL,
+                refererURL: URL(string: "https://bbs.yamibo.com/forum.php?tid=2")!
+            )
         )
 
         let values = try await [first, second]
@@ -100,8 +105,10 @@ struct NovelInlineImageDataLoaderTests {
 
         await #expect(throws: YamiboError.offline) {
             _ = try await loader.imageData(
-                for: URL(string: "https://img.example.com/a.jpg")!,
-                refererURL: URL(string: "https://bbs.yamibo.com/forum.php?tid=900")!
+                for: YamiboImageRequest(
+                    url: URL(string: "https://img.example.com/a.jpg")!,
+                    refererURL: URL(string: "https://bbs.yamibo.com/forum.php?tid=900")!
+                )
             )
         }
     }
@@ -117,7 +124,7 @@ struct NovelInlineImageDataLoaderTests {
             threadID: "910"
         )
 
-        let data = try await loader.imageData(for: imageURL, refererURL: refererURL)
+        let data = try await loader.imageData(for: YamiboImageRequest(url: imageURL, refererURL: refererURL))
 
         #expect(data == Data([4, 2]))
         #expect(await offlineProvider.requestedImageURLs == [imageURL])
@@ -136,7 +143,7 @@ struct NovelInlineImageDataLoaderTests {
             threadID: "911"
         )
 
-        let data = try await loader.imageData(for: imageURL, refererURL: refererURL)
+        let data = try await loader.imageData(for: YamiboImageRequest(url: imageURL, refererURL: refererURL))
 
         #expect(data == Data([6]))
         #expect(await offlineProvider.requestedImageURLs == [imageURL])
@@ -161,7 +168,7 @@ struct NovelInlineImageDataLoaderTests {
             threadID: "900"
         )
 
-        let data = try await loader.imageData(for: imageURL, refererURL: threadURL)
+        let data = try await loader.imageData(for: YamiboImageRequest(url: imageURL, refererURL: threadURL))
 
         #expect(data == Data([7, 8]))
         #expect(await upstream.callCount == 0)
@@ -181,7 +188,7 @@ struct NovelInlineImageDataLoaderTests {
             threadID: "901"
         )
 
-        let data = try await loader.imageData(for: imageURL, refererURL: threadURL)
+        let data = try await loader.imageData(for: YamiboImageRequest(url: imageURL, refererURL: threadURL))
 
         #expect(data == Data([3]))
         #expect(await upstream.callCount == 1)
@@ -204,7 +211,7 @@ struct NovelInlineImageDataLoaderTests {
             threadID: "903"
         )
 
-        let data = try await loader.imageData(for: imageURL, refererURL: requestedThreadURL)
+        let data = try await loader.imageData(for: YamiboImageRequest(url: imageURL, refererURL: requestedThreadURL))
 
         #expect(data == Data([4]))
         #expect(await upstream.callCount == 1)
@@ -225,7 +232,7 @@ struct NovelInlineImageDataLoaderTests {
         )
 
         await #expect(throws: YamiboError.offline) {
-            _ = try await loader.imageData(for: imageURL, refererURL: threadURL)
+            _ = try await loader.imageData(for: YamiboImageRequest(url: imageURL, refererURL: threadURL))
         }
 
         #expect(await upstream.callCount == 1)
@@ -267,8 +274,10 @@ struct NovelInlineImageDataLoaderTests {
 
         await #expect(throws: expected) {
             _ = try await loader.imageData(
-                for: URL(string: "https://img.example.com/a.jpg")!,
-                refererURL: URL(string: "https://bbs.yamibo.com/forum.php?tid=900")!
+                for: YamiboImageRequest(
+                    url: URL(string: "https://img.example.com/a.jpg")!,
+                    refererURL: URL(string: "https://bbs.yamibo.com/forum.php?tid=900")!
+                )
             )
         }
     }
@@ -290,7 +299,7 @@ private actor RecordingNovelOfflineImageProvider: NovelOfflineImageDataProviding
     }
 }
 
-private actor RecordingNovelInlineImageDataLoader: NovelInlineImageDataLoading {
+private actor RecordingNovelInlineImageDataLoader: YamiboImageDataLoading {
     private var results: [Result<Data, Error>]
     private(set) var requestedRequests: [YamiboImageRequest] = []
     private(set) var callCount = 0
@@ -299,9 +308,9 @@ private actor RecordingNovelInlineImageDataLoader: NovelInlineImageDataLoading {
         self.results = results
     }
 
-    func imageData(for imageURL: URL, refererURL: URL) async throws -> Data {
+    func imageData(for request: YamiboImageRequest) async throws -> Data {
         callCount += 1
-        requestedRequests.append(YamiboImageRequest(url: imageURL, refererURL: refererURL))
+        requestedRequests.append(request)
         let result = results.isEmpty ? Result<Data, Error>.failure(YamiboError.unreadableBody) : results.removeFirst()
         return try result.get()
     }

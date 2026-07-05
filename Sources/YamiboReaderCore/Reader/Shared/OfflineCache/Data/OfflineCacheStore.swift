@@ -2,7 +2,7 @@ import CryptoKit
 import Foundation
 @preconcurrency import GRDB
 
-public actor OfflineCacheStore: OfflineCacheStoring {
+public actor OfflineCacheStore {
     let database: DatabasePool
     nonisolated(unsafe) let fileManager: FileManager
     private let baseDirectory: URL
@@ -31,7 +31,7 @@ public actor OfflineCacheStore: OfflineCacheStoring {
         updateNotifier.stream()
     }
 
-    public func membership(ownerName: String, tid: String) async -> MangaOfflineCacheMembership? {
+    public func mangaOfflineCacheMembership(ownerName: String, tid: String) async -> MangaOfflineCacheMembership? {
         try? await recoverQueueStateAfterRestart()
         guard let id = normalizedID(ownerName: ownerName, tid: tid) else { return nil }
         return try? await database.read { db in
@@ -45,7 +45,7 @@ public actor OfflineCacheStore: OfflineCacheStoring {
         }
     }
 
-    public func memberships(forOwnerName ownerName: String) async -> [MangaOfflineCacheMembership] {
+    public func mangaOfflineCacheMemberships(forOwnerName ownerName: String) async -> [MangaOfflineCacheMembership] {
         try? await recoverQueueStateAfterRestart()
         guard let ownerName = ownerName.mangaReaderTrimmedNonEmpty else { return [] }
         return (try? await database.read { db in
@@ -58,10 +58,10 @@ public actor OfflineCacheStore: OfflineCacheStoring {
         }) ?? []
     }
 
-    public func allMemberships() async -> [MangaOfflineCacheMembership] {
+    public func allMangaOfflineCacheMemberships() async -> [MangaOfflineCacheMembership] {
         try? await recoverQueueStateAfterRestart()
         return (try? await database.read { db in
-            try Self.allMemberships(
+            try Self.allMangaMemberships(
                 fileManager: fileManager,
                 mangaSourcePagesDirectory: mangaSourcePagesDirectory,
                 in: db
@@ -69,7 +69,7 @@ public actor OfflineCacheStore: OfflineCacheStoring {
         }) ?? []
     }
 
-    public func saveMembership(_ membership: MangaOfflineCacheMembership) async throws {
+    public func saveMangaOfflineCacheMembership(_ membership: MangaOfflineCacheMembership) async throws {
         try await recoverQueueStateAfterRestart()
         var writtenPayload: MangaSourcePagePayload?
         do {
@@ -110,12 +110,12 @@ public actor OfflineCacheStore: OfflineCacheStoring {
         }
     }
 
-    public func removeMembership(ownerName: String, tid: String) async throws {
+    public func removeMangaOfflineCacheMembership(ownerName: String, tid: String) async throws {
         try await recoverQueueStateAfterRestart()
         guard let id = normalizedID(ownerName: ownerName, tid: tid) else { return }
         do {
             try await database.write { db in
-                let canceled = try Self.work(ownerName: id.ownerName, tid: id.tid, in: db)
+                let canceled = try Self.rawWork(readerKind: .manga, ownerKey: id.ownerName, entryKey: id.tid, in: db)
                 let candidateSourceFiles = try Self.mangaSourcePageFileNames(ownerName: id.ownerName, tid: id.tid, in: db)
                 let candidateImageURLs = try Self.imageURLs(
                     table: "offline_cache_manga_entry_images",
@@ -144,14 +144,14 @@ public actor OfflineCacheStore: OfflineCacheStoring {
         }
     }
 
-    public func removeMemberships(forOwnerName ownerName: String) async throws {
+    public func removeMangaOfflineCacheMemberships(forOwnerName ownerName: String) async throws {
         try await recoverQueueStateAfterRestart()
         guard let ownerName = ownerName.mangaReaderTrimmedNonEmpty else { return }
         do {
             try await database.write { db in
                 let candidateSourceFiles = try Self.mangaSourcePageFileNames(ownerName: ownerName, in: db)
                 let removedImageURLs = try Self.mangaEntryImageURLs(ownerName: ownerName, in: db)
-                let canceled = try Self.works(ownerName: ownerName, in: db)
+                let canceled = try Self.rawWorks(readerKind: .manga, ownerKey: ownerName, in: db)
                 try db.execute(sql: "DELETE FROM offline_cache_manga_entries WHERE owner_name = ?", arguments: [ownerName])
                 try db.execute(
                     sql: "DELETE FROM offline_cache_works WHERE reader_kind = ? AND owner_name = ?",
@@ -176,7 +176,7 @@ public actor OfflineCacheStore: OfflineCacheStoring {
         }
     }
 
-    public func renameOwner(from oldOwnerName: String, to newOwnerName: String) async throws {
+    public func renameMangaOfflineCacheOwner(from oldOwnerName: String, to newOwnerName: String) async throws {
         try await recoverQueueStateAfterRestart()
         guard let oldOwnerName = oldOwnerName.mangaReaderTrimmedNonEmpty,
               let newOwnerName = newOwnerName.mangaReaderTrimmedNonEmpty,
@@ -193,7 +193,7 @@ public actor OfflineCacheStore: OfflineCacheStoring {
                         mangaSourcePagesDirectory: mangaSourcePagesDirectory,
                         in: db
                     ),
-                    Self.works(ownerName: oldOwnerName, in: db)
+                    Self.rawWorks(readerKind: .manga, ownerKey: oldOwnerName, in: db)
                 )
             }
             guard !memberships.isEmpty || !works.isEmpty else { return }
@@ -228,14 +228,17 @@ public actor OfflineCacheStore: OfflineCacheStoring {
                     )
                 }
                 for work in works {
-                    try Self.save(MangaOfflineCacheWork(
+                    try Self.save(OfflineCacheRawWork(
+                        readerKind: .manga,
                         workID: work.workID,
-                    ownerName: newOwnerName,
-                    tid: work.tid,
-                    chapterTitle: work.chapterTitle,
-                    targetImageURLs: work.targetImageURLs,
-                    completedImageURLs: work.completedImageURLs,
-                    state: work.state,
+                        ownerKey: newOwnerName,
+                        ownerTitle: newOwnerName,
+                        entryKey: work.entryKey,
+                        title: work.title,
+                        targetImageURLs: work.targetImageURLs,
+                        completedImageURLs: work.completedImageURLs,
+                        retainsInlineImages: work.retainsInlineImages,
+                        state: work.state,
                         failureMessage: work.failureMessage,
                         currentBytesPerSecond: work.currentBytesPerSecond,
                         insertionIndex: work.insertionIndex,
@@ -259,22 +262,7 @@ public actor OfflineCacheStore: OfflineCacheStoring {
         }
     }
 
-    public func offlineCacheWork(ownerName: String, tid: String) async -> MangaOfflineCacheWork? {
-        try? await recoverQueueStateAfterRestart()
-        guard let id = normalizedID(ownerName: ownerName, tid: tid) else { return nil }
-        return try? await database.read { db in
-            try Self.work(ownerName: id.ownerName, tid: id.tid, in: db)
-        }
-    }
-
-    public func allOfflineCacheWorks() async -> [MangaOfflineCacheWork] {
-        try? await recoverQueueStateAfterRestart()
-        return (try? await database.read { db in
-            try Self.allWorks(in: db)
-        }) ?? []
-    }
-
-    public func enqueueOfflineCacheWork(_ request: MangaOfflineCacheWorkRequest) async throws -> MangaOfflineCacheEnqueueResult {
+    public func enqueueMangaOfflineCacheWork(_ request: MangaOfflineCacheWorkRequest) async throws -> MangaOfflineCacheEnqueueResult {
         try await recoverQueueStateAfterRestart()
         do {
             let result: MangaOfflineCacheEnqueueResult = try await database.write { db in
@@ -300,99 +288,33 @@ public actor OfflineCacheStore: OfflineCacheStoring {
                    try Self.isMembershipComplete(membership, fileManager: fileManager, imagesDirectory: imagesDirectory, in: db) {
                     return .alreadyCached(membership)
                 }
-                if let work = try Self.work(ownerName: normalizedRequest.ownerName, tid: normalizedRequest.tid, in: db) {
-                    return .alreadyQueued(work)
+                if let work = try Self.rawWork(readerKind: .manga, ownerKey: normalizedRequest.ownerName, entryKey: normalizedRequest.tid, in: db) {
+                    return .alreadyQueued(Self.queueWorkProjection(from: work))
                 }
-                let work = MangaOfflineCacheWork(
-                    request: normalizedRequest,
-                    insertionIndex: try Self.nextQueueInsertionIndex(in: db)
+                let work = OfflineCacheRawWork(
+                    readerKind: .manga,
+                    workID: UUID().uuidString,
+                    ownerKey: normalizedRequest.ownerName,
+                    ownerTitle: normalizedRequest.ownerName,
+                    entryKey: normalizedRequest.tid,
+                    title: normalizedRequest.chapterTitle,
+                    targetImageURLs: normalizedRequest.targetImageURLs,
+                    completedImageURLs: [],
+                    retainsInlineImages: false,
+                    state: .queued,
+                    failureMessage: nil,
+                    currentBytesPerSecond: 0,
+                    insertionIndex: try Self.nextQueueInsertionIndex(readerKind: OfflineCacheReaderKind.manga.rawValue, in: db),
+                    createdAt: Date(),
+                    updatedAt: Date()
                 )
                 try Self.save(work, in: db)
-                return .enqueued(work)
+                return .enqueued(Self.queueWorkProjection(from: work))
             }
             if result.enqueuedWork != nil {
                 notifyOfflineCacheDidChange()
             }
             return result
-        } catch {
-            throw offlineCachePersistenceError(from: error)
-        }
-    }
-
-    public func updateOfflineCacheWorkProgress(
-        ownerName: String,
-        tid: String,
-        targetImageURLs: [URL]?,
-        completedImageURLs: [URL],
-        currentBytesPerSecond: Int? = nil
-    ) async throws {
-        try await recoverQueueStateAfterRestart()
-        try await updateWork(ownerName: ownerName, tid: tid) { work in
-            work.updatingProgress(
-                targetImageURLs: targetImageURLs,
-                completedImageURLs: completedImageURLs,
-                currentBytesPerSecond: currentBytesPerSecond
-            )
-        }
-    }
-
-    public func prepareOfflineCacheWorkForRun(
-        ownerName: String,
-        tid: String,
-        targetImageURLs: [URL]?,
-        completedImageURLs: [URL]
-    ) async throws {
-        try await recoverQueueStateAfterRestart()
-        try await updateWork(ownerName: ownerName, tid: tid) { work in
-            work.preparingForRun(targetImageURLs: targetImageURLs, completedImageURLs: completedImageURLs)
-        }
-    }
-
-    public func markOfflineCacheWorkFailed(ownerName: String, tid: String, message: String?) async throws {
-        try await recoverQueueStateAfterRestart()
-        try await updateWork(ownerName: ownerName, tid: tid) { work in
-            work.markingFailed(message: message)
-        }
-    }
-
-    public func cancelOfflineCacheWork(ownerName: String, tid: String) async throws {
-        try await recoverQueueStateAfterRestart()
-        guard let id = normalizedID(ownerName: ownerName, tid: tid) else { return }
-        do {
-            try await database.write { db in
-                guard let canceled = try Self.work(ownerName: id.ownerName, tid: id.tid, in: db) else { return }
-                try Self.deleteWork(ownerName: id.ownerName, tid: id.tid, in: db)
-                try Self.removeUnreferencedImages(
-                    candidateImageURLs: canceled.targetImageURLs + canceled.completedImageURLs,
-                    fileManager: fileManager,
-                    imagesDirectory: imagesDirectory,
-                    in: db
-                )
-            }
-            notifyOfflineCacheDidChange()
-        } catch {
-            throw offlineCachePersistenceError(from: error)
-        }
-    }
-
-    public func cancelOfflineCacheWorks(forOwnerName ownerName: String) async throws {
-        try await recoverQueueStateAfterRestart()
-        guard let ownerName = ownerName.mangaReaderTrimmedNonEmpty else { return }
-        do {
-            try await database.write { db in
-                let canceled = try Self.works(ownerName: ownerName, in: db)
-                try db.execute(
-                    sql: "DELETE FROM offline_cache_works WHERE reader_kind = ? AND owner_name = ?",
-                    arguments: [Self.mangaReaderKind, ownerName]
-                )
-                try Self.removeUnreferencedImages(
-                    candidateImageURLs: canceled.flatMap { $0.targetImageURLs + $0.completedImageURLs },
-                    fileManager: fileManager,
-                    imagesDirectory: imagesDirectory,
-                    in: db
-                )
-            }
-            notifyOfflineCacheDidChange()
         } catch {
             throw offlineCachePersistenceError(from: error)
         }
@@ -407,14 +329,14 @@ public actor OfflineCacheStore: OfflineCacheStoring {
         notifyOfflineCacheDidChange()
     }
 
-    public func offlineCacheQueueRunState() async -> MangaOfflineCacheQueueRunState {
+    public func offlineCacheQueueRunState() async -> OfflineCacheQueueRunState {
         try? await recoverQueueStateAfterRestart()
         return (try? await database.read { db in
             try Self.queueRunState(in: db)
         }) ?? .paused
     }
 
-    public func setOfflineCacheQueueRunState(_ state: MangaOfflineCacheQueueRunState) async throws {
+    public func setOfflineCacheQueueRunState(_ state: OfflineCacheQueueRunState) async throws {
         didRecoverQueueState = true
         do {
             try await database.write { db in
@@ -429,7 +351,7 @@ public actor OfflineCacheStore: OfflineCacheStoring {
         }
     }
 
-    public func offlineCacheState(ownerName: String, tid: String) async -> MangaOfflineCacheState {
+    public func mangaOfflineCacheState(ownerName: String, tid: String) async -> MangaOfflineCacheState {
         try? await recoverQueueStateAfterRestart()
         guard let id = normalizedID(ownerName: ownerName, tid: tid) else { return .uncached }
         return (try? await database.read { db in
@@ -443,7 +365,7 @@ public actor OfflineCacheStore: OfflineCacheStoring {
                try Self.isMembershipComplete(membership, fileManager: fileManager, imagesDirectory: imagesDirectory, in: db) {
                 return .cached
             }
-            if try Self.work(ownerName: id.ownerName, tid: id.tid, in: db) != nil {
+            if try Self.rawWork(readerKind: .manga, ownerKey: id.ownerName, entryKey: id.tid, in: db) != nil {
                 return .caching
             }
             return .uncached
@@ -490,23 +412,6 @@ public actor OfflineCacheStore: OfflineCacheStoring {
             ) ?? 0
             return imageBytes + novelBytes + mangaSourcePageBytes
         }) ?? 0
-    }
-
-    private func updateWork(
-        ownerName: String,
-        tid: String,
-        transform: @Sendable (MangaOfflineCacheWork) -> MangaOfflineCacheWork
-    ) async throws {
-        guard let id = normalizedID(ownerName: ownerName, tid: tid) else { return }
-        do {
-            try await database.write { db in
-                guard let work = try Self.work(ownerName: id.ownerName, tid: id.tid, in: db) else { return }
-                try Self.save(transform(work), in: db)
-            }
-            notifyOfflineCacheDidChange()
-        } catch {
-            throw offlineCachePersistenceError(from: error)
-        }
     }
 
     func recoverQueueStateAfterRestart() async throws {
@@ -630,47 +535,6 @@ public actor OfflineCacheStore: OfflineCacheStoring {
         }
     }
 
-    private static func save(_ work: MangaOfflineCacheWork, in db: Database) throws {
-        try db.execute(
-            sql: """
-            INSERT OR REPLACE INTO offline_cache_works
-            (reader_kind, work_id, owner_name, owner_title, tid, chapter_title, retains_inline_images, state, failure_message, current_bytes_per_second, insertion_index, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            arguments: [
-                mangaReaderKind,
-                work.workID,
-                work.ownerName,
-                work.ownerName,
-                work.tid,
-                work.chapterTitle,
-                false,
-                work.state.rawValue,
-                work.failureMessage,
-                work.currentBytesPerSecond,
-                work.insertionIndex,
-                offlineCacheTimeInterval(from: work.createdAt),
-                offlineCacheTimeInterval(from: work.updatedAt)
-            ]
-        )
-        try replaceImageList(
-            table: "offline_cache_work_images",
-            readerKind: mangaReaderKind,
-            ownerName: work.ownerName,
-            tid: work.tid,
-            imageURLs: work.targetImageURLs,
-            in: db
-        )
-        try replaceImageList(
-            table: "offline_cache_completed_images",
-            readerKind: mangaReaderKind,
-            ownerName: work.ownerName,
-            tid: work.tid,
-            imageURLs: work.completedImageURLs,
-            in: db
-        )
-    }
-
     static func replaceImageList(
         table: String,
         readerKind: String,
@@ -745,7 +609,7 @@ public actor OfflineCacheStore: OfflineCacheStoring {
         }
     }
 
-    static func allMemberships(
+    static func allMangaMemberships(
         fileManager: FileManager,
         mangaSourcePagesDirectory: URL,
         in db: Database
@@ -797,94 +661,6 @@ public actor OfflineCacheStore: OfflineCacheStoring {
             ),
             sourcePage: sourcePage,
             createdAt: offlineCacheOptionalDate(from: row["created_at"] as Double?) ?? Date(timeIntervalSince1970: 0)
-        )
-    }
-
-    private static func work(ownerName: String, tid: String, in db: Database) throws -> MangaOfflineCacheWork? {
-        guard let row = try Row.fetchOne(
-            db,
-            sql: """
-            SELECT work_id, owner_name, tid, chapter_title, state, failure_message, current_bytes_per_second, insertion_index, created_at, updated_at
-            FROM offline_cache_works
-            WHERE reader_kind = ? AND owner_name = ? AND tid = ?
-            """,
-            arguments: [mangaReaderKind, ownerName, tid]
-        ) else {
-            return nil
-        }
-        return try work(from: row, in: db)
-    }
-
-    private static func works(ownerName: String, in db: Database) throws -> [MangaOfflineCacheWork] {
-        try Row.fetchAll(
-            db,
-            sql: """
-            SELECT work_id, owner_name, tid, chapter_title, state, failure_message, current_bytes_per_second, insertion_index, created_at, updated_at
-            FROM offline_cache_works
-            WHERE reader_kind = ? AND owner_name = ?
-            ORDER BY insertion_index ASC, owner_name ASC, tid ASC
-            """,
-            arguments: [mangaReaderKind, ownerName]
-        ).map { try work(from: $0, in: db) }
-    }
-
-    static func allWorks(in db: Database) throws -> [MangaOfflineCacheWork] {
-        try Row.fetchAll(
-            db,
-            sql: """
-            SELECT work_id, owner_name, tid, chapter_title, state, failure_message, current_bytes_per_second, insertion_index, created_at, updated_at
-            FROM offline_cache_works
-            WHERE reader_kind = ?
-            ORDER BY insertion_index ASC, owner_name ASC, tid ASC
-            """,
-            arguments: [mangaReaderKind]
-        ).map { try work(from: $0, in: db) }
-    }
-
-    private static func work(workID: String, in db: Database) throws -> MangaOfflineCacheWork? {
-        guard let workID = workID.mangaReaderTrimmedNonEmpty,
-              let row = try Row.fetchOne(
-                db,
-                sql: """
-                SELECT work_id, owner_name, tid, chapter_title, state, failure_message, current_bytes_per_second, insertion_index, created_at, updated_at
-                FROM offline_cache_works
-                WHERE reader_kind = ? AND work_id = ?
-                """,
-                arguments: [mangaReaderKind, workID]
-              ) else {
-            return nil
-        }
-        return try work(from: row, in: db)
-    }
-
-    private static func work(from row: Row, in db: Database) throws -> MangaOfflineCacheWork {
-        let tid = row["tid"] as String
-        let state = MangaOfflineCacheWorkState(rawValue: row["state"] as String) ?? .paused
-        return MangaOfflineCacheWork(
-            workID: row["work_id"],
-            ownerName: row["owner_name"],
-            tid: tid,
-            chapterTitle: row["chapter_title"],
-            targetImageURLs: try imageURLs(
-                table: "offline_cache_work_images",
-                readerKind: mangaReaderKind,
-                ownerName: row["owner_name"],
-                tid: tid,
-                in: db
-            ),
-            completedImageURLs: try imageURLs(
-                table: "offline_cache_completed_images",
-                readerKind: mangaReaderKind,
-                ownerName: row["owner_name"],
-                tid: tid,
-                in: db
-            ),
-            state: state,
-            failureMessage: row["failure_message"] as String?,
-            currentBytesPerSecond: row["current_bytes_per_second"] as Int,
-            insertionIndex: row["insertion_index"] as Int,
-            createdAt: offlineCacheOptionalDate(from: row["created_at"] as Double?) ?? Date(timeIntervalSince1970: 0),
-            updatedAt: offlineCacheOptionalDate(from: row["updated_at"] as Double?) ?? Date(timeIntervalSince1970: 0)
         )
     }
 
@@ -1064,13 +840,13 @@ public actor OfflineCacheStore: OfflineCacheStoring {
             WHERE state = ?
             """,
             arguments: [
-                MangaOfflineCacheWorkState.paused.rawValue,
-                MangaOfflineCacheWorkState.running.rawValue
+                OfflineCacheWorkState.paused.rawValue,
+                OfflineCacheWorkState.running.rawValue
             ]
         )
     }
 
-    private static func queueRunState(in db: Database) throws -> MangaOfflineCacheQueueRunState {
+    private static func queueRunState(in db: Database) throws -> OfflineCacheQueueRunState {
         guard let rawValue = try String.fetchOne(
             db,
             sql: "SELECT value FROM offline_cache_queue_state WHERE key = ?",
@@ -1078,10 +854,10 @@ public actor OfflineCacheStore: OfflineCacheStoring {
         ) else {
             return .paused
         }
-        return MangaOfflineCacheQueueRunState(rawValue: rawValue) ?? .paused
+        return OfflineCacheQueueRunState(rawValue: rawValue) ?? .paused
     }
 
-    private static func setQueueRunState(_ state: MangaOfflineCacheQueueRunState, in db: Database) throws {
+    private static func setQueueRunState(_ state: OfflineCacheQueueRunState, in db: Database) throws {
         try db.execute(
             sql: """
             INSERT INTO offline_cache_queue_state (key, value)
@@ -1122,6 +898,8 @@ private func offlineCachePersistenceError(from error: Error) -> YamiboError {
     }
     return YamiboError.persistenceFailed(error.localizedDescription)
 }
+
+extension OfflineCacheStore: OfflineCacheStoreCore {}
 
 private struct MangaSourcePagePayload {
     var fileName: String

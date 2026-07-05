@@ -21,7 +21,7 @@ extension OfflineCacheStore {
         var builders: [OfflineCacheEntryID: OfflineCacheManagementEntryBuilder] = [:]
         var groupTitles: [OfflineCacheGroupID: OfflineCacheManagementGroupTitle] = [:]
 
-        for membership in try allMemberships(
+        for membership in try allMangaMemberships(
             fileManager: fileManager,
             mangaSourcePagesDirectory: mangaSourcePagesDirectory,
             in: db

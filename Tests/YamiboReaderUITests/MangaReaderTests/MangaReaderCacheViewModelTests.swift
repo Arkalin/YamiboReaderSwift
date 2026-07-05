@@ -14,8 +14,8 @@ final class MangaReaderCacheViewModelTests: XCTestCase {
         let cachedImage = try XCTUnwrap(URL(string: "https://img.example.com/100-1.jpg"))
 
         try await fixture.store.saveOfflineImageData(Data([1]), for: cachedImage)
-        try await fixture.store.saveMembership(cacheMembership(favorite: fixture.favorite, tid: "100", imageURLs: [cachedImage]))
-        _ = try await fixture.store.enqueueOfflineCacheWork(cacheWorkRequest(favorite: fixture.favorite, tid: "300"))
+        try await fixture.store.saveMangaOfflineCacheMembership(cacheMembership(favorite: fixture.favorite, tid: "100", imageURLs: [cachedImage]))
+        _ = try await fixture.store.enqueueMangaOfflineCacheWork(cacheWorkRequest(favorite: fixture.favorite, tid: "300"))
 
         await fixture.model.load()
 
@@ -28,8 +28,8 @@ final class MangaReaderCacheViewModelTests: XCTestCase {
             cacheChapter(tid: "100", number: 1),
             cacheChapter(tid: "200", number: 2)
         ])
-        _ = try await fixture.store.enqueueOfflineCacheWork(cacheWorkRequest(favorite: fixture.favorite, tid: "100"))
-        _ = try await fixture.store.enqueueOfflineCacheWork(cacheWorkRequest(favorite: fixture.favorite, tid: "200"))
+        _ = try await fixture.store.enqueueMangaOfflineCacheWork(cacheWorkRequest(favorite: fixture.favorite, tid: "100"))
+        _ = try await fixture.store.enqueueMangaOfflineCacheWork(cacheWorkRequest(favorite: fixture.favorite, tid: "200"))
 
         await fixture.model.load()
 
@@ -43,14 +43,18 @@ final class MangaReaderCacheViewModelTests: XCTestCase {
         XCTAssertEqual(fixture.model.offlineCacheQueueEntryCount, 0)
         XCTAssertEqual(fixture.model.rows.map(\.state), [.uncached])
 
-        _ = try await fixture.store.enqueueOfflineCacheWork(cacheWorkRequest(favorite: fixture.favorite, tid: "100"))
+        _ = try await fixture.store.enqueueMangaOfflineCacheWork(cacheWorkRequest(favorite: fixture.favorite, tid: "100"))
 
         try await waitForMangaReaderCacheCondition {
             fixture.model.offlineCacheQueueEntryCount == 1
                 && fixture.model.rows.map(\.state) == [.caching]
         }
 
-        try await fixture.store.cancelOfflineCacheWork(ownerName: fixture.favorite.title, tid: "100")
+        try await fixture.store.cancelOfflineCacheEntry(OfflineCacheEntryID(
+            readerKind: .manga,
+            ownerKey: fixture.favorite.title,
+            entryKey: "100"
+        ))
 
         try await waitForMangaReaderCacheCondition {
             fixture.model.offlineCacheQueueEntryCount == 0
@@ -60,7 +64,7 @@ final class MangaReaderCacheViewModelTests: XCTestCase {
 
     func testFailedQueueWorkProjectsAsCaching() async throws {
         let fixture = try await makeCacheFixture(chapters: [cacheChapter(tid: "100", number: 1)])
-        _ = try await fixture.store.enqueueOfflineCacheWork(cacheWorkRequest(favorite: fixture.favorite, tid: "100"))
+        _ = try await fixture.store.enqueueMangaOfflineCacheWork(cacheWorkRequest(favorite: fixture.favorite, tid: "100"))
         try await fixture.store.markOfflineCacheWorkFailed(ownerName: fixture.favorite.title, tid: "100", message: "Timeout")
 
         await fixture.model.load()
@@ -76,14 +80,14 @@ final class MangaReaderCacheViewModelTests: XCTestCase {
         ])
         let cachedImage = try XCTUnwrap(URL(string: "https://img.example.com/100-1.jpg"))
         try await fixture.store.saveOfflineImageData(Data([1]), for: cachedImage)
-        try await fixture.store.saveMembership(cacheMembership(favorite: fixture.favorite, tid: "100", imageURLs: [cachedImage]))
-        _ = try await fixture.store.enqueueOfflineCacheWork(cacheWorkRequest(favorite: fixture.favorite, tid: "300"))
+        try await fixture.store.saveMangaOfflineCacheMembership(cacheMembership(favorite: fixture.favorite, tid: "100", imageURLs: [cachedImage]))
+        _ = try await fixture.store.enqueueMangaOfflineCacheWork(cacheWorkRequest(favorite: fixture.favorite, tid: "300"))
         try await fixture.store.markOfflineCacheWorkFailed(ownerName: fixture.favorite.title, tid: "300", message: "Timeout")
 
         await fixture.model.load()
         await fixture.model.cacheSelected(tids: ["100", "200", "300"])
 
-        let works = await fixture.store.allOfflineCacheWorks()
+        let works = await fixture.store.mangaQueueWorks()
         XCTAssertEqual(Set(works.map(\.tid)), ["200", "300"])
         XCTAssertEqual(works.first(where: { $0.tid == "300" })?.state, .failed)
         XCTAssertEqual(fixture.model.rows.map(\.state), [.cached, .caching, .caching])
@@ -109,7 +113,7 @@ final class MangaReaderCacheViewModelTests: XCTestCase {
 
         await fixture.model.cacheSelected(tids: ["100"])
 
-        let works = await fixture.store.allOfflineCacheWorks()
+        let works = await fixture.store.mangaQueueWorks()
         XCTAssertEqual(works.map(\.tid), ["100"])
         XCTAssertEqual(fixture.model.rows.map(\.state), [.caching])
         let events = await controller.snapshotEvents()
@@ -139,7 +143,7 @@ final class MangaReaderCacheViewModelTests: XCTestCase {
             ],
             offlineCacheQueueControllerProvider: { controller }
         )
-        _ = try await fixture.store.enqueueOfflineCacheWork(cacheWorkRequest(favorite: fixture.favorite, tid: "200"))
+        _ = try await fixture.store.enqueueMangaOfflineCacheWork(cacheWorkRequest(favorite: fixture.favorite, tid: "200"))
         try await fixture.store.markOfflineCacheWorkFailed(ownerName: fixture.favorite.title, tid: "200", message: "Timeout")
 
         await fixture.model.load()
@@ -147,7 +151,7 @@ final class MangaReaderCacheViewModelTests: XCTestCase {
 
         let events = await controller.snapshotEvents()
         XCTAssertEqual(events, [])
-        let works = await fixture.store.allOfflineCacheWorks()
+        let works = await fixture.store.mangaQueueWorks()
         XCTAssertEqual(Set(works.map(\.tid)), ["100", "200"])
         XCTAssertEqual(works.first(where: { $0.tid == "200" })?.state, .failed)
     }
@@ -160,17 +164,17 @@ final class MangaReaderCacheViewModelTests: XCTestCase {
         ])
         let cachedImage = try XCTUnwrap(URL(string: "https://img.example.com/100-1.jpg"))
         try await fixture.store.saveOfflineImageData(Data([1]), for: cachedImage)
-        try await fixture.store.saveMembership(cacheMembership(favorite: fixture.favorite, tid: "100", imageURLs: [cachedImage]))
-        _ = try await fixture.store.enqueueOfflineCacheWork(cacheWorkRequest(favorite: fixture.favorite, tid: "200"))
-        _ = try await fixture.store.enqueueOfflineCacheWork(cacheWorkRequest(favorite: fixture.favorite, tid: "300"))
+        try await fixture.store.saveMangaOfflineCacheMembership(cacheMembership(favorite: fixture.favorite, tid: "100", imageURLs: [cachedImage]))
+        _ = try await fixture.store.enqueueMangaOfflineCacheWork(cacheWorkRequest(favorite: fixture.favorite, tid: "200"))
+        _ = try await fixture.store.enqueueMangaOfflineCacheWork(cacheWorkRequest(favorite: fixture.favorite, tid: "300"))
         try await fixture.store.markOfflineCacheWorkFailed(ownerName: fixture.favorite.title, tid: "300", message: "Timeout")
 
         await fixture.model.load()
         await fixture.model.deleteSelected(tids: ["100", "200", "300"])
 
-        let deletedMembership = await fixture.store.membership(ownerName: fixture.favorite.title, tid: "100")
+        let deletedMembership = await fixture.store.mangaOfflineCacheMembership(ownerName: fixture.favorite.title, tid: "100")
         let deletedImageData = await fixture.store.offlineImageData(for: cachedImage)
-        let remainingWorks = await fixture.store.allOfflineCacheWorks()
+        let remainingWorks = await fixture.store.mangaQueueWorks()
         XCTAssertNil(deletedMembership)
         XCTAssertNil(deletedImageData)
         XCTAssertTrue(remainingWorks.isEmpty)
@@ -184,7 +188,7 @@ final class MangaReaderCacheViewModelTests: XCTestCase {
         await fixture.model.cacheSelected(tids: ["100"])
 
         XCTAssertNil(fixture.model.prompt)
-        let works = await fixture.store.allOfflineCacheWorks()
+        let works = await fixture.store.mangaQueueWorks()
         XCTAssertEqual(works.map(\.ownerName), ["测试漫画"])
         XCTAssertEqual(works.map(\.tid), ["100"])
         XCTAssertEqual(fixture.model.rows.map(\.state), [.caching])
@@ -194,14 +198,14 @@ final class MangaReaderCacheViewModelTests: XCTestCase {
         let fixture = try await makeCacheFixture(chapters: [cacheChapter(tid: "100", number: 1)], saveFavorite: false)
         let cachedImage = try XCTUnwrap(URL(string: "https://img.example.com/nonfavorite-100-1.jpg"))
         try await fixture.store.saveOfflineImageData(Data([1]), for: cachedImage)
-        try await fixture.store.saveMembership(cacheMembership(favorite: fixture.favorite, tid: "100", imageURLs: [cachedImage]))
+        try await fixture.store.saveMangaOfflineCacheMembership(cacheMembership(favorite: fixture.favorite, tid: "100", imageURLs: [cachedImage]))
 
         await fixture.model.load()
         XCTAssertEqual(fixture.model.rows.map(\.state), [.cached])
 
         await fixture.model.deleteSelected(tids: ["100"])
 
-        let deletedMembership = await fixture.store.membership(ownerName: fixture.favorite.title, tid: "100")
+        let deletedMembership = await fixture.store.mangaOfflineCacheMembership(ownerName: fixture.favorite.title, tid: "100")
         let deletedImageData = await fixture.store.offlineImageData(for: cachedImage)
         XCTAssertNil(deletedMembership)
         XCTAssertNil(deletedImageData)

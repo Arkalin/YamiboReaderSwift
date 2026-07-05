@@ -11,12 +11,7 @@ public actor YamiboMangaImageDataLoader: MangaImageDataLoading {
         self.imageDataLoader = imageDataLoader
     }
 
-    public func imageData(for url: URL, refererURL: URL?) async throws -> Data {
-        try await imageDataLoader.imageData(
-            for: YamiboImageRequest(
-                url: url,
-                refererURL: refererURL
-            )
-        )
+    public func imageData(for request: YamiboImageRequest) async throws -> Data {
+        try await imageDataLoader.imageData(for: request)
     }
 }

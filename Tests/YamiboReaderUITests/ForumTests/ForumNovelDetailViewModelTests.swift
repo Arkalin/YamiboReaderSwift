@@ -18,7 +18,7 @@ import Testing
 @MainActor
 @Test func forumNovelDetailContinueUsesReadingProgressResumePointWhenAvailable() throws {
     let model = try makeForumNovelDetailViewModel()
-    let resumePoint = ReaderResumePoint(
+    let resumePoint = NovelResumePoint(
         view: 5,
         displayedTextOffset: 128,
         chapterOrdinal: 4,
@@ -55,7 +55,7 @@ import Testing
 @MainActor
 @Test func forumNovelDetailContinueUsesIndependentReadingProgressWithoutFavorite() throws {
     let model = try makeForumNovelDetailViewModel()
-    let resumePoint = ReaderResumePoint(
+    let resumePoint = NovelResumePoint(
         view: 4,
         displayedTextOffset: 96,
         chapterOrdinal: 3,
@@ -1031,7 +1031,7 @@ import Testing
     let sections = ForumNovelDetailViewModel.chapterSections(
         from: [1: page],
         totalPages: 1,
-        readerSettings: ReaderAppearanceSettings(showsAuthorRepliesToOthers: false)
+        novelReaderSettings: NovelReaderAppearanceSettings(showsAuthorRepliesToOthers: false)
     )
 
     #expect(sections[0].chapters.map(\.title) == ["第一章", "第二章"])
@@ -1084,7 +1084,7 @@ import Testing
         novel: NovelReadingProgressRecord(
             lastView: 1,
             lastChapter: "第一章",
-            novelResumePoint: ReaderResumePoint(
+            novelResumePoint: NovelResumePoint(
                 view: 1,
                 chapterIdentity: NovelChapterIdentity(rawValue: "post:1002#chapter:0"),
                 displayedTextOffset: 20,
@@ -1168,7 +1168,7 @@ import Testing
             maxView: 3,
             chapterTitle: "第二章",
             authorID: "42",
-            resumePoint: ReaderResumePoint(
+            resumePoint: NovelResumePoint(
                 view: 2,
                 chapterIdentity: NovelChapterIdentity(rawValue: "post:2001#chapter:0"),
                 displayedTextOffset: 80,
@@ -1252,7 +1252,7 @@ private func makeNovelDetailThreadPage(
 }
 
 private struct FakeForumNovelDocumentLoader: ForumNovelDocumentLoading {
-    func loadPage(_ request: ReaderPageRequest) async throws -> NovelReaderProjection {
+    func loadPage(_ request: NovelPageRequest) async throws -> NovelReaderProjection {
         NovelReaderProjection(
             threadID: request.threadID,
             view: request.view,
@@ -1269,7 +1269,7 @@ private struct FakeForumNovelDocumentLoader: ForumNovelDocumentLoading {
 private struct FailingForumNovelDocumentLoader: ForumNovelDocumentLoading {
     let error: Error
 
-    func loadPage(_: ReaderPageRequest) async throws -> NovelReaderProjection {
+    func loadPage(_: NovelPageRequest) async throws -> NovelReaderProjection {
         throw error
     }
 }

@@ -69,7 +69,7 @@ extension OfflineCacheStore {
         threadID: String,
         view: Int,
         authorID: String?,
-        contentSource: ReaderContentSource?
+        contentSource: ReaderProjectionContentSource?
     ) async -> ForumThreadPage? {
         try? await recoverQueueStateAfterRestart()
         guard let identity = novelEntryLookup(
@@ -105,7 +105,7 @@ extension OfflineCacheStore {
         threadID: String,
         view: Int,
         authorID: String?,
-        contentSource: ReaderContentSource?
+        contentSource: ReaderProjectionContentSource?
     ) async -> NovelOfflineSourcePageSnapshot? {
         try? await recoverQueueStateAfterRestart()
         let normalizedThreadID = threadID.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -161,11 +161,11 @@ extension OfflineCacheStore {
         threadID: String,
         view: Int,
         authorID: String?,
-        contentSource: ReaderContentSource?
+        contentSource: ReaderProjectionContentSource?
     ) -> NovelEntryLookup? {
         let normalizedThreadID = threadID.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !normalizedThreadID.isEmpty else { return nil }
-        let identity = ReaderCacheIdentity(
+        let identity = NovelReaderCacheIdentity(
             threadID: normalizedThreadID,
             view: max(1, view),
             authorID: authorID,
@@ -277,7 +277,7 @@ extension OfflineCacheStore {
             ?? "offline"
         return try NovelReaderProjectionBuilder.build(
             from: sourcePage,
-            request: ReaderPageRequest(
+            request: NovelPageRequest(
                 threadID: request.threadID,
                 view: request.view,
                 authorID: authorID
@@ -309,7 +309,7 @@ extension OfflineCacheStore {
         )
     }
 
-    private static func syntheticHTML(for segment: ReaderSegment, index: Int) -> String {
+    private static func syntheticHTML(for segment: NovelReaderSegment, index: Int) -> String {
         switch segment {
         case let .text(text, chapterTitle):
             return "<strong>\((chapterTitle ?? "第\(index + 1)章").novelOfflineEscapedHTML)</strong><br>\(text.novelOfflineEscapedHTML)"
@@ -318,24 +318,6 @@ extension OfflineCacheStore {
         }
     }
 
-    static func novelEntryKeyComponents(from key: String) -> NovelEntryKeyComponents? {
-        let components = key.components(separatedBy: "_")
-        guard components.count == 8,
-              components[0] == "tid",
-              components[2] == "source",
-              components[4] == "author",
-              components[6] == "view",
-              let contentSource = ReaderContentSource(rawValue: components[3]),
-              let view = Int(components[7]) else {
-            return nil
-        }
-        return NovelEntryKeyComponents(
-            threadID: components[1],
-            contentSource: contentSource,
-            authorID: components[5] == "all" ? nil : components[5],
-            view: max(1, view)
-        )
-    }
 }
 
 struct NovelEntryLookup {
@@ -344,14 +326,7 @@ struct NovelEntryLookup {
     var threadID: String
     var entryKey: String
     var authorID: String?
-    var contentSource: ReaderContentSource
-}
-
-struct NovelEntryKeyComponents {
-    var threadID: String
-    var contentSource: ReaderContentSource
-    var authorID: String?
-    var view: Int
+    var contentSource: ReaderProjectionContentSource
 }
 
 struct NovelPayloadFileNames {

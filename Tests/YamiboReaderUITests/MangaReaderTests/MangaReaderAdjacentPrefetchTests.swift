@@ -206,7 +206,7 @@ final class MangaReaderAdjacentPrefetchTests: XCTestCase {
             }
         }
 
-        guard case let .manga(.native(savedContext))? = await fixture.resumeRouteStore.load() else {
+        guard case let .manga(savedContext)? = await fixture.resumeRouteStore.load() else {
             XCTFail("Expected saved manga resume route")
             return
         }
@@ -241,7 +241,7 @@ final class MangaReaderAdjacentPrefetchTests: XCTestCase {
 }
 
 private struct AdjacentPrefetchFixture {
-    let model: MangaReaderModel
+    let model: MangaReaderViewModel
     let resumeRouteStore: ReaderResumeRouteStore
 }
 
@@ -271,7 +271,7 @@ private func makeAdjacentPrefetchFixture(
         debounceNanoseconds: 0
     )
     #if os(iOS)
-    let dependencies = MangaReaderModelDependencies(
+    let dependencies = MangaReaderViewModelDependencies(
         makeProjectionLoader: { resolvedLoader },
         makeDirectoryRepository: { AdjacentPrefetchDirectoryRepository(seed: makeAdjacentPrefetchSeed(document: document)) },
         makeDirectoryStore: { AdjacentPrefetchDirectoryStore(directories: [directory]) },
@@ -280,7 +280,7 @@ private func makeAdjacentPrefetchFixture(
         progressSync: resolvedProgressSync
     )
     #else
-    let dependencies = MangaReaderModelDependencies(
+    let dependencies = MangaReaderViewModelDependencies(
         makeProjectionLoader: { resolvedLoader },
         makeDirectoryRepository: { AdjacentPrefetchDirectoryRepository(seed: makeAdjacentPrefetchSeed(document: document)) },
         makeDirectoryStore: { AdjacentPrefetchDirectoryStore(directories: [directory]) },
@@ -297,7 +297,7 @@ private func makeAdjacentPrefetchFixture(
         directoryName: directory.cleanBookName
     )
     return AdjacentPrefetchFixture(
-        model: MangaReaderModel(
+        model: MangaReaderViewModel(
             context: context,
             appContext: appContext,
             dependencies: dependencies,
@@ -390,7 +390,7 @@ private actor AdjacentPrefetchDirectoryStore: MangaDirectoryPersisting {
 
 #if os(iOS)
 private actor AdjacentPrefetchImageDataLoader: MangaImageDataLoading {
-    func imageData(for url: URL, refererURL: URL?) async throws -> Data {
+    func imageData(for request: YamiboImageRequest) async throws -> Data {
         Data()
     }
 }

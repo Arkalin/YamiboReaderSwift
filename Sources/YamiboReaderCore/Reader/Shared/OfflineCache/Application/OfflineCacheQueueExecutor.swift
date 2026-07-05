@@ -15,11 +15,11 @@ public struct OfflineCacheImageAcquisition: Hashable, Sendable {
 }
 
 public protocol OfflineCacheImageAcquiring: Sendable {
-    func acquireImageData(for imageURL: URL, refererURL: URL?) async throws -> OfflineCacheImageAcquisition
+    func acquireImageData(for request: YamiboImageRequest) async throws -> OfflineCacheImageAcquisition
 }
 
 public protocol OfflineCacheImageTransporting: Sendable {
-    func downloadImageData(for imageURL: URL, refererURL: URL?) async throws -> Data
+    func downloadImageData(for request: YamiboImageRequest) async throws -> Data
 }
 
 public protocol OfflineCacheQueueRunObserving: Sendable {
@@ -41,15 +41,10 @@ public actor OfflineCacheImageAcquirer: OfflineCacheImageAcquiring {
         self.backgroundTransport = backgroundTransport
     }
 
-    public func acquireImageData(for imageURL: URL, refererURL: URL?) async throws -> OfflineCacheImageAcquisition {
-        let request = YamiboImageRequest(
-            url: imageURL,
-            refererURL: refererURL
-        )
-
+    public func acquireImageData(for request: YamiboImageRequest) async throws -> OfflineCacheImageAcquisition {
         let data: Data
         if let backgroundTransport {
-            data = try await backgroundTransport.downloadImageData(for: imageURL, refererURL: refererURL)
+            data = try await backgroundTransport.downloadImageData(for: request)
         } else {
             data = try await networkLoader.imageData(for: request)
         }
@@ -58,7 +53,7 @@ public actor OfflineCacheImageAcquirer: OfflineCacheImageAcquiring {
 }
 
 public actor OfflineCacheQueueExecutor {
-    private let store: any OfflineCacheStoring
+    private let store: any OfflineCacheQueueStoring & OfflineCacheImageAssetStoring
     private let runObserver: (any OfflineCacheQueueRunObserving)?
     private let mangaWorkProcessor: OfflineCacheWorkProcessor<MangaOfflineCacheWorkProcessingStrategy>
     private let novelWorkProcessor: OfflineCacheWorkProcessor<NovelOfflineCacheWorkProcessingStrategy>?
@@ -66,7 +61,9 @@ public actor OfflineCacheQueueExecutor {
     private var runGeneration = 0
 
     public init(
-        store: any OfflineCacheStoring,
+        store: any OfflineCacheQueueStoring & OfflineCacheImageAssetStoring,
+        mangaCacheStore: any MangaOfflineCacheStoring,
+        novelCacheStore: (any NovelOfflineCacheStoring)? = nil,
         readerProjectionLoader: any MangaReaderProjectionSnapshotLoading,
         novelSourcePageLoader: (any NovelOfflineCacheSourcePageLoading)? = nil,
         imageAcquirer: any OfflineCacheImageAcquiring,
@@ -81,15 +78,21 @@ public actor OfflineCacheQueueExecutor {
             imageAcquirer: imageAcquirer,
             runObserver: runObserver,
             maxConcurrentImageTransfers: transferLimit,
-            strategy: MangaOfflineCacheWorkProcessingStrategy(readerProjectionLoader: readerProjectionLoader)
+            strategy: MangaOfflineCacheWorkProcessingStrategy(
+                store: mangaCacheStore,
+                readerProjectionLoader: readerProjectionLoader
+            )
         )
-        if let novelSourcePageLoader {
+        if let novelSourcePageLoader, let novelCacheStore {
             self.novelWorkProcessor = OfflineCacheWorkProcessor(
                 store: store,
                 imageAcquirer: imageAcquirer,
                 runObserver: runObserver,
                 maxConcurrentImageTransfers: transferLimit,
-                strategy: NovelOfflineCacheWorkProcessingStrategy(sourcePageLoader: novelSourcePageLoader)
+                strategy: NovelOfflineCacheWorkProcessingStrategy(
+                    store: novelCacheStore,
+                    sourcePageLoader: novelSourcePageLoader
+                )
             )
         } else {
             self.novelWorkProcessor = nil
@@ -131,7 +134,9 @@ public actor OfflineCacheQueueExecutor {
         runTask?.cancel()
         runTask = nil
         await runObserver?.queueRunDidCancel()
-        try await store.cancelOfflineCacheWork(ownerName: ownerName, tid: tid)
+        try await store.cancelOfflineCacheEntry(
+            OfflineCacheEntryID(readerKind: .manga, ownerKey: ownerName, entryKey: tid)
+        )
         if wasRunning {
             try await continueQueue()
         }
@@ -143,7 +148,9 @@ public actor OfflineCacheQueueExecutor {
         runTask?.cancel()
         runTask = nil
         await runObserver?.queueRunDidCancel()
-        try await store.cancelOfflineCacheWorks(forOwnerName: ownerName)
+        try await store.cancelOfflineCacheGroup(
+            OfflineCacheGroupID(readerKind: .manga, ownerKey: ownerName)
+        )
         if wasRunning {
             try await continueQueue()
         }

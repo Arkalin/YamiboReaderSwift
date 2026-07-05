@@ -251,16 +251,16 @@ final class MineHomeViewModelTests: XCTestCase {
         let fixture = try await makeMineHomeFixture()
         let activeImage = try XCTUnwrap(URL(string: "https://img.example.com/100-1.jpg"))
         let pendingImage = try XCTUnwrap(URL(string: "https://img.example.com/100-2.jpg"))
-        _ = try await fixture.offlineCacheStore.enqueueOfflineCacheWork(
+        _ = try await fixture.offlineCacheStore.enqueueMangaOfflineCacheWork(
             try makeMineOfflineCacheWorkRequest(ownerName: "作品B", tid: "300")
         )
-        _ = try await fixture.offlineCacheStore.enqueueOfflineCacheWork(
+        _ = try await fixture.offlineCacheStore.enqueueMangaOfflineCacheWork(
             try makeMineOfflineCacheWorkRequest(
                 ownerName: "作品A",
                 tid: "200"
             )
         )
-        _ = try await fixture.offlineCacheStore.enqueueOfflineCacheWork(
+        _ = try await fixture.offlineCacheStore.enqueueMangaOfflineCacheWork(
             try makeMineOfflineCacheWorkRequest(
                 ownerName: "作品A",
                 tid: "100",
@@ -317,14 +317,14 @@ final class MineHomeViewModelTests: XCTestCase {
         let fixture = try await makeMineHomeFixture()
         let cachedImage = try XCTUnwrap(URL(string: "https://img.example.com/completed-100.jpg"))
         try await fixture.offlineCacheStore.saveOfflineImageData(Data([1]), for: cachedImage)
-        try await fixture.offlineCacheStore.saveMembership(
+        try await fixture.offlineCacheStore.saveMangaOfflineCacheMembership(
             try makeMineOfflineCacheMembership(
                 ownerName: "作品A",
                 tid: "100",
                 imageURLs: [cachedImage]
             )
         )
-        _ = try await fixture.offlineCacheStore.enqueueOfflineCacheWork(
+        _ = try await fixture.offlineCacheStore.enqueueMangaOfflineCacheWork(
             try makeMineOfflineCacheWorkRequest(ownerName: "作品A", tid: "200")
         )
 
@@ -363,7 +363,7 @@ final class MineHomeViewModelTests: XCTestCase {
 
     func testOfflineCacheQueueLoadsNovelWorkRowsFromStore() async throws {
         let fixture = try await makeMineHomeFixture()
-        _ = try await fixture.offlineCacheStore.enqueueOfflineCacheWork(
+        _ = try await fixture.offlineCacheStore.enqueueMangaOfflineCacheWork(
             try makeMineOfflineCacheWorkRequest(ownerName: "漫画A", tid: "100")
         )
         _ = try await fixture.offlineCacheStore.enqueueNovelOfflineCacheWork(
@@ -407,7 +407,7 @@ final class MineHomeViewModelTests: XCTestCase {
         let fixture = try await makeMineHomeFixture()
         let firstImage = try XCTUnwrap(URL(string: "https://img.example.com/100-1.jpg"))
         let secondImage = try XCTUnwrap(URL(string: "https://img.example.com/100-2.jpg"))
-        _ = try await fixture.offlineCacheStore.enqueueOfflineCacheWork(
+        _ = try await fixture.offlineCacheStore.enqueueMangaOfflineCacheWork(
             try makeMineOfflineCacheWorkRequest(
                 ownerName: "作品A",
                 tid: "100",
@@ -444,7 +444,7 @@ final class MineHomeViewModelTests: XCTestCase {
         await viewModel.loadOfflineCacheQueue()
         XCTAssertEqual(viewModel.offlineCacheQueueEntryCount, 0)
 
-        _ = try await fixture.offlineCacheStore.enqueueOfflineCacheWork(
+        _ = try await fixture.offlineCacheStore.enqueueMangaOfflineCacheWork(
             try makeMineOfflineCacheWorkRequest(ownerName: "作品A", tid: "100")
         )
 
@@ -483,7 +483,7 @@ final class MineHomeViewModelTests: XCTestCase {
 
     func testOfflineCacheQueueCommandsUseQueueControllerAndRefreshProjection() async throws {
         let fixture = try await makeMineHomeFixture()
-        _ = try await fixture.offlineCacheStore.enqueueOfflineCacheWork(
+        _ = try await fixture.offlineCacheStore.enqueueMangaOfflineCacheWork(
             try makeMineOfflineCacheWorkRequest(ownerName: "作品A", tid: "100")
         )
         let controller = RecordingOfflineCacheQueueController(store: fixture.offlineCacheStore)
@@ -499,7 +499,7 @@ final class MineHomeViewModelTests: XCTestCase {
         await viewModel.cancelOfflineCacheChapter(workID)
 
         let events = await controller.snapshotEvents()
-        let canceledWork = await fixture.offlineCacheStore.offlineCacheWork(ownerName: "作品A", tid: "100")
+        let canceledWork = await fixture.offlineCacheStore.mangaQueueWork(ownerName: "作品A", tid: "100")
         XCTAssertEqual(events, ["continue", "pause", "cancel:作品A:100"])
         XCTAssertEqual(viewModel.offlineCacheQueueEntryCount, 0)
         XCTAssertNil(canceledWork)
@@ -508,11 +508,11 @@ final class MineHomeViewModelTests: XCTestCase {
     func testOfflineCacheOwnerGroupCancelPreservesCompletedCachedMembership() async throws {
         let fixture = try await makeMineHomeFixture()
         let cachedImage = try XCTUnwrap(URL(string: "https://img.example.com/100-1.jpg"))
-        _ = try await fixture.offlineCacheStore.enqueueOfflineCacheWork(
+        _ = try await fixture.offlineCacheStore.enqueueMangaOfflineCacheWork(
             try makeMineOfflineCacheWorkRequest(ownerName: "作品A", tid: "200")
         )
         try await fixture.offlineCacheStore.saveOfflineImageData(Data([1]), for: cachedImage)
-        try await fixture.offlineCacheStore.saveMembership(
+        try await fixture.offlineCacheStore.saveMangaOfflineCacheMembership(
             try makeMineOfflineCacheMembership(
                 ownerName: "作品A",
                 tid: "100",
@@ -527,8 +527,8 @@ final class MineHomeViewModelTests: XCTestCase {
 
         await viewModel.cancelOfflineCacheOwnerGroup(id: mineMangaOfflineGroupID("作品A"))
 
-        let canceledWork = await fixture.offlineCacheStore.offlineCacheWork(ownerName: "作品A", tid: "200")
-        let completedMembership = await fixture.offlineCacheStore.membership(ownerName: "作品A", tid: "100")
+        let canceledWork = await fixture.offlineCacheStore.mangaQueueWork(ownerName: "作品A", tid: "200")
+        let completedMembership = await fixture.offlineCacheStore.mangaOfflineCacheMembership(ownerName: "作品A", tid: "100")
         XCTAssertNil(canceledWork)
         XCTAssertNotNil(completedMembership)
         XCTAssertEqual(viewModel.offlineCacheQueueEntryCount, 0)
@@ -536,10 +536,10 @@ final class MineHomeViewModelTests: XCTestCase {
 
     func testOfflineCacheSelectionModeBatchCancelsSelectedWork() async throws {
         let fixture = try await makeMineHomeFixture()
-        _ = try await fixture.offlineCacheStore.enqueueOfflineCacheWork(
+        _ = try await fixture.offlineCacheStore.enqueueMangaOfflineCacheWork(
             try makeMineOfflineCacheWorkRequest(ownerName: "作品A", tid: "100")
         )
-        _ = try await fixture.offlineCacheStore.enqueueOfflineCacheWork(
+        _ = try await fixture.offlineCacheStore.enqueueMangaOfflineCacheWork(
             try makeMineOfflineCacheWorkRequest(ownerName: "作品A", tid: "200")
         )
         let controller = RecordingOfflineCacheQueueController(store: fixture.offlineCacheStore)
@@ -568,13 +568,13 @@ final class MineHomeViewModelTests: XCTestCase {
 
     func testOfflineCacheSelectionModeTogglesWholeOwnerGroup() async throws {
         let fixture = try await makeMineHomeFixture()
-        _ = try await fixture.offlineCacheStore.enqueueOfflineCacheWork(
+        _ = try await fixture.offlineCacheStore.enqueueMangaOfflineCacheWork(
             try makeMineOfflineCacheWorkRequest(ownerName: "作品A", tid: "100")
         )
-        _ = try await fixture.offlineCacheStore.enqueueOfflineCacheWork(
+        _ = try await fixture.offlineCacheStore.enqueueMangaOfflineCacheWork(
             try makeMineOfflineCacheWorkRequest(ownerName: "作品A", tid: "200")
         )
-        _ = try await fixture.offlineCacheStore.enqueueOfflineCacheWork(
+        _ = try await fixture.offlineCacheStore.enqueueMangaOfflineCacheWork(
             try makeMineOfflineCacheWorkRequest(ownerName: "作品B", tid: "300")
         )
         let viewModel = MineHomeViewModel(appContext: fixture.appContext)
@@ -602,7 +602,7 @@ final class MineHomeViewModelTests: XCTestCase {
 private struct MineHomeViewModelFixture {
     let appContext: YamiboAppContext
     let checkInStore: YamiboCheckInStore
-    let offlineCacheStore: any OfflineCacheStoring
+    let offlineCacheStore: any TestOfflineCacheStoring
     let directoryStore: MangaDirectoryStore
 }
 
@@ -766,14 +766,14 @@ private func profileHTML(uid: String) -> String {
 }
 
 private actor RecordingOfflineCacheQueueController: OfflineCacheQueueControlling {
-    private let store: any OfflineCacheStoring
+    private let store: any TestOfflineCacheStoring
     private var recordedEvents: [String] = []
 
     func snapshotEvents() -> [String] {
         recordedEvents
     }
 
-    init(store: any OfflineCacheStoring) {
+    init(store: any TestOfflineCacheStoring) {
         self.store = store
     }
 
@@ -789,7 +789,7 @@ private actor RecordingOfflineCacheQueueController: OfflineCacheQueueControlling
     }
 
     func cancelWork(id: OfflineCacheWorkID) async throws {
-        if let work = await store.allOfflineCacheWorks().first(where: { $0.workID == id.rawValue }) {
+        if let work = await store.mangaQueueWorks().first(where: { $0.workID == id.rawValue }) {
             recordedEvents.append("cancel:\(work.ownerName):\(work.tid)")
         } else {
             recordedEvents.append("cancel:\(id.readerKind.rawValue):\(id.rawValue)")

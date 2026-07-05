@@ -3,7 +3,7 @@ import Observation
 import YamiboReaderCore
 
 protocol ForumNovelDocumentLoading: Sendable {
-    func loadPage(_ request: ReaderPageRequest) async throws -> NovelReaderProjection
+    func loadPage(_ request: NovelPageRequest) async throws -> NovelReaderProjection
 }
 
 extension NovelReaderRepository: ForumNovelDocumentLoading {}
@@ -23,7 +23,7 @@ struct ForumNovelChapterSummary: Identifiable, Hashable, Sendable {
     var view: Int
     var postID: String? = nil
     var floorText: String? = nil
-    var resumePoint: ReaderResumePoint? = nil
+    var resumePoint: NovelResumePoint? = nil
     var progressText: String? = nil
     var isCurrentRead: Bool = false
 }
@@ -80,7 +80,7 @@ final class ForumNovelDetailViewModel {
     @ObservationIgnored private var loadingChapterPages: Set<Int> = []
     @ObservationIgnored private var chapterPageErrors: [Int: String] = [:]
     @ObservationIgnored private var totalChapterPages = 1
-    @ObservationIgnored private var readerSettings = ReaderAppearanceSettings()
+    @ObservationIgnored private var novelReaderSettings = NovelReaderAppearanceSettings()
     @ObservationIgnored private var documentPreloadTask: Task<Void, Never>?
     @ObservationIgnored private var favoriteUpdatesTask: Task<Void, Never>?
     @ObservationIgnored private var readingProgressUpdatesTask: Task<Void, Never>?
@@ -198,7 +198,7 @@ final class ForumNovelDetailViewModel {
             favorite = await localFavoriteItem()?.favorite(type: .novel)
             readingProgress = await appContext.readingProgressStore.load(threadID: context.thread.tid)
             contentCover = await loadContentCover()
-            readerSettings = await appContext.settingsStore.load().reader
+            novelReaderSettings = await appContext.settingsStore.load().novelReader
             favoriteErrorMessage = nil
             let threadRepository = await threadRepositoryProvider()
             let initialPages = try await loadInitialPages(repository: threadRepository, preferCache: preferCache)
@@ -279,7 +279,7 @@ final class ForumNovelDetailViewModel {
     }
 
     private func preloadReaderDocument() {
-        let request = ReaderPageRequest(
+        let request = NovelPageRequest(
             threadID: context.thread.tid,
             view: 1,
             authorID: resolvedAuthorID ?? context.authorID
@@ -299,8 +299,8 @@ final class ForumNovelDetailViewModel {
         }
     }
 
-    func launchContext(for chapter: ForumNovelChapterSummary?) -> ReaderLaunchContext {
-        ReaderLaunchContext(
+    func launchContext(for chapter: ForumNovelChapterSummary?) -> NovelLaunchContext {
+        NovelLaunchContext(
             threadID: context.thread.tid,
             threadTitle: context.title,
             source: .forum,
@@ -311,11 +311,11 @@ final class ForumNovelDetailViewModel {
         )
     }
 
-    func continueLaunchContext() -> ReaderLaunchContext {
+    func continueLaunchContext() -> NovelLaunchContext {
         let novelProgress = readingProgress?.novel
         let resumePoint = novelProgress?.novelResumePoint
         let hasProgress = Self.hasReadingProgress(readingProgress, favorite: favorite)
-        return ReaderLaunchContext(
+        return NovelLaunchContext(
             threadID: context.thread.tid,
             threadTitle: favorite?.resolvedDisplayTitle ?? context.title,
             source: hasProgress ? .resume : .forum,
@@ -432,7 +432,7 @@ final class ForumNovelDetailViewModel {
         pageErrors: [Int: String] = [:],
         readingProgress: ReadingProgressRecord? = nil,
         favorite: Favorite? = nil,
-        readerSettings: ReaderAppearanceSettings = .init(),
+        novelReaderSettings: NovelReaderAppearanceSettings = .init(),
         authorID: String? = nil
     ) -> [ForumNovelChapterSection] {
         let normalizedTotal = max(1, totalPages)
@@ -442,7 +442,7 @@ final class ForumNovelDetailViewModel {
                 chapterSummaries(
                     from: $0,
                     page: page,
-                    readerSettings: readerSettings,
+                    novelReaderSettings: novelReaderSettings,
                     authorID: authorID
                 )
             } ?? []
@@ -477,7 +477,7 @@ final class ForumNovelDetailViewModel {
             pageErrors: chapterPageErrors,
             readingProgress: readingProgress,
             favorite: favorite,
-            readerSettings: readerSettings,
+            novelReaderSettings: novelReaderSettings,
             authorID: resolvedAuthorID ?? context.authorID
         )
         chapters = chapterSections.flatMap(\.chapters)
@@ -505,12 +505,12 @@ final class ForumNovelDetailViewModel {
     private static func chapterSummaries(
         from page: ForumThreadPage,
         page pageNumber: Int,
-        readerSettings: ReaderAppearanceSettings,
+        novelReaderSettings: NovelReaderAppearanceSettings,
         authorID: String?
     ) -> [ForumNovelChapterSummary] {
         let resolvedAuthorID = trimmedNonEmpty(authorID) ?? trimmedNonEmpty(page.posts.first?.author.uid)
         guard let resolvedAuthorID else { return [] }
-        let request = ReaderPageRequest(
+        let request = NovelPageRequest(
             threadID: page.thread.tid,
             view: pageNumber,
             authorID: resolvedAuthorID
@@ -530,7 +530,7 @@ final class ForumNovelDetailViewModel {
             partial[postID] = floorText
         }
         return NovelChapterDirectoryExtractor
-            .entries(from: document, settings: readerSettings)
+            .entries(from: document, settings: novelReaderSettings)
             .map { entry in
                 let postID = entry.ownerPostID
                 return ForumNovelChapterSummary(

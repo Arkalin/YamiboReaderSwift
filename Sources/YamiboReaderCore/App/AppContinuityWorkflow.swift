@@ -176,29 +176,13 @@ public final class AppContinuityWorkflow {
                 ))
             }
             return nil
-        case let .manga(route):
-            guard let route = await mangaRouteReconciledWithReadingProgress(route) else {
-                return nil
-            }
-            return .manga(route)
-        }
-    }
-
-    private func mangaRouteReconciledWithReadingProgress(_ route: MangaPresentationRoute) async -> MangaPresentationRoute? {
-        switch route {
-        case let .native(context):
+        case let .manga(context):
             if let progress = await appContext.readingProgressStore.load(threadID: context.originalThreadID),
                progress.hasMangaReadingProgress {
-                return .native(context.reconciledWithReadingProgress(
+                return .manga(context.reconciledWithReadingProgress(
                     progress,
                     favoriteItem: await favoriteItem(forMangaContext: context)
                 ))
-            }
-            return nil
-        case let .web(context):
-            if let progress = await appContext.readingProgressStore.load(threadID: context.originalThreadID),
-               progress.hasMangaReadingProgress {
-                return .web(context.reconciledWithReadingProgress(progress))
             }
             return nil
         }
@@ -231,38 +215,21 @@ private extension ReaderResumeRoute {
         switch self {
         case let .novel(context):
             context.hasLocalReadingProgress
-        case let .manga(route):
-            route.hasLocalReadingProgress
+        case let .manga(context):
+            context.hasLocalReadingProgress
         }
     }
 }
 
-private extension ReaderLaunchContext {
+private extension NovelLaunchContext {
     var hasLocalReadingProgress: Bool {
         initialResumePoint != nil || (initialView ?? 1) > 1
-    }
-}
-
-private extension MangaPresentationRoute {
-    var hasLocalReadingProgress: Bool {
-        switch self {
-        case let .native(context):
-            context.hasLocalReadingProgress
-        case let .web(context):
-            context.hasLocalReadingProgress
-        }
     }
 }
 
 private extension MangaLaunchContext {
     var hasLocalReadingProgress: Bool {
         initialPage > 0 || chapterTID != originalThreadID || chapterView > 1
-    }
-}
-
-private extension MangaWebContext {
-    var hasLocalReadingProgress: Bool {
-        initialPage > 0 || currentThreadID != originalThreadID || currentPage > 1
     }
 }
 
@@ -282,14 +249,14 @@ private extension ReadingProgressRecord {
     }
 }
 
-private extension ReaderLaunchContext {
+private extension NovelLaunchContext {
     func reconciledWithReadingProgress(
         _ progress: ReadingProgressRecord,
         favoriteItem: FavoriteItem?
-    ) -> ReaderLaunchContext {
+    ) -> NovelLaunchContext {
         let novel = progress.novel
         let resumePoint = novel?.novelResumePoint ?? initialResumePoint
-        return ReaderLaunchContext(
+        return NovelLaunchContext(
             threadID: threadID,
             threadTitle: favoriteItem?.resolvedDisplayTitle ?? threadTitle,
             source: .resume,
@@ -317,20 +284,4 @@ private extension MangaLaunchContext {
             offlineCacheFavoriteID: favoriteItem?.id ?? offlineCacheFavoriteID
         )
     }
-}
-
-private extension MangaWebContext {
-    func reconciledWithReadingProgress(_ progress: ReadingProgressRecord) -> MangaWebContext {
-        guard let manga = progress.manga else { return self }
-        return MangaWebContext(
-            currentThreadID: manga.chapterThreadID,
-            currentPage: manga.chapterView,
-            originalThreadID: originalThreadID,
-            source: .resume,
-            initialPage: manga.mangaPageIndex,
-            autoOpenNative: autoOpenNative,
-            waitingForNativeReturn: waitingForNativeReturn
-        )
-    }
-
 }

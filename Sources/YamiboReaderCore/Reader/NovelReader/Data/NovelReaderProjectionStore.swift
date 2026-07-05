@@ -34,8 +34,8 @@ public actor NovelReaderProjectionStore {
     }
 
     public func loadProjection(
-        for request: ReaderPageRequest,
-        contentSource: ReaderContentSource? = nil
+        for request: NovelPageRequest,
+        contentSource: ReaderProjectionContentSource? = nil
     ) async -> NovelReaderProjection? {
         let key = projectionCacheKey(threadID: request.threadID, view: request.view, authorID: request.authorID, contentSource: contentSource)
 
@@ -60,9 +60,9 @@ public actor NovelReaderProjectionStore {
     public func cachedViews(
         for threadID: String,
         authorID: String?,
-        contentSource: ReaderContentSource? = nil
+        contentSource: ReaderProjectionContentSource? = nil
     ) async -> Set<Int> {
-        let identity = ReaderCacheIdentity(threadID: threadID, view: 1, authorID: authorID, contentSource: contentSource)
+        let identity = NovelReaderCacheIdentity(threadID: threadID, view: 1, authorID: authorID, contentSource: contentSource)
         let resolvedSource = resolvedContentSource(authorID: authorID, contentSource: contentSource)
         let normalizedAuthorID = authorID?.nilIfBlank
         let entries = (try? await cacheStore.entries(namespace: Self.projectionNamespace)) ?? []
@@ -81,7 +81,7 @@ public actor NovelReaderProjectionStore {
         _ views: Set<Int>,
         for threadID: String,
         authorID: String?,
-        contentSource: ReaderContentSource? = nil
+        contentSource: ReaderProjectionContentSource? = nil
     ) async throws {
         for view in views {
             let key = projectionCacheKey(threadID: threadID, view: view, authorID: authorID, contentSource: contentSource)
@@ -93,7 +93,7 @@ public actor NovelReaderProjectionStore {
     public func deleteAll(
         for threadID: String,
         authorID: String?,
-        contentSource: ReaderContentSource? = nil
+        contentSource: ReaderProjectionContentSource? = nil
     ) async throws {
         let views = await cachedViews(for: threadID, authorID: authorID, contentSource: contentSource)
         try await deleteViews(views, for: threadID, authorID: authorID, contentSource: contentSource)
@@ -132,9 +132,9 @@ public actor NovelReaderProjectionStore {
         threadID: String,
         view: Int,
         authorID: String?,
-        contentSource: ReaderContentSource?
+        contentSource: ReaderProjectionContentSource?
     ) -> String {
-        let identity = ReaderCacheIdentity(threadID: threadID, view: view, authorID: authorID, contentSource: contentSource)
+        let identity = NovelReaderCacheIdentity(threadID: threadID, view: view, authorID: authorID, contentSource: contentSource)
         let source = resolvedContentSource(authorID: authorID, contentSource: contentSource)
         return [
             "tid", identity.threadID,
@@ -151,7 +151,7 @@ public actor NovelReaderProjectionStore {
               components[2] == "source",
               components[4] == "author",
               components[6] == "view",
-              let source = ReaderContentSource(rawValue: components[3]),
+              let source = ReaderProjectionContentSource(rawValue: components[3]),
               let view = Int(components[7]) else {
             return nil
         }
@@ -164,7 +164,7 @@ public actor NovelReaderProjectionStore {
         )
     }
 
-    private func resolvedContentSource(authorID: String?, contentSource: ReaderContentSource?) -> ReaderContentSource {
+    private func resolvedContentSource(authorID: String?, contentSource: ReaderProjectionContentSource?) -> ReaderProjectionContentSource {
         if let contentSource {
             return contentSource
         }
@@ -193,7 +193,7 @@ private final class CacheBox: NSObject {
 
 private struct ProjectionKeyComponents: Sendable {
     var threadID: String
-    var contentSource: ReaderContentSource
+    var contentSource: ReaderProjectionContentSource
     var authorID: String?
     var view: Int
 }

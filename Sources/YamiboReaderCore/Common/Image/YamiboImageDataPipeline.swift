@@ -55,7 +55,7 @@ public final class YamiboImageDataPipeline: YamiboOrdinaryImageCacheClearing, @u
         configuration.isResumableDataEnabled = false
         self.pipeline = ImagePipeline(
             configuration: configuration,
-            delegate: YamiboImagePipelineDelegate()
+            delegate: YamiboImageDataPipelineDelegate()
         )
     }
 
@@ -136,7 +136,7 @@ public final class YamiboImageDataPipeline: YamiboOrdinaryImageCacheClearing, @u
     }
 }
 
-private final class YamiboImagePipelineDelegate: ImagePipeline.Delegate {
+private final class YamiboImageDataPipelineDelegate: ImagePipeline.Delegate {
     func dataLoader(for request: ImageRequest, pipeline: ImagePipeline) -> any DataLoading {
         if let session = request.userInfo[.yamiboURLSession] as? YamiboImageRequestSession {
             return YamiboURLSessionImageDataLoader(session: session.value)

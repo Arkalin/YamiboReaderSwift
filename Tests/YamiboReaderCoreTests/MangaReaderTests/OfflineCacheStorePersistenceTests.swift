@@ -19,10 +19,10 @@ struct MangaReaderTestsMangaOfflineCachePersistence {
         )
         let imageURLs = try makeOfflineImageURLs(tid: "100", count: 2)
 
-        try await firstStore.saveMembership(
+        try await firstStore.saveMangaOfflineCacheMembership(
             try makeOfflineMembership(ownerName: "作品A", tid: "100", imageURLs: imageURLs)
         )
-        _ = try await firstStore.enqueueOfflineCacheWork(
+        _ = try await firstStore.enqueueMangaOfflineCacheWork(
             try makeOfflineWorkRequest(ownerName: "作品A", tid: "101", targetImageURLs: imageURLs)
         )
         try await firstStore.updateOfflineCacheWorkProgress(
@@ -37,12 +37,12 @@ struct MangaReaderTestsMangaOfflineCachePersistence {
             databasePool: fixture.database,
             baseDirectory: fixture.offlineDirectory
         )
-        let membership = try #require(await secondStore.membership(ownerName: "作品A", tid: "100"))
-        let work = try #require(await secondStore.offlineCacheWork(ownerName: "作品A", tid: "101"))
+        let membership = try #require(await secondStore.mangaOfflineCacheMembership(ownerName: "作品A", tid: "100"))
+        let work = try #require(await secondStore.mangaQueueWork(ownerName: "作品A", tid: "101"))
 
         #expect(membership.imageURLs == imageURLs)
         #expect(work.completedImageURLs == [imageURLs[0]])
-        #expect(work.progress == MangaOfflineCacheProgress(completedImageCount: 1, targetImageCount: 2))
+        #expect(work.progress == OfflineCacheProgress(completedUnitCount: 1, targetUnitCount: 2))
 
         let databaseState = try await fixture.database.read { db in
             (
@@ -112,7 +112,7 @@ struct MangaReaderTestsMangaOfflineCachePersistence {
         let sourcePage = try makeOfflineSourcePage(tid: "150")
         let imageURL = try #require(URL(string: "https://img.example.com/150-1.jpg"))
 
-        try await firstStore.saveMembership(
+        try await firstStore.saveMangaOfflineCacheMembership(
             MangaOfflineCacheMembership(
                 ownerName: "作品A",
                 tid: "150",
@@ -126,7 +126,7 @@ struct MangaReaderTestsMangaOfflineCachePersistence {
             databasePool: fixture.database,
             baseDirectory: fixture.offlineDirectory
         )
-        let loaded = try #require(await secondStore.membership(ownerName: "作品A", tid: "150"))
+        let loaded = try #require(await secondStore.mangaOfflineCacheMembership(ownerName: "作品A", tid: "150"))
         let persisted = try #require(try await fixture.database.read { db -> (
             columns: [String],
             fileName: String,
@@ -178,7 +178,7 @@ struct MangaReaderTestsMangaOfflineCachePersistence {
         let imageURL = try #require(URL(string: "https://img.example.com/mismatch.jpg"))
 
         await #expect(throws: YamiboError.self) {
-            try await store.saveMembership(
+            try await store.saveMangaOfflineCacheMembership(
                 MangaOfflineCacheMembership(
                     ownerName: "作品A",
                     tid: "151",
@@ -189,7 +189,7 @@ struct MangaReaderTestsMangaOfflineCachePersistence {
             )
         }
 
-        #expect(await store.membership(ownerName: "作品A", tid: "151") == nil)
+        #expect(await store.mangaOfflineCacheMembership(ownerName: "作品A", tid: "151") == nil)
     }
 
     @Test func mangaEntryWithMissingOrDamagedSourceFileIsUnreadableAndUncached() async throws {
@@ -200,7 +200,7 @@ struct MangaReaderTestsMangaOfflineCachePersistence {
         )
         let membership = try makeOfflineMembership(ownerName: "作品A", tid: "155", imageURLs: [])
 
-        try await store.saveMembership(membership)
+        try await store.saveMangaOfflineCacheMembership(membership)
         let fileName = try #require(try await fixture.database.read { db in
             try String.fetchOne(
                 db,
@@ -218,13 +218,13 @@ struct MangaReaderTestsMangaOfflineCachePersistence {
 
         try FileManager.default.removeItem(at: sourceFileURL)
 
-        #expect(await store.membership(ownerName: "作品A", tid: "155") == nil)
-        #expect(await store.offlineCacheState(ownerName: "作品A", tid: "155") == .uncached)
+        #expect(await store.mangaOfflineCacheMembership(ownerName: "作品A", tid: "155") == nil)
+        #expect(await store.mangaOfflineCacheState(ownerName: "作品A", tid: "155") == .uncached)
 
         try Data("not-json".utf8).write(to: sourceFileURL, options: [.atomic])
 
-        #expect(await store.membership(ownerName: "作品A", tid: "155") == nil)
-        #expect(await store.offlineCacheState(ownerName: "作品A", tid: "155") == .uncached)
+        #expect(await store.mangaOfflineCacheMembership(ownerName: "作品A", tid: "155") == nil)
+        #expect(await store.mangaOfflineCacheState(ownerName: "作品A", tid: "155") == .uncached)
 
         var tamperedSourcePage = membership.sourcePage
         tamperedSourcePage.title = "第155集"
@@ -241,8 +241,8 @@ struct MangaReaderTestsMangaOfflineCachePersistence {
             )
         }
 
-        #expect(await store.membership(ownerName: "作品A", tid: "155") == nil)
-        #expect(await store.offlineCacheState(ownerName: "作品A", tid: "155") == .uncached)
+        #expect(await store.mangaOfflineCacheMembership(ownerName: "作品A", tid: "155") == nil)
+        #expect(await store.mangaOfflineCacheState(ownerName: "作品A", tid: "155") == .uncached)
     }
 
     @Test func mangaEntryWithoutSourceFileDoesNotBecomeCachedOrBlockEnqueue() async throws {
@@ -265,9 +265,9 @@ struct MangaReaderTestsMangaOfflineCachePersistence {
             baseDirectory: fixture.offlineDirectory
         )
 
-        #expect(await recoveredStore.membership(ownerName: "作品A", tid: "160") == nil)
-        #expect(await recoveredStore.offlineCacheState(ownerName: "作品A", tid: "160") == .uncached)
-        let result = try await recoveredStore.enqueueOfflineCacheWork(
+        #expect(await recoveredStore.mangaOfflineCacheMembership(ownerName: "作品A", tid: "160") == nil)
+        #expect(await recoveredStore.mangaOfflineCacheState(ownerName: "作品A", tid: "160") == .uncached)
+        let result = try await recoveredStore.enqueueMangaOfflineCacheWork(
             try makeOfflineWorkRequest(ownerName: "作品A", tid: "160", targetImageURLs: [imageURL])
         )
         #expect(result.enqueuedWork?.tid == "160")
@@ -288,9 +288,9 @@ struct MangaReaderTestsMangaOfflineCachePersistence {
             in: fixture.database
         )
 
-        #expect(await store.allMemberships().isEmpty)
-        #expect(await store.memberships(forOwnerName: "作品A").isEmpty)
-        #expect(await store.diskUsageByOwner().isEmpty)
+        #expect(await store.allMangaOfflineCacheMemberships().isEmpty)
+        #expect(await store.mangaOfflineCacheMemberships(forOwnerName: "作品A").isEmpty)
+        #expect(await store.mangaOfflineCacheDiskUsageByOwner().isEmpty)
         #expect(await store.offlineCacheManagementSnapshot().groups.isEmpty)
         #expect(await store.offlineImageData(for: imageURL) == Data([7, 8]))
     }
@@ -305,7 +305,7 @@ struct MangaReaderTestsMangaOfflineCachePersistence {
         let workImage = try #require(URL(string: "https://img.example.com/work-shared.jpg"))
         try await writingStore.saveOfflineImageData(Data([1]), for: staleImage)
         try await writingStore.saveOfflineImageData(Data([2]), for: workImage)
-        _ = try await writingStore.enqueueOfflineCacheWork(
+        _ = try await writingStore.enqueueMangaOfflineCacheWork(
             try makeOfflineWorkRequest(ownerName: "作品A", tid: "171", targetImageURLs: [workImage])
         )
         try await seedMangaEntryWithoutSourceFile(
@@ -320,11 +320,11 @@ struct MangaReaderTestsMangaOfflineCachePersistence {
             baseDirectory: fixture.offlineDirectory
         )
 
-        #expect(await recoveredStore.membership(ownerName: "作品A", tid: "170") == nil)
-        #expect(await recoveredStore.offlineCacheState(ownerName: "作品A", tid: "170") == .uncached)
+        #expect(await recoveredStore.mangaOfflineCacheMembership(ownerName: "作品A", tid: "170") == nil)
+        #expect(await recoveredStore.mangaOfflineCacheState(ownerName: "作品A", tid: "170") == .uncached)
         #expect(await recoveredStore.offlineImageData(for: staleImage) == Data([1]))
         #expect(await recoveredStore.offlineImageData(for: workImage) == Data([2]))
-        #expect(await recoveredStore.offlineCacheWork(ownerName: "作品A", tid: "171") != nil)
+        #expect(await recoveredStore.mangaQueueWork(ownerName: "作品A", tid: "171") != nil)
     }
 
     @Test func restartRecoveryPausesRunningQueueAndKeepsFailedWork() async throws {
@@ -335,7 +335,7 @@ struct MangaReaderTestsMangaOfflineCachePersistence {
         )
         let imageURL = try #require(URL(string: "https://img.example.com/restart.jpg"))
 
-        _ = try await writingStore.enqueueOfflineCacheWork(
+        _ = try await writingStore.enqueueMangaOfflineCacheWork(
             try makeOfflineWorkRequest(ownerName: "作品A", tid: "200", targetImageURLs: [imageURL])
         )
         try await writingStore.updateOfflineCacheWorkProgress(
@@ -354,7 +354,7 @@ struct MangaReaderTestsMangaOfflineCachePersistence {
         )
 
         #expect(await recoveredStore.offlineCacheQueueRunState() == .paused)
-        let recoveredWork = try #require(await recoveredStore.offlineCacheWork(ownerName: "作品A", tid: "200"))
+        let recoveredWork = try #require(await recoveredStore.mangaQueueWork(ownerName: "作品A", tid: "200"))
         #expect(recoveredWork.state == .failed)
         #expect(recoveredWork.failureMessage == "Timeout")
         #expect(recoveredWork.currentBytesPerSecond == 0)
@@ -371,21 +371,21 @@ struct MangaReaderTestsMangaOfflineCachePersistence {
 
         try await store.saveOfflineImageData(Data([1, 2, 3]), for: sharedImage)
         try await store.saveOfflineImageData(Data([4, 5]), for: removedImage)
-        try await store.saveMembership(
+        try await store.saveMangaOfflineCacheMembership(
             try makeOfflineMembership(ownerName: "作品A", tid: "300", imageURLs: [sharedImage, removedImage])
         )
         let retainedMembership = try makeOfflineMembership(ownerName: "作品A", tid: "301", imageURLs: [sharedImage])
-        try await store.saveMembership(retainedMembership)
+        try await store.saveMangaOfflineCacheMembership(retainedMembership)
 
-        #expect(await store.offlineCacheState(ownerName: "作品A", tid: "300") == .cached)
+        #expect(await store.mangaOfflineCacheState(ownerName: "作品A", tid: "300") == .cached)
 
-        try await store.removeMembership(ownerName: "作品A", tid: "300")
+        try await store.removeMangaOfflineCacheMembership(ownerName: "作品A", tid: "300")
         let expectedBytes = try mangaSourcePageByteCount(retainedMembership) + 3
 
-        #expect(await store.membership(ownerName: "作品A", tid: "300") == nil)
+        #expect(await store.mangaOfflineCacheMembership(ownerName: "作品A", tid: "300") == nil)
         #expect(await store.offlineImageData(for: sharedImage) == Data([1, 2, 3]))
         #expect(await store.offlineImageData(for: removedImage) == nil)
-        #expect(await store.diskUsageByOwner() == [
+        #expect(await store.mangaOfflineCacheDiskUsageByOwner() == [
             MangaOfflineCacheOwnerUsage(ownerName: "作品A", byteCount: expectedBytes)
         ])
     }
@@ -399,8 +399,8 @@ struct MangaReaderTestsMangaOfflineCachePersistence {
         let firstMembership = try makeOfflineMembership(ownerName: "作品A", tid: "310", imageURLs: [])
         let secondMembership = try makeOfflineMembership(ownerName: "作品A", tid: "311", imageURLs: [])
 
-        try await store.saveMembership(firstMembership)
-        try await store.saveMembership(secondMembership)
+        try await store.saveMangaOfflineCacheMembership(firstMembership)
+        try await store.saveMangaOfflineCacheMembership(secondMembership)
         let fileNames = try await mangaSourcePageFileNames(
             ownerName: "作品A",
             tids: ["310", "311"],
@@ -413,12 +413,12 @@ struct MangaReaderTestsMangaOfflineCachePersistence {
             .appendingPathComponent("manga-source-pages", isDirectory: true)
             .appendingPathComponent(try #require(fileNames["311"]), isDirectory: false)
 
-        try await store.removeMembership(ownerName: "作品A", tid: "310")
+        try await store.removeMangaOfflineCacheMembership(ownerName: "作品A", tid: "310")
 
         #expect(!FileManager.default.fileExists(atPath: firstFileURL.path))
         #expect(FileManager.default.fileExists(atPath: secondFileURL.path))
 
-        try await store.removeMemberships(forOwnerName: "作品A")
+        try await store.removeMangaOfflineCacheMemberships(forOwnerName: "作品A")
 
         #expect(!FileManager.default.fileExists(atPath: secondFileURL.path))
     }
@@ -430,13 +430,15 @@ struct MangaReaderTestsMangaOfflineCachePersistence {
             baseDirectory: fixture.offlineDirectory
         )
         let imageURLs = try makeOfflineImageURLs(tid: "400", count: 2)
-        _ = try await store.enqueueOfflineCacheWork(
+        _ = try await store.enqueueMangaOfflineCacheWork(
             try makeOfflineWorkRequest(ownerName: "作品A", tid: "400", targetImageURLs: imageURLs)
         )
         let acquirer = RecordingOfflineImageAcquirer()
         await acquirer.setData(for: imageURLs)
         let executor = OfflineCacheQueueExecutor(
             store: store,
+            mangaCacheStore: store,
+            novelCacheStore: store,
             readerProjectionLoader: RecordingReaderProjectionLoader(documents: [
                 try makeDocument(tid: "400", imageURLs: imageURLs)
             ]),
@@ -447,9 +449,9 @@ struct MangaReaderTestsMangaOfflineCachePersistence {
         try await executor.continueQueue()
         await executor.waitForIdle()
 
-        #expect(await store.offlineCacheWork(ownerName: "作品A", tid: "400") == nil)
-        #expect(await store.offlineCacheState(ownerName: "作品A", tid: "400") == .cached)
-        #expect(await store.membership(ownerName: "作品A", tid: "400")?.imageURLs == imageURLs)
+        #expect(await store.mangaQueueWork(ownerName: "作品A", tid: "400") == nil)
+        #expect(await store.mangaOfflineCacheState(ownerName: "作品A", tid: "400") == .cached)
+        #expect(await store.mangaOfflineCacheMembership(ownerName: "作品A", tid: "400")?.imageURLs == imageURLs)
         #expect(await acquirer.requestedURLs == imageURLs)
     }
 }
@@ -604,9 +606,9 @@ private actor RecordingOfflineImageAcquirer: OfflineCacheImageAcquiring {
         }
     }
 
-    func acquireImageData(for imageURL: URL, refererURL: URL?) async throws -> OfflineCacheImageAcquisition {
-        requestedURLs.append(imageURL)
-        guard let data = dataByURL[imageURL] else {
+    func acquireImageData(for request: YamiboImageRequest) async throws -> OfflineCacheImageAcquisition {
+        requestedURLs.append(request.url)
+        guard let data = dataByURL[request.url] else {
             throw YamiboError.invalidResponse(statusCode: 404)
         }
         return OfflineCacheImageAcquisition(data: data, source: .network)

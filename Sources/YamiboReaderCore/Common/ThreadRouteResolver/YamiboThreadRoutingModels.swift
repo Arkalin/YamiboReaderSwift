@@ -97,7 +97,7 @@ public struct MangaDetailLaunchContext: Codable, Hashable, Sendable {
     }
 }
 
-public struct ThreadReaderLaunchContext: Codable, Hashable, Sendable {
+public struct ThreadNovelLaunchContext: Codable, Hashable, Sendable {
     public var thread: ThreadIdentity
     public var title: String
     public var initialPage: Int

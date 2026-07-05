@@ -18,8 +18,10 @@ struct MangaReaderTestsImageDataLoader {
 
         let loader = YamiboMangaImageDataLoader(imageDataLoader: imageDataLoader(harness: harness))
         let data = try await loader.imageData(
-            for: URL(string: "https://img.example.com/a.jpg")!,
-            refererURL: URL(string: "https://bbs.yamibo.com/forum.php?tid=700")!
+            for: YamiboImageRequest(
+                url: URL(string: "https://img.example.com/a.jpg")!,
+                refererURL: URL(string: "https://bbs.yamibo.com/forum.php?tid=700")!
+            )
         )
 
         #expect(data == Data([1, 2, 3]))
@@ -35,7 +37,7 @@ struct MangaReaderTestsImageDataLoader {
         }
 
         let loader = YamiboMangaImageDataLoader(imageDataLoader: imageDataLoader(harness: harness))
-        _ = try await loader.imageData(for: URL(string: "https://img.example.com/a.jpg")!, refererURL: nil)
+        _ = try await loader.imageData(for: YamiboImageRequest(url: URL(string: "https://img.example.com/a.jpg")!))
     }
 
     @Test func deduplicatesConcurrentSameImageRequests() async throws {
@@ -52,8 +54,9 @@ struct MangaReaderTestsImageDataLoader {
         let loader = YamiboMangaImageDataLoader(imageDataLoader: imageDataLoader(harness: harness))
         let imageURL = URL(string: "https://img.example.com/shared.jpg")!
         let refererURL = URL(string: "https://bbs.yamibo.com/forum.php?tid=1")!
-        async let first = loader.imageData(for: imageURL, refererURL: refererURL)
-        async let second = loader.imageData(for: imageURL, refererURL: refererURL)
+        let request = YamiboImageRequest(url: imageURL, refererURL: refererURL)
+        async let first = loader.imageData(for: request)
+        async let second = loader.imageData(for: request)
 
         let values = try await [first, second]
 
@@ -80,7 +83,7 @@ struct MangaReaderTestsImageDataLoader {
         let loader = YamiboMangaImageDataLoader(imageDataLoader: imageDataLoader(harness: harness))
 
         await #expect(throws: YamiboError.self) {
-            _ = try await loader.imageData(for: URL(string: "https://img.example.com/a.jpg")!, refererURL: nil)
+            _ = try await loader.imageData(for: YamiboImageRequest(url: URL(string: "https://img.example.com/a.jpg")!))
         }
     }
 
@@ -94,7 +97,7 @@ struct MangaReaderTestsImageDataLoader {
         let loader = YamiboMangaImageDataLoader(imageDataLoader: imageDataLoader(harness: harness))
 
         await #expect(throws: expected) {
-            _ = try await loader.imageData(for: URL(string: "https://img.example.com/a.jpg")!, refererURL: nil)
+            _ = try await loader.imageData(for: YamiboImageRequest(url: URL(string: "https://img.example.com/a.jpg")!))
         }
     }
 
@@ -108,7 +111,7 @@ struct MangaReaderTestsImageDataLoader {
         let loader = YamiboMangaImageDataLoader(imageDataLoader: imageDataLoader(harness: harness))
 
         await #expect(throws: expected) {
-            _ = try await loader.imageData(for: URL(string: "https://img.example.com/a.jpg")!, refererURL: nil)
+            _ = try await loader.imageData(for: YamiboImageRequest(url: URL(string: "https://img.example.com/a.jpg")!))
         }
     }
 

@@ -3,8 +3,8 @@ import UIKit
 import YamiboReaderCore
 
 enum LocalFavoriteOpenTarget: Sendable {
-    case reader(ReaderLaunchContext)
-    case manga(MangaLaunchContext)
+    case novelReader(NovelLaunchContext)
+    case mangaReader(MangaLaunchContext)
     case nativeThread(url: URL, title: String)
     case web(URL)
 }
@@ -1372,7 +1372,7 @@ final class LocalFavoritesViewModel: ObservableObject {
             }
             let repository = await appContext.makeForumThreadReaderRepository()
             let thread = ThreadIdentity(tid: tid, fid: item.fid)
-            let context = ThreadReaderLaunchContext(thread: thread, title: item.resolvedDisplayTitle)
+            let context = ThreadNovelLaunchContext(thread: thread, title: item.resolvedDisplayTitle)
             return try await repository.fetchThreadPage(context: context, page: 1)
         } catch {
             return nil
@@ -1482,8 +1482,8 @@ final class LocalFavoritesViewModel: ObservableObject {
         case let .novelThread(threadID):
             let novel = progress?.novel
             let resumePoint = mode == .start ? nil : novel?.novelResumePoint
-            return .reader(
-                ReaderLaunchContext(
+            return .novelReader(
+                NovelLaunchContext(
                     threadID: threadID,
                     threadTitle: latestItem.resolvedDisplayTitle,
                     source: .favorites,
@@ -1503,7 +1503,7 @@ final class LocalFavoritesViewModel: ObservableObject {
                 return nil
             }
             let originalThreadID = metadata?.chapterTID ?? chapterTID
-            return .manga(
+            return .mangaReader(
                 MangaLaunchContext(
                     originalThreadID: originalThreadID,
                     chapterTID: chapterTID,

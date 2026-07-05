@@ -5,7 +5,7 @@ import UIKit
 struct NovelReaderTopChrome: View {
     private let pagedChapterTitleTopLift: CGFloat = 12
 
-    let model: ReaderContainerModel
+    let model: NovelReaderViewModel
     let topInset: CGFloat
     let onNavigateBack: () -> Void
     let onNavigateForward: () -> Void

@@ -2,48 +2,42 @@ import Foundation
 
 public actor CachedMangaImageDataLoader: MangaImageDataLoading {
     private let imageDataLoader: any YamiboImageDataLoading
-    private let offlineCacheStore: (any OfflineCacheStoring)?
+    private let offlineCacheStore: (any MangaOfflineCacheStoring)?
 
     public init(
         imageDataLoader: any YamiboImageDataLoading,
-        offlineCacheStore: (any OfflineCacheStoring)? = nil
+        offlineCacheStore: (any MangaOfflineCacheStoring)? = nil
     ) {
         self.imageDataLoader = imageDataLoader
         self.offlineCacheStore = offlineCacheStore
     }
 
-    public func imageData(for url: URL, refererURL: URL?) async throws -> Data {
-        try await imageData(for: url, refererURL: refererURL, offlineCacheContext: nil)
+    public func imageData(for request: YamiboImageRequest) async throws -> Data {
+        try await imageData(for: request, offlineCacheContext: nil)
     }
 
     public func imageData(
-        for url: URL,
-        refererURL: URL?,
+        for request: YamiboImageRequest,
         offlineCacheContext: MangaImageOfflineCacheContext?
     ) async throws -> Data {
-        if let offline = await offlineImageData(for: url, context: offlineCacheContext) {
+        if let offline = await offlineImageData(for: request, context: offlineCacheContext) {
             return offline
         }
 
-        return try await imageDataLoader.imageData(
-            for: YamiboImageRequest(
-                url: url,
-                refererURL: refererURL
-            )
-        )
+        return try await imageDataLoader.imageData(for: request)
     }
 
-    private func offlineImageData(for url: URL, context: MangaImageOfflineCacheContext?) async -> Data? {
+    private func offlineImageData(for request: YamiboImageRequest, context: MangaImageOfflineCacheContext?) async -> Data? {
         guard let context, let offlineCacheStore else { return nil }
-        guard let membership = await offlineCacheStore.membership(
+        guard let membership = await offlineCacheStore.mangaOfflineCacheMembership(
             ownerName: context.ownerName,
             tid: context.tid
         ) else {
             return nil
         }
-        guard membership.imageURLs.contains(where: { $0.absoluteString == url.absoluteString }) else {
+        guard membership.imageURLs.contains(where: { $0.absoluteString == request.url.absoluteString }) else {
             return nil
         }
-        return await offlineCacheStore.offlineImageData(for: url)
+        return await offlineCacheStore.offlineImageData(for: request.url)
     }
 }

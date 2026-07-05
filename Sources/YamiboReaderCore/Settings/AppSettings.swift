@@ -109,7 +109,7 @@ public enum ReaderFontFamily: String, Codable, Hashable, CaseIterable, Sendable 
     }
 }
 
-public struct ReaderAppearanceSettings: Codable, Hashable, Sendable {
+public struct NovelReaderAppearanceSettings: Codable, Hashable, Sendable {
     public var fontScale: Double
     public var fontFamily: ReaderFontFamily
     public var lineHeightScale: Double
@@ -571,7 +571,7 @@ public struct FavoriteRemoteSyncSnapshot: Codable, Hashable, Identifiable, Senda
 }
 
 public struct AppSettings: Codable, Hashable, Sendable {
-    public var reader: ReaderAppearanceSettings
+    public var novelReader: NovelReaderAppearanceSettings
     public var manga: MangaReaderSettings
     public var novelOfflineCache: NovelOfflineCacheSettings
     public var webBrowser: WebBrowserSettings
@@ -590,7 +590,7 @@ public struct AppSettings: Codable, Hashable, Sendable {
     public var collapsesFavoriteSections: Bool
 
     public init(
-        reader: ReaderAppearanceSettings = .init(),
+        novelReader: NovelReaderAppearanceSettings = .init(),
         manga: MangaReaderSettings = .init(),
         novelOfflineCache: NovelOfflineCacheSettings = .init(),
         webBrowser: WebBrowserSettings = .init(),
@@ -608,7 +608,7 @@ public struct AppSettings: Codable, Hashable, Sendable {
         usesDataSaverMode: Bool = false,
         collapsesFavoriteSections: Bool = false
     ) {
-        self.reader = reader
+        self.novelReader = novelReader
         self.manga = manga
         self.novelOfflineCache = novelOfflineCache
         self.webBrowser = webBrowser
@@ -628,7 +628,7 @@ public struct AppSettings: Codable, Hashable, Sendable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case reader
+        case novelReader
         case manga
         case novelOfflineCache
         case webBrowser
@@ -649,7 +649,7 @@ public struct AppSettings: Codable, Hashable, Sendable {
 
     public init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        reader = try container.decodeIfPresent(ReaderAppearanceSettings.self, forKey: .reader) ?? .init()
+        novelReader = try container.decodeIfPresent(NovelReaderAppearanceSettings.self, forKey: .novelReader) ?? .init()
         manga = try container.decodeIfPresent(MangaReaderSettings.self, forKey: .manga) ?? .init()
         novelOfflineCache = try container.decodeIfPresent(
             NovelOfflineCacheSettings.self,
@@ -673,7 +673,7 @@ public struct AppSettings: Codable, Hashable, Sendable {
 
     public func encode(to encoder: any Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
-        try container.encode(reader, forKey: .reader)
+        try container.encode(novelReader, forKey: .novelReader)
         try container.encode(manga, forKey: .manga)
         try container.encode(novelOfflineCache, forKey: .novelOfflineCache)
         try container.encode(webBrowser, forKey: .webBrowser)

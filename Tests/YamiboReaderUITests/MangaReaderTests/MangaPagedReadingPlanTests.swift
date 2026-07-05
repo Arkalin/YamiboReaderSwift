@@ -266,7 +266,7 @@ struct MangaPagedReadingPlanTests {
 
     @Test func pageCurlSelectionResolverIgnoresAlreadyAppliedPlacementAfterPageTurn() throws {
         let pages = try makePagedPlanPages(pageCountsByTID: [("700", 3)])
-        let placement = MangaReaderViewportPlacement(targetPageIndex: 0, revision: 1)
+        let placement = MangaNovelReaderViewportPlacement(targetPageIndex: 0, revision: 1)
         var resolver = MangaPagedPageCurlSelectionResolver()
 
         let initialPlan = MangaPagedReadingPlan(
@@ -285,7 +285,7 @@ struct MangaPagedReadingPlanTests {
         )
         #expect(resolver.selectionIndex(plan: turnedPlan, viewportPlacement: placement) == 1)
 
-        let jumpPlacement = MangaReaderViewportPlacement(targetPageIndex: 2, revision: 2)
+        let jumpPlacement = MangaNovelReaderViewportPlacement(targetPageIndex: 2, revision: 2)
         #expect(resolver.selectionIndex(plan: turnedPlan, viewportPlacement: jumpPlacement) == 2)
     }
 

@@ -4,8 +4,8 @@ import XCTest
 
 private typealias NovelTextLayoutFixture = @Sendable (
     NovelReaderProjection,
-    ReaderAppearanceSettings,
-    ReaderContainerLayout
+    NovelReaderAppearanceSettings,
+    NovelReaderLayout
 ) throws -> NovelTextLayoutResult
 
 final class NovelReadingSessionTests: XCTestCase {
@@ -25,17 +25,17 @@ final class NovelReadingSessionTests: XCTestCase {
                 maxView: document.maxView,
                 fetchedAt: document.fetchedAt,
                 contentSource: document.contentSource,
-                appearance: ReaderAppearanceSettings(readingMode: .paged),
-                layout: ReaderContainerLayout(width: 320, height: 568)
+                appearance: NovelReaderAppearanceSettings(readingMode: .paged),
+                layout: NovelReaderLayout(width: 320, height: 568)
             ),
             document: NovelTextViewportDocument(
                 text: "第一章正文\n\n第二章正文",
                 textRangesBySegment: [
-                    0: ReaderRenderedTextRange(segmentIndex: 0, startOffset: 0, endOffset: 5),
-                    1: ReaderRenderedTextRange(segmentIndex: 1, startOffset: 7, endOffset: 12)
+                    0: NovelRenderedTextRange(segmentIndex: 0, startOffset: 0, endOffset: 5),
+                    1: NovelRenderedTextRange(segmentIndex: 1, startOffset: 7, endOffset: 12)
                 ],
                 insertedSeparatorRanges: [
-                    ReaderRenderedTextRange(segmentIndex: 0, startOffset: 5, endOffset: 7)
+                    NovelRenderedTextRange(segmentIndex: 0, startOffset: 5, endOffset: 7)
                 ]
             ),
             externalBlocks: [],
@@ -44,8 +44,8 @@ final class NovelReadingSessionTests: XCTestCase {
 
         let session = try NovelReadingSession(
             validating: document,
-            settings: ReaderAppearanceSettings(readingMode: .paged),
-            layout: ReaderContainerLayout(width: 320, height: 568),
+            settings: NovelReaderAppearanceSettings(readingMode: .paged),
+            layout: NovelReaderLayout(width: 320, height: 568),
             pagination: { document, _, _ in
                 layoutResult(
                     pages: [
@@ -58,7 +58,7 @@ final class NovelReadingSessionTests: XCTestCase {
                         )
                     ],
                     chapters: [
-                        ReaderChapter(ordinal: 0, title: "第一章", startIndex: 0)
+                        NovelReaderChapter(ordinal: 0, title: "第一章", startIndex: 0)
                     ],
                     viewportIndex: NovelTextViewportIndex(
                         documentView: document.view,
@@ -70,7 +70,7 @@ final class NovelReadingSessionTests: XCTestCase {
                                 chapterOrdinal: 0,
                                 chapterTitle: "第一章",
                                 ranges: [
-                                    ReaderRenderedTextRange(segmentIndex: 0, startOffset: 0, endOffset: 5)
+                                    NovelRenderedTextRange(segmentIndex: 0, startOffset: 0, endOffset: 5)
                                 ]
                             )
                         ],
@@ -114,8 +114,8 @@ final class NovelReadingSessionTests: XCTestCase {
 
         let session = try NovelReadingSession(
             validating: document,
-            settings: ReaderAppearanceSettings(readingMode: .paged),
-            layout: ReaderContainerLayout(width: 320, height: 568),
+            settings: NovelReaderAppearanceSettings(readingMode: .paged),
+            layout: NovelReaderLayout(width: 320, height: 568),
             resumePoint: resumePoint,
             pagination: { document, _, _ in
                 layoutResult(
@@ -127,7 +127,7 @@ final class NovelReadingSessionTests: XCTestCase {
                                     "viewport-backed page text",
                                     chapterTitle: "第二章",
                                     ranges: [
-                                        ReaderRenderedTextRange(segmentIndex: 99, startOffset: 0, endOffset: 1)
+                                        NovelRenderedTextRange(segmentIndex: 99, startOffset: 0, endOffset: 1)
                                     ]
                                 )
                             ],
@@ -137,7 +137,7 @@ final class NovelReadingSessionTests: XCTestCase {
                         )
                     ],
                     chapters: [
-                        ReaderChapter(ordinal: 99, title: "错误章节", startIndex: 0)
+                        NovelReaderChapter(ordinal: 99, title: "错误章节", startIndex: 0)
                     ],
                     viewportIndex: NovelTextViewportIndex(
                         documentView: document.view,
@@ -149,7 +149,7 @@ final class NovelReadingSessionTests: XCTestCase {
                                 chapterOrdinal: 1,
                                 chapterTitle: "第二章",
                                 ranges: [
-                                    ReaderRenderedTextRange(segmentIndex: 1, startOffset: 10, endOffset: 20)
+                                    NovelRenderedTextRange(segmentIndex: 1, startOffset: 10, endOffset: 20)
                                 ],
                                 chapterCommentTarget: viewportCommentTarget
                             )
@@ -170,8 +170,8 @@ final class NovelReadingSessionTests: XCTestCase {
         XCTAssertEqual(session.snapshot.selectedSurfaceOrdinal, 0)
         XCTAssertEqual(session.snapshot.currentChapterTitle, "第二章")
         XCTAssertEqual(session.snapshot.currentSurfaceIntraProgress, 0.5, accuracy: 0.001)
-        XCTAssertEqual(session.readerChaptersForTesting.map(\.title), ["第二章"])
-        XCTAssertEqual(session.readerChaptersForTesting.first?.chapterCommentTarget?.ownerPostID, "viewport-post")
+        XCTAssertEqual(session.novelReaderChaptersForTesting.map(\.title), ["第二章"])
+        XCTAssertEqual(session.novelReaderChaptersForTesting.first?.chapterCommentTarget?.ownerPostID, "viewport-post")
         XCTAssertEqual(session.viewportSurfacesForTesting.first?.chapterCommentTarget?.ownerPostID, "viewport-post")
     }
 
@@ -185,7 +185,7 @@ final class NovelReadingSessionTests: XCTestCase {
             ]
         )
         let secondSemantics = try XCTUnwrap(document.semantics(forSegmentIndex: 1))
-        let resumePoint = ReaderResumePoint(
+        let resumePoint = NovelResumePoint(
             view: 1,
             chapterIdentity: secondSemantics.chapterIdentity,
             textSegmentIdentity: secondSemantics.textSegmentIdentity,
@@ -198,8 +198,8 @@ final class NovelReadingSessionTests: XCTestCase {
 
         let session = try NovelReadingSession(
             validating: document,
-            settings: ReaderAppearanceSettings(readingMode: .paged),
-            layout: ReaderContainerLayout(width: 320, height: 568),
+            settings: NovelReaderAppearanceSettings(readingMode: .paged),
+            layout: NovelReaderLayout(width: 320, height: 568),
             resumePoint: resumePoint,
             pagination: { document, _, _ in
                 layoutResult(
@@ -209,19 +209,19 @@ final class NovelReadingSessionTests: XCTestCase {
                             documentView: document.view,
                             chapterOrdinal: 0,
                             chapterTitle: "同名章",
-                            ranges: [ReaderRenderedTextRange(segmentIndex: 0, startOffset: 0, endOffset: 8)]
+                            ranges: [NovelRenderedTextRange(segmentIndex: 0, startOffset: 0, endOffset: 8)]
                         ),
                         NovelTextViewportIndexSurface(
                             surfaceOrdinal: 1,
                             documentView: document.view,
                             chapterOrdinal: 1,
                             chapterTitle: "同名章",
-                            ranges: [ReaderRenderedTextRange(segmentIndex: 1, startOffset: 0, endOffset: 8)]
+                            ranges: [NovelRenderedTextRange(segmentIndex: 1, startOffset: 0, endOffset: 8)]
                         )
                     ],
                     chapters: [
-                        ReaderChapter(ordinal: 0, title: "同名章", startIndex: 0),
-                        ReaderChapter(ordinal: 1, title: "同名章", startIndex: 1)
+                        NovelReaderChapter(ordinal: 0, title: "同名章", startIndex: 0),
+                        NovelReaderChapter(ordinal: 1, title: "同名章", startIndex: 1)
                     ],
                     viewportIndex: NovelTextViewportIndex(
                         documentView: document.view,
@@ -232,14 +232,14 @@ final class NovelReadingSessionTests: XCTestCase {
                                 documentView: document.view,
                                 chapterOrdinal: 0,
                                 chapterTitle: "同名章",
-                                ranges: [ReaderRenderedTextRange(segmentIndex: 0, startOffset: 0, endOffset: 8)]
+                                ranges: [NovelRenderedTextRange(segmentIndex: 0, startOffset: 0, endOffset: 8)]
                             ),
                             NovelTextViewportIndexSurface(
                                 surfaceOrdinal: 1,
                                 documentView: document.view,
                                 chapterOrdinal: 1,
                                 chapterTitle: "同名章",
-                                ranges: [ReaderRenderedTextRange(segmentIndex: 1, startOffset: 0, endOffset: 8)]
+                                ranges: [NovelRenderedTextRange(segmentIndex: 1, startOffset: 0, endOffset: 8)]
                             )
                         ],
                         chapters: [
@@ -268,7 +268,7 @@ final class NovelReadingSessionTests: XCTestCase {
         )
         let retainedChapterIdentity = try XCTUnwrap(originalDocument.semantics(forSegmentIndex: 1)?.chapterIdentity)
         let removedTextIdentity = NovelTextSegmentIdentity(rawValue: "\(retainedChapterIdentity.rawValue)#removed")
-        let resumePoint = ReaderResumePoint(
+        let resumePoint = NovelResumePoint(
             view: 1,
             chapterIdentity: retainedChapterIdentity,
             textSegmentIdentity: removedTextIdentity,
@@ -285,7 +285,7 @@ final class NovelReadingSessionTests: XCTestCase {
             contentSource: originalDocument.contentSource,
             segments: [.text("保留段", chapterTitle: "第一章")],
             segmentSemantics: [
-                ReaderSegmentSemantics(
+                NovelReaderSegmentSemantics(
                     chapterIdentity: retainedChapterIdentity,
                     textSegmentIdentity: NovelTextSegmentIdentity(rawValue: "\(retainedChapterIdentity.rawValue)#text:retained")
                 )
@@ -294,8 +294,8 @@ final class NovelReadingSessionTests: XCTestCase {
 
         let session = try NovelReadingSession(
             validating: refreshedDocument,
-            settings: ReaderAppearanceSettings(readingMode: .paged),
-            layout: ReaderContainerLayout(width: 320, height: 568),
+            settings: NovelReaderAppearanceSettings(readingMode: .paged),
+            layout: NovelReaderLayout(width: 320, height: 568),
             resumePoint: resumePoint,
             pagination: { document, _, _ in
                 layoutResult(
@@ -305,11 +305,11 @@ final class NovelReadingSessionTests: XCTestCase {
                             documentView: document.view,
                             chapterOrdinal: 0,
                             chapterTitle: "第一章",
-                            ranges: [ReaderRenderedTextRange(segmentIndex: 0, startOffset: 0, endOffset: 3)]
+                            ranges: [NovelRenderedTextRange(segmentIndex: 0, startOffset: 0, endOffset: 3)]
                         )
                     ],
                     chapters: [
-                        ReaderChapter(ordinal: 0, title: "第一章", startIndex: 0)
+                        NovelReaderChapter(ordinal: 0, title: "第一章", startIndex: 0)
                     ],
                     viewportIndex: NovelTextViewportIndex(
                         documentView: document.view,
@@ -320,7 +320,7 @@ final class NovelReadingSessionTests: XCTestCase {
                                 documentView: document.view,
                                 chapterOrdinal: 0,
                                 chapterTitle: "第一章",
-                                ranges: [ReaderRenderedTextRange(segmentIndex: 0, startOffset: 0, endOffset: 3)]
+                                ranges: [NovelRenderedTextRange(segmentIndex: 0, startOffset: 0, endOffset: 3)]
                             )
                         ],
                         chapters: [
@@ -334,8 +334,8 @@ final class NovelReadingSessionTests: XCTestCase {
         XCTAssertEqual(session.snapshot.selectedSurfaceOrdinal, 0)
     }
 
-    func testReaderResumePointEncodesSemanticSchemaWithoutRuntimeFields() throws {
-        let resumePoint = ReaderResumePoint(
+    func testNovelResumePointEncodesSemanticSchemaWithoutRuntimeFields() throws {
+        let resumePoint = NovelResumePoint(
             view: 2,
             chapterIdentity: NovelChapterIdentity(rawValue: "post:10#chapter:0"),
             textSegmentIdentity: NovelTextSegmentIdentity(rawValue: "post:10#chapter:0#text:1"),
@@ -350,7 +350,7 @@ final class NovelReadingSessionTests: XCTestCase {
         let data = try JSONEncoder().encode(resumePoint)
         let object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
 
-        XCTAssertEqual(object["schemaVersion"] as? Int, ReaderResumePoint.schemaVersion)
+        XCTAssertEqual(object["schemaVersion"] as? Int, NovelResumePoint.schemaVersion)
         XCTAssertNotNil(object["chapterIdentity"])
         XCTAssertNotNil(object["textSegmentIdentity"])
         XCTAssertEqual(object["displayedTextOffset"] as? Int, 12)
@@ -361,7 +361,7 @@ final class NovelReadingSessionTests: XCTestCase {
         XCTAssertNil(object["displayedPageNumber"])
     }
 
-    func testReaderResumePointDecodesLegacySegmentHintsForOneTimeMigration() throws {
+    func testNovelResumePointDecodesLegacySegmentHintsForOneTimeMigration() throws {
         let payload: [String: Any] = [
             "schemaVersion": 2,
             "view": 1,
@@ -373,7 +373,7 @@ final class NovelReadingSessionTests: XCTestCase {
             "readingModeHint": "vertical"
         ]
         let data = try JSONSerialization.data(withJSONObject: payload)
-        let resumePoint = try JSONDecoder().decode(ReaderResumePoint.self, from: data)
+        let resumePoint = try JSONDecoder().decode(NovelResumePoint.self, from: data)
 
         XCTAssertNil(resumePoint.textSegmentIdentity)
         XCTAssertEqual(resumePoint.displayedTextOffset, 42)
@@ -393,8 +393,8 @@ final class NovelReadingSessionTests: XCTestCase {
         )
         var session = try NovelReadingSession(
             validating: document,
-            settings: ReaderAppearanceSettings(readingMode: .vertical),
-            layout: ReaderContainerLayout(width: 320, height: 568),
+            settings: NovelReaderAppearanceSettings(readingMode: .vertical),
+            layout: NovelReaderLayout(width: 320, height: 568),
             pagination: { document, _, _ in
                 layoutResult(
                     pages: [
@@ -405,7 +405,7 @@ final class NovelReadingSessionTests: XCTestCase {
                                     "viewport-backed page text",
                                     chapterTitle: "第一章",
                                     ranges: [
-                                        ReaderRenderedTextRange(segmentIndex: 99, startOffset: 900, endOffset: 950)
+                                        NovelRenderedTextRange(segmentIndex: 99, startOffset: 900, endOffset: 950)
                                     ]
                                 )
                             ],
@@ -415,7 +415,7 @@ final class NovelReadingSessionTests: XCTestCase {
                         )
                     ],
                     chapters: [
-                        ReaderChapter(ordinal: 0, title: "第一章", startIndex: 0)
+                        NovelReaderChapter(ordinal: 0, title: "第一章", startIndex: 0)
                     ],
                     viewportIndex: NovelTextViewportIndex(
                         documentView: document.view,
@@ -427,8 +427,8 @@ final class NovelReadingSessionTests: XCTestCase {
                                 chapterOrdinal: 0,
                                 chapterTitle: "第一章",
                                 ranges: [
-                                    ReaderRenderedTextRange(segmentIndex: 1, startOffset: 10, endOffset: 30),
-                                    ReaderRenderedTextRange(segmentIndex: 2, startOffset: 4, endOffset: 24)
+                                    NovelRenderedTextRange(segmentIndex: 1, startOffset: 10, endOffset: 30),
+                                    NovelRenderedTextRange(segmentIndex: 2, startOffset: 4, endOffset: 24)
                                 ]
                             )
                         ],
@@ -459,12 +459,12 @@ final class NovelReadingSessionTests: XCTestCase {
         )
         var session = try NovelReadingSession(
             validating: document,
-            settings: ReaderAppearanceSettings(readingMode: .vertical),
-            layout: ReaderContainerLayout(width: 320, height: 568),
+            settings: NovelReaderAppearanceSettings(readingMode: .vertical),
+            layout: NovelReaderLayout(width: 320, height: 568),
             pagination: { document, settings, _ in
                 let hasIndexedText = settings.fontScale <= 1
                 let indexedRanges = hasIndexedText
-                    ? [ReaderRenderedTextRange(segmentIndex: 0, startOffset: 0, endOffset: 100)]
+                    ? [NovelRenderedTextRange(segmentIndex: 0, startOffset: 0, endOffset: 100)]
                     : []
                 return layoutResult(
                     pages: [
@@ -475,7 +475,7 @@ final class NovelReadingSessionTests: XCTestCase {
                                     "stale display value range",
                                     chapterTitle: "第一章",
                                     ranges: [
-                                        ReaderRenderedTextRange(segmentIndex: 99, startOffset: 0, endOffset: 1)
+                                        NovelRenderedTextRange(segmentIndex: 99, startOffset: 0, endOffset: 1)
                                     ]
                                 )
                             ],
@@ -485,7 +485,7 @@ final class NovelReadingSessionTests: XCTestCase {
                         )
                     ],
                     chapters: [
-                        ReaderChapter(ordinal: 0, title: "第一章", startIndex: 0)
+                        NovelReaderChapter(ordinal: 0, title: "第一章", startIndex: 0)
                     ],
                     viewportIndex: NovelTextViewportIndex(
                         documentView: document.view,
@@ -545,8 +545,8 @@ final class NovelReadingSessionTests: XCTestCase {
 
         let session = try NovelReadingSession(
             validating: document,
-            settings: ReaderAppearanceSettings(readingMode: .paged),
-            layout: ReaderContainerLayout(width: 320, height: 568),
+            settings: NovelReaderAppearanceSettings(readingMode: .paged),
+            layout: NovelReaderLayout(width: 320, height: 568),
             resumePoint: resumePoint,
             pagination: { document, _, _ in
                 layoutResult(
@@ -558,7 +558,7 @@ final class NovelReadingSessionTests: XCTestCase {
                                     "第二章 display value text",
                                     chapterTitle: "第二章",
                                     ranges: [
-                                        ReaderRenderedTextRange(segmentIndex: 1, startOffset: 10, endOffset: 20)
+                                        NovelRenderedTextRange(segmentIndex: 1, startOffset: 10, endOffset: 20)
                                     ]
                                 )
                             ],
@@ -568,7 +568,7 @@ final class NovelReadingSessionTests: XCTestCase {
                         )
                     ],
                     chapters: [
-                        ReaderChapter(ordinal: 1, title: "第二章", startIndex: 0)
+                        NovelReaderChapter(ordinal: 1, title: "第二章", startIndex: 0)
                     ],
                     viewportIndex: NovelTextViewportIndex(
                         documentView: document.view,
@@ -580,7 +580,7 @@ final class NovelReadingSessionTests: XCTestCase {
                                 chapterOrdinal: 1,
                                 chapterTitle: "第二章",
                                 ranges: [
-                                    ReaderRenderedTextRange(segmentIndex: 1, startOffset: 10, endOffset: 20)
+                                    NovelRenderedTextRange(segmentIndex: 1, startOffset: 10, endOffset: 20)
                                 ]
                             )
                         ],
@@ -609,8 +609,8 @@ final class NovelReadingSessionTests: XCTestCase {
         )
         var session = try NovelReadingSession(
             validating: document,
-            settings: ReaderAppearanceSettings(readingMode: .vertical),
-            layout: ReaderContainerLayout(width: 320, height: 568),
+            settings: NovelReaderAppearanceSettings(readingMode: .vertical),
+            layout: NovelReaderLayout(width: 320, height: 568),
             pagination: { document, _, _ in
                 layoutResult(
                     pages: [
@@ -621,8 +621,8 @@ final class NovelReadingSessionTests: XCTestCase {
                                     "display value from multiple source ranges",
                                     chapterTitle: "第一章",
                                     ranges: [
-                                        ReaderRenderedTextRange(segmentIndex: 1, startOffset: 10, endOffset: 30),
-                                        ReaderRenderedTextRange(segmentIndex: 2, startOffset: 4, endOffset: 24)
+                                        NovelRenderedTextRange(segmentIndex: 1, startOffset: 10, endOffset: 30),
+                                        NovelRenderedTextRange(segmentIndex: 2, startOffset: 4, endOffset: 24)
                                     ]
                                 )
                             ],
@@ -632,7 +632,7 @@ final class NovelReadingSessionTests: XCTestCase {
                         )
                     ],
                     chapters: [
-                        ReaderChapter(ordinal: 0, title: "第一章", startIndex: 0)
+                        NovelReaderChapter(ordinal: 0, title: "第一章", startIndex: 0)
                     ],
                     viewportIndex: NovelTextViewportIndex(
                         documentView: document.view,
@@ -644,8 +644,8 @@ final class NovelReadingSessionTests: XCTestCase {
                                 chapterOrdinal: 0,
                                 chapterTitle: "第一章",
                                 ranges: [
-                                    ReaderRenderedTextRange(segmentIndex: 1, startOffset: 10, endOffset: 30),
-                                    ReaderRenderedTextRange(segmentIndex: 2, startOffset: 4, endOffset: 24)
+                                    NovelRenderedTextRange(segmentIndex: 1, startOffset: 10, endOffset: 30),
+                                    NovelRenderedTextRange(segmentIndex: 2, startOffset: 4, endOffset: 24)
                                 ]
                             )
                         ],
@@ -681,8 +681,8 @@ final class NovelReadingSessionTests: XCTestCase {
 
         let session = try NovelReadingSession(
             validating: document,
-            settings: ReaderAppearanceSettings(readingMode: .paged),
-            layout: ReaderContainerLayout(width: 320, height: 568),
+            settings: NovelReaderAppearanceSettings(readingMode: .paged),
+            layout: NovelReaderLayout(width: 320, height: 568),
             preferredSurfaceOrdinal: 1,
             pagination: { document, _, _ in
                 layoutResult(
@@ -696,7 +696,7 @@ final class NovelReadingSessionTests: XCTestCase {
                         )
                     ],
                     chapters: [
-                        ReaderChapter(ordinal: 0, title: "兼容章节", startIndex: 0)
+                        NovelReaderChapter(ordinal: 0, title: "兼容章节", startIndex: 0)
                     ],
                     viewportIndex: NovelTextViewportIndex(
                         documentView: document.view,
@@ -708,7 +708,7 @@ final class NovelReadingSessionTests: XCTestCase {
                                 chapterOrdinal: 0,
                                 chapterTitle: "第一章",
                                 ranges: [
-                                    ReaderRenderedTextRange(segmentIndex: 0, startOffset: 0, endOffset: 5)
+                                    NovelRenderedTextRange(segmentIndex: 0, startOffset: 0, endOffset: 5)
                                 ]
                             ),
                             NovelTextViewportIndexSurface(
@@ -717,7 +717,7 @@ final class NovelReadingSessionTests: XCTestCase {
                                 chapterOrdinal: 1,
                                 chapterTitle: "第二章",
                                 ranges: [
-                                    ReaderRenderedTextRange(segmentIndex: 1, startOffset: 0, endOffset: 5)
+                                    NovelRenderedTextRange(segmentIndex: 1, startOffset: 0, endOffset: 5)
                                 ]
                             )
                         ],
@@ -731,7 +731,7 @@ final class NovelReadingSessionTests: XCTestCase {
         )
 
         XCTAssertEqual(session.viewportSurfacesForTesting.count, 2)
-        XCTAssertEqual(session.readerChaptersForTesting.map(\.title), ["第一章", "第二章"])
+        XCTAssertEqual(session.novelReaderChaptersForTesting.map(\.title), ["第一章", "第二章"])
         XCTAssertEqual(session.snapshot.selectedSurfaceOrdinal, 1)
         XCTAssertEqual(session.snapshot.currentChapterTitle, "第二章")
     }
@@ -744,8 +744,8 @@ final class NovelReadingSessionTests: XCTestCase {
                 ("第一章", String(repeating: "第一章 内容。", count: 260)),
             ]
         )
-        let initialSettings = ReaderAppearanceSettings(readingMode: .paged)
-        let initialLayout = ReaderContainerLayout(width: 320, height: 568)
+        let initialSettings = NovelReaderAppearanceSettings(readingMode: .paged)
+        let initialLayout = NovelReaderLayout(width: 320, height: 568)
         let pagination = textRangePagination(
             defaultRanges: [0..<40, 40..<80, 80..<120],
             repaginatedRanges: [0..<40, 40..<80, 80..<120]
@@ -761,7 +761,7 @@ final class NovelReadingSessionTests: XCTestCase {
         let targetOffset = targetRange.startOffset + max(1, targetRange.length / 2)
 
         session.updateVerticalViewportPosition(surfaceOrdinal: targetViewportSurface.surfaceOrdinal, intraSurfaceProgress: 0.5)
-        let updatedSettings = ReaderAppearanceSettings(readingMode: .vertical)
+        let updatedSettings = NovelReaderAppearanceSettings(readingMode: .vertical)
         session.consumeCommittedLayoutResult(
             try committedLayoutResult(
                 document: document,
@@ -787,8 +787,8 @@ final class NovelReadingSessionTests: XCTestCase {
                 ("第一章", String(repeating: "第一章 内容。", count: 320)),
             ]
         )
-        let initialSettings = ReaderAppearanceSettings(readingMode: .paged)
-        let initialLayout = ReaderContainerLayout(width: 320, height: 568)
+        let initialSettings = NovelReaderAppearanceSettings(readingMode: .paged)
+        let initialLayout = NovelReaderLayout(width: 320, height: 568)
         let pagination = textRangePagination(
             defaultRanges: [0..<40, 40..<80, 80..<120],
             repaginatedRanges: [0..<40, 40..<80, 80..<120]
@@ -804,7 +804,7 @@ final class NovelReadingSessionTests: XCTestCase {
         let targetOffset = targetRange.startOffset + max(1, targetRange.length / 2)
 
         session.updateVerticalViewportPosition(surfaceOrdinal: targetViewportSurface.surfaceOrdinal, intraSurfaceProgress: 0.5)
-        let updatedSettings = ReaderAppearanceSettings(
+        let updatedSettings = NovelReaderAppearanceSettings(
             indentsParagraphFirstLine: true,
             readingMode: .paged
         )
@@ -833,8 +833,8 @@ final class NovelReadingSessionTests: XCTestCase {
                 ("第一章", String(repeating: "第一章 内容。", count: 90)),
             ]
         )
-        let initialSettings = ReaderAppearanceSettings(readingMode: .paged)
-        let initialLayout = ReaderContainerLayout(width: 320, height: 568)
+        let initialSettings = NovelReaderAppearanceSettings(readingMode: .paged)
+        let initialLayout = NovelReaderLayout(width: 320, height: 568)
         let pagination = textRangePagination(
             defaultRanges: [0 ..< 100, 100 ..< 200, 200 ..< 300],
             repaginatedRanges: [0 ..< 60, 60 ..< 120, 120 ..< 180, 180 ..< 240, 240 ..< 300]
@@ -849,7 +849,7 @@ final class NovelReadingSessionTests: XCTestCase {
         session.updateVerticalViewportPosition(surfaceOrdinal: 1, intraSurfaceProgress: 0.5)
         let savedPosition = try XCTUnwrap(session.captureNovelReadingPosition())
 
-        let updatedSettings = ReaderAppearanceSettings(
+        let updatedSettings = NovelReaderAppearanceSettings(
             fontScale: 1.25,
             lineHeightScale: 1.7,
             horizontalPadding: 24,
@@ -887,8 +887,8 @@ final class NovelReadingSessionTests: XCTestCase {
                 ("第一章", String(repeating: "第一章 内容。", count: 90)),
             ]
         )
-        let initialSettings = ReaderAppearanceSettings(readingMode: .vertical)
-        let initialLayout = ReaderContainerLayout(width: 320, height: 568)
+        let initialSettings = NovelReaderAppearanceSettings(readingMode: .vertical)
+        let initialLayout = NovelReaderLayout(width: 320, height: 568)
         let pagination = textRangePagination(
             defaultRanges: [0 ..< 200, 200 ..< 300],
             repaginatedRanges: [0 ..< 40, 40 ..< 80, 80 ..< 120, 120 ..< 160, 160 ..< 200, 200 ..< 240, 240 ..< 300]
@@ -903,11 +903,11 @@ final class NovelReadingSessionTests: XCTestCase {
         session.updateVerticalViewportPosition(surfaceOrdinal: 0, intraSurfaceProgress: 0.25)
         let savedPosition = try XCTUnwrap(session.captureNovelReadingPosition())
 
-        let updatedLayout = ReaderContainerLayout(
+        let updatedLayout = NovelReaderLayout(
             containerSize: CGSize(width: 390, height: 844),
-            safeAreaInsets: ReaderLayoutInsets(top: 59, bottom: 34),
-            contentInsets: ReaderLayoutInsets(top: 16, leading: 20, bottom: 24, trailing: 20),
-            chromeInsets: ReaderLayoutInsets(top: 72, bottom: 96),
+            safeAreaInsets: NovelReaderLayoutInsets(top: 59, bottom: 34),
+            contentInsets: NovelReaderLayoutInsets(top: 16, leading: 20, bottom: 24, trailing: 20),
+            chromeInsets: NovelReaderLayoutInsets(top: 72, bottom: 96),
             readingMode: .vertical
         )
         session.consumeCommittedLayoutResult(
@@ -936,8 +936,8 @@ final class NovelReadingSessionTests: XCTestCase {
         let prefetched = makeNovelDocument(view: 2, maxView: 2, segments: [("第二章", "预取页正文")])
         var session = NovelReadingSession(
             document: current,
-            settings: ReaderAppearanceSettings(readingMode: .vertical),
-            layout: ReaderContainerLayout(width: 320, height: 568),
+            settings: NovelReaderAppearanceSettings(readingMode: .vertical),
+            layout: NovelReaderLayout(width: 320, height: 568),
             pagination: textRangePagination(
                 defaultRanges: [0..<5],
                 repaginatedRanges: [0..<5]
@@ -947,8 +947,8 @@ final class NovelReadingSessionTests: XCTestCase {
             document: prefetched,
             layoutResult: try committedLayoutResult(
                 document: prefetched,
-                settings: ReaderAppearanceSettings(readingMode: .vertical),
-                layout: ReaderContainerLayout(width: 320, height: 568),
+                settings: NovelReaderAppearanceSettings(readingMode: .vertical),
+                layout: NovelReaderLayout(width: 320, height: 568),
                 pagination: textRangePagination(
                     defaultRanges: [0..<5],
                     repaginatedRanges: [0..<5]
@@ -970,8 +970,8 @@ final class NovelReadingSessionTests: XCTestCase {
         )
         var session = NovelReadingSession(
             document: document,
-            settings: ReaderAppearanceSettings(readingMode: .paged),
-            layout: ReaderContainerLayout(width: 320, height: 568)
+            settings: NovelReaderAppearanceSettings(readingMode: .paged),
+            layout: NovelReaderLayout(width: 320, height: 568)
         )
 
         let request = session.jumpRelativeSurface(1)
@@ -1007,10 +1007,10 @@ private func viewportSurfaceContainsSegmentOffset(_ page: NovelTextViewportIndex
 private extension NovelReadingSession {
     init(
         document: NovelReaderProjection,
-        settings: ReaderAppearanceSettings,
-        layout: ReaderContainerLayout,
+        settings: NovelReaderAppearanceSettings,
+        layout: NovelReaderLayout,
         preferredSurfaceOrdinal: Int = 0,
-        resumePoint: ReaderResumePoint? = nil,
+        resumePoint: NovelResumePoint? = nil,
         usesPadPresentation: Bool = false,
         currentAuthorID: String? = nil,
         pagination: @escaping NovelTextLayoutFixture = NovelTextLayout.layout
@@ -1038,10 +1038,10 @@ private extension NovelReadingSession {
 
     init(
         validating document: NovelReaderProjection,
-        settings: ReaderAppearanceSettings,
-        layout: ReaderContainerLayout,
+        settings: NovelReaderAppearanceSettings,
+        layout: NovelReaderLayout,
         preferredSurfaceOrdinal: Int = 0,
-        resumePoint: ReaderResumePoint? = nil,
+        resumePoint: NovelResumePoint? = nil,
         usesPadPresentation: Bool = false,
         currentAuthorID: String? = nil,
         pagination: @escaping NovelTextLayoutFixture = NovelTextLayout.layout
@@ -1070,8 +1070,8 @@ private extension NovelReadingSession {
 
 private func committedLayoutResult(
     document: NovelReaderProjection,
-    settings: ReaderAppearanceSettings,
-    layout: ReaderContainerLayout,
+    settings: NovelReaderAppearanceSettings,
+    layout: NovelReaderLayout,
     usesPadPresentation: Bool = false,
     pagination: NovelTextLayoutFixture = NovelTextLayout.layout
 ) throws -> NovelTextLayoutResult {
@@ -1086,8 +1086,8 @@ private func committedLayoutResult(
 }
 
 private func committedUsesPagedSpread(
-    settings: ReaderAppearanceSettings,
-    layout: ReaderContainerLayout,
+    settings: NovelReaderAppearanceSettings,
+    layout: NovelReaderLayout,
     usesPadPresentation: Bool
 ) -> Bool {
     settings.readingMode == .paged &&
@@ -1098,7 +1098,7 @@ private func committedUsesPagedSpread(
 
 private func layoutResult(
     pages: [NovelTextViewportIndexSurface],
-    chapters: [ReaderChapter],
+    chapters: [NovelReaderChapter],
     viewportIndex: NovelTextViewportIndex? = nil,
     viewportContext: NovelTextViewportContext? = nil
 ) -> NovelTextLayoutResult {
@@ -1129,8 +1129,8 @@ private func layoutResult(
             maxView: index.documentView,
             fetchedAt: Date(timeIntervalSince1970: 0),
             contentSource: .fallbackUnfilteredPage,
-            appearance: ReaderAppearanceSettings(readingMode: index.readingMode),
-            layout: ReaderContainerLayout(width: 320, height: 568, readingMode: index.readingMode)
+            appearance: NovelReaderAppearanceSettings(readingMode: index.readingMode),
+            layout: NovelReaderLayout(width: 320, height: 568, readingMode: index.readingMode)
         ),
         document: NovelTextViewportDocument(
             text: "",
@@ -1147,7 +1147,7 @@ private func layoutResult(
 }
 
 private enum ViewportTestBlock {
-    case text(String, chapterTitle: String?, ranges: [ReaderRenderedTextRange] = [])
+    case text(String, chapterTitle: String?, ranges: [NovelRenderedTextRange] = [])
     case image(URL, chapterTitle: String?)
 }
 
@@ -1159,7 +1159,7 @@ private func viewportTestPage(
     chapterTitle: String? = nil,
     chapterCommentTarget: ReaderChapterCommentTarget? = nil
 ) -> NovelTextViewportIndexSurface {
-    let ranges = blocks.flatMap { block -> [ReaderRenderedTextRange] in
+    let ranges = blocks.flatMap { block -> [NovelRenderedTextRange] in
         if case let .text(_, _, ranges) = block {
             return ranges
         }
@@ -1206,7 +1206,7 @@ private func textRangePagination(
                 )
             },
             chapters: [
-                ReaderChapter(ordinal: 0, title: chapterTitle, startIndex: 0)
+                NovelReaderChapter(ordinal: 0, title: chapterTitle, startIndex: 0)
             ],
             viewportIndex: NovelTextViewportIndex(
                 documentView: document.view,
@@ -1218,7 +1218,7 @@ private func textRangePagination(
                         chapterOrdinal: 0,
                         chapterTitle: chapterTitle,
                         ranges: [
-                            ReaderRenderedTextRange(
+                            NovelRenderedTextRange(
                                 segmentIndex: 0,
                                 startOffset: range.lowerBound,
                                 endOffset: range.upperBound
@@ -1243,8 +1243,8 @@ private func legacyResumePoint(
     segmentProgress: Double,
     authorID: String? = nil,
     readingModeHint: ReaderReadingMode
-) -> ReaderResumePoint {
-    ReaderResumePoint(
+) -> NovelResumePoint {
+    NovelResumePoint(
         view: view,
         displayedTextOffset: segmentOffset,
         chapterOrdinal: chapterOrdinal,

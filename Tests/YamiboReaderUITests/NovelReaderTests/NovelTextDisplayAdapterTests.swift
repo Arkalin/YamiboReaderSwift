@@ -4,19 +4,6 @@ import XCTest
 @testable import YamiboReaderUI
 
 final class NovelTextDisplayAdapterTests: XCTestCase {
-    func testInlineImageHitTestingUsesAspectFitFrameOnly() {
-        let container = CGSize(width: 300, height: 500)
-        let image = CGSize(width: 300, height: 200)
-        let imageFrame = ReaderImageHitTesting.aspectFitImageFrame(
-            imageSize: image,
-            containerSize: container
-        )
-
-        XCTAssertEqual(imageFrame, CGRect(x: 0, y: 150, width: 300, height: 200))
-        XCTAssertTrue(ReaderImageHitTesting.containsImagePoint(CGPoint(x: 150, y: 240), imageSize: image, containerSize: container))
-        XCTAssertFalse(ReaderImageHitTesting.containsImagePoint(CGPoint(x: 150, y: 420), imageSize: image, containerSize: container))
-    }
-
     func testPagedTapZoneKeepsBlankAreaNavigationAvailable() {
         let bounds = CGRect(x: 0, y: 0, width: 390, height: 844)
 
@@ -182,7 +169,7 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
 
     func testPageCurlSequenceMapsSinglePagesBySurfaceIndex() {
         let surfaces = makePageCurlSurfaces(count: 3)
-        let sequence = ReaderPagedPageCurlSequence(
+        let sequence = NovelReaderPagedPageCurlSequence(
             surfaces: surfaces,
             spreads: [],
             usesTwoPageSpread: false
@@ -196,7 +183,7 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
 
     func testPageCurlSequenceReversesPhysicalBookOrderForRightToLeftDirection() {
         let surfaces = makePageCurlSurfaces(count: 3)
-        let sequence = ReaderPagedPageCurlSequence(
+        let sequence = NovelReaderPagedPageCurlSequence(
             surfaces: surfaces,
             spreads: [],
             usesTwoPageSpread: false,
@@ -230,7 +217,7 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
                 chapterTitle: nil
             )
         ]
-        let sequence = ReaderPagedPageCurlSequence(
+        let sequence = NovelReaderPagedPageCurlSequence(
             surfaces: surfaces,
             spreads: spreads,
             usesTwoPageSpread: true
@@ -262,7 +249,7 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
                 chapterTitle: nil
             )
         ]
-        let sequence = ReaderPagedPageCurlSequence(
+        let sequence = NovelReaderPagedPageCurlSequence(
             surfaces: surfaces,
             spreads: spreads,
             usesTwoPageSpread: true,
@@ -277,12 +264,12 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
     }
 
     func testPageCurlSequenceProvidesBlankControllersForEmptyContent() {
-        let singlePageSequence = ReaderPagedPageCurlSequence(
+        let singlePageSequence = NovelReaderPagedPageCurlSequence(
             surfaces: [],
             spreads: [],
             usesTwoPageSpread: false
         )
-        let spreadSequence = ReaderPagedPageCurlSequence(
+        let spreadSequence = NovelReaderPagedPageCurlSequence(
             surfaces: [],
             spreads: [],
             usesTwoPageSpread: true
@@ -366,45 +353,6 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         ))
     }
 
-    func testImageBrowserSwipeDownDismissRequiresMinimumZoomAndDownwardIntent() {
-        XCTAssertTrue(ReaderImageBrowserDismissGesture.canBegin(
-            translation: CGPoint(x: 12, y: 80),
-            zoomScale: 1,
-            minimumZoomScale: 1
-        ))
-        XCTAssertTrue(ReaderImageBrowserDismissGesture.shouldDismiss(
-            translation: CGPoint(x: 12, y: 120),
-            velocity: CGPoint(x: 0, y: 700),
-            zoomScale: 1,
-            minimumZoomScale: 1
-        ))
-        XCTAssertFalse(ReaderImageBrowserDismissGesture.shouldDismiss(
-            translation: CGPoint(x: 12, y: 120),
-            velocity: CGPoint(x: 0, y: 900),
-            zoomScale: 1.2,
-            minimumZoomScale: 1
-        ))
-        XCTAssertFalse(ReaderImageBrowserDismissGesture.canBegin(
-            translation: CGPoint(x: 120, y: 80),
-            zoomScale: 1,
-            minimumZoomScale: 1
-        ))
-        XCTAssertFalse(ReaderImageBrowserDismissGesture.shouldDismiss(
-            translation: CGPoint(x: 12, y: 70),
-            velocity: CGPoint(x: 0, y: 300),
-            zoomScale: 1,
-            minimumZoomScale: 1
-        ))
-    }
-
-    func testImageBrowserSwipeDownDismissVisualProgressIsClamped() {
-        XCTAssertEqual(ReaderImageBrowserDismissGesture.progress(for: -40), 0)
-        XCTAssertEqual(ReaderImageBrowserDismissGesture.progress(for: 75), 0.5)
-        XCTAssertEqual(ReaderImageBrowserDismissGesture.progress(for: 300), 1)
-        XCTAssertEqual(ReaderImageBrowserDismissGesture.imageScale(for: 1), 0.92, accuracy: 0.001)
-        XCTAssertEqual(ReaderImageBrowserDismissGesture.backgroundOpacity(for: 1), 0, accuracy: 0.001)
-    }
-
     func testSwiftUIViewUpdateCallbackSchedulerDefersCallbacksDuringViewUpdate() {
         let scheduler = SwiftUIViewUpdateCallbackScheduler()
         var events: [String] = []
@@ -445,8 +393,8 @@ final class NovelTextDisplayAdapterTests: XCTestCase {
         XCTAssertThrowsError(
             try NovelTextLayout.layout(
                 document: document,
-                settings: ReaderAppearanceSettings(readingMode: .paged),
-                layout: ReaderContainerLayout(width: 320, height: 568),
+                settings: NovelReaderAppearanceSettings(readingMode: .paged),
+                layout: NovelReaderLayout(width: 320, height: 568),
                 viewportSurfaceLayout: { _, _, _ in [] }
             )
         ) { error in

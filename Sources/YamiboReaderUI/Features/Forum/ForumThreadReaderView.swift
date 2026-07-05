@@ -135,10 +135,10 @@ private struct ForumThreadReaderBodyView: View {
         contentWithSheets
             .fullScreenCover(item: $imageBrowserRequest) { request in
                 if let inlineImageLoadingContext {
-                    ReaderImageBrowserView(
-                        url: request.url,
-                        title: request.title,
-                        refererURL: request.refererURL,
+                    ImageBrowserView(
+                        items: request.items,
+                        initialItemID: request.initialItemID,
+                        mode: .multiple,
                         imageDataLoader: inlineImageLoadingContext.loader,
                         onDismiss: {
                             imageBrowserRequest = nil
@@ -261,15 +261,25 @@ private struct ForumThreadReaderBodyView: View {
         ].joined(separator: "|")
     }
 
-    private func openImageBrowser(_ url: URL, _ title: String?, _ refererURL: URL) {
-        guard inlineImageLoadingContext != nil else {
+    private func openImageBrowser(_ imageID: String, _ url: URL, _ title: String?, _ refererURL: URL) {
+        guard inlineImageLoadingContext != nil, let page else {
             onURLTap(url)
             return
         }
-        imageBrowserRequest = ForumThreadImageBrowserRequest(
-            url: url,
+        let gallery = ForumThreadImageBrowserGallery(
+            page: page,
+            refererURL: refererURL,
+            selectedBlockID: imageID,
+            defaultTitle: L10n.string("forum.thread.image")
+        )
+        let fallbackItem = ImageBrowserItem(
+            id: imageID,
+            request: YamiboImageRequest(url: url, refererURL: refererURL),
             title: imageBrowserTitle(from: title),
-            refererURL: refererURL
+        )
+        imageBrowserRequest = ForumThreadImageBrowserRequest(
+            items: gallery.items.isEmpty ? [fallbackItem] : gallery.items,
+            initialItemID: gallery.initialItemID ?? fallbackItem.id
         )
     }
 
@@ -340,15 +350,13 @@ private struct ForumThreadReaderActionBar: View {
 }
 
 private struct ForumThreadImageBrowserRequest: Identifiable, Equatable {
-    var url: URL
-    var title: String
-    var refererURL: URL
+    var items: [ImageBrowserItem]
+    var initialItemID: String
 
     var id: String {
         [
-            url.absoluteString,
-            refererURL.absoluteString,
-            title
+            initialItemID,
+            items.map(\.id).joined(separator: "\u{1E}")
         ].joined(separator: "\u{1F}")
     }
 }
@@ -689,7 +697,7 @@ private struct ForumThreadPostCard: View {
     let formHash: String?
     let inlineImageLoadingContext: NovelInlineImageLoadingContext?
     let onUserTap: (String, String?) -> Void
-    let onImageTap: (URL, String?, URL) -> Void
+    let onImageTap: (String, URL, String?, URL) -> Void
     let onShowRatingResults: (String, String) -> Void
     let onShowPollVoters: (String, String?) -> Void
     let onVotePoll: (String, String, [String], String) async throws -> String
@@ -1439,7 +1447,7 @@ private struct ForumThreadContentBlocksView: View {
     let fallbackText: String
     let refererURL: URL
     let inlineImageLoadingContext: NovelInlineImageLoadingContext?
-    let onImageTap: (URL, String?, URL) -> Void
+    let onImageTap: (String, URL, String?, URL) -> Void
     let onURLTap: (URL) -> Void
 
     var body: some View {
@@ -1469,7 +1477,7 @@ private struct ForumThreadContentBlockView: View {
     let block: ForumThreadContentBlock
     let refererURL: URL
     let inlineImageLoadingContext: NovelInlineImageLoadingContext?
-    let onImageTap: (URL, String?, URL) -> Void
+    let onImageTap: (String, URL, String?, URL) -> Void
     let onURLTap: (URL) -> Void
 
     var body: some View {
@@ -1478,6 +1486,7 @@ private struct ForumThreadContentBlockView: View {
             ForumThreadTextBlockView(block: textBlock, onURLTap: onURLTap)
         case let .image(imageBlock):
             ForumThreadImageBlockView(
+                blockID: block.id,
                 block: imageBlock,
                 refererURL: refererURL,
                 inlineImageLoadingContext: inlineImageLoadingContext,
@@ -1840,10 +1849,11 @@ private extension Color {
 }
 
 private struct ForumThreadImageBlockView: View {
+    let blockID: String
     let block: ForumThreadImageBlock
     let refererURL: URL
     let inlineImageLoadingContext: NovelInlineImageLoadingContext?
-    let onImageTap: (URL, String?, URL) -> Void
+    let onImageTap: (String, URL, String?, URL) -> Void
     let onURLTap: (URL) -> Void
 
     var body: some View {
@@ -1858,7 +1868,7 @@ private struct ForumThreadImageBlockView: View {
                 if let linkURL = block.linkURL {
                     onURLTap(linkURL)
                 } else {
-                    onImageTap(block.url, block.altText, refererURL)
+                    onImageTap(blockID, block.url, block.altText, refererURL)
                 }
             } label: {
                 image
@@ -1881,8 +1891,7 @@ private struct ForumThreadImageBlockView: View {
             )
         } else {
             YamiboRemoteImage(
-                url: block.url,
-                refererURL: refererURL
+                request: YamiboImageRequest(url: block.url, refererURL: refererURL)
             ) { image in
                 image
                     .resizable()
@@ -1921,17 +1930,16 @@ private struct ForumThreadImageFailureView: View {
 }
 
 private struct ForumThreadAuthenticatedImage: View {
-    @StateObject private var loader: ReaderImageLoader
+    @StateObject private var loader: NovelReaderImageLoader
 
     init(
         url: URL,
         refererURL: URL,
-        imageDataLoader: any NovelInlineImageDataLoading
+        imageDataLoader: any YamiboImageDataLoading
     ) {
         _loader = StateObject(
-            wrappedValue: ReaderImageLoader(
-                url: url,
-                refererURL: refererURL,
+            wrappedValue: NovelReaderImageLoader(
+                request: YamiboImageRequest(url: url, refererURL: refererURL),
                 imageDataLoader: imageDataLoader
             )
         )
@@ -2000,7 +2008,7 @@ private struct ForumThreadAttachmentIconView: View {
     let iconURL: URL?
 
     var body: some View {
-        YamiboRemoteImage(url: iconURL) { image in
+        YamiboRemoteImage(request: iconURL.map { YamiboImageRequest(url: $0) }) { image in
             image.resizable().scaledToFit()
         } placeholder: {
             Image(systemName: "paperclip")
@@ -2040,7 +2048,7 @@ private struct ForumThreadDisclosureBlockView: View {
     let blocks: [ForumThreadContentBlock]
     let refererURL: URL
     let inlineImageLoadingContext: NovelInlineImageLoadingContext?
-    let onImageTap: (URL, String?, URL) -> Void
+    let onImageTap: (String, URL, String?, URL) -> Void
     let onURLTap: (URL) -> Void
 
     @State private var isExpanded = false
@@ -2071,7 +2079,7 @@ private struct ForumThreadLockedBlockView: View {
     let blocks: [ForumThreadContentBlock]
     let refererURL: URL
     let inlineImageLoadingContext: NovelInlineImageLoadingContext?
-    let onImageTap: (URL, String?, URL) -> Void
+    let onImageTap: (String, URL, String?, URL) -> Void
     let onURLTap: (URL) -> Void
 
     var body: some View {
@@ -2122,7 +2130,7 @@ private struct ForumThreadTableBlockView: View {
     let rows: [[ForumThreadTableCell]]
     let refererURL: URL
     let inlineImageLoadingContext: NovelInlineImageLoadingContext?
-    let onImageTap: (URL, String?, URL) -> Void
+    let onImageTap: (String, URL, String?, URL) -> Void
     let onURLTap: (URL) -> Void
 
     var body: some View {
@@ -2153,7 +2161,7 @@ private struct ForumThreadTableCellView: View {
     let cell: ForumThreadTableCell
     let refererURL: URL
     let inlineImageLoadingContext: NovelInlineImageLoadingContext?
-    let onImageTap: (URL, String?, URL) -> Void
+    let onImageTap: (String, URL, String?, URL) -> Void
     let onURLTap: (URL) -> Void
 
     var body: some View {
@@ -2183,7 +2191,7 @@ private struct ForumThreadPostHeader: View {
 
     var body: some View {
         HStack(alignment: .center, spacing: 10) {
-            YamiboRemoteImage(url: post.author.avatarURL) { image in
+            YamiboRemoteImage(request: post.author.avatarURL.map { YamiboImageRequest(url: $0) }) { image in
                 image.resizable().scaledToFill()
             } placeholder: {
                 Image(systemName: "person.crop.circle")

@@ -33,7 +33,7 @@ import Testing
     let imageURL = try #require(URL(string: "https://img.example.test/7001-1.jpg"))
 
     try await saveMigratedAppState(appContext: appContext, chapterTID: "7001", imageURL: imageURL)
-    try await appContext.readerCacheStore.save(
+    try await appContext.novelReaderCacheStore.save(
         NovelReaderProjection(
             threadID: "7001",
             view: 1,
@@ -99,7 +99,7 @@ import Testing
     let imageURL = try #require(URL(string: "https://img.example.test/7002-1.jpg"))
 
     try await saveMigratedAppState(appContext: appContext, chapterTID: "7002", imageURL: imageURL)
-    try await appContext.readerCacheStore.save(
+    try await appContext.novelReaderCacheStore.save(
         NovelReaderProjection(
             threadID: "7002",
             view: 1,
@@ -232,7 +232,7 @@ import Testing
     )
 
     try await legacyStore.saveOfflineImageData(Data([9, 3]), for: imageURL)
-    try await legacyStore.saveMembership(
+    try await legacyStore.saveMangaOfflineCacheMembership(
         MangaOfflineCacheMembership(
             ownerName: "Legacy Manga",
             tid: "9003",
@@ -263,7 +263,7 @@ import Testing
     #expect(FileManager.default.fileExists(atPath: legacyOfflineCacheDirectory(rootDirectory: rootDirectory).path))
     #expect(!FileManager.default.fileExists(atPath: offlineCacheDirectory(rootDirectory: rootDirectory).path))
     #expect(await appContext.offlineCacheStore.offlineImageData(for: imageURL) == nil)
-    #expect(await appContext.offlineCacheStore.offlineCacheState(ownerName: "Legacy Manga", tid: "9003") == .uncached)
+    #expect(await appContext.offlineCacheStore.mangaOfflineCacheState(ownerName: "Legacy Manga", tid: "9003") == .uncached)
     let loadedNovelSourcePage = await appContext.offlineCacheStore.novelOfflineSourcePage(
         ownerTitle: "Legacy Novel",
         threadID: novelSourcePage.thread.tid,
@@ -346,7 +346,7 @@ private func saveMigratedAppState(
             imageURLs: [imageURL]
         )
     )
-    try await appContext.offlineCacheStore.saveMembership(
+    try await appContext.offlineCacheStore.saveMangaOfflineCacheMembership(
         MangaOfflineCacheMembership(
             ownerName: "Shared GRDB Manga",
             tid: chapter.tid,

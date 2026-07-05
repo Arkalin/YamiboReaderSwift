@@ -8,13 +8,13 @@ Accepted. Supersedes ADR 0041.
 
 ## Consequences
 
-The implementation should treat Nuke as the owner of the ordinary remote image cache policy and should actively configure Nuke `DataCache` rather than relying only on the default `URLCache` path, while preserving explicit offline-cache membership, queue state, offline image bytes, and storage controls for **Manga Offline Cache**. The dedicated Yamibo image pipeline should make `DataCache` the ordinary-image disk cache and disable or minimize URLSession `URLCache` disk storage for that same pipeline so ordinary images are not duplicated across two disk cache layers. The first Nuke migration should not make **Manga Offline Cache** acquisition depend on copying bytes from Nuke's ordinary cache; offline acquisition should fetch or otherwise obtain its own bytes and write them to offline storage, with any future Nuke-cache reuse treated only as an optimization. Any "clear image cache" UI should be redefined around Nuke's cache behavior and must remain separate from offline manga cleanup.
+The implementation should treat Nuke as the owner of the ordinary remote image cache policy and should actively configure Nuke `DataCache` rather than relying only on the default `URLCache` path, while preserving explicit offline-cache membership, queue state, offline image bytes, and storage controls for **Manga Offline Cache**. The dedicated Yamibo image data pipeline should make `DataCache` the ordinary-image disk cache and disable or minimize URLSession `URLCache` disk storage for that same pipeline so ordinary images are not duplicated across two disk cache layers. The first Nuke migration should not make **Manga Offline Cache** acquisition depend on copying bytes from Nuke's ordinary cache; offline acquisition should fetch or otherwise obtain its own bytes and write them to offline storage, with any future Nuke-cache reuse treated only as an optimization. Any "clear image cache" UI should be redefined around Nuke's cache behavior and must remain separate from offline manga cleanup.
 
 The first Nuke `DataCache` budget should be 512 MB. This carries forward the app's previous ordinary-image disk budget expectation without preserving the old GRDB-backed namespace, retention-policy, or protected-avatar semantics.
 
 Nuke should remain behind YamiboReader's image loading seams rather than spreading Nuke request and pipeline types through feature code. Callers should keep using project-owned interfaces such as `YamiboImageDataLoading`, `MangaImageDataLoading`, and UI image adapters; Nuke-backed adapters translate those requests, authentication headers, referer behavior, error mapping, cache clearing, and display integration internally.
 
-The app-owned shared facade should keep the existing `YamiboImagePipeline` name while becoming Nuke-backed internally. The implementation should use one shared ordinary-image pipeline rather than long-lived per-account pipelines.
+The app-owned raw-byte facade is `YamiboImageDataPipeline`; UI image decoding and in-memory display caching live behind `YamiboUIImagePipeline`. The implementation should use shared ordinary-image pipelines rather than long-lived per-account pipelines, while keeping raw data loading distinct from UI image decoding.
 
 The Nuke migration should remove cache namespace inputs rather than preserving them as compatibility fields. `YamiboImageRequest.cacheNamespace`, `YamiboImageCacheNamespace`, `NovelInlineImageCacheNamespace`, and environment/loading contexts that exist only to thread ordinary-image cache namespaces should be deleted or reshaped during the migration.
 
@@ -37,6 +37,6 @@ Tests should move away from the superseded namespace/session-isolation contract.
 ## Implementation Order
 
 1. Complete the repository-wide iOS-only cleanup from ADR 0044.
-2. Add Nuke 13.0.6 with `swift-tools-version: 6.2`, then introduce the Nuke-backed `YamiboImagePipeline` facade and Core adapters with a 512 MB Nuke `DataCache`.
+2. Add Nuke 13.0.6 with `swift-tools-version: 6.2`, then introduce the Nuke-backed `YamiboImageDataPipeline` facade and Core adapters with a 512 MB Nuke `DataCache`.
 3. Migrate image call sites and delete the superseded namespace and `FileImageDataCacheStore` wiring, while keeping **Manga Offline Cache** byte acquisition independent.
 4. Update settings behavior and replace the old namespace/GRDB image-cache tests with tests for the new Nuke-backed contract.

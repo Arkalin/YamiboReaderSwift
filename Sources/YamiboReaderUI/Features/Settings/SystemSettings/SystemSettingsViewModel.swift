@@ -294,7 +294,7 @@ final class SystemSettingsViewModel: ObservableObject {
         defer { activeAction = nil }
 
         do {
-            try await appContext.readerCacheStore.clearAll()
+            try await appContext.novelReaderCacheStore.clearAll()
             await refreshStorageUsage()
             return true
         } catch {
@@ -353,7 +353,7 @@ final class SystemSettingsViewModel: ObservableObject {
     }
 
     func refreshStorageUsage() async {
-        novelCacheBytes = await appContext.readerCacheStore.totalDiskUsageBytes()
+        novelCacheBytes = await appContext.novelReaderCacheStore.totalDiskUsageBytes()
         let directoryBytes = await appContext.mangaDirectoryStore.totalDiskUsageBytes()
         let projectionBytes = await appContext.mangaReaderProjectionStore.totalDiskUsageBytes()
         mangaIndexCacheBytes = directoryBytes + projectionBytes

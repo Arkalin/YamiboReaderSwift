@@ -232,10 +232,10 @@ struct LocalFavoritesRootView: View {
     private func open(_ item: FavoriteItem, mode: FavoriteLaunchMode) async {
         guard let target = await viewModel.openTarget(for: item, mode: mode) else { return }
         switch target {
-        case let .reader(context):
-            appModel.presentReader(context)
-        case let .manga(context):
-            await appModel.openManga(context)
+        case let .novelReader(context):
+            appModel.presentNovelReader(context)
+        case let .mangaReader(context):
+            appModel.presentMangaReader(context)
         case let .nativeThread(url, title):
             appModel.openNativeForumThread(url: url, title: title)
         case let .web(url):
@@ -3849,7 +3849,7 @@ private struct LocalFavoriteCoverThumbnail: View {
             RoundedRectangle(cornerRadius: 6, style: .continuous)
                 .fill(fallbackColor.opacity(0.16))
             if let url {
-                YamiboRemoteImage(url: url) { image in
+                YamiboRemoteImage(request: YamiboImageRequest(url: url)) { image in
                     image
                         .resizable()
                         .scaledToFill()

@@ -205,7 +205,7 @@ private struct PrivateMessageAvatarView: View {
     let url: URL?
 
     var body: some View {
-        YamiboRemoteImage(url: url) { image in
+        YamiboRemoteImage(request: url.map { YamiboImageRequest(url: $0) }) { image in
             image.resizable().scaledToFill()
         } placeholder: {
             Image(systemName: "person.crop.circle")

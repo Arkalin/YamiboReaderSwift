@@ -6,7 +6,7 @@ public struct NovelReadingPosition: Hashable, Sendable {
     public var maxView: Int?
     public var chapterTitle: String?
     public var authorID: String?
-    public var resumePoint: ReaderResumePoint?
+    public var resumePoint: NovelResumePoint?
     public var documentSurfaceProgressPercent: Int?
     public var threadCoverURL: URL?
 
@@ -16,7 +16,7 @@ public struct NovelReadingPosition: Hashable, Sendable {
         maxView: Int? = nil,
         chapterTitle: String? = nil,
         authorID: String? = nil,
-        resumePoint: ReaderResumePoint? = nil,
+        resumePoint: NovelResumePoint? = nil,
         documentSurfaceProgressPercent: Int? = nil,
         threadCoverURL: URL? = nil
     ) {

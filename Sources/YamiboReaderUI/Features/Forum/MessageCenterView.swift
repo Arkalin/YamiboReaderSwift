@@ -295,7 +295,7 @@ private struct MessageCenterAvatarView: View {
     let systemImage: String
 
     var body: some View {
-        YamiboRemoteImage(url: url) { image in
+        YamiboRemoteImage(request: url.map { YamiboImageRequest(url: $0) }) { image in
             image.resizable().scaledToFill()
         } placeholder: {
             Image(systemName: systemImage)

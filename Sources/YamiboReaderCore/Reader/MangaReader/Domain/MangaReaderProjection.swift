@@ -3,13 +3,13 @@ import Foundation
 public struct MangaReaderProjectionSourceIdentity: Codable, Hashable, Sendable {
     public var tid: String
     public var authorID: String?
-    public var contentSource: ReaderContentSource
+    public var contentSource: ReaderProjectionContentSource
     public var view: Int
 
     public init(
         tid: String,
         authorID: String?,
-        contentSource: ReaderContentSource,
+        contentSource: ReaderProjectionContentSource,
         view: Int
     ) {
         self.tid = tid.trimmingCharacters(in: .whitespacesAndNewlines)

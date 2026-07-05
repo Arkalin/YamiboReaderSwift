@@ -46,19 +46,6 @@ public enum OfflineCacheWorkState: String, Codable, Hashable, Sendable {
     case running
     case paused
     case failed
-
-    public init(mangaWorkState: MangaOfflineCacheWorkState) {
-        switch mangaWorkState {
-        case .queued:
-            self = .queued
-        case .running:
-            self = .running
-        case .paused:
-            self = .paused
-        case .failed:
-            self = .failed
-        }
-    }
 }
 
 public struct OfflineCacheProgress: Codable, Hashable, Sendable {
@@ -73,13 +60,6 @@ public struct OfflineCacheProgress: Codable, Hashable, Sendable {
     public init(completedUnitCount: Int, targetUnitCount: Int) {
         self.targetUnitCount = max(0, targetUnitCount)
         self.completedUnitCount = min(max(0, completedUnitCount), self.targetUnitCount)
-    }
-
-    public init(mangaProgress: MangaOfflineCacheProgress) {
-        self.init(
-            completedUnitCount: mangaProgress.completedImageCount,
-            targetUnitCount: mangaProgress.targetImageCount
-        )
     }
 }
 
@@ -101,10 +81,6 @@ public enum OfflineCacheEntryState: String, Codable, Hashable, Sendable {
         case .failed:
             self = .failed
         }
-    }
-
-    public init(mangaWorkState: MangaOfflineCacheWorkState) {
-        self.init(workState: OfflineCacheWorkState(mangaWorkState: mangaWorkState))
     }
 }
 

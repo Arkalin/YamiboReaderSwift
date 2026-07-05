@@ -13,12 +13,13 @@ import UIKit
 struct MangaReaderPresentationInfrastructureTests {
     #if os(iOS)
     @MainActor
-    @Test func imagePipelineReturnsOriginalImageData() async throws {
+    @Test func mangaImageDataLoaderReturnsOriginalImageDataForSaving() async throws {
         let loader = RecordingMangaPipelineDataLoader(outputs: [.success(Self.pngData)])
-        let pipeline = makeMangaImagePipeline(dataLoader: loader)
         let page = try makePipelinePage()
 
-        let data = try await pipeline.imageData(for: page)
+        let data = try await loader.imageData(
+            for: page.mangaReaderImageRequest
+        )
 
         #expect(data == Self.pngData)
         #expect(await loader.callCount == 1)
@@ -35,13 +36,14 @@ struct MangaReaderPresentationInfrastructureTests {
     }
 
     @MainActor
-    @Test func imagePipelinePropagatesOriginalImageDataFailures() async throws {
+    @Test func mangaImageDataLoaderPropagatesOriginalImageDataFailuresForSaving() async throws {
         let loader = RecordingMangaPipelineDataLoader(outputs: [.failure(MangaPipelineTestError.loaderFailure)])
-        let pipeline = makeMangaImagePipeline(dataLoader: loader)
         let page = try makePipelinePage()
 
         await #expect(throws: MangaPipelineTestError.loaderFailure) {
-            _ = try await pipeline.imageData(for: page)
+            _ = try await loader.imageData(
+                for: page.mangaReaderImageRequest
+            )
         }
         #expect(await loader.callCount == 1)
     }
@@ -108,13 +110,13 @@ struct MangaReaderPresentationInfrastructureTests {
     }
 
     @MainActor
-    @Test func imagePipelineDeduplicatesConcurrentLoads() async throws {
+    @Test func pageImageLoaderDeduplicatesConcurrentLoads() async throws {
         let loader = RecordingMangaPipelineDataLoader(outputs: [.success(Self.pngData)], delayNanoseconds: 50_000_000)
-        let pipeline = makeMangaImagePipeline(dataLoader: loader)
+        let pageImageLoader = makeMangaReaderPageImageLoader(dataLoader: loader)
         let page = try makePipelinePage()
 
-        async let first = pipeline.image(for: page)
-        async let second = pipeline.image(for: page)
+        async let first = pageImageLoader.image(for: page)
+        async let second = pageImageLoader.image(for: page)
         let images = try await [first, second]
 
         #expect(images.count == 2)
@@ -123,50 +125,50 @@ struct MangaReaderPresentationInfrastructureTests {
     }
 
     @MainActor
-    @Test func imagePipelineCachesDecodedImages() async throws {
+    @Test func pageImageLoaderCachesDecodedImages() async throws {
         let loader = RecordingMangaPipelineDataLoader(outputs: [.success(Self.pngData)])
-        let pipeline = makeMangaImagePipeline(dataLoader: loader)
+        let pageImageLoader = makeMangaReaderPageImageLoader(dataLoader: loader)
         let page = try makePipelinePage()
 
-        let first = try await pipeline.image(for: page)
-        let second = try await pipeline.image(for: page)
+        let first = try await pageImageLoader.image(for: page)
+        let second = try await pageImageLoader.image(for: page)
 
         #expect(first === second)
         #expect(await loader.callCount == 1)
     }
 
     @MainActor
-    @Test func imagePipelineDoesNotCacheInvalidImageData() async throws {
+    @Test func pageImageLoaderDoesNotCacheInvalidImageData() async throws {
         let loader = RecordingMangaPipelineDataLoader(outputs: [
             .success(Data([0, 1, 2])),
             .success(Self.pngData)
         ])
-        let pipeline = makeMangaImagePipeline(dataLoader: loader)
+        let pageImageLoader = makeMangaReaderPageImageLoader(dataLoader: loader)
         let page = try makePipelinePage()
 
-        await #expect(throws: MangaImagePipelineError.invalidImageData) {
-            _ = try await pipeline.image(for: page)
+        await #expect(throws: MangaReaderPageImageLoaderError.invalidImageData) {
+            _ = try await pageImageLoader.image(for: page)
         }
-        let image = try await pipeline.image(for: page)
+        let image = try await pageImageLoader.image(for: page)
 
         #expect(image.size.width > 0)
         #expect(await loader.callCount == 2)
     }
 
     @MainActor
-    @Test func imagePipelineDoesNotCacheLoaderFailures() async throws {
+    @Test func pageImageLoaderDoesNotCacheLoaderFailures() async throws {
         let loader = RecordingMangaPipelineDataLoader(outputs: [
             .failure(MangaPipelineTestError.loaderFailure),
             .success(Self.pngData)
         ])
-        let pipeline = makeMangaImagePipeline(dataLoader: loader)
+        let pageImageLoader = makeMangaReaderPageImageLoader(dataLoader: loader)
         let page = try makePipelinePage()
 
         await #expect(throws: MangaPipelineTestError.loaderFailure) {
-            _ = try await pipeline.image(for: page)
+            _ = try await pageImageLoader.image(for: page)
         }
-        #expect(pipeline.cachedImage(for: page) == nil)
-        let image = try await pipeline.image(for: page)
+        #expect(pageImageLoader.cachedImage(for: page) == nil)
+        let image = try await pageImageLoader.image(for: page)
 
         #expect(image.size.width > 0)
         #expect(await loader.callCount == 2)
@@ -236,7 +238,7 @@ private actor RecordingMangaPipelineDataLoader: MangaImageDataLoading {
         self.delayNanoseconds = delayNanoseconds
     }
 
-    func imageData(for url: URL, refererURL: URL?) async throws -> Data {
+    func imageData(for request: YamiboImageRequest) async throws -> Data {
         callCount += 1
         if delayNanoseconds > 0 {
             try? await Task.sleep(nanoseconds: delayNanoseconds)
@@ -247,10 +249,10 @@ private actor RecordingMangaPipelineDataLoader: MangaImageDataLoading {
 }
 
 @MainActor
-private func makeMangaImagePipeline(dataLoader: any MangaImageDataLoading) -> MangaImagePipeline {
-    MangaImagePipeline(
+private func makeMangaReaderPageImageLoader(dataLoader: any MangaImageDataLoading) -> MangaReaderPageImageLoader {
+    MangaReaderPageImageLoader(
         dataLoader: dataLoader,
-        imagePipeline: YamiboImagePipeline()
+        uiImagePipeline: YamiboUIImagePipeline()
     )
 }
 

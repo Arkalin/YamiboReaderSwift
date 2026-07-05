@@ -181,7 +181,7 @@ final class MangaReaderDirectoryPanelTests: XCTestCase {
 }
 
 private struct MangaReaderDirectoryPanelFixture {
-    let model: MangaReaderModel
+    let model: MangaReaderViewModel
     let settingsStore: SettingsStore
 }
 
@@ -227,7 +227,7 @@ private func makeDirectoryPanelFixture(
         readerResumeRouteStore: try ReaderResumeRouteStore(testSuiteName: defaultsSuiteName, key: "resume"),
     )
     #if os(iOS)
-    let dependencies = MangaReaderModelDependencies(
+    let dependencies = MangaReaderViewModelDependencies(
         makeProjectionLoader: { DirectoryPanelProjectionLoader(documents: documents) },
         makeDirectoryRepository: { resolvedRepository },
         makeDirectoryStore: { DirectoryPanelStore(directories: storedDirectories) },
@@ -242,7 +242,7 @@ private func makeDirectoryPanelFixture(
         )
     )
     #else
-    let dependencies = MangaReaderModelDependencies(
+    let dependencies = MangaReaderViewModelDependencies(
         makeProjectionLoader: { DirectoryPanelProjectionLoader(documents: documents) },
         makeDirectoryRepository: { resolvedRepository },
         makeDirectoryStore: { DirectoryPanelStore(directories: storedDirectories) },
@@ -257,7 +257,7 @@ private func makeDirectoryPanelFixture(
     )
     #endif
     return MangaReaderDirectoryPanelFixture(
-        model: MangaReaderModel(context: context, appContext: appContext, dependencies: dependencies),
+        model: MangaReaderViewModel(context: context, appContext: appContext, dependencies: dependencies),
         settingsStore: settingsStore
     )
 }
@@ -374,7 +374,7 @@ private actor DirectoryPanelStore: MangaDirectoryPersisting {
 
 #if os(iOS)
 private actor DirectoryPanelImageDataLoader: MangaImageDataLoading {
-    func imageData(for url: URL, refererURL: URL?) async throws -> Data {
+    func imageData(for request: YamiboImageRequest) async throws -> Data {
         Data()
     }
 }

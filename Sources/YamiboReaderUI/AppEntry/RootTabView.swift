@@ -165,22 +165,13 @@ private struct ReaderPresentationModifier: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .fullScreenCover(item: binding(for: \.activeReaderContext)) { context in
-                ReaderContainerView(context: context, appModel: appModel)
+            .fullScreenCover(item: binding(for: \.activeNovelContext)) { context in
+                NovelReaderView(context: context, appModel: appModel)
                     .ignoresSafeArea()
                     .modifier(ClipboardForumLinkPromptAlert(appModel: appModel, isActive: true))
             }
-            .fullScreenCover(
-                isPresented: Binding(
-                    get: { appModel.activeMangaRoute != nil },
-                    set: { isPresented in
-                        if !isPresented {
-                            appModel.dismissManga()
-                        }
-                    }
-                )
-            ) {
-                MangaPresentationHostView(appModel: appModel)
+            .fullScreenCover(item: binding(for: \.activeMangaContext)) { context in
+                MangaReaderView(context: context, appModel: appModel)
                     .ignoresSafeArea()
                     .modifier(ClipboardForumLinkPromptAlert(appModel: appModel, isActive: true))
             }
@@ -191,26 +182,5 @@ private struct ReaderPresentationModifier: ViewModifier {
             get: { appModel[keyPath: keyPath] },
             set: { appModel[keyPath: keyPath] = $0 }
         )
-    }
-}
-
-private struct MangaPresentationHostView: View {
-    let appModel: YamiboAppModel
-
-    var body: some View {
-        ZStack {
-            Color.black.ignoresSafeArea()
-
-            switch appModel.activeMangaRoute {
-            case let .native(context)?:
-                MangaReaderView(context: context, appModel: appModel)
-                    .id("native-\(context.id)")
-            case let .web(context)?:
-                MangaWebFallbackView(context: context, appModel: appModel)
-                    .id("web-\(context.id)")
-            case nil:
-                Color.clear
-            }
-        }
     }
 }

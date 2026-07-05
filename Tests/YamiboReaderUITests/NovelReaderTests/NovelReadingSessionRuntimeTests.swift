@@ -5,8 +5,8 @@ import XCTest
 #if canImport(UIKit)
 private typealias NovelTextLayoutFixture = (
     NovelReaderProjection,
-    ReaderAppearanceSettings,
-    ReaderContainerLayout
+    NovelReaderAppearanceSettings,
+    NovelReaderLayout
 ) throws -> NovelTextLayoutResult
 
 @MainActor
@@ -21,15 +21,15 @@ final class NovelReadingSessionRuntimeTests: XCTestCase {
                 ("第三章", String(repeating: "第三章 内容。", count: 120)),
             ]
         )
-        let settings = ReaderAppearanceSettings(readingMode: .vertical)
-        let layout = ReaderContainerLayout(width: 320, height: 568)
+        let settings = NovelReaderAppearanceSettings(readingMode: .vertical)
+        let layout = NovelReaderLayout(width: 320, height: 568)
         let pagination = try NovelTextLayout.layout(document: document, settings: settings, layout: layout)
         let savedViewportSurface = try XCTUnwrap(
             pagination.viewportIndex.surfaces.first { $0.chapterTitle == "第三章" && !$0.ranges.isEmpty }
         )
         let savedRange = try XCTUnwrap(savedViewportSurface.ranges.first)
         let savedOffset = savedRange.startOffset + max(1, savedRange.length / 2)
-        let resumePoint = ReaderResumePoint(
+        let resumePoint = NovelResumePoint(
             view: 2,
             textSegmentIdentity: try XCTUnwrap(document.semantics(forSegmentIndex: savedRange.segmentIndex)?.textSegmentIdentity),
             displayedTextOffset: savedOffset,
@@ -65,15 +65,15 @@ final class NovelReadingSessionRuntimeTests: XCTestCase {
                 .text(String(repeating: "第二章 内容。", count: 80), chapterTitle: "第二章"),
             ],
             segmentSources: [
-                ReaderSegmentSource(ownerPostID: "100"),
-                ReaderSegmentSource(ownerPostID: "101", isAuthorReplyToOther: true),
-                ReaderSegmentSource(ownerPostID: "102"),
+                NovelReaderSegmentSource(ownerPostID: "100"),
+                NovelReaderSegmentSource(ownerPostID: "101", isAuthorReplyToOther: true),
+                NovelReaderSegmentSource(ownerPostID: "102"),
             ]
         )
-        let layout = ReaderContainerLayout(width: 320, height: 568)
+        let layout = NovelReaderLayout(width: 320, height: 568)
         var session = try NovelReadingSession(
             validating: document,
-            settings: ReaderAppearanceSettings(readingMode: .vertical),
+            settings: NovelReaderAppearanceSettings(readingMode: .vertical),
             layout: layout
         )
         let replySurface = try XCTUnwrap(session.viewportSurfacesForTesting.first { surface in
@@ -85,7 +85,7 @@ final class NovelReadingSessionRuntimeTests: XCTestCase {
         session.consumeCommittedLayoutResult(
             try committedLayoutResult(
                 document: document,
-                settings: ReaderAppearanceSettings(showsAuthorRepliesToOthers: false, readingMode: .vertical),
+                settings: NovelReaderAppearanceSettings(showsAuthorRepliesToOthers: false, readingMode: .vertical),
                 layout: layout
             ),
             preferredSurfaceOrdinal: session.snapshot.selectedSurfaceOrdinal,
@@ -110,14 +110,14 @@ final class NovelReadingSessionRuntimeTests: XCTestCase {
                 .text(String(repeating: "第一章 内容。", count: 80), chapterTitle: "第一章"),
             ],
             segmentSources: [
-                ReaderSegmentSource(ownerPostID: "100", isAuthorReplyToOther: true),
-                ReaderSegmentSource(ownerPostID: "101"),
+                NovelReaderSegmentSource(ownerPostID: "100", isAuthorReplyToOther: true),
+                NovelReaderSegmentSource(ownerPostID: "101"),
             ]
         )
-        let layout = ReaderContainerLayout(width: 320, height: 568)
+        let layout = NovelReaderLayout(width: 320, height: 568)
         var session = try NovelReadingSession(
             validating: document,
-            settings: ReaderAppearanceSettings(readingMode: .vertical),
+            settings: NovelReaderAppearanceSettings(readingMode: .vertical),
             layout: layout
         )
         let replySurface = try XCTUnwrap(session.viewportSurfacesForTesting.first { surface in
@@ -129,7 +129,7 @@ final class NovelReadingSessionRuntimeTests: XCTestCase {
         session.consumeCommittedLayoutResult(
             try committedLayoutResult(
                 document: document,
-                settings: ReaderAppearanceSettings(showsAuthorRepliesToOthers: false, readingMode: .vertical),
+                settings: NovelReaderAppearanceSettings(showsAuthorRepliesToOthers: false, readingMode: .vertical),
                 layout: layout
             ),
             preferredSurfaceOrdinal: session.snapshot.selectedSurfaceOrdinal,
@@ -151,11 +151,11 @@ final class NovelReadingSessionRuntimeTests: XCTestCase {
             contentSource: .fallbackUnfilteredPage,
             segments: (0 ..< 6).map { .image(URL(string: "https://example.com/\($0).jpg")!, chapterTitle: "第一章") }
         )
-        let settings = ReaderAppearanceSettings(
+        let settings = NovelReaderAppearanceSettings(
             showsTwoPagesInLandscapeOnPad: true,
             readingMode: .paged
         )
-        let landscapeLayout = ReaderContainerLayout(width: 844, height: 390, readingMode: .paged)
+        let landscapeLayout = NovelReaderLayout(width: 844, height: 390, readingMode: .paged)
         var session = NovelReadingSession(
             document: document,
             settings: settings,
@@ -180,12 +180,12 @@ final class NovelReadingSessionRuntimeTests: XCTestCase {
             contentSource: .fallbackUnfilteredPage,
             segments: (0 ..< 6).map { .image(URL(string: "https://example.com/\($0).jpg")!, chapterTitle: "第一章") }
         )
-        let settings = ReaderAppearanceSettings(
+        let settings = NovelReaderAppearanceSettings(
             showsTwoPagesInLandscapeOnPad: true,
             readingMode: .paged,
             pageTurnDirection: .rightToLeft
         )
-        let landscapeLayout = ReaderContainerLayout(width: 844, height: 390, readingMode: .paged)
+        let landscapeLayout = NovelReaderLayout(width: 844, height: 390, readingMode: .paged)
         var session = NovelReadingSession(
             document: document,
             settings: settings,
@@ -210,11 +210,11 @@ final class NovelReadingSessionRuntimeTests: XCTestCase {
             contentSource: .fallbackUnfilteredPage,
             segments: (0 ..< 6).map { .image(URL(string: "https://example.com/\($0).jpg")!, chapterTitle: "第一章") }
         )
-        let settings = ReaderAppearanceSettings(
+        let settings = NovelReaderAppearanceSettings(
             showsTwoPagesInLandscapeOnPad: true,
             readingMode: .paged
         )
-        let landscapeLayout = ReaderContainerLayout(width: 844, height: 390, readingMode: .paged)
+        let landscapeLayout = NovelReaderLayout(width: 844, height: 390, readingMode: .paged)
         var session = NovelReadingSession(
             document: document,
             settings: settings,
@@ -247,10 +247,10 @@ private func makeNovelDocument(
 private extension NovelReadingSession {
     init(
         document: NovelReaderProjection,
-        settings: ReaderAppearanceSettings,
-        layout: ReaderContainerLayout,
+        settings: NovelReaderAppearanceSettings,
+        layout: NovelReaderLayout,
         preferredSurfaceOrdinal: Int = 0,
-        resumePoint: ReaderResumePoint? = nil,
+        resumePoint: NovelResumePoint? = nil,
         usesPadPresentation: Bool = false,
         currentAuthorID: String? = nil,
         pagination: @escaping NovelTextLayoutFixture = NovelTextLayout.layout
@@ -279,10 +279,10 @@ private extension NovelReadingSession {
 
     init(
         validating document: NovelReaderProjection,
-        settings: ReaderAppearanceSettings,
-        layout: ReaderContainerLayout,
+        settings: NovelReaderAppearanceSettings,
+        layout: NovelReaderLayout,
         preferredSurfaceOrdinal: Int = 0,
-        resumePoint: ReaderResumePoint? = nil,
+        resumePoint: NovelResumePoint? = nil,
         usesPadPresentation: Bool = false,
         currentAuthorID: String? = nil,
         pagination: @escaping NovelTextLayoutFixture = NovelTextLayout.layout
@@ -312,8 +312,8 @@ private extension NovelReadingSession {
 
 private func committedLayoutResult(
     document: NovelReaderProjection,
-    settings: ReaderAppearanceSettings,
-    layout: ReaderContainerLayout,
+    settings: NovelReaderAppearanceSettings,
+    layout: NovelReaderLayout,
     usesPadPresentation: Bool = false,
     pagination: NovelTextLayoutFixture = NovelTextLayout.layout
 ) throws -> NovelTextLayoutResult {
@@ -328,8 +328,8 @@ private func committedLayoutResult(
 }
 
 private func committedUsesPagedSpread(
-    settings: ReaderAppearanceSettings,
-    layout: ReaderContainerLayout,
+    settings: NovelReaderAppearanceSettings,
+    layout: NovelReaderLayout,
     usesPadPresentation: Bool
 ) -> Bool {
     settings.readingMode == .paged &&

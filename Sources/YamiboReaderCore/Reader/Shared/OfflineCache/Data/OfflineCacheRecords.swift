@@ -10,7 +10,7 @@ extension OfflineCacheStore {
     public func removeOfflineCacheGroup(_ id: OfflineCacheGroupID) async throws {
         switch id.readerKind {
         case .manga:
-            try await removeMemberships(forOwnerName: id.ownerKey)
+            try await removeMangaOfflineCacheMemberships(forOwnerName: id.ownerKey)
         case .novel:
             try await removeNovelOfflineCacheEntries(ownerName: id.ownerKey)
         }
@@ -19,7 +19,7 @@ extension OfflineCacheStore {
     public func removeOfflineCacheEntry(_ id: OfflineCacheEntryID) async throws {
         switch id.readerKind {
         case .manga:
-            try await removeMembership(ownerName: id.ownerKey, tid: id.entryKey)
+            try await removeMangaOfflineCacheMembership(ownerName: id.ownerKey, tid: id.entryKey)
         case .novel:
             try await removeNovelOfflineCacheEntry(entryKey: id.entryKey)
         }
@@ -62,7 +62,7 @@ extension OfflineCacheStore {
         ownerTitle: String,
         threadID: String,
         authorID: String?,
-        contentSource: ReaderContentSource?
+        contentSource: ReaderProjectionContentSource?
     ) async -> NovelOfflineCacheViewsSnapshot {
         try? await recoverQueueStateAfterRestart()
         guard let lookup = novelEntryLookup(
@@ -126,7 +126,7 @@ extension OfflineCacheStore {
 
             let works = try Self.rawWorks(readerKind: .novel, ownerKey: lookup.groupKey, in: db)
             let cachingViews = Set(works.compactMap { work -> Int? in
-                guard let parsed = Self.novelEntryKeyComponents(from: work.entryKey),
+                guard let parsed = NovelOfflineCacheEntry.entryKeyComponents(from: work.entryKey),
                       parsed.threadID == lookup.threadID,
                       parsed.authorID == lookup.authorID,
                       parsed.contentSource == lookup.contentSource else {
@@ -147,7 +147,7 @@ extension OfflineCacheStore {
         ownerTitle: String,
         threadID: String,
         authorID: String?,
-        contentSource: ReaderContentSource?
+        contentSource: ReaderProjectionContentSource?
     ) async throws {
         for view in views {
             guard let lookup = novelEntryLookup(
@@ -431,7 +431,7 @@ extension OfflineCacheStore {
         document.threadID = row["thread_id"] as String
         document.view = row["view"] as Int
         document.resolvedAuthorID = row["author_id"] as String?
-        document.contentSource = ReaderContentSource(rawValue: row["content_source"] as String) ?? document.contentSource
+        document.contentSource = ReaderProjectionContentSource(rawValue: row["content_source"] as String) ?? document.contentSource
         return NovelOfflineCacheEntry(
             ownerTitle: (row["owner_title"] as String?) ?? novelDisplayOwnerTitle(ownerTitle: "", threadID: document.threadID),
             title: row["title"],

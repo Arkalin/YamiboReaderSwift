@@ -223,7 +223,7 @@ private struct ForumThreadReaderViewModelFixture {
     @MainActor
     func makeModel() -> ForumThreadReaderViewModel {
         ForumThreadReaderViewModel(
-            context: ThreadReaderLaunchContext(
+            context: ThreadNovelLaunchContext(
                 thread: ThreadIdentity(tid: "704", fid: "40"),
                 title: "上下文标题"
             ),
@@ -247,12 +247,12 @@ private final class FakeForumThreadPageLoader: ForumThreadPageLoading, @unchecke
         self.fetchError = fetchError
     }
 
-    func cachedThreadPage(context _: ThreadReaderLaunchContext, page: Int) async -> ForumThreadPage? {
+    func cachedThreadPage(context _: ThreadNovelLaunchContext, page: Int) async -> ForumThreadPage? {
         recordedCachedPages.append(page)
         return cachedPages[page]
     }
 
-    func fetchThreadPage(context: ThreadReaderLaunchContext, page: Int) async throws -> ForumThreadPage {
+    func fetchThreadPage(context: ThreadNovelLaunchContext, page: Int) async throws -> ForumThreadPage {
         recordedFetchPages.append(page)
         if let fetchError {
             throw fetchError

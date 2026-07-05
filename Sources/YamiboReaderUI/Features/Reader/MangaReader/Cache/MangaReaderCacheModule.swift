@@ -14,7 +14,7 @@ public struct MangaReaderCacheRow: Hashable, Identifiable, Sendable {
     }
 }
 
-public struct MangaReaderCacheSelectionState: Equatable, Sendable {
+public struct MangaNovelReaderCacheSelectionState: Equatable, Sendable {
     public var selectedTIDs: Set<String>
     public var uncachedSelectedTIDs: Set<String>
     public var removableSelectedTIDs: Set<String>
@@ -61,7 +61,7 @@ public final class MangaReaderCacheViewModel: ObservableObject {
     private let context: MangaLaunchContext
     private let panel: MangaDirectoryPanelPresentation
     private let localFavoriteLibraryStore: FavoriteLibraryStore
-    private let offlineCacheStore: any OfflineCacheStoring
+    private let offlineCacheStore: any MangaOfflineCacheStoring & OfflineCacheQueueStoring
     private let offlineCacheQueueControllerProvider: (@Sendable () async -> any OfflineCacheQueueControlling)?
     private var offlineCacheQueueController: (any OfflineCacheQueueControlling)?
     private var offlineCacheUpdatesTask: Task<Void, Never>?
@@ -70,7 +70,7 @@ public final class MangaReaderCacheViewModel: ObservableObject {
         context: MangaLaunchContext,
         panel: MangaDirectoryPanelPresentation,
         localFavoriteLibraryStore: FavoriteLibraryStore,
-        offlineCacheStore: any OfflineCacheStoring,
+        offlineCacheStore: any MangaOfflineCacheStoring & OfflineCacheQueueStoring,
         offlineCacheQueueControllerProvider: (@Sendable () async -> any OfflineCacheQueueControlling)? = nil
     ) {
         self.context = context
@@ -105,7 +105,7 @@ public final class MangaReaderCacheViewModel: ObservableObject {
         for chapter in panel.displayChapters {
             let state: MangaOfflineCacheState
             if let ownerName {
-                state = await offlineCacheStore.offlineCacheState(ownerName: ownerName, tid: chapter.tid)
+                state = await offlineCacheStore.mangaOfflineCacheState(ownerName: ownerName, tid: chapter.tid)
             } else {
                 state = .uncached
             }
@@ -115,13 +115,10 @@ public final class MangaReaderCacheViewModel: ObservableObject {
     }
 
     private func refreshOfflineCacheQueueEntryCount() async {
-        let works = await offlineCacheStore.allOfflineCacheWorks()
-        offlineCacheQueueEntryCount = MangaOfflineCacheQueueProjection
-            .project(works: works)
-            .unfinishedCount
+        offlineCacheQueueEntryCount = await mangaQueueWorks().count
     }
 
-    public func selectionState(for selectedTIDs: Set<String>) -> MangaReaderCacheSelectionState {
+    public func selectionState(for selectedTIDs: Set<String>) -> MangaNovelReaderCacheSelectionState {
         let validSelection = selectedTIDs.intersection(allChapterTIDs)
         let stateByTID = Dictionary(uniqueKeysWithValues: rows.map { ($0.chapter.tid, $0.state) })
         let uncached = validSelection.filter { stateByTID[$0] == .uncached }
@@ -133,7 +130,7 @@ public final class MangaReaderCacheViewModel: ObservableObject {
                 false
             }
         }
-        return MangaReaderCacheSelectionState(
+        return MangaNovelReaderCacheSelectionState(
             selectedTIDs: validSelection,
             uncachedSelectedTIDs: Set(uncached),
             removableSelectedTIDs: Set(removable),
@@ -153,7 +150,7 @@ public final class MangaReaderCacheViewModel: ObservableObject {
         do {
             var didEnqueueWork = false
             for chapter in panel.displayChapters where targetTIDs.contains(chapter.tid) {
-                let result = try await offlineCacheStore.enqueueOfflineCacheWork(
+                let result = try await offlineCacheStore.enqueueMangaOfflineCacheWork(
                     MangaOfflineCacheWorkRequest(
                         ownerName: ownerName,
                         tid: chapter.tid,
@@ -182,7 +179,7 @@ public final class MangaReaderCacheViewModel: ObservableObject {
 
         do {
             for chapter in panel.displayChapters where targetTIDs.contains(chapter.tid) {
-                try await offlineCacheStore.removeMembership(ownerName: ownerName, tid: chapter.tid)
+                try await offlineCacheStore.removeMangaOfflineCacheMembership(ownerName: ownerName, tid: chapter.tid)
             }
             await refreshRows()
         } catch {
@@ -206,10 +203,14 @@ public final class MangaReaderCacheViewModel: ObservableObject {
     }
 
     private func continueOfflineCacheQueueIfAllowed() async throws {
-        let works = await offlineCacheStore.allOfflineCacheWorks()
+        let works = await mangaQueueWorks()
         guard works.allSatisfy({ $0.state != .failed }) else { return }
         guard let controller = await offlineCacheController() else { return }
         try await controller.continueQueue()
+    }
+
+    private func mangaQueueWorks() async -> [OfflineCacheQueueWorkProjection] {
+        (await offlineCacheStore.offlineCacheQueueWorks()).filter { $0.id.readerKind == .manga }
     }
 
     private func offlineCacheController() async -> (any OfflineCacheQueueControlling)? {
