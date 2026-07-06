@@ -44,7 +44,7 @@ public protocol MangaReaderProjectionSnapshotLoading: MangaReaderProjectionLoadi
     func loadReaderProjectionSnapshot(_ request: MangaReaderProjectionRequest) async throws -> MangaReaderProjectionSnapshot
 }
 
-public protocol MangaReaderProjectionPersisting: Sendable {
+protocol MangaReaderProjectionPersisting: Sendable {
     func projection(for identity: MangaReaderProjectionSourceIdentity) async -> MangaReaderProjection?
     func save(_ projection: MangaReaderProjection) async throws
     func clearAll() async throws
@@ -86,7 +86,7 @@ public protocol MangaDirectoryPersisting: Sendable {
     func deleteDirectory(named name: String) async throws
 }
 
-public protocol MangaDirectoryRenaming: Sendable {
+protocol MangaDirectoryRenaming: Sendable {
     func renameDirectory(
         from oldName: String,
         to newDirectory: MangaDirectory

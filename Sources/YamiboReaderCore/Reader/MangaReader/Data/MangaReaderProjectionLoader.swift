@@ -1,9 +1,9 @@
 import Foundation
 
-public actor MangaReaderProjectionLoader: MangaReaderProjectionSnapshotLoading {
+actor MangaReaderProjectionLoader: MangaReaderProjectionSnapshotLoading {
     private let loader: ReaderProjectionLoader<ReaderThreadPageProjectionLoadingStrategy<MangaProjectionAdapter>>
 
-    public init(
+    init(
         client: YamiboClient,
         projectionStore: any MangaReaderProjectionPersisting,
         forumCacheStore: ForumCacheStore,
@@ -22,16 +22,16 @@ public actor MangaReaderProjectionLoader: MangaReaderProjectionSnapshotLoading {
         )
     }
 
-    public func loadReaderProjection(_ request: MangaReaderProjectionRequest) async throws -> MangaReaderProjection {
+    func loadReaderProjection(_ request: MangaReaderProjectionRequest) async throws -> MangaReaderProjection {
         try await loadReaderProjectionSnapshot(request).projection
     }
 
-    public func loadReaderProjectionSnapshot(_ request: MangaReaderProjectionRequest) async throws -> MangaReaderProjectionSnapshot {
+    func loadReaderProjectionSnapshot(_ request: MangaReaderProjectionRequest) async throws -> MangaReaderProjectionSnapshot {
         let loaded = try await loader.load(request, ignoresCache: false)
         return MangaReaderProjectionSnapshot(projection: loaded.projection, sourcePage: loaded.sourcePage)
     }
 
-    public func loadReaderProjectionIgnoringCache(_ request: MangaReaderProjectionRequest) async throws -> MangaReaderProjection {
+    func loadReaderProjectionIgnoringCache(_ request: MangaReaderProjectionRequest) async throws -> MangaReaderProjection {
         try await loader.load(request, ignoresCache: true).projection
     }
 }

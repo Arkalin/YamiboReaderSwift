@@ -3,25 +3,25 @@ import Foundation
 /// WebDAV sync participant for the synchronized subset of app settings.
 /// Last-writer-wins: the payload is a snapshot, never merged, and it is only
 /// uploaded automatically after the synchronized subset actually changed.
-public struct AppSettingsWebDAVParticipant: WebDAVSyncParticipant {
-    public let datasetID = "appSettings"
-    public let remoteFileName = "yamibo-app-settings-v1.json"
-    public let uploadsOnlyWhenMarkedDirty = true
+struct AppSettingsWebDAVParticipant: WebDAVSyncParticipant {
+    let datasetID = "appSettings"
+    let remoteFileName = "yamibo-app-settings-v1.json"
+    let uploadsOnlyWhenMarkedDirty = true
 
     private let store: SettingsStore
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
 
-    public init(store: SettingsStore) {
+    init(store: SettingsStore) {
         self.store = store
     }
 
-    public func inspectRemote(_ data: Data) throws -> WebDAVRemotePayloadInfo {
+    func inspectRemote(_ data: Data) throws -> WebDAVRemotePayloadInfo {
         let payload = try decoder.decode(AppSettingsWebDAVPayload.self, from: data)
         return WebDAVRemotePayloadInfo(updatedAt: payload.updatedAt, accountUID: payload.accountUID)
     }
 
-    public func mergeAndExport(remoteData _: Data?, updatedAt: Date, accountUID: String) async throws -> Data {
+    func mergeAndExport(remoteData _: Data?, updatedAt: Date, accountUID: String) async throws -> Data {
         let payload = AppSettingsWebDAVPayload(
             updatedAt: updatedAt,
             accountUID: accountUID,
@@ -30,13 +30,13 @@ public struct AppSettingsWebDAVParticipant: WebDAVSyncParticipant {
         return try encoder.encode(payload)
     }
 
-    public func applyRemote(_ data: Data) async throws {
+    func applyRemote(_ data: Data) async throws {
         let payload = try decoder.decode(AppSettingsWebDAVPayload.self, from: data)
         let currentSettings = await store.load()
         try await store.save(payload.appSettings.applying(to: currentSettings))
     }
 
-    public func localFingerprint() async -> String? {
+    func localFingerprint() async -> String? {
         let snapshot = WebDAVSyncedAppSettings(settings: await store.load())
         let fingerprintEncoder = JSONEncoder()
         fingerprintEncoder.outputFormatting = [.sortedKeys]
@@ -46,12 +46,12 @@ public struct AppSettingsWebDAVParticipant: WebDAVSyncParticipant {
 }
 
 /// The subset of `AppSettings` that participates in WebDAV synchronization.
-public struct WebDAVSyncedAppSettings: Codable, Equatable, Sendable {
-    public var homePage: AppHomePage
-    public var webBrowser: WebBrowserSettings
-    public var favoriteAppearance: FavoriteAppearanceSettings
+struct WebDAVSyncedAppSettings: Codable, Equatable, Sendable {
+    var homePage: AppHomePage
+    var webBrowser: WebBrowserSettings
+    var favoriteAppearance: FavoriteAppearanceSettings
 
-    public init(
+    init(
         homePage: AppHomePage,
         webBrowser: WebBrowserSettings,
         favoriteAppearance: FavoriteAppearanceSettings
@@ -61,7 +61,7 @@ public struct WebDAVSyncedAppSettings: Codable, Equatable, Sendable {
         self.favoriteAppearance = favoriteAppearance
     }
 
-    public init(settings: AppSettings) {
+    init(settings: AppSettings) {
         self.init(
             homePage: settings.system.homePage,
             webBrowser: settings.webBrowser,
@@ -69,7 +69,7 @@ public struct WebDAVSyncedAppSettings: Codable, Equatable, Sendable {
         )
     }
 
-    public func applying(to settings: AppSettings) -> AppSettings {
+    func applying(to settings: AppSettings) -> AppSettings {
         var updated = settings
         updated.system.homePage = homePage
         updated.webBrowser = webBrowser
@@ -78,15 +78,15 @@ public struct WebDAVSyncedAppSettings: Codable, Equatable, Sendable {
     }
 }
 
-public struct AppSettingsWebDAVPayload: Codable, Equatable, Sendable {
-    public static let currentVersion = 1
+struct AppSettingsWebDAVPayload: Codable, Equatable, Sendable {
+    static let currentVersion = 1
 
-    public var version: Int
-    public var updatedAt: Date
-    public var accountUID: String?
-    public var appSettings: WebDAVSyncedAppSettings
+    var version: Int
+    var updatedAt: Date
+    var accountUID: String?
+    var appSettings: WebDAVSyncedAppSettings
 
-    public init(
+    init(
         version: Int = Self.currentVersion,
         updatedAt: Date,
         accountUID: String? = nil,

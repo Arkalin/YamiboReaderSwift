@@ -1,7 +1,7 @@
 import Foundation
 
-public enum MangaDirectoryInitialization {
-    public static func directory(from seed: MangaDirectorySeed) -> MangaDirectory {
+enum MangaDirectoryInitialization {
+    static func directory(from seed: MangaDirectorySeed) -> MangaDirectory {
         let tagIDs = normalizedTagIDs(seed.tagIDs)
         let chapters = deduplicatedChapters(current: seed.currentChapter, samePage: seed.samePageChapters)
         let cleanBookName = normalizedBookName(seed)

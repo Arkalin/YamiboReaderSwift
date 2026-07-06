@@ -2,24 +2,24 @@ import Foundation
 
 /// WebDAV sync participant for the local favorite library. Owns the payload
 /// format and CRDT-style merge semantics for favorites.
-public struct FavoriteLibraryWebDAVParticipant: WebDAVSyncParticipant {
-    public let datasetID = "favoriteLibrary"
-    public let remoteFileName = "yamibo-favorite-library-v1.json"
+struct FavoriteLibraryWebDAVParticipant: WebDAVSyncParticipant {
+    let datasetID = "favoriteLibrary"
+    let remoteFileName = "yamibo-favorite-library-v1.json"
 
     private let store: FavoriteLibraryStore
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
 
-    public init(store: FavoriteLibraryStore) {
+    init(store: FavoriteLibraryStore) {
         self.store = store
     }
 
-    public func inspectRemote(_ data: Data) throws -> WebDAVRemotePayloadInfo {
+    func inspectRemote(_ data: Data) throws -> WebDAVRemotePayloadInfo {
         let payload = try decoder.decode(FavoriteLibraryWebDAVPayload.self, from: data)
         return WebDAVRemotePayloadInfo(updatedAt: payload.updatedAt, accountUID: payload.accountUID)
     }
 
-    public func mergeAndExport(remoteData: Data?, updatedAt: Date, accountUID: String) async throws -> Data {
+    func mergeAndExport(remoteData: Data?, updatedAt: Date, accountUID: String) async throws -> Data {
         let local = FavoriteLibraryWebDAVPayload(
             updatedAt: updatedAt,
             accountUID: accountUID,
@@ -31,23 +31,23 @@ public struct FavoriteLibraryWebDAVParticipant: WebDAVSyncParticipant {
         return try encoder.encode(merged)
     }
 
-    public func applyRemote(_ data: Data) async throws {
+    func applyRemote(_ data: Data) async throws {
         let payload = try decoder.decode(FavoriteLibraryWebDAVPayload.self, from: data)
         try await store.save(payload.library)
     }
 }
 
-public struct FavoriteLibraryWebDAVPayload: Codable, Equatable, Sendable {
-    public static let currentVersion = 2
+struct FavoriteLibraryWebDAVPayload: Codable, Equatable, Sendable {
+    static let currentVersion = 2
 
-    public var version: Int
-    public var updatedAt: Date
-    public var accountUID: String?
-    public var library: FavoriteLibraryDocument
-    public var tombstones: FavoriteLibraryWebDAVTombstones
-    public var clocks: FavoriteLibraryWebDAVClocks
+    var version: Int
+    var updatedAt: Date
+    var accountUID: String?
+    var library: FavoriteLibraryDocument
+    var tombstones: FavoriteLibraryWebDAVTombstones
+    var clocks: FavoriteLibraryWebDAVClocks
 
-    public init(
+    init(
         version: Int = Self.currentVersion,
         updatedAt: Date,
         accountUID: String? = nil,
@@ -72,7 +72,7 @@ public struct FavoriteLibraryWebDAVPayload: Codable, Equatable, Sendable {
         case clocks
     }
 
-    public init(from decoder: any Decoder) throws {
+    init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         guard let version = try container.decodeIfPresent(Int.self, forKey: .version) else {
             throw WebDAVSyncError.unsupportedPayloadVersion(0)
@@ -89,11 +89,11 @@ public struct FavoriteLibraryWebDAVPayload: Codable, Equatable, Sendable {
     }
 }
 
-public struct FavoriteLibraryWebDAVTombstones: Codable, Equatable, Sendable {
-    public var removedLocationsByTargetID: [String: Set<FavoriteLocation>]
-    public var removedTagIDsByTargetID: [String: Set<String>]
+struct FavoriteLibraryWebDAVTombstones: Codable, Equatable, Sendable {
+    var removedLocationsByTargetID: [String: Set<FavoriteLocation>]
+    var removedTagIDsByTargetID: [String: Set<String>]
 
-    public init(
+    init(
         removedLocationsByTargetID: [String: Set<FavoriteLocation>] = [:],
         removedTagIDsByTargetID: [String: Set<String>] = [:]
     ) {
@@ -102,12 +102,12 @@ public struct FavoriteLibraryWebDAVTombstones: Codable, Equatable, Sendable {
     }
 }
 
-public struct FavoriteLibraryWebDAVClocks: Codable, Equatable, Sendable {
-    public var displayNameUpdatedAtByTargetID: [String: Date]
-    public var coverUpdatedAtByTargetID: [String: Date]
-    public var remoteMappingUpdatedAtByTargetID: [String: Date]
+struct FavoriteLibraryWebDAVClocks: Codable, Equatable, Sendable {
+    var displayNameUpdatedAtByTargetID: [String: Date]
+    var coverUpdatedAtByTargetID: [String: Date]
+    var remoteMappingUpdatedAtByTargetID: [String: Date]
 
-    public init(
+    init(
         displayNameUpdatedAtByTargetID: [String: Date] = [:],
         coverUpdatedAtByTargetID: [String: Date] = [:],
         remoteMappingUpdatedAtByTargetID: [String: Date] = [:]
@@ -118,10 +118,10 @@ public struct FavoriteLibraryWebDAVClocks: Codable, Equatable, Sendable {
     }
 }
 
-public struct FavoriteLibraryWebDAVMerger: Sendable {
-    public init() {}
+struct FavoriteLibraryWebDAVMerger: Sendable {
+    init() {}
 
-    public func merge(
+    func merge(
         local: FavoriteLibraryWebDAVPayload,
         remote: FavoriteLibraryWebDAVPayload?,
         updatedAt: Date

@@ -115,8 +115,8 @@ public struct AppUpdateChecker: Sendable {
     }
 }
 
-public enum AppVersionComparator {
-    public static func compare(_ lhs: String, _ rhs: String) -> ComparisonResult {
+enum AppVersionComparator {
+    static func compare(_ lhs: String, _ rhs: String) -> ComparisonResult {
         if let lhsComponents = numericComponents(lhs),
            let rhsComponents = numericComponents(rhs) {
             let count = max(lhsComponents.count, rhsComponents.count)

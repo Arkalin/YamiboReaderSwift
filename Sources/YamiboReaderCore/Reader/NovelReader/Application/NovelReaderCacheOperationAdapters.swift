@@ -1,17 +1,17 @@
 import Foundation
 
-public struct NovelReaderRepositoryCacheOperationAdapter: NovelReaderCacheOperationRepository {
+struct NovelReaderRepositoryCacheOperationAdapter: NovelReaderCacheOperationRepository {
     private let repository: NovelReaderRepository
 
-    public init(repository: NovelReaderRepository) {
+    init(repository: NovelReaderRepository) {
         self.repository = repository
     }
 
-    public func cacheState(for context: NovelReaderCacheOperationContext) async -> NovelOfflineCacheViewsSnapshot {
+    func cacheState(for context: NovelReaderCacheOperationContext) async -> NovelOfflineCacheViewsSnapshot {
         NovelOfflineCacheViewsSnapshot(cachedViews: await cachedViews(for: context))
     }
 
-    public func cachedViews(for context: NovelReaderCacheOperationContext) async -> Set<Int> {
+    func cachedViews(for context: NovelReaderCacheOperationContext) async -> Set<Int> {
         await repository.cachedViews(
             for: context.threadID,
             authorID: context.authorID,
@@ -19,7 +19,7 @@ public struct NovelReaderRepositoryCacheOperationAdapter: NovelReaderCacheOperat
         )
     }
 
-    public func deleteCachedViews(
+    func deleteCachedViews(
         _ views: Set<Int>,
         for context: NovelReaderCacheOperationContext
     ) async throws {
@@ -31,7 +31,7 @@ public struct NovelReaderRepositoryCacheOperationAdapter: NovelReaderCacheOperat
         )
     }
 
-    public func cacheViews(
+    func cacheViews(
         _ views: Set<Int>,
         for context: NovelReaderCacheOperationContext,
         progress: (@Sendable (NovelReaderCacheBatchProgress) async -> Void)?
@@ -45,7 +45,7 @@ public struct NovelReaderRepositoryCacheOperationAdapter: NovelReaderCacheOperat
         )
     }
 
-    public func updateCachedViews(
+    func updateCachedViews(
         _ views: Set<Int>,
         for context: NovelReaderCacheOperationContext,
         progress: (@Sendable (NovelReaderCacheBatchProgress) async -> Void)?
@@ -59,12 +59,12 @@ public struct NovelReaderRepositoryCacheOperationAdapter: NovelReaderCacheOperat
     }
 }
 
-public struct NovelOfflineStoreReaderCacheOperationAdapter: NovelReaderCacheOperationRepository {
+struct NovelOfflineStoreReaderCacheOperationAdapter: NovelReaderCacheOperationRepository {
     private let store: any NovelOfflineCacheStoring & OfflineCacheQueueStoring
     private let novelOfflineCacheSettings: @Sendable () async -> NovelOfflineCacheSettings
     private let continueOfflineCacheQueue: (@Sendable () async throws -> Void)?
 
-    public init(
+    init(
         store: any NovelOfflineCacheStoring & OfflineCacheQueueStoring,
         novelOfflineCacheSettings: @escaping @Sendable () async -> NovelOfflineCacheSettings = { .init() },
         continueOfflineCacheQueue: (@Sendable () async throws -> Void)? = nil
@@ -74,7 +74,7 @@ public struct NovelOfflineStoreReaderCacheOperationAdapter: NovelReaderCacheOper
         self.continueOfflineCacheQueue = continueOfflineCacheQueue
     }
 
-    public func cacheState(for context: NovelReaderCacheOperationContext) async -> NovelOfflineCacheViewsSnapshot {
+    func cacheState(for context: NovelReaderCacheOperationContext) async -> NovelOfflineCacheViewsSnapshot {
         await store.novelOfflineCacheViewsSnapshot(
             ownerTitle: context.ownerTitle,
             threadID: context.threadID,
@@ -83,11 +83,11 @@ public struct NovelOfflineStoreReaderCacheOperationAdapter: NovelReaderCacheOper
         )
     }
 
-    public func cachedViews(for context: NovelReaderCacheOperationContext) async -> Set<Int> {
+    func cachedViews(for context: NovelReaderCacheOperationContext) async -> Set<Int> {
         await cacheState(for: context).cachedViews
     }
 
-    public func deleteCachedViews(
+    func deleteCachedViews(
         _ views: Set<Int>,
         for context: NovelReaderCacheOperationContext
     ) async throws {
@@ -100,7 +100,7 @@ public struct NovelOfflineStoreReaderCacheOperationAdapter: NovelReaderCacheOper
         )
     }
 
-    public func cacheViews(
+    func cacheViews(
         _ views: Set<Int>,
         for context: NovelReaderCacheOperationContext,
         progress _: (@Sendable (NovelReaderCacheBatchProgress) async -> Void)?
@@ -108,7 +108,7 @@ public struct NovelOfflineStoreReaderCacheOperationAdapter: NovelReaderCacheOper
         await enqueue(views, for: context, isUpdate: false)
     }
 
-    public func updateCachedViews(
+    func updateCachedViews(
         _ views: Set<Int>,
         for context: NovelReaderCacheOperationContext,
         progress _: (@Sendable (NovelReaderCacheBatchProgress) async -> Void)?

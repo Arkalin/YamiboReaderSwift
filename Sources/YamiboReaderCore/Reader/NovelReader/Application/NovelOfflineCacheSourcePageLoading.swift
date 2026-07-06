@@ -10,6 +10,6 @@ public struct NovelOfflineCachePreparedSourcePage: Sendable {
     }
 }
 
-public protocol NovelOfflineCacheSourcePageLoading: Sendable {
+protocol NovelOfflineCacheSourcePageLoading: Sendable {
     func loadNovelOfflineCacheSourcePage(_ request: NovelOfflineCacheWorkRequest) async throws -> NovelOfflineCachePreparedSourcePage
 }

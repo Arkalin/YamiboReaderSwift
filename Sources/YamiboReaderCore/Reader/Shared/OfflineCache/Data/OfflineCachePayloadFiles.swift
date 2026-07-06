@@ -2,7 +2,7 @@ import Foundation
 @preconcurrency import GRDB
 
 extension OfflineCacheStore {
-    public func saveNovelOfflineSourcePage(
+    func saveNovelOfflineSourcePage(
         _ sourcePage: ForumThreadPage,
         request: NovelOfflineCacheWorkRequest,
         updatedAt: Date = .now,
@@ -64,7 +64,7 @@ extension OfflineCacheStore {
         }
     }
 
-    public func novelOfflineSourcePage(
+    func novelOfflineSourcePage(
         ownerTitle: String,
         threadID: String,
         view: Int,
@@ -101,7 +101,7 @@ extension OfflineCacheStore {
         )
     }
 
-    public func novelOfflineSourcePageSnapshot(
+    func novelOfflineSourcePageSnapshot(
         threadID: String,
         view: Int,
         authorID: String?,

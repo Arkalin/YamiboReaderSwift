@@ -7,7 +7,7 @@ public actor MangaReaderProjectionStore: MangaReaderProjectionPersisting {
     private let cacheStore: DiskCacheStore
     private nonisolated(unsafe) let fileManager: FileManager
 
-    public init(
+    init(
         databasePool: DatabasePool? = nil,
         fileManager: FileManager = .default,
         rootDirectory: URL? = nil,

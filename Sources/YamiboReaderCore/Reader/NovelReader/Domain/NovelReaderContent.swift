@@ -1,18 +1,18 @@
 import Foundation
 
-public struct NovelReaderContent: Codable, Hashable, Sendable {
-    public var data: String
-    public var type: ContentType
-    public var chapterTitle: String?
+struct NovelReaderContent: Codable, Hashable, Sendable {
+    var data: String
+    var type: ContentType
+    var chapterTitle: String?
 
-    public init(data: String, type: ContentType, chapterTitle: String? = nil) {
+    init(data: String, type: ContentType, chapterTitle: String? = nil) {
         self.data = data
         self.type = type
         self.chapterTitle = chapterTitle
     }
 }
 
-public enum ContentType: String, Codable, Sendable {
+enum ContentType: String, Codable, Sendable {
     case image
     case text
 }

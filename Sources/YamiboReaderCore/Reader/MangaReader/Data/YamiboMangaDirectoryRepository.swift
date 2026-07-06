@@ -1,13 +1,13 @@
 import Foundation
 
-public struct YamiboMangaDirectoryRepository: MangaDirectoryRepository {
-    public var client: YamiboClient
+struct YamiboMangaDirectoryRepository: MangaDirectoryRepository {
+    var client: YamiboClient
 
-    public init(client: YamiboClient) {
+    init(client: YamiboClient) {
         self.client = client
     }
 
-    public func loadDirectorySeed(for threadID: String) async throws -> MangaDirectorySeed {
+    func loadDirectorySeed(for threadID: String) async throws -> MangaDirectorySeed {
         return try await MangaReaderDataSupport.mapNetworkErrors {
             guard let tid = threadID.mangaReaderTrimmedNonEmpty else {
                 throw MangaReaderDataSupport.mangaDirectoryParsingFailure()
@@ -46,7 +46,7 @@ public struct YamiboMangaDirectoryRepository: MangaDirectoryRepository {
         }
     }
 
-    public func loadTagDirectory(tagIDs: [String]) async throws -> [MangaChapter] {
+    func loadTagDirectory(tagIDs: [String]) async throws -> [MangaChapter] {
         let normalizedTagIDs = normalizedUniqueValues(tagIDs)
         guard !normalizedTagIDs.isEmpty else { return [] }
 
@@ -80,7 +80,7 @@ public struct YamiboMangaDirectoryRepository: MangaDirectoryRepository {
         }
     }
 
-    public func searchDirectory(keyword: String, forumID: String) async throws -> [MangaChapter] {
+    func searchDirectory(keyword: String, forumID: String) async throws -> [MangaChapter] {
         guard let normalizedKeyword = keyword.mangaReaderTrimmedNonEmpty else { return [] }
         let normalizedForumID = forumID.mangaReaderTrimmedNonEmpty ?? "30"
 

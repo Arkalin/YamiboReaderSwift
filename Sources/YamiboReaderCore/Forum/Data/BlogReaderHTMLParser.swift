@@ -1,7 +1,7 @@
 import Foundation
 
-public enum BlogReaderHTMLParser {
-    public static func parsePage(from html: String, blogID: String, uidHint: String? = nil, titleHint: String? = nil) throws -> BlogReaderPage {
+enum BlogReaderHTMLParser {
+    static func parsePage(from html: String, blogID: String, uidHint: String? = nil, titleHint: String? = nil) throws -> BlogReaderPage {
         try YamiboHTMLPageInspector.ensureReadable(html)
         let document = try KannaSoup.parse(html, baseURL: YamiboDomain.baseURL.absoluteString)
         let title = firstNonBlank([
@@ -36,7 +36,7 @@ public enum BlogReaderHTMLParser {
         )
     }
 
-    public static func parseCommentResult(from html: String) throws -> String {
+    static func parseCommentResult(from html: String) throws -> String {
         try YamiboHTMLPageInspector.ensureReadable(html)
         let document = try KannaSoup.parse(html, baseURL: YamiboDomain.baseURL.absoluteString)
         let message = document.firstText(".jump_c, .alert_info, .messagetext, .showmessage, .wp, body")

@@ -4,7 +4,7 @@ public actor ForumThreadReaderRepository: ThreadCoverPageResolving {
     private let client: YamiboClient
     private let cacheStore: ForumCacheStore
 
-    public init(client: YamiboClient, cacheStore: ForumCacheStore = ForumCacheStore()) {
+    init(client: YamiboClient, cacheStore: ForumCacheStore = ForumCacheStore()) {
         self.client = client
         self.cacheStore = cacheStore
     }

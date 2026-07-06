@@ -14,7 +14,7 @@ public actor ForumCacheStore {
     private let cacheStore: DiskCacheStore
     private let now: @Sendable () -> Date
 
-    public init(
+    init(
         databasePool: DatabasePool? = nil,
         fileManager: FileManager = .default,
         rootDirectory: URL? = nil,

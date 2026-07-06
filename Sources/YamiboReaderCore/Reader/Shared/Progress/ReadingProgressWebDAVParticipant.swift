@@ -2,24 +2,24 @@ import Foundation
 
 /// WebDAV sync participant for reading progress. Owns the payload format and
 /// newest-record-wins merge semantics for progress records.
-public struct ReadingProgressWebDAVParticipant: WebDAVSyncParticipant {
-    public let datasetID = "readingProgress"
-    public let remoteFileName = "yamibo-reading-progress-v1.json"
+struct ReadingProgressWebDAVParticipant: WebDAVSyncParticipant {
+    let datasetID = "readingProgress"
+    let remoteFileName = "yamibo-reading-progress-v1.json"
 
     private let store: ReadingProgressStore
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
 
-    public init(store: ReadingProgressStore) {
+    init(store: ReadingProgressStore) {
         self.store = store
     }
 
-    public func inspectRemote(_ data: Data) throws -> WebDAVRemotePayloadInfo {
+    func inspectRemote(_ data: Data) throws -> WebDAVRemotePayloadInfo {
         let payload = try decoder.decode(ReadingProgressWebDAVPayload.self, from: data)
         return WebDAVRemotePayloadInfo(updatedAt: payload.updatedAt)
     }
 
-    public func mergeAndExport(remoteData: Data?, updatedAt: Date, accountUID _: String) async throws -> Data {
+    func mergeAndExport(remoteData: Data?, updatedAt: Date, accountUID _: String) async throws -> Data {
         let local = ReadingProgressWebDAVPayload(
             updatedAt: updatedAt,
             records: await store.loadAll()
@@ -30,20 +30,20 @@ public struct ReadingProgressWebDAVParticipant: WebDAVSyncParticipant {
         return try encoder.encode(merged)
     }
 
-    public func applyRemote(_ data: Data) async throws {
+    func applyRemote(_ data: Data) async throws {
         let payload = try decoder.decode(ReadingProgressWebDAVPayload.self, from: data)
         try await store.replaceAll(payload.records)
     }
 }
 
-public struct ReadingProgressWebDAVPayload: Codable, Equatable, Sendable {
-    public static let currentVersion = 2
+struct ReadingProgressWebDAVPayload: Codable, Equatable, Sendable {
+    static let currentVersion = 2
 
-    public var version: Int
-    public var updatedAt: Date
-    public var records: [ReadingProgressRecord]
+    var version: Int
+    var updatedAt: Date
+    var records: [ReadingProgressRecord]
 
-    public init(version: Int = Self.currentVersion, updatedAt: Date, records: [ReadingProgressRecord]) {
+    init(version: Int = Self.currentVersion, updatedAt: Date, records: [ReadingProgressRecord]) {
         self.version = version
         self.updatedAt = updatedAt
         self.records = records
@@ -55,7 +55,7 @@ public struct ReadingProgressWebDAVPayload: Codable, Equatable, Sendable {
         case records
     }
 
-    public init(from decoder: any Decoder) throws {
+    init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         guard let version = try container.decodeIfPresent(Int.self, forKey: .version) else {
             throw WebDAVSyncError.unsupportedPayloadVersion(0)
@@ -69,7 +69,7 @@ public struct ReadingProgressWebDAVPayload: Codable, Equatable, Sendable {
             .map { try $0.record() }
     }
 
-    public func encode(to encoder: any Encoder) throws {
+    func encode(to encoder: any Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(version, forKey: .version)
         try container.encode(updatedAt, forKey: .updatedAt)
@@ -77,10 +77,10 @@ public struct ReadingProgressWebDAVPayload: Codable, Equatable, Sendable {
     }
 }
 
-public struct ReadingProgressWebDAVMerger: Sendable {
-    public init() {}
+struct ReadingProgressWebDAVMerger: Sendable {
+    init() {}
 
-    public func merge(
+    func merge(
         local: ReadingProgressWebDAVPayload,
         remote: ReadingProgressWebDAVPayload?,
         updatedAt: Date

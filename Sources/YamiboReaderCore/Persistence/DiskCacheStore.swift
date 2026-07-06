@@ -1,14 +1,14 @@
 import Foundation
 @preconcurrency import GRDB
 
-public actor DiskCacheStore {
-    public struct CacheEntry: Sendable {
-        public var namespace: String
-        public var key: String
-        public var createdAt: Date
-        public var lastAccessedAt: Date
+actor DiskCacheStore {
+    struct CacheEntry: Sendable {
+        var namespace: String
+        var key: String
+        var createdAt: Date
+        var lastAccessedAt: Date
 
-        public init(namespace: String, key: String, createdAt: Date, lastAccessedAt: Date) {
+        init(namespace: String, key: String, createdAt: Date, lastAccessedAt: Date) {
             self.namespace = namespace
             self.key = key
             self.createdAt = createdAt
@@ -23,7 +23,7 @@ public actor DiskCacheStore {
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
 
-    public init(
+    init(
         writer: any DatabaseWriter,
         rootDirectory: URL,
         fileManager: FileManager = .default,
@@ -38,7 +38,7 @@ public actor DiskCacheStore {
         decoder.dateDecodingStrategy = .iso8601
     }
 
-    public func set<Value: Encodable & Sendable>(_ value: Value, namespace: String, key: String) async throws {
+    func set<Value: Encodable & Sendable>(_ value: Value, namespace: String, key: String) async throws {
         let resolvedNamespace = try validatedComponent(namespace, label: "namespace")
         let resolvedKey = try validatedComponent(key, label: "cache key")
         let namespaceDirectory = cacheDirectory(for: resolvedNamespace)
@@ -64,7 +64,7 @@ public actor DiskCacheStore {
         }
     }
 
-    public func get<Value: Decodable & Sendable>(
+    func get<Value: Decodable & Sendable>(
         _ type: Value.Type = Value.self,
         namespace: String,
         key: String,
@@ -95,11 +95,11 @@ public actor DiskCacheStore {
         }
     }
 
-    public func remove(namespace: String, key: String) async throws {
+    func remove(namespace: String, key: String) async throws {
         try await removeValidated(namespace: try validatedComponent(namespace, label: "namespace"), key: try validatedComponent(key, label: "cache key"))
     }
 
-    public func clearNamespace(_ namespace: String) async throws {
+    func clearNamespace(_ namespace: String) async throws {
         let resolvedNamespace = try validatedComponent(namespace, label: "namespace")
         try await writer.write { db in
             try db.execute(sql: "DELETE FROM cache_entries WHERE namespace = ?", arguments: [resolvedNamespace])
@@ -110,7 +110,7 @@ public actor DiskCacheStore {
         }
     }
 
-    public func deleteKeys(namespace: String, matchingPrefix prefix: String) async throws {
+    func deleteKeys(namespace: String, matchingPrefix prefix: String) async throws {
         let resolvedNamespace = try validatedComponent(namespace, label: "namespace")
         let resolvedPrefix = prefix.trimmingCharacters(in: .whitespacesAndNewlines)
         let keys = try await writer.read { db in
@@ -125,7 +125,7 @@ public actor DiskCacheStore {
         }
     }
 
-    public func trimNamespace(_ namespace: String, maximumEntryCount: Int) async throws {
+    func trimNamespace(_ namespace: String, maximumEntryCount: Int) async throws {
         let resolvedNamespace = try validatedComponent(namespace, label: "namespace")
         guard maximumEntryCount >= 0 else { throw YamiboError.persistenceFailed("Invalid cache entry limit") }
         let keys = try await writer.read { db in
@@ -146,7 +146,7 @@ public actor DiskCacheStore {
         }
     }
 
-    public func entries(namespace: String) async throws -> [CacheEntry] {
+    func entries(namespace: String) async throws -> [CacheEntry] {
         let resolvedNamespace = try validatedComponent(namespace, label: "namespace")
         return try await writer.read { db in
             let rows = try Row.fetchAll(
@@ -170,7 +170,7 @@ public actor DiskCacheStore {
         }
     }
 
-    public func fileURL(namespace: String, key: String) throws -> URL {
+    func fileURL(namespace: String, key: String) throws -> URL {
         try cacheFileURL(
             namespace: validatedComponent(namespace, label: "namespace"),
             key: validatedComponent(key, label: "cache key")

@@ -9,7 +9,7 @@ public struct YamiboAccountService: Sendable {
     private let profileStore: YamiboProfileStore
     private let userAgent: String
 
-    public init(
+    init(
         session: URLSession = YamiboNetworkConfiguration.makeSession(),
         sessionStore: SessionStore,
         profileStore: YamiboProfileStore,

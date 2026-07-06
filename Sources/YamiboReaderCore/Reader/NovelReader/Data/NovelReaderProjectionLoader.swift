@@ -1,11 +1,11 @@
 import Foundation
 
-public struct NovelReaderProjectionLoadedPage: Sendable {
-    public var projection: NovelReaderProjection
-    public var sourcePage: ForumThreadPage
-    public var source: ReaderProjectionLoadSource
+struct NovelReaderProjectionLoadedPage: Sendable {
+    var projection: NovelReaderProjection
+    var sourcePage: ForumThreadPage
+    var source: ReaderProjectionLoadSource
 
-    public init(
+    init(
         projection: NovelReaderProjection,
         sourcePage: ForumThreadPage,
         source: ReaderProjectionLoadSource
@@ -16,10 +16,10 @@ public struct NovelReaderProjectionLoadedPage: Sendable {
     }
 }
 
-public actor NovelReaderProjectionLoader {
+actor NovelReaderProjectionLoader {
     private let loader: ReaderProjectionLoader<ReaderThreadPageProjectionLoadingStrategy<NovelProjectionAdapter>>
 
-    public init(
+    init(
         client: YamiboClient,
         projectionStore: NovelReaderProjectionStore = NovelReaderProjectionStore(),
         forumCacheStore: ForumCacheStore = ForumCacheStore(),
@@ -37,15 +37,15 @@ public actor NovelReaderProjectionLoader {
         )
     }
 
-    public func loadProjection(_ request: NovelPageRequest) async throws -> NovelReaderProjectionLoadedPage {
+    func loadProjection(_ request: NovelPageRequest) async throws -> NovelReaderProjectionLoadedPage {
         try await loadProjection(request, ignoresCache: false)
     }
 
-    public func loadProjectionIgnoringCache(_ request: NovelPageRequest) async throws -> NovelReaderProjectionLoadedPage {
+    func loadProjectionIgnoringCache(_ request: NovelPageRequest) async throws -> NovelReaderProjectionLoadedPage {
         try await loadProjection(request, ignoresCache: true)
     }
 
-    public func loadOnlineProjection(
+    func loadOnlineProjection(
         _ request: NovelPageRequest,
         ignoresCache: Bool
     ) async throws -> ReaderProjectionPreparedSourcePage<NovelReaderProjection, ForumThreadPage> {

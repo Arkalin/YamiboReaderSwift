@@ -1,6 +1,6 @@
 import Foundation
 
-public enum ChapterCommentsHTMLParser {
+enum ChapterCommentsHTMLParser {
     private static let filteredRatingReasons: Set<String> = [
         "你太可爱",
         "你太可愛",
@@ -12,7 +12,7 @@ public enum ChapterCommentsHTMLParser {
         "原創內容"
     ]
 
-    public static func parseInitialPage(
+    static func parseInitialPage(
         html: String,
         target: ReaderChapterCommentTarget
     ) throws -> ChapterCommentsPage {
@@ -30,7 +30,7 @@ public enum ChapterCommentsHTMLParser {
         )
     }
 
-    public static func parseContinuationPage(
+    static func parseContinuationPage(
         html: String,
         target: ReaderChapterCommentTarget,
         view: Int
@@ -45,12 +45,12 @@ public enum ChapterCommentsHTMLParser {
         )
     }
 
-    public static func currentView(html: String, fallback: Int) throws -> Int {
+    static func currentView(html: String, fallback: Int) throws -> Int {
         let document = try KannaSoup.parse(html)
         return document.firstText(".pg strong").flatMap(Int.init) ?? max(1, fallback)
     }
 
-    public static func fullRatingReasonsURL(
+    static func fullRatingReasonsURL(
         html: String,
         target: ReaderChapterCommentTarget
     ) throws -> URL? {
@@ -58,7 +58,7 @@ public enum ChapterCommentsHTMLParser {
         return document.firstURL("[id=ratelog_\(target.ownerPostID)] a[href*=action=viewratings]")
     }
 
-    public static func parseFullRatingReasonsPage(
+    static func parseFullRatingReasonsPage(
         html: String,
         target: ReaderChapterCommentTarget
     ) throws -> [ChapterComment] {

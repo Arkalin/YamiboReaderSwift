@@ -1,7 +1,7 @@
 import Foundation
 
-public enum UserSpaceHTMLParser {
-    public static func parseProfile(from html: String, uidHint: String? = nil, titleHint: String? = nil) throws -> UserSpaceProfile {
+enum UserSpaceHTMLParser {
+    static func parseProfile(from html: String, uidHint: String? = nil, titleHint: String? = nil) throws -> UserSpaceProfile {
         try YamiboHTMLPageInspector.ensureReadable(html)
         let document = try KannaSoup.parse(html, baseURL: YamiboDomain.baseURL.absoluteString)
         let bodyText = document.body()?.normalizedText() ?? ""
@@ -45,7 +45,7 @@ public enum UserSpaceHTMLParser {
         )
     }
 
-    public static func parseThreads(from html: String) throws -> UserSpaceThreadPage {
+    static func parseThreads(from html: String) throws -> UserSpaceThreadPage {
         try YamiboHTMLPageInspector.ensureReadable(html)
         let document = try KannaSoup.parse(html, baseURL: YamiboDomain.baseURL.absoluteString)
         return UserSpaceThreadPage(
@@ -54,7 +54,7 @@ public enum UserSpaceHTMLParser {
         )
     }
 
-    public static func parseReplies(from html: String) throws -> UserSpaceReplyPage {
+    static func parseReplies(from html: String) throws -> UserSpaceReplyPage {
         try YamiboHTMLPageInspector.ensureReadable(html)
         let document = try KannaSoup.parse(html, baseURL: YamiboDomain.baseURL.absoluteString)
         var replies: [UserSpaceReplyGroup] = []
@@ -83,7 +83,7 @@ public enum UserSpaceHTMLParser {
         return UserSpaceReplyPage(replies: replies, pageNavigation: parsePageNavigation(in: document))
     }
 
-    public static func parseBlogs(from html: String) throws -> UserSpaceBlogPage {
+    static func parseBlogs(from html: String) throws -> UserSpaceBlogPage {
         try YamiboHTMLPageInspector.ensureReadable(html)
         let document = try KannaSoup.parse(html, baseURL: YamiboDomain.baseURL.absoluteString)
         var blogs: [UserSpaceBlogSummary] = []
@@ -117,7 +117,7 @@ public enum UserSpaceHTMLParser {
         return UserSpaceBlogPage(blogs: blogs, pageNavigation: parsePageNavigation(in: document))
     }
 
-    public static func parseFriends(from html: String) throws -> UserSpaceFriendPage {
+    static func parseFriends(from html: String) throws -> UserSpaceFriendPage {
         try YamiboHTMLPageInspector.ensureReadable(html)
         let document = try KannaSoup.parse(html, baseURL: YamiboDomain.baseURL.absoluteString)
         let containers = friendListContainers(in: document)
@@ -149,7 +149,7 @@ public enum UserSpaceHTMLParser {
         return UserSpaceFriendPage(friends: friends, pageNavigation: parsePageNavigation(in: document))
     }
 
-    public static func parsePrivateMessageList(from html: String) throws -> UserSpacePrivateMessagePage {
+    static func parsePrivateMessageList(from html: String) throws -> UserSpacePrivateMessagePage {
         try YamiboHTMLPageInspector.ensureReadable(html)
         let document = try KannaSoup.parse(html, baseURL: YamiboDomain.baseURL.absoluteString)
         var messages: [UserSpacePrivateMessageSummary] = []
@@ -193,7 +193,7 @@ public enum UserSpaceHTMLParser {
         )
     }
 
-    public static func parseNotices(from html: String) throws -> UserSpaceNoticePage {
+    static func parseNotices(from html: String) throws -> UserSpaceNoticePage {
         try YamiboHTMLPageInspector.ensureReadable(html)
         let document = try KannaSoup.parse(html, baseURL: YamiboDomain.baseURL.absoluteString)
         var notices: [UserSpaceNoticeSummary] = []
@@ -225,7 +225,7 @@ public enum UserSpaceHTMLParser {
         return UserSpaceNoticePage(notices: notices, pageNavigation: parsePageNavigation(in: document))
     }
 
-    public static func parseAddFriendForm(from html: String, uid: String, nameHint: String? = nil) throws -> UserSpaceAddFriendForm {
+    static func parseAddFriendForm(from html: String, uid: String, nameHint: String? = nil) throws -> UserSpaceAddFriendForm {
         try YamiboHTMLPageInspector.ensureReadable(html)
         let document = try KannaSoup.parse(html, baseURL: YamiboDomain.baseURL.absoluteString)
         guard let formHash = parseFormHash(in: document, html: html) else {
@@ -251,7 +251,7 @@ public enum UserSpaceHTMLParser {
         )
     }
 
-    public static func parseAddFriendResult(from html: String) throws -> String {
+    static func parseAddFriendResult(from html: String) throws -> String {
         try YamiboHTMLPageInspector.ensureReadable(html)
         let document = try KannaSoup.parse(html, baseURL: YamiboDomain.baseURL.absoluteString)
         let message = document.selectFirst(".jump_c, .alert_info, .messagetext, .showmessage, .wp, body")?.normalizedText() ?? ""
@@ -268,7 +268,7 @@ public enum UserSpaceHTMLParser {
         return message
     }
 
-    public static func parsePrivateMessagePage(from html: String, toUID: String, titleHint: String? = nil) throws -> PrivateMessagePage {
+    static func parsePrivateMessagePage(from html: String, toUID: String, titleHint: String? = nil) throws -> PrivateMessagePage {
         try YamiboHTMLPageInspector.ensureReadable(html)
         let document = try KannaSoup.parse(html, baseURL: YamiboDomain.baseURL.absoluteString)
         let normalizedToUID = toUID.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -296,7 +296,7 @@ public enum UserSpaceHTMLParser {
         )
     }
 
-    public static func parsePrivateMessageSendResult(from html: String) throws -> String {
+    static func parsePrivateMessageSendResult(from html: String) throws -> String {
         try YamiboHTMLPageInspector.ensureReadable(html)
         let document = try KannaSoup.parse(html, baseURL: YamiboDomain.baseURL.absoluteString)
         let message = document.selectFirst(".jump_c, .alert_info, .messagetext, .showmessage, .wp, body")?.normalizedText() ?? ""

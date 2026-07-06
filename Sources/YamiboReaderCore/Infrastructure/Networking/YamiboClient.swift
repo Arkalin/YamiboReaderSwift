@@ -1,16 +1,16 @@
 import Foundation
 
-public enum YamiboRequestCancellationPolicy: Sendable {
+enum YamiboRequestCancellationPolicy: Sendable {
     case propagateCancellation
     case completeStartedRequest
 }
 
-public struct YamiboClient: Sendable {
-    public var session: URLSession
-    public var cookie: String?
-    public var userAgent: String
+struct YamiboClient: Sendable {
+    var session: URLSession
+    var cookie: String?
+    var userAgent: String
 
-    public init(
+    init(
         session: URLSession = YamiboNetworkConfiguration.makeSession(),
         cookie: String? = nil,
         userAgent: String = YamiboNetworkConfiguration.defaultMobileUserAgent
@@ -20,7 +20,7 @@ public struct YamiboClient: Sendable {
         self.userAgent = userAgent
     }
 
-    public func fetchHTML(
+    func fetchHTML(
         for route: YamiboRoute,
         userAgent: String? = nil,
         cachePolicy: URLRequest.CachePolicy = .useProtocolCachePolicy,
@@ -34,7 +34,7 @@ public struct YamiboClient: Sendable {
         )
     }
 
-    public func fetchThreadById(
+    func fetchThreadById(
         tid: String,
         authorID: String? = nil,
         reverse: Bool = false,
@@ -51,7 +51,7 @@ public struct YamiboClient: Sendable {
         )
     }
 
-    public func submitForm(
+    func submitForm(
         for route: YamiboRoute,
         fields: [(String, String)],
         userAgent: String? = nil
@@ -59,7 +59,7 @@ public struct YamiboClient: Sendable {
         try await submitForm(url: route.url, fields: fields, userAgent: userAgent)
     }
 
-    public func submitForm(
+    func submitForm(
         url: URL,
         fields: [(String, String)],
         userAgent: String? = nil
@@ -78,7 +78,7 @@ public struct YamiboClient: Sendable {
         return try decodeHTML(from: data, response: response)
     }
 
-    public func fetchHTML(
+    func fetchHTML(
         url: URL,
         userAgent: String? = nil,
         cachePolicy: URLRequest.CachePolicy = .useProtocolCachePolicy,

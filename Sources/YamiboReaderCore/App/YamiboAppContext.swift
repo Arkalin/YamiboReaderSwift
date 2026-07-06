@@ -65,7 +65,7 @@ public final class YamiboAppContext: Sendable {
         mangaReaderProjectionStore: MangaReaderProjectionStore? = nil,
         offlineCacheStore: (any OfflineCacheStoring)? = nil,
         forumCacheStore: ForumCacheStore? = nil,
-        ordinaryImageCache: any YamiboOrdinaryImageCacheClearing = YamiboImageDataPipeline.shared,
+        ordinaryImageCache: (any YamiboOrdinaryImageCacheClearing)? = nil,
         offlineCacheBackgroundDownloadTransport: OfflineCacheBackgroundDownloadTransport = OfflineCacheBackgroundDownloadTransport(),
         offlineCacheContinuedProcessingCoordinator: OfflineCacheContinuedProcessingCoordinator = OfflineCacheContinuedProcessingCoordinator(),
         databasePool: DatabasePool? = nil,
@@ -110,7 +110,7 @@ public final class YamiboAppContext: Sendable {
         self.forumCacheStore = forumCacheStore ?? ForumCacheStore(
             diskCacheStore: diskCacheStore
         )
-        self.ordinaryImageCache = ordinaryImageCache
+        self.ordinaryImageCache = ordinaryImageCache ?? YamiboImageDataPipeline.shared
         self.offlineCacheBackgroundDownloadTransport = offlineCacheBackgroundDownloadTransport
         self.offlineCacheContinuedProcessingCoordinator = offlineCacheContinuedProcessingCoordinator
         self.session = session

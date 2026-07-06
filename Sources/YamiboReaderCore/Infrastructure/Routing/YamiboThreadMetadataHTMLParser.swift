@@ -1,13 +1,13 @@
 import Foundation
 
-public struct YamiboThreadMetadata: Hashable, Sendable {
-    public var tid: String?
-    public var fid: String?
-    public var title: String?
-    public var authorID: String?
-    public var sectionText: String?
+struct YamiboThreadMetadata: Hashable, Sendable {
+    var tid: String?
+    var fid: String?
+    var title: String?
+    var authorID: String?
+    var sectionText: String?
 
-    public init(
+    init(
         tid: String? = nil,
         fid: String? = nil,
         title: String? = nil,
@@ -22,8 +22,8 @@ public struct YamiboThreadMetadata: Hashable, Sendable {
     }
 }
 
-public enum YamiboThreadMetadataHTMLParser {
-    public static func parse(from html: String, url: URL) throws -> YamiboThreadMetadata {
+enum YamiboThreadMetadataHTMLParser {
+    static func parse(from html: String, url: URL) throws -> YamiboThreadMetadata {
         try YamiboHTMLPageInspector.ensureReadable(html)
 
         let document = try KannaSoup.parse(html, baseURL: YamiboDomain.baseURL.absoluteString)

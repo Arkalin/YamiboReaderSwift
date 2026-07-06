@@ -1,13 +1,13 @@
 import Foundation
 
-public struct NovelReaderParsedContent: Hashable, Sendable {
-    public var segments: [NovelReaderSegment]
-    public var segmentSources: [NovelReaderSegmentSource?]
-    public var segmentSemantics: [NovelReaderSegmentSemantics?]
-    public var retainedChapterCount: Int
-    public var filteredChapterCandidateCount: Int
+struct NovelReaderParsedContent: Hashable, Sendable {
+    var segments: [NovelReaderSegment]
+    var segmentSources: [NovelReaderSegmentSource?]
+    var segmentSemantics: [NovelReaderSegmentSemantics?]
+    var retainedChapterCount: Int
+    var filteredChapterCandidateCount: Int
 
-    public init(
+    init(
         segments: [NovelReaderSegment] = [],
         segmentSources: [NovelReaderSegmentSource?] = [],
         segmentSemantics: [NovelReaderSegmentSemantics?] = [],

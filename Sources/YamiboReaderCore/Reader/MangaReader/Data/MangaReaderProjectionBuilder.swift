@@ -1,7 +1,7 @@
 import Foundation
 
-public enum MangaReaderProjectionBuilder {
-    public static func build(
+enum MangaReaderProjectionBuilder {
+    static func build(
         from page: ForumThreadPage,
         identity: MangaReaderProjectionSourceIdentity,
         sourceFingerprint: String,

@@ -1,7 +1,7 @@
 import Foundation
 
-public enum ForumHTMLParser {
-    public static func parseHomePage(from html: String, fetchedAt: Date = .now) throws -> ForumHomePage {
+enum ForumHTMLParser {
+    static func parseHomePage(from html: String, fetchedAt: Date = .now) throws -> ForumHomePage {
         try YamiboHTMLPageInspector.ensureReadable(html)
 
         let document = try KannaSoup.parse(html, baseURL: YamiboDomain.baseURL.absoluteString)
@@ -18,7 +18,7 @@ public enum ForumHTMLParser {
         )
     }
 
-    public static func parseBoardPage(
+    static func parseBoardPage(
         from html: String,
         fid: String,
         title: String? = nil,
@@ -55,7 +55,7 @@ public enum ForumHTMLParser {
         )
     }
 
-    public static func parseBoardFavoriteResult(from html: String) throws -> String {
+    static func parseBoardFavoriteResult(from html: String) throws -> String {
         try YamiboHTMLPageInspector.ensureReadable(html)
 
         let document = try KannaSoup.parse(html, baseURL: YamiboDomain.baseURL.absoluteString)
@@ -79,7 +79,7 @@ public enum ForumHTMLParser {
         return L10n.string("forum.board.favorite_success")
     }
 
-    public static func parseSearchPage(from html: String, query: String) throws -> ForumSearchPage {
+    static func parseSearchPage(from html: String, query: String) throws -> ForumSearchPage {
         try YamiboHTMLPageInspector.ensureReadable(html)
 
         let document = try KannaSoup.parse(html, baseURL: YamiboDomain.baseURL.absoluteString)

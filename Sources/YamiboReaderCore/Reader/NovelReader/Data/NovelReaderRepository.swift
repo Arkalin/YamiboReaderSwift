@@ -9,7 +9,7 @@ public actor NovelReaderRepository {
     private let novelOfflineAutoRefreshEnabled: @Sendable () async -> Bool
     private let novelOfflineRetainsInlineImages: @Sendable () async -> Bool
 
-    public init(
+    init(
         client: YamiboClient,
         cacheStore: NovelReaderProjectionStore = NovelReaderProjectionStore(),
         forumCacheStore: ForumCacheStore = ForumCacheStore(),

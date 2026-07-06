@@ -3,7 +3,7 @@ import Foundation
 public actor YamiboThreadRouteResolver {
     private let client: YamiboClient
 
-    public init(client: YamiboClient) {
+    init(client: YamiboClient) {
         self.client = client
     }
 

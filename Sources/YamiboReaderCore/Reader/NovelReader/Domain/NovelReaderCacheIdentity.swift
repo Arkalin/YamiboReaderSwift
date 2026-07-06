@@ -1,10 +1,10 @@
 import Foundation
 
-public enum NovelReaderCacheVariant: Hashable, Codable, Sendable {
+enum NovelReaderCacheVariant: Hashable, Codable, Sendable {
     case author(String)
     case source(ReaderProjectionContentSource)
 
-    public var key: String {
+    var key: String {
         switch self {
         case let .author(authorID):
             return "author:\(authorID)"
@@ -14,21 +14,21 @@ public enum NovelReaderCacheVariant: Hashable, Codable, Sendable {
     }
 }
 
-public struct NovelReaderCacheIdentity: Hashable, Codable, Sendable {
-    public let threadID: String
-    public let threadKey: String
-    public let variant: NovelReaderCacheVariant
-    public let view: Int
+struct NovelReaderCacheIdentity: Hashable, Codable, Sendable {
+    let threadID: String
+    let threadKey: String
+    let variant: NovelReaderCacheVariant
+    let view: Int
 
-    public var variantKey: String {
+    var variantKey: String {
         variant.key
     }
 
-    public var cacheKey: String {
+    var cacheKey: String {
         "\(threadKey)#\(variantKey)#\(view)"
     }
 
-    public init(threadID: String, view: Int, authorID: String?, contentSource: ReaderProjectionContentSource?) {
+    init(threadID: String, view: Int, authorID: String?, contentSource: ReaderProjectionContentSource?) {
         let normalizedThreadID = threadID.trimmingCharacters(in: .whitespacesAndNewlines)
         precondition(!normalizedThreadID.isEmpty, "NovelReaderCacheIdentity requires a Yamibo thread tid")
         self.threadID = normalizedThreadID
@@ -37,7 +37,7 @@ public struct NovelReaderCacheIdentity: Hashable, Codable, Sendable {
         self.view = max(1, view)
     }
 
-    public init(request: NovelPageRequest, contentSource: ReaderProjectionContentSource? = nil) {
+    init(request: NovelPageRequest, contentSource: ReaderProjectionContentSource? = nil) {
         self.init(
             threadID: request.threadID,
             view: request.view,
@@ -46,7 +46,7 @@ public struct NovelReaderCacheIdentity: Hashable, Codable, Sendable {
         )
     }
 
-    public init(projection: NovelReaderProjection) {
+    init(projection: NovelReaderProjection) {
         self.init(
             threadID: projection.threadID,
             view: projection.view,

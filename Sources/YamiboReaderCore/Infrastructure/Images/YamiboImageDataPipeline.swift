@@ -5,23 +5,23 @@ public protocol YamiboOrdinaryImageCacheClearing: Sendable {
     func removeAllCachedData() async
 }
 
-public final class YamiboImageDataPipeline: YamiboOrdinaryImageCacheClearing, @unchecked Sendable {
-    public static let shared = YamiboImageDataPipeline()
-    public static let defaultDataCacheLimitBytes = 512 * 1024 * 1024
-    public static let defaultDataCacheName = "com.arkalin.YamiboReader.OrdinaryImageDataCache"
+final class YamiboImageDataPipeline: YamiboOrdinaryImageCacheClearing, @unchecked Sendable {
+    static let shared = YamiboImageDataPipeline()
+    static let defaultDataCacheLimitBytes = 512 * 1024 * 1024
+    static let defaultDataCacheName = "com.arkalin.YamiboReader.OrdinaryImageDataCache"
 
     private let pipeline: ImagePipeline
     private let dataCache: DataCache
 
-    public var dataCacheLimitBytes: Int {
+    var dataCacheLimitBytes: Int {
         dataCache.sizeLimit
     }
 
-    public var usesURLCacheDiskStorage: Bool {
+    var usesURLCacheDiskStorage: Bool {
         false
     }
 
-    public convenience init(
+    convenience init(
         dataCacheName: String = YamiboImageDataPipeline.defaultDataCacheName,
         dataCacheLimitBytes: Int = YamiboImageDataPipeline.defaultDataCacheLimitBytes
     ) {
@@ -34,7 +34,7 @@ public final class YamiboImageDataPipeline: YamiboOrdinaryImageCacheClearing, @u
         self.init(dataCache: dataCache, dataCacheLimitBytes: dataCacheLimitBytes)
     }
 
-    public convenience init(
+    convenience init(
         dataCacheDirectory: URL,
         dataCacheLimitBytes: Int = YamiboImageDataPipeline.defaultDataCacheLimitBytes
     ) throws {
@@ -59,7 +59,7 @@ public final class YamiboImageDataPipeline: YamiboOrdinaryImageCacheClearing, @u
         )
     }
 
-    public func data(
+    func data(
         for source: YamiboImageSource,
         client: YamiboClient
     ) async throws -> Data {
@@ -71,11 +71,11 @@ public final class YamiboImageDataPipeline: YamiboOrdinaryImageCacheClearing, @u
         }
     }
 
-    public func cachedData(for source: YamiboImageSource) -> Data? {
+    func cachedData(for source: YamiboImageSource) -> Data? {
         pipeline.cache.cachedData(for: nukeRequest(for: source, client: nil))
     }
 
-    public func removeAllCachedData() {
+    func removeAllCachedData() {
         pipeline.cache.removeAll()
     }
 

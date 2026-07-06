@@ -31,15 +31,15 @@ public protocol YamiboCheckInServicing: Sendable {
     func checkInIfNeeded(force: Bool) async -> YamiboCheckInResult
 }
 
-public struct YamiboCheckInService: YamiboCheckInServicing, Sendable {
-    public static let checkInPageURL = YamiboDomain.url(forSitePath: "plugin.php?id=zqlj_sign&mobile=2")!
+struct YamiboCheckInService: YamiboCheckInServicing, Sendable {
+    static let checkInPageURL = YamiboDomain.url(forSitePath: "plugin.php?id=zqlj_sign&mobile=2")!
 
     private let sessionStore: SessionStore
     private let checkInStore: YamiboCheckInStore
     private let session: URLSession
     private let verificationDelayNanoseconds: UInt64
 
-    public init(
+    init(
         sessionStore: SessionStore,
         checkInStore: YamiboCheckInStore,
         session: URLSession = YamiboNetworkConfiguration.makeSession(),
@@ -51,7 +51,7 @@ public struct YamiboCheckInService: YamiboCheckInServicing, Sendable {
         self.verificationDelayNanoseconds = verificationDelayNanoseconds
     }
 
-    public func checkInIfNeeded(force: Bool = false) async -> YamiboCheckInResult {
+    func checkInIfNeeded(force: Bool = false) async -> YamiboCheckInResult {
         let sessionState = await sessionStore.load()
         guard sessionState.isLoggedIn, !sessionState.cookie.isEmpty else {
             return .notAuthenticated

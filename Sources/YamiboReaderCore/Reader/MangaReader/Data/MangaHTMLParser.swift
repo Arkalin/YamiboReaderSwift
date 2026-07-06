@@ -1,16 +1,16 @@
 import Foundation
 
-public enum MangaHTMLParser {
-    public static func findTagIDs(in html: String) -> [String] {
+enum MangaHTMLParser {
+    static func findTagIDs(in html: String) -> [String] {
         let matches = HTMLTextExtractor.matches(pattern: #"href=["'][^"']*mod=tag[^"']*id=(\d+)[^"']*["']"#, in: html)
         return Array(Set(matches.compactMap { $0.dropFirst().first })).sorted()
     }
 
-    public static func extractSearchID(from html: String) -> String? {
+    static func extractSearchID(from html: String) -> String? {
         HTMLTextExtractor.firstMatch(pattern: #"searchid=(\d+)"#, in: html)?.dropFirst().first
     }
 
-    public static func extractTotalPages(from html: String) -> Int {
+    static func extractTotalPages(from html: String) -> Int {
         let optionValues = HTMLTextExtractor.matches(pattern: #"<option[^>]*value=["'](\d+)["']"#, in: html)
             .compactMap { Int($0.dropFirst().first ?? "") }
         if let max = optionValues.max() {
@@ -30,7 +30,7 @@ public enum MangaHTMLParser {
         return linkedPages.max() ?? 1
     }
 
-    public static func findTagIDsMobile(in html: String) -> [String] {
+    static func findTagIDsMobile(in html: String) -> [String] {
         guard let document = try? KannaSoup.parse(html) else { return [] }
         return Array(Set(document.selectAll("a[href*='mod=tag']").compactMap { element in
             let href = (try? element.attr("href")) ?? ""
@@ -39,7 +39,7 @@ public enum MangaHTMLParser {
         .sorted()
     }
 
-    public static func extractSamePageLinks(
+    static func extractSamePageLinks(
         from html: String,
         baseURL: URL = YamiboDomain.baseURL
     ) -> [MangaChapter] {
@@ -64,7 +64,7 @@ public enum MangaHTMLParser {
         }
     }
 
-    public static func extractFirstPostID(from html: String) -> String? {
+    static func extractFirstPostID(from html: String) -> String? {
         guard let document = try? KannaSoup.parse(html) else { return nil }
         let selectors = [
             "[id^=postmessage_]",
@@ -84,7 +84,7 @@ public enum MangaHTMLParser {
         return nil
     }
 
-    public static func extractSectionName(from html: String) -> String? {
+    static func extractSectionName(from html: String) -> String? {
         guard let document = try? KannaSoup.parse(html) else { return nil }
         return document.firstText(anyOf: [
             ".header h2 a",
@@ -93,19 +93,19 @@ public enum MangaHTMLParser {
         ])
     }
 
-    public static func isAllowedMangaSection(_ sectionName: String?) -> Bool {
+    static func isAllowedMangaSection(_ sectionName: String?) -> Bool {
         guard let sectionName, !sectionName.isEmpty else { return false }
         let allowed = ["中文百合漫画区", "貼圖區", "贴图区", "原创图作区", "百合漫画图源区"]
         return allowed.contains(where: { sectionName.contains($0) })
     }
 
-    public static func isAnnouncement(from html: String) -> Bool {
+    static func isAnnouncement(from html: String) -> Bool {
         guard let document = try? KannaSoup.parse(html) else { return false }
         let label = (try? document.select(".view_tit em").text()) ?? ""
         return label.contains("公告")
     }
 
-    public static func extractImageURLs(from html: String, baseURL: URL = YamiboDomain.baseURL) -> [URL] {
+    static func extractImageURLs(from html: String, baseURL: URL = YamiboDomain.baseURL) -> [URL] {
         guard let document = try? KannaSoup.parse(html) else { return [] }
         let images = (try? document.select(".img_one img, .message img:not([src*='smiley'])")) ?? Elements()
         var urls: [URL] = []
@@ -120,7 +120,7 @@ public enum MangaHTMLParser {
         return urls
     }
 
-    public static func extractThreadTitle(from html: String) -> String? {
+    static func extractThreadTitle(from html: String) -> String? {
         if let title = YamiboHTMLPageInspector.pageTitle(from: html), !title.isEmpty {
             return title
         }
@@ -129,7 +129,7 @@ public enum MangaHTMLParser {
         return text.nilIfBlank
     }
 
-    public static func isLoginPage(_ html: String) -> Bool {
+    static func isLoginPage(_ html: String) -> Bool {
         let markers = [
             "请先登录",
             "登录后",
@@ -141,7 +141,7 @@ public enum MangaHTMLParser {
         return markers.contains { html.localizedCaseInsensitiveContains($0) }
     }
 
-    public static func isLikelyMangaThread(title: String?, html: String) -> Bool {
+    static func isLikelyMangaThread(title: String?, html: String) -> Bool {
         if isLoginPage(html) || isFloodControlOrError(html) || isAnnouncement(from: html) {
             return false
         }
@@ -159,18 +159,18 @@ public enum MangaHTMLParser {
             || !findTagIDsMobile(in: html).isEmpty
     }
 
-    public static func isFloodControlOrError(_ html: String) -> Bool {
+    static func isFloodControlOrError(_ html: String) -> Bool {
         guard !html.contains("没有找到匹配结果") else { return false }
         return html.contains("只能进行一次搜索")
             || html.contains("防灌水")
             || html.contains("指定的搜索词长度")
     }
 
-    public static func parseListHTML(_ html: String, groupIndex: Int = 0) -> [MangaChapter] {
+    static func parseListHTML(_ html: String, groupIndex: Int = 0) -> [MangaChapter] {
         parsePCList(html, groupIndex: groupIndex) + parseMobileSearchList(html, groupIndex: groupIndex)
     }
 
-    public static func parseTagThreadListHTML(
+    static func parseTagThreadListHTML(
         _ html: String,
         groupIndex: Int = 0,
         allowedForumIDs: Set<String> = ["30"]

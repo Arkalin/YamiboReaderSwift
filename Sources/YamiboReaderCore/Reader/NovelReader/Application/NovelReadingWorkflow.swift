@@ -1,6 +1,6 @@
 import Foundation
 
-public protocol NovelReadingPageRepository: Sendable {
+package protocol NovelReadingPageRepository: Sendable {
     func loadPage(_ request: NovelPageRequest) async throws -> NovelReaderProjection
     func loadPageIgnoringCache(_ request: NovelPageRequest) async throws -> NovelReaderProjection
     func loadPageResult(_ request: NovelPageRequest) async throws -> NovelReaderProjectionLoad
@@ -18,7 +18,7 @@ public protocol NovelReadingPageRepository: Sendable {
     ) async throws
 }
 
-public extension NovelReadingPageRepository {
+extension NovelReadingPageRepository {
     func loadPageResult(_ request: NovelPageRequest) async throws -> NovelReaderProjectionLoad {
         NovelReaderProjectionLoad(projection: try await loadPage(request), source: .online)
     }

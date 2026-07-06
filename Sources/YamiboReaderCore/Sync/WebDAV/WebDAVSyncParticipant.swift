@@ -2,11 +2,11 @@ import Foundation
 
 /// Coordination metadata the sync flow needs from a remote payload without
 /// understanding the payload's domain content.
-public struct WebDAVRemotePayloadInfo: Sendable {
-    public var updatedAt: Date
-    public var accountUID: String?
+struct WebDAVRemotePayloadInfo: Sendable {
+    var updatedAt: Date
+    var accountUID: String?
 
-    public init(updatedAt: Date, accountUID: String? = nil) {
+    init(updatedAt: Date, accountUID: String? = nil) {
         self.updatedAt = updatedAt
         self.accountUID = accountUID
     }
@@ -15,7 +15,7 @@ public struct WebDAVRemotePayloadInfo: Sendable {
 /// One synchronizable dataset. Feature modules implement this protocol and own
 /// their payload formats and merge semantics; the Sync module only orchestrates
 /// upload/download/conflict decisions over opaque payload data.
-public protocol WebDAVSyncParticipant: Sendable {
+protocol WebDAVSyncParticipant: Sendable {
     /// Stable identifier used for dirty tracking and fingerprint bookkeeping.
     var datasetID: String { get }
 
@@ -45,7 +45,7 @@ public protocol WebDAVSyncParticipant: Sendable {
     func localFingerprint() async -> String?
 }
 
-public extension WebDAVSyncParticipant {
+extension WebDAVSyncParticipant {
     var uploadsOnlyWhenMarkedDirty: Bool { false }
 
     func localFingerprint() async -> String? { nil }

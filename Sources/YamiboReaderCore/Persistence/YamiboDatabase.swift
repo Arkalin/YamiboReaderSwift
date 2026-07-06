@@ -3,9 +3,9 @@ import Foundation
 
 /// Owns the shared `yamibo.sqlite` pool: path resolution, pool configuration, and
 /// aggregation of the feature schema modules that own the actual tables.
-public enum YamiboDatabase {
-    public static let databaseFileName = "yamibo.sqlite"
-    public static let cacheDirectoryName = "yamibo_cache"
+enum YamiboDatabase {
+    static let databaseFileName = "yamibo.sqlite"
+    static let cacheDirectoryName = "yamibo_cache"
 
     /// Every feature module owning tables in `yamibo.sqlite`.
     private static let schemaModules: [any DatabaseSchemaModule.Type] = [
@@ -14,23 +14,23 @@ public enum YamiboDatabase {
         ReaderDatabaseSchema.self,
     ]
 
-    public static func defaultRootDirectory(fileManager: FileManager = .default) -> URL {
+    static func defaultRootDirectory(fileManager: FileManager = .default) -> URL {
         fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
             .appendingPathComponent("YamiboReader", isDirectory: true)
             ?? URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("YamiboReader", isDirectory: true)
     }
 
-    public static func databaseURL(rootDirectory: URL? = nil, fileManager: FileManager = .default) -> URL {
+    static func databaseURL(rootDirectory: URL? = nil, fileManager: FileManager = .default) -> URL {
         (rootDirectory ?? defaultRootDirectory(fileManager: fileManager))
             .appendingPathComponent(databaseFileName, isDirectory: false)
     }
 
-    public static func cacheDirectoryURL(rootDirectory: URL? = nil, fileManager: FileManager = .default) -> URL {
+    static func cacheDirectoryURL(rootDirectory: URL? = nil, fileManager: FileManager = .default) -> URL {
         (rootDirectory ?? defaultRootDirectory(fileManager: fileManager))
             .appendingPathComponent(cacheDirectoryName, isDirectory: true)
     }
 
-    public static func openPool(
+    static func openPool(
         rootDirectory: URL? = nil,
         fileManager: FileManager = .default
     ) throws -> DatabasePool {
@@ -50,7 +50,7 @@ public enum YamiboDatabase {
         return pool
     }
 
-    public static func migrate(_ writer: any DatabaseWriter) throws {
+    static func migrate(_ writer: any DatabaseWriter) throws {
         var migrator = DatabaseMigrator()
         // Pre-release app: a schema change rebuilds the local database instead of migrating it.
         migrator.eraseDatabaseOnSchemaChange = true
@@ -60,7 +60,7 @@ public enum YamiboDatabase {
         try migrator.migrate(writer)
     }
 
-    public static func reset(
+    static func reset(
         writer: any DatabaseWriter,
         rootDirectory: URL,
         fileManager: FileManager = .default

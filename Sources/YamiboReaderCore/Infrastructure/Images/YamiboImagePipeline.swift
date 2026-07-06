@@ -15,7 +15,14 @@ public final class YamiboImagePipeline: @unchecked Sendable {
     private let offlineImagesLock = NSLock()
     private nonisolated(unsafe) var offlineImagesStorage: (any YamiboOfflineImageDataProviding)?
 
-    public init(
+    /// The narrow public entry point. The designated initializer with an
+    /// injectable engine and session store is internal; tests reach it via
+    /// `@testable import`.
+    public convenience init(offlineImages: (any YamiboOfflineImageDataProviding)? = nil) {
+        self.init(engine: .shared, offlineImages: offlineImages)
+    }
+
+    init(
         engine: YamiboImageDataPipeline = .shared,
         sessionStore: any SessionStoring = SessionStore(),
         imageSession: URLSession = YamiboNetworkConfiguration.makeImageSession(),

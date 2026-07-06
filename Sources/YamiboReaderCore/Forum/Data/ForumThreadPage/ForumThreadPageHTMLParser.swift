@@ -7,8 +7,8 @@ import Foundation
 /// part parsers (`ForumThreadPostsParser`, `ForumThreadPollParser`,
 /// `ForumThreadRatingParser`, `ForumThreadPageMetadataParser`, ...), and surfaces
 /// server-side error messages as `YamiboError`.
-public enum ForumThreadPageHTMLParser {
-    public static func parsePage(
+enum ForumThreadPageHTMLParser {
+    static func parsePage(
         from html: String,
         thread: ThreadIdentity,
         fallbackTitle: String?
@@ -38,7 +38,7 @@ public enum ForumThreadPageHTMLParser {
         )
     }
 
-    public static func parseRatingResults(from html: String) throws -> ForumThreadRatingResultsPage {
+    static func parseRatingResults(from html: String) throws -> ForumThreadRatingResultsPage {
         try YamiboHTMLPageInspector.ensureReadable(html)
 
         let body = extractCData(from: html) ?? html
@@ -55,7 +55,7 @@ public enum ForumThreadPageHTMLParser {
         )
     }
 
-    public static func parseRateOptions(from html: String) throws -> ForumThreadRateOptionsPage {
+    static func parseRateOptions(from html: String) throws -> ForumThreadRateOptionsPage {
         try YamiboHTMLPageInspector.ensureReadable(html)
 
         let body = extractCData(from: html) ?? html
@@ -68,7 +68,7 @@ public enum ForumThreadPageHTMLParser {
         return page
     }
 
-    public static func parsePollVoters(
+    static func parsePollVoters(
         from html: String,
         threadID: String,
         requestedOptionID: String? = nil
@@ -99,7 +99,7 @@ public enum ForumThreadPageHTMLParser {
         )
     }
 
-    public static func parseThreadActionResult(
+    static func parseThreadActionResult(
         from html: String,
         context: String = L10n.string("context.thread_page")
     ) throws -> String {

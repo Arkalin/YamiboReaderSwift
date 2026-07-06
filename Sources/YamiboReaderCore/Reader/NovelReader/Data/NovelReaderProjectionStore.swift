@@ -8,7 +8,7 @@ public actor NovelReaderProjectionStore {
     private nonisolated(unsafe) let fileManager: FileManager
     private let memoryCache = NSCache<NSString, CacheBox>()
 
-    public init(
+    init(
         databasePool: DatabasePool? = nil,
         fileManager: FileManager = .default,
         rootDirectory: URL? = nil,
