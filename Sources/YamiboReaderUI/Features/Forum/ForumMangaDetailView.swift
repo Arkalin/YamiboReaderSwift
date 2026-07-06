@@ -83,9 +83,9 @@ private struct ForumMangaDetailBodyView: View {
                             .id(chapter.tid)
                         }
                     } else if isLoading {
-                        ForumThreadReaderLoadingView()
+                        ForumContentLoadingView()
                     } else if let errorMessage {
-                        ForumThreadReaderErrorView(message: errorMessage, retry: retry)
+                        ForumContentErrorView(message: errorMessage, retry: retry)
                     }
                 }
                 .padding(.horizontal, 16)
@@ -96,6 +96,10 @@ private struct ForumMangaDetailBodyView: View {
                       directory?.chapters.contains(where: { $0.tid == focusedChapterTID }) == true else {
                     return
                 }
+                // SwiftUI offers no layout-completion callback for freshly loaded
+                // LazyVStack content; scrolling immediately targets estimated row
+                // positions and lands off-target. The 150ms settle delay is an
+                // empirical workaround, not a synchronization mechanism.
                 try? await Task.sleep(nanoseconds: 150_000_000)
                 withAnimation(.snappy) {
                     proxy.scrollTo(focusedChapterTID, anchor: .center)

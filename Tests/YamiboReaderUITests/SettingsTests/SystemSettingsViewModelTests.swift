@@ -1,5 +1,6 @@
 import XCTest
 @testable import YamiboReaderCore
+import YamiboReaderTestSupport
 @testable import YamiboReaderUI
 
 @MainActor
@@ -10,9 +11,9 @@ final class SystemSettingsViewModelTests: XCTestCase {
             isEnabled: true,
             behavior: .doubleTapNextSqueezePrevious
         )
-        try await fixture.settingsStore.save(AppSettings(applePencilPageTurn: savedSettings))
+        try await fixture.settingsStore.save(AppSettings(system: SystemSettings(applePencilPageTurn: savedSettings)))
 
-        let viewModel = SystemSettingsViewModel(appContext: fixture.appContext)
+        let viewModel = SystemSettingsViewModel(dependencies: fixture.appContext.settingsDependencies)
         await viewModel.load()
 
         XCTAssertEqual(viewModel.applePencilPageTurn, savedSettings)
@@ -26,7 +27,7 @@ final class SystemSettingsViewModelTests: XCTestCase {
         )
         try await fixture.settingsStore.save(AppSettings(novelOfflineCache: savedSettings))
 
-        let viewModel = SystemSettingsViewModel(appContext: fixture.appContext)
+        let viewModel = SystemSettingsViewModel(dependencies: fixture.appContext.settingsDependencies)
         await viewModel.load()
 
         XCTAssertEqual(viewModel.novelOfflineCache, savedSettings)
@@ -42,9 +43,9 @@ final class SystemSettingsViewModelTests: XCTestCase {
             offsetY: -0.3,
             blurRadius: 11
         )
-        try await fixture.settingsStore.save(AppSettings(favoriteBackground: savedSettings))
+        try await fixture.settingsStore.save(AppSettings(favorites: FavoriteLibrarySettings(background: savedSettings)))
 
-        let viewModel = SystemSettingsViewModel(appContext: fixture.appContext)
+        let viewModel = SystemSettingsViewModel(dependencies: fixture.appContext.settingsDependencies)
         await viewModel.load()
 
         XCTAssertEqual(viewModel.favoriteBackground, savedSettings)
@@ -52,14 +53,14 @@ final class SystemSettingsViewModelTests: XCTestCase {
 
     func testFavoriteLibraryDisplaySettingsLoadAndPersist() async throws {
         let fixture = try makeFixture()
-        try await fixture.settingsStore.save(AppSettings(
-            favoriteLayoutMode: .staggered,
-            favoriteSortOrder: .displayTitle,
-            favoriteSortDescending: true,
-            favoriteShowsCategoryCounts: false
-        ))
+        try await fixture.settingsStore.save(AppSettings(favorites: FavoriteLibrarySettings(
+            layoutMode: .staggered,
+            sortOrder: .displayTitle,
+            sortDescending: true,
+            showsCategoryCounts: false
+        )))
 
-        let viewModel = SystemSettingsViewModel(appContext: fixture.appContext)
+        let viewModel = SystemSettingsViewModel(dependencies: fixture.appContext.settingsDependencies)
         await viewModel.load()
 
         XCTAssertEqual(viewModel.favoriteLayoutMode, .staggered)
@@ -74,10 +75,10 @@ final class SystemSettingsViewModelTests: XCTestCase {
 
         try await waitFor {
             let loaded = await fixture.settingsStore.load()
-            return loaded.favoriteLayoutMode == .fixedGrid
-                && loaded.favoriteSortOrder == .lastReadAt
-                && !loaded.favoriteSortDescending
-                && loaded.favoriteShowsCategoryCounts
+            return loaded.favorites.layoutMode == .fixedGrid
+                && loaded.favorites.sortOrder == .lastReadAt
+                && !loaded.favorites.sortDescending
+                && loaded.favorites.showsCategoryCounts
         }
         XCTAssertEqual(viewModel.favoriteLayoutMode, .fixedGrid)
         XCTAssertEqual(viewModel.favoriteSortOrder, .lastReadAt)
@@ -87,7 +88,7 @@ final class SystemSettingsViewModelTests: XCTestCase {
 
     func testApplyFavoriteBackgroundPersistsImageAndSettings() async throws {
         let fixture = try makeFixture()
-        let viewModel = SystemSettingsViewModel(appContext: fixture.appContext)
+        let viewModel = SystemSettingsViewModel(dependencies: fixture.appContext.settingsDependencies)
         await viewModel.load()
         let imageData = Data(repeating: 6, count: 128)
         let draftSettings = FavoriteBackgroundSettings(
@@ -105,15 +106,15 @@ final class SystemSettingsViewModelTests: XCTestCase {
 
         XCTAssertTrue(didApply)
         let loaded = await fixture.settingsStore.load()
-        let imageID = try XCTUnwrap(loaded.favoriteBackground.imageID)
-        XCTAssertTrue(loaded.favoriteBackground.isEnabled)
-        XCTAssertEqual(loaded.favoriteBackground.scale, 2)
-        XCTAssertEqual(loaded.favoriteBackground.offsetX, 0.5)
-        XCTAssertEqual(loaded.favoriteBackground.offsetY, -0.25)
-        XCTAssertEqual(loaded.favoriteBackground.blurRadius, 14)
+        let imageID = try XCTUnwrap(loaded.favorites.background.imageID)
+        XCTAssertTrue(loaded.favorites.background.isEnabled)
+        XCTAssertEqual(loaded.favorites.background.scale, 2)
+        XCTAssertEqual(loaded.favorites.background.offsetX, 0.5)
+        XCTAssertEqual(loaded.favorites.background.offsetY, -0.25)
+        XCTAssertEqual(loaded.favorites.background.blurRadius, 14)
         let savedImageData = await fixture.favoriteBackgroundImageStore.loadData(imageID: imageID)
         XCTAssertEqual(savedImageData, imageData)
-        XCTAssertEqual(viewModel.favoriteBackground, loaded.favoriteBackground)
+        XCTAssertEqual(viewModel.favoriteBackground, loaded.favorites.background)
     }
 
     func testRestoreDefaultFavoriteBackgroundClearsImageAndSettings() async throws {
@@ -121,17 +122,17 @@ final class SystemSettingsViewModelTests: XCTestCase {
         let imageID = "background"
         try await fixture.favoriteBackgroundImageStore.save(Data(repeating: 7, count: 96), imageID: imageID)
         try await fixture.settingsStore.save(AppSettings(
-            favoriteBackground: FavoriteBackgroundSettings(isEnabled: true, imageID: imageID)
+            favorites: FavoriteLibrarySettings(background: FavoriteBackgroundSettings(isEnabled: true, imageID: imageID))
         ))
 
-        let viewModel = SystemSettingsViewModel(appContext: fixture.appContext)
+        let viewModel = SystemSettingsViewModel(dependencies: fixture.appContext.settingsDependencies)
         await viewModel.load()
         let didRestore = await viewModel.restoreDefaultFavoriteBackground()
 
         XCTAssertTrue(didRestore)
         XCTAssertEqual(viewModel.favoriteBackground, FavoriteBackgroundSettings())
         let loadedSettings = await fixture.settingsStore.load()
-        XCTAssertEqual(loadedSettings.favoriteBackground, FavoriteBackgroundSettings())
+        XCTAssertEqual(loadedSettings.favorites.background, FavoriteBackgroundSettings())
         let savedImageData = await fixture.favoriteBackgroundImageStore.loadData(imageID: imageID)
         XCTAssertNil(savedImageData)
     }
@@ -140,13 +141,13 @@ final class SystemSettingsViewModelTests: XCTestCase {
         let fixture = try makeFixture()
         try await fixture.settingsStore.save(AppSettings())
 
-        let viewModel = SystemSettingsViewModel(appContext: fixture.appContext)
+        let viewModel = SystemSettingsViewModel(dependencies: fixture.appContext.settingsDependencies)
         await viewModel.load()
         viewModel.updateApplePencilPageTurnEnabled(true)
 
         try await waitFor {
             let loaded = await fixture.settingsStore.load()
-            return loaded.applePencilPageTurn.isEnabled
+            return loaded.system.applePencilPageTurn.isEnabled
         }
         XCTAssertTrue(viewModel.applePencilPageTurn.isEnabled)
     }
@@ -155,13 +156,13 @@ final class SystemSettingsViewModelTests: XCTestCase {
         let fixture = try makeFixture()
         try await fixture.settingsStore.save(AppSettings())
 
-        let viewModel = SystemSettingsViewModel(appContext: fixture.appContext)
+        let viewModel = SystemSettingsViewModel(dependencies: fixture.appContext.settingsDependencies)
         await viewModel.load()
         viewModel.updateApplePencilPageTurnBehavior(.doubleTapNextSqueezePrevious)
 
         try await waitFor {
             let loaded = await fixture.settingsStore.load()
-            return loaded.applePencilPageTurn.behavior == .doubleTapNextSqueezePrevious
+            return loaded.system.applePencilPageTurn.behavior == .doubleTapNextSqueezePrevious
         }
         XCTAssertEqual(viewModel.applePencilPageTurn.behavior, .doubleTapNextSqueezePrevious)
     }
@@ -170,7 +171,7 @@ final class SystemSettingsViewModelTests: XCTestCase {
         let fixture = try makeFixture()
         try await fixture.settingsStore.save(AppSettings())
 
-        let viewModel = SystemSettingsViewModel(appContext: fixture.appContext)
+        let viewModel = SystemSettingsViewModel(dependencies: fixture.appContext.settingsDependencies)
         await viewModel.load()
         XCTAssertFalse(viewModel.novelOfflineCache.retainsInlineImages)
         XCTAssertTrue(viewModel.novelOfflineCache.isAutoRefreshEnabled)
@@ -201,13 +202,13 @@ final class SystemSettingsViewModelTests: XCTestCase {
                 retainsInlineImages: true,
                 isAutoRefreshEnabled: false
             ),
-            applePencilPageTurn: ApplePencilPageTurnSettings(
+            system: SystemSettings(applePencilPageTurn: ApplePencilPageTurnSettings(
                 isEnabled: true,
                 behavior: .doubleTapNextSqueezePrevious
-            )
+            ))
         ))
 
-        let viewModel = SystemSettingsViewModel(appContext: fixture.appContext)
+        let viewModel = SystemSettingsViewModel(dependencies: fixture.appContext.settingsDependencies)
         await viewModel.load()
         let didReset = await viewModel.resetApplication()
 
@@ -216,7 +217,7 @@ final class SystemSettingsViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.applePencilPageTurn, ApplePencilPageTurnSettings())
         let loaded = await fixture.settingsStore.load()
         XCTAssertEqual(loaded.novelOfflineCache, NovelOfflineCacheSettings())
-        XCTAssertEqual(loaded.applePencilPageTurn, ApplePencilPageTurnSettings())
+        XCTAssertEqual(loaded.system.applePencilPageTurn, ApplePencilPageTurnSettings())
         XCTAssertEqual(viewModel.favoriteBackground, FavoriteBackgroundSettings())
     }
 
@@ -226,7 +227,7 @@ final class SystemSettingsViewModelTests: XCTestCase {
         try await seedMangaIndexCache(fixture)
         try await seedMangaOfflineCache(fixture)
 
-        let viewModel = SystemSettingsViewModel(appContext: fixture.appContext)
+        let viewModel = SystemSettingsViewModel(dependencies: fixture.appContext.settingsDependencies)
         await viewModel.load()
 
         XCTAssertGreaterThan(viewModel.novelCacheBytes, 0)
@@ -242,7 +243,7 @@ final class SystemSettingsViewModelTests: XCTestCase {
         try await seedMangaIndexCache(fixture)
         try await seedMangaOfflineCache(fixture)
 
-        let viewModel = SystemSettingsViewModel(appContext: fixture.appContext)
+        let viewModel = SystemSettingsViewModel(dependencies: fixture.appContext.settingsDependencies)
         await viewModel.load()
         let novelBytesBeforeClear = await fixture.novelReaderCacheStore.totalDiskUsageBytes()
         let directoryBytesBeforeClear = await fixture.mangaDirectoryStore.totalDiskUsageBytes()
@@ -278,7 +279,7 @@ final class SystemSettingsViewModelTests: XCTestCase {
         let fixture = try makeFixture()
         try await seedMangaIndexCache(fixture)
 
-        let viewModel = SystemSettingsViewModel(appContext: fixture.appContext)
+        let viewModel = SystemSettingsViewModel(dependencies: fixture.appContext.settingsDependencies)
         await viewModel.load()
 
         let didClear = await viewModel.clearMangaIndexCache()
@@ -313,8 +314,8 @@ final class SystemSettingsViewModelTests: XCTestCase {
             imageID: favoriteBackgroundID
         )
         try await fixture.settingsStore.save(AppSettings(
-            favoriteBackground: FavoriteBackgroundSettings(isEnabled: true, imageID: favoriteBackgroundID),
-            homePage: .favorites
+            favorites: FavoriteLibrarySettings(background: FavoriteBackgroundSettings(isEnabled: true, imageID: favoriteBackgroundID)),
+            system: SystemSettings(homePage: .favorites)
         ))
         var favoriteLibrary = FavoriteLibraryDocument()
         favoriteLibrary.addItem(try FavoriteItem(
@@ -324,7 +325,7 @@ final class SystemSettingsViewModelTests: XCTestCase {
         ))
         try await fixture.appContext.localFavoriteLibraryStore.save(favoriteLibrary)
 
-        let viewModel = SystemSettingsViewModel(appContext: fixture.appContext)
+        let viewModel = SystemSettingsViewModel(dependencies: fixture.appContext.settingsDependencies)
         await viewModel.load()
         let novelBytesBeforeClear = await fixture.novelReaderCacheStore.totalDiskUsageBytes()
         let directoryBytesBeforeClear = await fixture.mangaDirectoryStore.totalDiskUsageBytes()
@@ -352,8 +353,8 @@ final class SystemSettingsViewModelTests: XCTestCase {
         XCTAssertNotNil(offlineMembershipAfterClear)
         XCTAssertNotNil(offlineWorkAfterClear)
         XCTAssertEqual(favoriteBackgroundDataAfterClear, Data(repeating: 5, count: 128))
-        XCTAssertEqual(settingsAfterClear.homePage, .favorites)
-        XCTAssertEqual(settingsAfterClear.favoriteBackground.imageID, favoriteBackgroundID)
+        XCTAssertEqual(settingsAfterClear.system.homePage, .favorites)
+        XCTAssertEqual(settingsAfterClear.favorites.background.imageID, favoriteBackgroundID)
         XCTAssertEqual(favoriteLibraryAfterClear, favoriteLibrary)
         XCTAssertEqual(viewModel.novelCacheBytes, novelBytesBeforeClear)
         XCTAssertEqual(viewModel.mangaIndexCacheBytes, indexBytesBeforeClear)
@@ -382,7 +383,7 @@ final class SystemSettingsViewModelTests: XCTestCase {
             try makeNovelOfflineCacheEntry(ownerTitle: "小说A", tid: "410", view: 1)
         )
 
-        let viewModel = SystemSettingsViewModel(appContext: fixture.appContext)
+        let viewModel = SystemSettingsViewModel(dependencies: fixture.appContext.settingsDependencies)
         await viewModel.refreshOfflineCacheManagement()
 
         let groupsByID = Dictionary(
@@ -405,7 +406,7 @@ final class SystemSettingsViewModelTests: XCTestCase {
 
     func testOfflineCacheManagementEmptyStateWhenNoMembershipOrWorkExists() async throws {
         let fixture = try makeFixture()
-        let viewModel = SystemSettingsViewModel(appContext: fixture.appContext)
+        let viewModel = SystemSettingsViewModel(dependencies: fixture.appContext.settingsDependencies)
 
         await viewModel.refreshOfflineCacheManagement()
 
@@ -420,7 +421,7 @@ final class SystemSettingsViewModelTests: XCTestCase {
         try await fixture.offlineCacheStore.saveMangaOfflineCacheMembership(
             try makeMangaOfflineMembership(ownerName: "作品A", tid: "310", imageURLs: [imageURL])
         )
-        let viewModel = SystemSettingsViewModel(appContext: fixture.appContext)
+        let viewModel = SystemSettingsViewModel(dependencies: fixture.appContext.settingsDependencies)
         await viewModel.refreshOfflineCacheManagement()
 
         viewModel.requestOfflineCacheGroupDeletion(id: mangaOfflineGroupID("作品A"))
@@ -443,7 +444,7 @@ final class SystemSettingsViewModelTests: XCTestCase {
         try await fixture.offlineCacheStore.saveMangaOfflineCacheMembership(
             try makeMangaOfflineMembership(ownerName: "作品B", tid: "320", imageURLs: [secondImage])
         )
-        let viewModel = SystemSettingsViewModel(appContext: fixture.appContext)
+        let viewModel = SystemSettingsViewModel(dependencies: fixture.appContext.settingsDependencies)
         await viewModel.refreshOfflineCacheManagement()
 
         viewModel.setOfflineCacheManagementSelectionMode(true)
@@ -461,7 +462,7 @@ final class SystemSettingsViewModelTests: XCTestCase {
         try await fixture.offlineCacheStore.saveMangaOfflineCacheMembership(
             try makeMangaOfflineMembership(ownerName: "作品A", tid: "310", imageURLs: [imageURL])
         )
-        let viewModel = SystemSettingsViewModel(appContext: fixture.appContext)
+        let viewModel = SystemSettingsViewModel(dependencies: fixture.appContext.settingsDependencies)
         await viewModel.refreshOfflineCacheManagement()
 
         viewModel.setOfflineCacheManagementSelectionMode(true)
@@ -507,7 +508,7 @@ final class SystemSettingsViewModelTests: XCTestCase {
             completedImageURLs: [workImage],
             currentBytesPerSecond: nil
         )
-        let viewModel = SystemSettingsViewModel(appContext: fixture.appContext)
+        let viewModel = SystemSettingsViewModel(dependencies: fixture.appContext.settingsDependencies)
         await viewModel.refreshOfflineCacheManagement()
 
         viewModel.requestOfflineCacheGroupDeletion(id: mangaOfflineGroupID("作品A"))
@@ -542,7 +543,7 @@ final class SystemSettingsViewModelTests: XCTestCase {
         try await fixture.offlineCacheStore.saveMangaOfflineCacheMembership(
             try makeMangaOfflineMembership(ownerName: "作品A", tid: "311", imageURLs: [secondImage])
         )
-        let viewModel = SystemSettingsViewModel(appContext: fixture.appContext)
+        let viewModel = SystemSettingsViewModel(dependencies: fixture.appContext.settingsDependencies)
         await viewModel.refreshOfflineCacheManagement()
 
         viewModel.requestOfflineCacheEntryDeletion(id: mangaOfflineEntryID(ownerName: "作品A", tid: "310"))
@@ -577,7 +578,7 @@ final class SystemSettingsViewModelTests: XCTestCase {
         let secondEntryID = try novelOfflineEntryID(tid: "410", view: 2)
         let firstGroupID = firstEntryID.groupID
         let otherGroupID = try novelOfflineEntryID(ownerTitle: "小说B", tid: "420", view: 1).groupID
-        let viewModel = SystemSettingsViewModel(appContext: fixture.appContext)
+        let viewModel = SystemSettingsViewModel(dependencies: fixture.appContext.settingsDependencies)
         await viewModel.refreshOfflineCacheManagement()
 
         viewModel.requestOfflineCacheEntryDeletion(id: firstEntryID)
@@ -608,7 +609,7 @@ final class SystemSettingsViewModelTests: XCTestCase {
         try await fixture.offlineCacheStore.saveMangaOfflineCacheMembership(
             try makeMangaOfflineMembership(ownerName: "作品A", tid: "310", imageURLs: [imageURL])
         )
-        let viewModel = SystemSettingsViewModel(appContext: fixture.appContext)
+        let viewModel = SystemSettingsViewModel(dependencies: fixture.appContext.settingsDependencies)
         await viewModel.refreshOfflineCacheManagement()
 
         viewModel.requestOfflineCacheGroupDeletion(id: mangaOfflineGroupID("作品A"))
@@ -632,7 +633,7 @@ final class SystemSettingsViewModelTests: XCTestCase {
         )
         let directoryBytesBeforeClear = await fixture.mangaDirectoryStore.totalDiskUsageBytes()
         let projectionBytesBeforeClear = await fixture.mangaReaderProjectionStore.totalDiskUsageBytes()
-        let viewModel = SystemSettingsViewModel(appContext: fixture.appContext)
+        let viewModel = SystemSettingsViewModel(dependencies: fixture.appContext.settingsDependencies)
         await viewModel.refreshOfflineCacheManagement()
 
         viewModel.requestOfflineCacheGroupDeletion(id: mangaOfflineGroupID("作品A"))
@@ -652,7 +653,7 @@ final class SystemSettingsViewModelTests: XCTestCase {
         try await seedMangaIndexCache(fixture)
         try await seedMangaOfflineCache(fixture)
 
-        let viewModel = SystemSettingsViewModel(appContext: fixture.appContext)
+        let viewModel = SystemSettingsViewModel(dependencies: fixture.appContext.settingsDependencies)
         await viewModel.load()
         XCTAssertGreaterThan(viewModel.novelCacheBytes, 0)
         XCTAssertGreaterThan(viewModel.mangaIndexCacheBytes, 0)

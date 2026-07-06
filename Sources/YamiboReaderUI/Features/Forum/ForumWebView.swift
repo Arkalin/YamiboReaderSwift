@@ -7,17 +7,17 @@ import UIKit
 
 public struct IOSForumWebView: UIViewRepresentable {
     public let model: ForumBrowserModel
-    public let appContext: YamiboAppContext
+    public let sessionStore: SessionStore
     public let isSelected: Bool
 
-    public init(model: ForumBrowserModel, appContext: YamiboAppContext, isSelected: Bool = true) {
+    public init(model: ForumBrowserModel, sessionStore: SessionStore, isSelected: Bool = true) {
         self.model = model
-        self.appContext = appContext
+        self.sessionStore = sessionStore
         self.isSelected = isSelected
     }
 
     public func makeCoordinator() -> Coordinator {
-        Coordinator(model: model, appContext: appContext)
+        Coordinator(model: model, sessionStore: sessionStore)
     }
 
     public func makeUIView(context: Context) -> WKWebView {
@@ -46,16 +46,16 @@ public struct IOSForumWebView: UIViewRepresentable {
 
     public final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate {
         private let model: ForumBrowserModel
-        private let appContext: YamiboAppContext
+        private let sessionStore: SessionStore
         private weak var webView: WKWebView?
         private var didPrepareInitialLoad = false
         private var didApplyAppearance = false
         private var sessionObservationTask: Task<Void, Never>?
         private var sessionSyncState = ForumWebSessionSyncState()
 
-        init(model: ForumBrowserModel, appContext: YamiboAppContext) {
+        init(model: ForumBrowserModel, sessionStore: SessionStore) {
             self.model = model
-            self.appContext = appContext
+            self.sessionStore = sessionStore
         }
 
         deinit {
@@ -72,10 +72,10 @@ public struct IOSForumWebView: UIViewRepresentable {
 
             Task { @MainActor [weak self, weak webView] in
                 guard let self, let webView else { return }
-                let sessionState = await appContext.sessionStore.load()
+                let sessionState = await sessionStore.load()
                 await synchronizeWebViewSession(sessionState, reloadIfNeeded: false)
                 if webView.url == nil {
-                    model.load(model.currentURL ?? YamiboRoute.baseURL)
+                    model.load(model.currentURL ?? YamiboDomain.baseURL)
                 }
             }
         }
@@ -96,7 +96,7 @@ public struct IOSForumWebView: UIViewRepresentable {
         func synchronizeCurrentSession(reloadIfNeeded: Bool) {
             Task { @MainActor [weak self] in
                 guard let self else { return }
-                let sessionState = await appContext.sessionStore.load()
+                let sessionState = await sessionStore.load()
                 await synchronizeWebViewSession(sessionState, reloadIfNeeded: reloadIfNeeded)
             }
         }
@@ -166,8 +166,7 @@ public struct IOSForumWebView: UIViewRepresentable {
         }
 
         private func isInternal(_ url: URL) -> Bool {
-            guard let host = url.host?.lowercased() else { return false }
-            return host == "bbs.yamibo.com" || host.hasSuffix(".yamibo.com")
+            YamiboDomain.isYamiboHost(url)
         }
 
         private func startObservingSessionChanges() {
@@ -178,11 +177,11 @@ public struct IOSForumWebView: UIViewRepresentable {
                     guard !Task.isCancelled else { return }
                     guard let self else { return }
                     guard let changeID = notification.userInfo?[SessionStore.changeIDUserInfoKey] as? String,
-                          changeID == appContext.sessionStore.changeID else {
+                          changeID == sessionStore.changeID else {
                         continue
                     }
 
-                    let sessionState = await appContext.sessionStore.load()
+                    let sessionState = await sessionStore.load()
                     await synchronizeWebViewSession(sessionState, reloadIfNeeded: true)
                 }
             }
@@ -216,7 +215,7 @@ public struct IOSForumWebView: UIViewRepresentable {
         @MainActor
         private func reloadOrLoad(_ webView: WKWebView) {
             if webView.url == nil {
-                model.load(model.currentURL ?? YamiboRoute.baseURL)
+                model.load(model.currentURL ?? YamiboDomain.baseURL)
             } else if let url = webView.url, isInternal(url) {
                 webView.reload()
             }
@@ -229,7 +228,7 @@ public struct IOSForumWebView: UIViewRepresentable {
                     let pair = cookiePart.split(separator: "=", maxSplits: 1).map(String.init)
                     guard pair.count == 2 else { return nil }
                     return HTTPCookie(properties: [
-                        .domain: "bbs.yamibo.com",
+                        .domain: YamiboDomain.forumHost,
                         .path: "/",
                         .name: pair[0].trimmingCharacters(in: .whitespaces),
                         .value: pair[1].trimmingCharacters(in: .whitespaces),
@@ -249,7 +248,7 @@ public struct IOSForumWebView: UIViewRepresentable {
             let cookieStore = webView.configuration.websiteDataStore.httpCookieStore
             let storedCookies = await cookieStore.allCookies()
             for cookie in storedCookies
-                where cookie.domain.lowercased().contains("yamibo.com") &&
+                where YamiboDomain.containsYamiboDomain(cookie.domain) &&
                 incomingNames.contains(cookie.name) {
                 await cookieStore.deleteCookieAsync(cookie)
             }
@@ -258,7 +257,7 @@ public struct IOSForumWebView: UIViewRepresentable {
         private func clearYamiboCookies(in webView: WKWebView) async {
             let cookieStore = webView.configuration.websiteDataStore.httpCookieStore
             let cookies = await cookieStore.allCookies()
-            for cookie in cookies where cookie.domain.lowercased().contains("yamibo.com") {
+            for cookie in cookies where YamiboDomain.containsYamiboDomain(cookie.domain) {
                 await cookieStore.deleteCookieAsync(cookie)
             }
         }
@@ -266,14 +265,14 @@ public struct IOSForumWebView: UIViewRepresentable {
         private func persistCookies(from webView: WKWebView) async throws {
             let cookies = await webView.configuration.websiteDataStore.httpCookieStore.allCookies()
             let header = cookies
-                .filter { $0.domain.contains("yamibo.com") }
+                .filter { YamiboDomain.containsYamiboDomain($0.domain) }
                 .sorted { $0.name < $1.name }
                 .map { "\($0.name)=\($0.value)" }
                 .joined(separator: "; ")
 
             let userAgent = webView.customUserAgent ?? YamiboNetworkConfiguration.defaultMobileUserAgent
             sessionSyncState.markPersistedWebSession(cookieHeader: header)
-            try await appContext.sessionStore.updateWebSession(
+            try await sessionStore.updateWebSession(
                 cookie: header,
                 userAgent: userAgent,
                 isLoggedIn: SessionState.hasAuthenticationCookie(header)

@@ -1,0 +1,72 @@
+import Foundation
+
+/// Everything the novel reader feature UI (reader, offline cache panel)
+/// needs from the composition root.
+public struct NovelReaderDependencies: Sendable {
+    public let sessionStore: SessionStore
+    public let settingsStore: SettingsStore
+    public let readingProgressStore: ReadingProgressStore
+    public let offlineCacheStore: any OfflineCacheStoring
+    public let makeNovelReaderRepository: @Sendable () async -> NovelReaderRepository
+    public let makeOfflineCacheQueueExecutor: @Sendable () async -> OfflineCacheQueueExecutor
+    /// The cache panel embeds the account feature's offline queue view model.
+    public let account: AccountDependencies
+
+    public init(
+        sessionStore: SessionStore,
+        settingsStore: SettingsStore,
+        readingProgressStore: ReadingProgressStore,
+        offlineCacheStore: any OfflineCacheStoring,
+        makeNovelReaderRepository: @escaping @Sendable () async -> NovelReaderRepository,
+        makeChapterCommentsRepository: @escaping @Sendable () async -> ReaderChapterCommentsRepository,
+        makeOfflineCacheQueueExecutor: @escaping @Sendable () async -> OfflineCacheQueueExecutor,
+        account: AccountDependencies
+    ) {
+        self.sessionStore = sessionStore
+        self.settingsStore = settingsStore
+        self.readingProgressStore = readingProgressStore
+        self.offlineCacheStore = offlineCacheStore
+        self.makeNovelReaderRepository = makeNovelReaderRepository
+        self.makeOfflineCacheQueueExecutor = makeOfflineCacheQueueExecutor
+        self.account = account
+        makeChapterCommentsModule = { onChange in
+            ReaderChapterCommentsModule(
+                adapter: ReaderChapterCommentsModule.Adapter(
+                    loadInitial: { target in
+                        try await makeChapterCommentsRepository().loadChapterComments(for: target)
+                    },
+                    loadMore: { target, view in
+                        try await makeChapterCommentsRepository().loadMoreChapterComments(for: target, view: view)
+                    }
+                ),
+                onChange: onChange
+            )
+        }
+        makeCacheOperationRepository = { [settingsStore, offlineCacheStore, makeOfflineCacheQueueExecutor] in
+            NovelOfflineStoreReaderCacheOperationAdapter(
+                store: offlineCacheStore,
+                novelOfflineCacheSettings: {
+                    await settingsStore.load().novelOfflineCache
+                },
+                continueOfflineCacheQueue: {
+                    try await makeOfflineCacheQueueExecutor().continueQueue()
+                }
+            )
+        }
+    }
+
+    /// Builds the chapter-comments module wired to the composition root's
+    /// repository; the reader view model supplies only its state sink.
+    public let makeChapterCommentsModule: @Sendable (
+        _ onChange: @escaping @Sendable (ReaderChapterCommentsSnapshot) -> Void
+    ) -> ReaderChapterCommentsModule
+
+    /// Builds the offline-cache operation repository backed by the shared
+    /// offline cache store, settings, and download queue executor.
+    public let makeCacheOperationRepository: @Sendable () -> any NovelReaderCacheOperationRepository
+
+    @MainActor
+    public func makeCacheOperationModule() -> NovelReaderCacheOperationModule {
+        NovelReaderCacheOperationModule()
+    }
+}

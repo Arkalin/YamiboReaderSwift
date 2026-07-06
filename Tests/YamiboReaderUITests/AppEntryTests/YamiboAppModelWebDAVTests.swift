@@ -1,5 +1,6 @@
 import XCTest
 @testable import YamiboReaderCore
+import YamiboReaderTestSupport
 @testable import YamiboReaderUI
 
 final class YamiboAppModelWebDAVTests: XCTestCase {
@@ -19,8 +20,8 @@ final class YamiboAppModelWebDAVTests: XCTestCase {
 
         let localUpdatedAt = try await Self.waitForLocalUpdatedAt(in: webDAVSettingsStore)
         XCTAssertNotNil(localUpdatedAt)
-        let appSettingsUpdatedAt = await webDAVSettingsStore.load().appSettingsUpdatedAt
-        XCTAssertNil(appSettingsUpdatedAt)
+        let dirtyDatasetIDs = await webDAVSettingsStore.load().dirtyDatasetIDs
+        XCTAssertTrue(dirtyDatasetIDs.isEmpty)
     }
 
     @MainActor
@@ -53,8 +54,8 @@ final class YamiboAppModelWebDAVTests: XCTestCase {
 
         let localUpdatedAt = try await Self.waitForLocalUpdatedAt(in: webDAVSettingsStore)
         XCTAssertNotNil(localUpdatedAt)
-        let appSettingsUpdatedAt = await webDAVSettingsStore.load().appSettingsUpdatedAt
-        XCTAssertNil(appSettingsUpdatedAt)
+        let dirtyDatasetIDs = await webDAVSettingsStore.load().dirtyDatasetIDs
+        XCTAssertTrue(dirtyDatasetIDs.isEmpty)
     }
 
     private static func waitForLocalUpdatedAt(

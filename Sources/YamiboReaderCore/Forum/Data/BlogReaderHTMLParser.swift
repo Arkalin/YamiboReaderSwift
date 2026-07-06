@@ -1,19 +1,19 @@
 import Foundation
 
-public enum BlogReaderHTMLParser {
-    public static func parsePage(from html: String, blogID: String, uidHint: String? = nil, titleHint: String? = nil) throws -> BlogReaderPage {
-        try validate(html)
-        let document = try KannaSoup.parse(html, baseURL: YamiboRoute.baseURL.absoluteString)
+enum BlogReaderHTMLParser {
+    static func parsePage(from html: String, blogID: String, uidHint: String? = nil, titleHint: String? = nil) throws -> BlogReaderPage {
+        try YamiboHTMLPageInspector.ensureReadable(html)
+        let document = try KannaSoup.parse(html, baseURL: YamiboDomain.baseURL.absoluteString)
         let title = firstNonBlank([
-            try? document.select(".blog_tit, .mtit, .bm_h h1, .vw .ph, h1").first()?.text(),
+            document.firstText(".blog_tit, .mtit, .bm_h h1, .vw .ph, h1"),
             titleHint,
             try? document.title().replacingOccurrences(of: "-  百合会", with: "")
         ]) ?? L10n.string("blog_reader.title")
         let root = rootBlogElement(in: document)
         let content = contentElement(in: root, document: document)
         let contentHTML = ((try? content?.html()) ?? "").nilIfBlank ?? ((try? root?.html()) ?? "")
-        let contentText = ((try? content?.text()) ?? (try? root?.text()) ?? "").normalizedBlogText
-        let pageText = ((try? document.body()?.text()) ?? "").normalizedBlogText
+        let contentText = content?.normalizedText() ?? root?.normalizedText() ?? ""
+        let pageText = document.body()?.normalizedText() ?? ""
 
         guard !contentText.isEmpty else {
             throw YamiboError.parsingFailed(context: L10n.string("context.blog_reader"))
@@ -36,12 +36,10 @@ public enum BlogReaderHTMLParser {
         )
     }
 
-    public static func parseCommentResult(from html: String) throws -> String {
-        try validate(html)
-        let document = try KannaSoup.parse(html, baseURL: YamiboRoute.baseURL.absoluteString)
-        let message = firstNonBlank([
-            try? document.select(".jump_c, .alert_info, .messagetext, .showmessage, .wp, body").first()?.text()
-        ])
+    static func parseCommentResult(from html: String) throws -> String {
+        try YamiboHTMLPageInspector.ensureReadable(html)
+        let document = try KannaSoup.parse(html, baseURL: YamiboDomain.baseURL.absoluteString)
+        let message = document.firstText(".jump_c, .alert_info, .messagetext, .showmessage, .wp, body")
 
         guard let message else {
             throw YamiboError.parsingFailed(context: L10n.string("context.blog_reader"))
@@ -52,17 +50,8 @@ public enum BlogReaderHTMLParser {
         return message
     }
 
-    private static func validate(_ html: String) throws {
-        if YamiboHTMLPageInspector.isNotAuthenticated(html) {
-            throw YamiboError.notAuthenticated
-        }
-        if YamiboHTMLPageInspector.isFloodControlOrError(html) {
-            throw YamiboError.floodControl
-        }
-    }
-
     private static func rootBlogElement(in document: Document) -> Element? {
-        firstElement(in: document, selectors: [
+        document.selectFirst(anyOf: [
             "#blog_article",
             ".blog_article",
             ".blogcontent",
@@ -75,29 +64,24 @@ public enum BlogReaderHTMLParser {
     }
 
     private static func contentElement(in root: Element?, document: Document) -> Element? {
-        if let root {
-            for selector in [".blogcontent", ".blog_article", ".content", ".postmessage", ".message", "td.t_f"] {
-                if let element = try? root.select(selector).first() {
-                    return element
-                }
-            }
+        if let element = root?.selectFirst(anyOf: [".blogcontent", ".blog_article", ".content", ".postmessage", ".message", "td.t_f"]) {
+            return element
         }
         return rootBlogElement(in: document)
     }
 
     private static func parseComments(in document: Document) -> [BlogReaderComment] {
-        let containers = commentContainers(in: document)
         var comments: [BlogReaderComment] = []
         var seen = Set<String>()
 
-        for container in containers {
-            let text = ((try? container.text()) ?? "").normalizedBlogText
+        for container in commentContainers(in: document) {
+            let text = container.normalizedText()
             guard !text.isEmpty, !looksLikeRootBlog(container) else { continue }
             let commentID = commentID(in: container)
             let user = author(in: container, document: document, uidHint: nil)
             let content = commentContentElement(in: container) ?? container
             let contentHTML = ((try? content.html()) ?? "").nilIfBlank ?? ((try? container.html()) ?? "")
-            let contentText = ((try? content.text()) ?? "").normalizedBlogText
+            let contentText = content.normalizedText()
             guard !contentText.isEmpty else { continue }
             let key = commentID ?? "\(user.uid ?? "")|\(user.name)|\(contentText)"
             guard seen.insert(key).inserted else { continue }
@@ -116,17 +100,17 @@ public enum BlogReaderHTMLParser {
         return comments
     }
 
-    private static func commentContainers(in document: Document) -> Elements {
-        let scoped = (try? document.select("#comment_ul li, .commentlist li, .blog_comment li, li[id^=comment_], dl[id^=comment_], .cmt .ptm, .comment")) ?? Elements()
+    private static func commentContainers(in document: Document) -> [Element] {
+        let scoped = document.selectAll("#comment_ul li, .commentlist li, .blog_comment li, li[id^=comment_], dl[id^=comment_], .cmt .ptm, .comment")
         if !scoped.isEmpty {
             return scoped
         }
-        return (try? document.select("li, dl")) ?? Elements()
+        return document.selectAll("li, dl")
     }
 
     private static func commentContentElement(in container: Element) -> Element? {
         for selector in [".comment_content", ".content", ".message", ".xg1 + div", "dd", "blockquote"] {
-            if let element = try? container.select(selector).last() {
+            if let element = container.selectAll(selector).last {
                 return element
             }
         }
@@ -143,66 +127,30 @@ public enum BlogReaderHTMLParser {
 
     private static func author(in element: Element?, document: Document, uidHint: String?) -> BlogReaderUser {
         let link = firstUserLink(in: element) ?? firstUserLink(in: document)
-        let href = (try? link?.attr("href")).flatMap { HTMLTextExtractor.absoluteURL(from: $0) }
-        let uid = href.flatMap(userID(from:)) ?? uidHint?.nilIfBlank
+        let uid = link?.attrURL("href").flatMap(userID(from:)) ?? uidHint?.nilIfBlank
         let name = firstNonBlank([
-            try? link?.text(),
-            try? element?.select(".author, .username, .mmc, .muser").first()?.text(),
-            try? document.select(".author, .username, .mmc, .muser").first()?.text()
+            link?.normalizedText(),
+            element?.firstText(".author, .username, .mmc, .muser"),
+            document.firstText(".author, .username, .mmc, .muser")
         ]) ?? L10n.string("user_space.unknown_user")
+        let avatarSelectors = ["img[src*='avatar']", ".avatar img[src]", ".mimg img[src]"]
         return BlogReaderUser(
             uid: uid,
             name: name,
-            avatarURL: firstImageURL(in: element, selectors: ["img[src*='avatar']", ".avatar img[src]", ".mimg img[src]", "img[src]"])
-                ?? firstImageURL(in: document, selectors: ["img[src*='avatar']", ".avatar img[src]", ".mimg img[src]"])
+            avatarURL: element?.firstURL(anyOf: avatarSelectors + ["img[src]"], attribute: "src")
+                ?? document.firstURL(anyOf: avatarSelectors, attribute: "src")
         )
     }
 
     private static func firstUserLink(in element: Element?) -> Element? {
-        guard let element else { return nil }
-        return try? element.select("a[href*='uid='], a[href*='space-uid-']").first()
-    }
-
-    private static func firstUserLink(in document: Document) -> Element? {
-        try? document.select("a[href*='uid='], a[href*='space-uid-']").first()
-    }
-
-    private static func firstElement(in document: Document, selectors: [String]) -> Element? {
-        for selector in selectors {
-            if let element = try? document.select(selector).first() {
-                return element
-            }
-        }
-        return nil
-    }
-
-    private static func firstImageURL(in element: Element?, selectors: [String]) -> URL? {
-        guard let element else { return nil }
-        for selector in selectors {
-            if let href = try? element.select(selector).first()?.attr("src"),
-               let url = HTMLTextExtractor.absoluteURL(from: href) {
-                return url
-            }
-        }
-        return nil
-    }
-
-    private static func firstImageURL(in document: Document, selectors: [String]) -> URL? {
-        for selector in selectors {
-            if let href = try? document.select(selector).first()?.attr("src"),
-               let url = HTMLTextExtractor.absoluteURL(from: href) {
-                return url
-            }
-        }
-        return nil
+        element?.selectFirst("a[href*='uid='], a[href*='space-uid-']")
     }
 
     private static func actionURL(in document: Document, keywords: [String]) -> URL? {
-        let links = (try? document.select("a[href]")) ?? Elements()
-        for link in links {
-            let text = ((try? link.text()) ?? "").normalizedBlogText
+        for link in document.selectAll("a[href]") {
+            let text = link.normalizedText()
             guard keywords.contains(where: { text.contains($0) }) else { continue }
-            if let url = HTMLTextExtractor.absoluteURL(from: (try? link.attr("href")) ?? "") {
+            if let url = link.attrURL("href") {
                 return url
             }
         }
@@ -210,11 +158,10 @@ public enum BlogReaderHTMLParser {
     }
 
     private static func replyURL(in element: Element) -> URL? {
-        let links = (try? element.select("a[href]")) ?? Elements()
-        for link in links {
-            let text = ((try? link.text()) ?? "").normalizedBlogText
+        for link in element.selectAll("a[href]") {
+            let text = link.normalizedText()
             guard text.contains("回复") || text.contains("回復") || text.contains("回覆") else { continue }
-            if let url = HTMLTextExtractor.absoluteURL(from: (try? link.attr("href")) ?? "") {
+            if let url = link.attrURL("href") {
                 return url
             }
         }
@@ -222,10 +169,9 @@ public enum BlogReaderHTMLParser {
     }
 
     private static func parsePageNavigation(in document: Document) -> ForumPageNavigation? {
-        guard let pager = try? document.select(".pg").first() else { return nil }
-        let currentText = ((try? pager.select("strong").first()?.text()) ?? "").normalizedBlogText
-        let currentPage = Int(currentText) ?? 1
-        let pagerText = ((try? pager.text()) ?? "").normalizedBlogText
+        guard let pager = document.selectFirst(".pg") else { return nil }
+        let currentPage = pager.firstText("strong").flatMap(Int.init) ?? 1
+        let pagerText = pager.normalizedText()
         let totalPages = HTMLTextExtractor.firstMatch(pattern: #"共\s*(\d+)\s*页"#, in: pagerText)?
             .dropFirst()
             .first
@@ -245,20 +191,12 @@ public enum BlogReaderHTMLParser {
     }
 
     private static func userID(from url: URL) -> String? {
-        queryValue("uid", in: url)
+        url.queryItemValue("uid")
             ?? HTMLTextExtractor.firstMatch(pattern: #"space-uid-(\d+)"#, in: url.absoluteString)?.dropFirst().first
     }
 
-    private static func queryValue(_ name: String, in url: URL) -> String? {
-        URLComponents(url: url, resolvingAgainstBaseURL: false)?
-            .queryItems?
-            .first(where: { $0.name == name })?
-            .value?
-            .nilIfBlank
-    }
-
     private static func firstDateText(in element: Element?) -> String? {
-        let text = ((try? element?.text()) ?? "").normalizedBlogText
+        let text = element?.normalizedText() ?? ""
         return HTMLTextExtractor.firstMatch(pattern: #"\d{4}[-/]\d{1,2}[-/]\d{1,2}(?:\s+\d{1,2}:\d{2})?"#, in: text)?
             .first?
             .nilIfBlank
@@ -277,19 +215,6 @@ public enum BlogReaderHTMLParser {
     }
 
     private static func firstNonBlank(_ values: [String?]) -> String? {
-        values.compactMap { $0?.normalizedBlogText.nilIfBlank }.first
-    }
-}
-
-private extension String {
-    var nilIfBlank: String? {
-        let value = trimmingCharacters(in: .whitespacesAndNewlines)
-        return value.isEmpty ? nil : value
-    }
-
-    var normalizedBlogText: String {
-        HTMLTextExtractor.decodeHTMLEntities(self)
-            .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+        values.compactMap { $0?.htmlNormalized.nilIfBlank }.first
     }
 }

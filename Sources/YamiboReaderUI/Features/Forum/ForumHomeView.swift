@@ -137,7 +137,7 @@ private struct ForumCarouselImageButton: View {
                     Rectangle().fill(ForumColors.creamSurface)
                     ProgressView()
                 }
-            } failure: { _ in
+            } failure: {
                 ZStack {
                     Rectangle().fill(ForumColors.creamSurface)
                     Image(systemName: "photo")
@@ -283,7 +283,7 @@ private struct ForumBoardIconView: View {
             Image(systemName: "text.bubble")
                 .font(.title3)
                 .foregroundStyle(ForumColors.secondaryText)
-        } failure: { _ in
+        } failure: {
             Image(systemName: "text.bubble")
                 .font(.title3)
                 .foregroundStyle(ForumColors.secondaryText)

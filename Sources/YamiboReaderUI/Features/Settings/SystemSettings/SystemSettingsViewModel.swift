@@ -22,10 +22,10 @@ final class SystemSettingsViewModel: ObservableObject {
     @Published private(set) var activeAction: SystemSettingsAction?
     @Published var errorMessage: String?
 
-    private let appContext: YamiboAppContext
+    private let dependencies: SettingsDependencies
 
-    init(appContext: YamiboAppContext) {
-        self.appContext = appContext
+    init(dependencies: SettingsDependencies) {
+        self.dependencies = dependencies
     }
 
     var isBusy: Bool {
@@ -64,16 +64,16 @@ final class SystemSettingsViewModel: ObservableObject {
         activeAction = .loading
         defer { activeAction = nil }
 
-        let settings = await appContext.settingsStore.load()
-        homePage = settings.homePage
-        favoriteAppearance = settings.favoriteAppearance
-        favoriteBackground = settings.favoriteBackground
-        favoriteLayoutMode = settings.favoriteLayoutMode
-        favoriteSortOrder = settings.favoriteSortOrder
-        favoriteSortDescending = settings.favoriteSortDescending
-        favoriteShowsCategoryCounts = settings.favoriteShowsCategoryCounts
+        let settings = await dependencies.settingsStore.load()
+        homePage = settings.system.homePage
+        favoriteAppearance = settings.favorites.appearance
+        favoriteBackground = settings.favorites.background
+        favoriteLayoutMode = settings.favorites.layoutMode
+        favoriteSortOrder = settings.favorites.sortOrder
+        favoriteSortDescending = settings.favorites.sortDescending
+        favoriteShowsCategoryCounts = settings.favorites.showsCategoryCounts
         novelOfflineCache = settings.novelOfflineCache
-        applePencilPageTurn = settings.applePencilPageTurn
+        applePencilPageTurn = settings.system.applePencilPageTurn
         await refreshStorageUsage()
     }
 
@@ -82,11 +82,11 @@ final class SystemSettingsViewModel: ObservableObject {
         homePage = value
 
         Task {
-            var settings = await appContext.settingsStore.load()
-            settings.homePage = value
+            var settings = await dependencies.settingsStore.load()
+            settings.system.homePage = value
 
             do {
-                try await appContext.settingsStore.save(settings)
+                try await dependencies.settingsStore.save(settings)
             } catch {
                 await MainActor.run {
                     homePage = previous
@@ -103,11 +103,11 @@ final class SystemSettingsViewModel: ObservableObject {
         favoriteAppearance = updated
 
         Task {
-            var settings = await appContext.settingsStore.load()
-            settings.favoriteAppearance = updated
+            var settings = await dependencies.settingsStore.load()
+            settings.favorites.appearance = updated
 
             do {
-                try await appContext.settingsStore.save(settings)
+                try await dependencies.settingsStore.save(settings)
             } catch {
                 await MainActor.run {
                     if favoriteAppearance == updated {
@@ -120,7 +120,7 @@ final class SystemSettingsViewModel: ObservableObject {
     }
 
     func loadFavoriteBackgroundImageData() async -> Data? {
-        await appContext.favoriteBackgroundImageStore.loadData(imageID: favoriteBackground.imageID)
+        await dependencies.favoriteBackgroundImageStore.loadData(imageID: favoriteBackground.imageID)
     }
 
     func normalizedFavoriteBackgroundImageData(from data: Data) throws -> Data {
@@ -143,17 +143,17 @@ final class SystemSettingsViewModel: ObservableObject {
         updatedBackground.isEnabled = true
 
         do {
-            try await appContext.favoriteBackgroundImageStore.save(imageData, imageID: imageID)
+            try await dependencies.favoriteBackgroundImageStore.save(imageData, imageID: imageID)
 
-            var settings = await appContext.settingsStore.load()
-            settings.favoriteBackground = updatedBackground
-            try await appContext.settingsStore.save(settings)
+            var settings = await dependencies.settingsStore.load()
+            settings.favorites.background = updatedBackground
+            try await dependencies.settingsStore.save(settings)
 
             favoriteBackground = updatedBackground
-            try? await appContext.favoriteBackgroundImageStore.prune(keeping: imageID)
+            try? await dependencies.favoriteBackgroundImageStore.prune(keeping: imageID)
             return true
         } catch {
-            try? await appContext.favoriteBackgroundImageStore.delete(imageID: imageID)
+            try? await dependencies.favoriteBackgroundImageStore.delete(imageID: imageID)
             errorMessage = error.localizedDescription
             return false
         }
@@ -161,12 +161,12 @@ final class SystemSettingsViewModel: ObservableObject {
 
     func restoreDefaultFavoriteBackground() async -> Bool {
         do {
-            var settings = await appContext.settingsStore.load()
-            settings.favoriteBackground = FavoriteBackgroundSettings()
-            try await appContext.settingsStore.save(settings)
+            var settings = await dependencies.settingsStore.load()
+            settings.favorites.background = FavoriteBackgroundSettings()
+            try await dependencies.settingsStore.save(settings)
 
             favoriteBackground = FavoriteBackgroundSettings()
-            try? await appContext.favoriteBackgroundImageStore.deleteAll()
+            try? await dependencies.favoriteBackgroundImageStore.deleteAll()
             return true
         } catch {
             errorMessage = error.localizedDescription
@@ -179,11 +179,11 @@ final class SystemSettingsViewModel: ObservableObject {
         favoriteLayoutMode = value
 
         Task {
-            var settings = await appContext.settingsStore.load()
+            var settings = await dependencies.settingsStore.load()
             applyFavoriteLibraryDisplaySettings(to: &settings)
 
             do {
-                try await appContext.settingsStore.save(settings)
+                try await dependencies.settingsStore.save(settings)
             } catch {
                 await MainActor.run {
                     if favoriteLayoutMode == value {
@@ -200,11 +200,11 @@ final class SystemSettingsViewModel: ObservableObject {
         favoriteSortOrder = value
 
         Task {
-            var settings = await appContext.settingsStore.load()
+            var settings = await dependencies.settingsStore.load()
             applyFavoriteLibraryDisplaySettings(to: &settings)
 
             do {
-                try await appContext.settingsStore.save(settings)
+                try await dependencies.settingsStore.save(settings)
             } catch {
                 await MainActor.run {
                     if favoriteSortOrder == value {
@@ -221,11 +221,11 @@ final class SystemSettingsViewModel: ObservableObject {
         favoriteSortDescending = value
 
         Task {
-            var settings = await appContext.settingsStore.load()
+            var settings = await dependencies.settingsStore.load()
             applyFavoriteLibraryDisplaySettings(to: &settings)
 
             do {
-                try await appContext.settingsStore.save(settings)
+                try await dependencies.settingsStore.save(settings)
             } catch {
                 await MainActor.run {
                     if favoriteSortDescending == value {
@@ -242,11 +242,11 @@ final class SystemSettingsViewModel: ObservableObject {
         favoriteShowsCategoryCounts = value
 
         Task {
-            var settings = await appContext.settingsStore.load()
+            var settings = await dependencies.settingsStore.load()
             applyFavoriteLibraryDisplaySettings(to: &settings)
 
             do {
-                try await appContext.settingsStore.save(settings)
+                try await dependencies.settingsStore.save(settings)
             } catch {
                 await MainActor.run {
                     if favoriteShowsCategoryCounts == value {
@@ -259,10 +259,10 @@ final class SystemSettingsViewModel: ObservableObject {
     }
 
     private func applyFavoriteLibraryDisplaySettings(to settings: inout AppSettings) {
-        settings.favoriteLayoutMode = favoriteLayoutMode
-        settings.favoriteSortOrder = favoriteSortOrder
-        settings.favoriteSortDescending = favoriteSortDescending
-        settings.favoriteShowsCategoryCounts = favoriteShowsCategoryCounts
+        settings.favorites.layoutMode = favoriteLayoutMode
+        settings.favorites.sortOrder = favoriteSortOrder
+        settings.favorites.sortDescending = favoriteSortDescending
+        settings.favorites.showsCategoryCounts = favoriteShowsCategoryCounts
     }
 
     func updateApplePencilPageTurnEnabled(_ isEnabled: Bool) {
@@ -294,7 +294,7 @@ final class SystemSettingsViewModel: ObservableObject {
         defer { activeAction = nil }
 
         do {
-            try await appContext.novelReaderCacheStore.clearAll()
+            try await dependencies.novelReaderCacheStore.clearAll()
             await refreshStorageUsage()
             return true
         } catch {
@@ -308,8 +308,8 @@ final class SystemSettingsViewModel: ObservableObject {
         defer { activeAction = nil }
 
         do {
-            try await appContext.mangaDirectoryStore.clearAll()
-            try await appContext.mangaReaderProjectionStore.clearAll()
+            try await dependencies.mangaDirectoryStore.clearAll()
+            try await dependencies.mangaReaderProjectionStore.clearAll()
             await refreshStorageUsage()
             return true
         } catch {
@@ -322,7 +322,7 @@ final class SystemSettingsViewModel: ObservableObject {
         activeAction = .clearingImageCache
         defer { activeAction = nil }
 
-        await appContext.clearOrdinaryImageCache()
+        await dependencies.clearOrdinaryImageCache()
         await refreshStorageUsage()
         return true
     }
@@ -332,7 +332,7 @@ final class SystemSettingsViewModel: ObservableObject {
         defer { activeAction = nil }
 
         do {
-            try await appContext.resetApplicationData()
+            try await dependencies.resetApplicationData()
             homePage = .forum
             favoriteAppearance = .init()
             favoriteBackground = .init()
@@ -353,11 +353,11 @@ final class SystemSettingsViewModel: ObservableObject {
     }
 
     func refreshStorageUsage() async {
-        novelCacheBytes = await appContext.novelReaderCacheStore.totalDiskUsageBytes()
-        let directoryBytes = await appContext.mangaDirectoryStore.totalDiskUsageBytes()
-        let projectionBytes = await appContext.mangaReaderProjectionStore.totalDiskUsageBytes()
+        novelCacheBytes = await dependencies.novelReaderCacheStore.totalDiskUsageBytes()
+        let directoryBytes = await dependencies.mangaDirectoryStore.totalDiskUsageBytes()
+        let projectionBytes = await dependencies.mangaReaderProjectionStore.totalDiskUsageBytes()
         mangaIndexCacheBytes = directoryBytes + projectionBytes
-        offlineCacheBytes = await appContext.offlineCacheStore.totalDiskUsageBytes()
+        offlineCacheBytes = await dependencies.offlineCacheStore.totalDiskUsageBytes()
     }
 
     func refreshOfflineCacheManagement() async {
@@ -443,10 +443,10 @@ final class SystemSettingsViewModel: ObservableObject {
 
         do {
             for groupID in normalizedGroupIDs {
-                try await appContext.offlineCacheStore.removeOfflineCacheGroup(groupID)
+                try await dependencies.offlineCacheStore.removeOfflineCacheGroup(groupID)
             }
             for entryID in normalizedEntryIDs {
-                try await appContext.offlineCacheStore.removeOfflineCacheEntry(entryID)
+                try await dependencies.offlineCacheStore.removeOfflineCacheEntry(entryID)
             }
             pendingOfflineCacheManagementConfirmation = nil
             selectedOfflineCacheGroupIDs.subtract(normalizedGroupIDs)
@@ -463,7 +463,7 @@ final class SystemSettingsViewModel: ObservableObject {
     }
 
     private func refreshOfflineCacheManagementRows() async {
-        let snapshot = await appContext.offlineCacheStore.offlineCacheManagementSnapshot()
+        let snapshot = await dependencies.offlineCacheStore.offlineCacheManagementSnapshot()
         offlineCacheManagementRows = snapshot.groups
             .map(OfflineCacheManagementRow.init(group:))
             .sorted { lhs, rhs in
@@ -533,11 +533,11 @@ final class SystemSettingsViewModel: ObservableObject {
         applePencilPageTurn = updated
 
         Task {
-            var settings = await appContext.settingsStore.load()
-            settings.applePencilPageTurn = updated
+            var settings = await dependencies.settingsStore.load()
+            settings.system.applePencilPageTurn = updated
 
             do {
-                try await appContext.settingsStore.save(settings)
+                try await dependencies.settingsStore.save(settings)
             } catch {
                 await MainActor.run {
                     if applePencilPageTurn == updated {
@@ -554,11 +554,11 @@ final class SystemSettingsViewModel: ObservableObject {
         novelOfflineCache = updated
 
         Task {
-            var settings = await appContext.settingsStore.load()
+            var settings = await dependencies.settingsStore.load()
             settings.novelOfflineCache = updated
 
             do {
-                try await appContext.settingsStore.save(settings)
+                try await dependencies.settingsStore.save(settings)
             } catch {
                 await MainActor.run {
                     if novelOfflineCache == updated {

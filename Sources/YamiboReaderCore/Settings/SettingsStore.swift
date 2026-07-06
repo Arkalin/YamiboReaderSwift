@@ -1,12 +1,6 @@
 import Foundation
 
-public protocol SettingsStoring: Sendable {
-    func load() async -> AppSettings
-    func save(_ settings: AppSettings) async throws
-    func reset() async throws
-}
-
-public actor SettingsStore: SettingsStoring {
+public actor SettingsStore {
     public static let didChangeNotification = Notification.Name("yamibo.settingsStore.didChange")
     public static let changeIDUserInfoKey = "changeID"
     public static let defaultKey = "yamibo.settings"

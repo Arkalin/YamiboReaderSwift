@@ -3,7 +3,7 @@ import Foundation
 public actor FavoriteRepository {
     private let client: YamiboClient
 
-    public init(client: YamiboClient) {
+    init(client: YamiboClient) {
         self.client = client
     }
 
@@ -16,7 +16,7 @@ public actor FavoriteRepository {
         return favorites
     }
 
-    public func fetchFavoritePage(page: Int = 1) async throws -> FavoriteHTMLParser.FavoritePageResult {
+    func fetchFavoritePage(page: Int = 1) async throws -> FavoriteHTMLParser.FavoritePageResult {
         let html = try await client.fetchHTML(for: .favorites(page: page))
         let parsed = FavoriteHTMLParser.parseFavoritePage(from: html)
         if parsed.favorites.isEmpty {

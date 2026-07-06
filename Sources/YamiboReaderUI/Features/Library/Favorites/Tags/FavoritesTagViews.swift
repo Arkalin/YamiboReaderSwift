@@ -1,6 +1,22 @@
 import SwiftUI
 import YamiboReaderCore
 
+extension FavoriteTagSortOrder {
+    /// User-facing label for the tag sort menu; presentation mapping lives
+    /// with the views, not the model.
+    var title: String {
+        switch self {
+        case .manual: L10n.string("favorites.tag_sort.manual")
+        case .name: L10n.string("favorites.tag_sort.name")
+        case .nameDescending: L10n.string("favorites.tag_sort.name_desc")
+        case .updatedAt: L10n.string("favorites.tag_sort.updated_at")
+        case .updatedAtDescending: L10n.string("favorites.tag_sort.updated_at_desc")
+        case .associationCount: L10n.string("favorites.tag_sort.association_count")
+        case .associationCountDescending: L10n.string("favorites.tag_sort.association_count_desc")
+        }
+    }
+}
+
 struct FavoriteTagPickerView: View {
     let tags: [FavoriteTag]
     let favorites: [Favorite]

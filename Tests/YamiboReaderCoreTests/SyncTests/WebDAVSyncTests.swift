@@ -126,9 +126,11 @@ private enum WebDAVTestError: Error {
     let fixture = try WebDAVSyncFixture(prefix: "webdav-local-first-app-settings-upload")
     try await fixture.signIn(accountUID: "123")
     let appSettings = AppSettings(
+        favorites: FavoriteLibrarySettings(
+            appearance: FavoriteAppearanceSettings(collection: .purple, novel: .red, manga: .green, other: .gray)
+        ),
         webBrowser: WebBrowserSettings(showsNavigationBar: false),
-        favoriteAppearance: FavoriteAppearanceSettings(collection: .purple, novel: .red, manga: .green, other: .gray),
-        homePage: .favorites
+        system: SystemSettings(homePage: .favorites)
     )
     try await fixture.appSettingsStore.save(appSettings)
 
@@ -168,7 +170,7 @@ private enum WebDAVTestError: Error {
     try await fixture.signIn(accountUID: "123")
     let localSettings = AppSettings(
         webBrowser: WebBrowserSettings(showsNavigationBar: true),
-        homePage: .forum
+        system: SystemSettings(homePage: .forum)
     )
     let remoteSettings = WebDAVSyncedAppSettings(
         homePage: .favorites,
@@ -201,9 +203,9 @@ private enum WebDAVTestError: Error {
 
     #expect(!getPaths.contains { $0.hasSuffix("yamibo-sync-v1.json") })
     let loadedSettings = await fixture.appSettingsStore.load()
-    #expect(loadedSettings.homePage == .favorites)
+    #expect(loadedSettings.system.homePage == .favorites)
     #expect(loadedSettings.webBrowser.showsNavigationBar == false)
-    #expect(loadedSettings.favoriteAppearance == remoteSettings.favoriteAppearance)
+    #expect(loadedSettings.favorites.appearance == remoteSettings.favoriteAppearance)
 }
 
 @Test func webDAVAutomaticLocalFirstSyncUploadsWithoutLegacyPayload() async throws {
@@ -342,10 +344,12 @@ private struct WebDAVSyncFixture {
     func makeService() -> WebDAVSyncService {
         WebDAVSyncService(
             settingsStore: settingsStore,
-            localFavoriteLibraryStore: localFavoriteLibraryStore,
-            readingProgressStore: readingProgressStore,
             sessionStore: sessionStore,
-            appSettingsStore: appSettingsStore,
+            participants: [
+                FavoriteLibraryWebDAVParticipant(store: localFavoriteLibraryStore),
+                ReadingProgressWebDAVParticipant(store: readingProgressStore),
+                AppSettingsWebDAVParticipant(store: appSettingsStore),
+            ],
             client: WebDAVClient(session: makeWebDAVTestSession())
         )
     }

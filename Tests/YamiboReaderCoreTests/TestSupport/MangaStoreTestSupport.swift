@@ -13,7 +13,7 @@ func makeTestMangaDirectoryStore(
 ) throws -> MangaDirectoryStore {
     let rootDirectory = rootDirectory ?? makeTestMangaStoreRoot(prefix: prefix)
     return MangaDirectoryStore(
-        databasePool: try YamiboDatabase.openSharedPool(rootDirectory: rootDirectory.appendingPathComponent("grdb", isDirectory: true))
+        databasePool: try YamiboDatabase.openPool(rootDirectory: rootDirectory.appendingPathComponent("grdb", isDirectory: true))
     )
 }
 
@@ -23,7 +23,7 @@ func makeTestMangaReaderProjectionStore(
 ) throws -> MangaReaderProjectionStore {
     let rootDirectory = rootDirectory ?? makeTestMangaStoreRoot(prefix: prefix)
     return MangaReaderProjectionStore(
-        databasePool: try YamiboDatabase.openSharedPool(rootDirectory: rootDirectory.appendingPathComponent("grdb", isDirectory: true)),
+        databasePool: try YamiboDatabase.openPool(rootDirectory: rootDirectory.appendingPathComponent("grdb", isDirectory: true)),
         rootDirectory: rootDirectory
     )
 }
@@ -35,7 +35,7 @@ func makeTestOfflineCacheStore(
 ) throws -> OfflineCacheStore {
     let rootDirectory = rootDirectory ?? makeTestMangaStoreRoot(prefix: prefix)
     return OfflineCacheStore(
-        databasePool: try YamiboDatabase.openSharedPool(rootDirectory: rootDirectory.appendingPathComponent("grdb", isDirectory: true)),
+        databasePool: try YamiboDatabase.openPool(rootDirectory: rootDirectory.appendingPathComponent("grdb", isDirectory: true)),
         baseDirectory: baseDirectory ?? rootDirectory.appendingPathComponent("offline-images", isDirectory: true)
     )
 }

@@ -2,7 +2,7 @@ import Foundation
 @preconcurrency import GRDB
 
 extension OfflineCacheStore {
-    public func offlineCacheManagementSnapshot() async -> OfflineCacheManagementSnapshot {
+    func offlineCacheManagementSnapshot() async -> OfflineCacheManagementSnapshot {
         try? await recoverQueueStateAfterRestart()
         return (try? await database.read { db in
             try Self.managementSnapshot(

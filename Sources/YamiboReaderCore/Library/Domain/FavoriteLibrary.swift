@@ -485,7 +485,7 @@ public struct FavoriteThreadProbeResult: Hashable, Sendable {
     }
 }
 
-public enum FavoriteThreadImportFailure: Error, Equatable, Sendable {
+enum FavoriteThreadImportFailure: Error, Equatable, Sendable {
     case probeFailed(String)
     case unsupportedTarget
 }

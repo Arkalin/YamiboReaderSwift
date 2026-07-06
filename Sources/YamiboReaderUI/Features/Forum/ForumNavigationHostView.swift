@@ -6,13 +6,13 @@ public struct ForumNavigationHostView: View {
     @State private var path: [ForumDestination] = []
     @State private var actionErrorMessage: String?
 
-    private let appContext: YamiboAppContext
+    private let dependencies: ForumDependencies
     private let appModel: YamiboAppModel
 
-    public init(appContext: YamiboAppContext, appModel: YamiboAppModel) {
-        self.appContext = appContext
+    public init(dependencies: ForumDependencies, appModel: YamiboAppModel) {
+        self.dependencies = dependencies
         self.appModel = appModel
-        _model = State(wrappedValue: ForumHomeViewModel(appContext: appContext))
+        _model = State(wrappedValue: ForumHomeViewModel(dependencies: dependencies))
     }
 
     public var body: some View {
@@ -30,7 +30,7 @@ public struct ForumNavigationHostView: View {
                             fid: fid,
                             title: title,
                             initialPage: page ?? 1,
-                            appContext: appContext
+                            dependencies: dependencies
                         ),
                         onSubBoardTap: openBoard,
                         onPinnedTap: { openPinnedItem($0, containingFid: fid) },
@@ -46,7 +46,7 @@ public struct ForumNavigationHostView: View {
                     .forumNavigationBarStyle()
                 case let .search(fid):
                     ForumSearchView(
-                        model: ForumSearchViewModel(forumID: fid, appContext: appContext),
+                        model: ForumSearchViewModel(forumID: fid, dependencies: dependencies),
                         onThreadTap: { openThread($0, containingFid: fid) },
                         onAuthorTap: openUserSpace,
                         onURLSubmit: {
@@ -61,7 +61,7 @@ public struct ForumNavigationHostView: View {
                             titleHint: name,
                             initialSection: section,
                             initialSubPage: subPage,
-                            appContext: appContext
+                            dependencies: dependencies
                         ),
                         onThreadTap: { openThread($0, title: $1, containingFid: nil) },
                         onUserTap: openUserSpace,
@@ -76,7 +76,7 @@ public struct ForumNavigationHostView: View {
                     .forumNavigationBarStyle()
                 case let .messageCenter(tab):
                     MessageCenterView(
-                        model: MessageCenterViewModel(initialTab: tab, appContext: appContext),
+                        model: MessageCenterViewModel(initialTab: tab, dependencies: dependencies),
                         onPrivateMessageTap: openPrivateMessage,
                         onUserTap: openUserSpace,
                         onWebTap: {
@@ -89,13 +89,13 @@ public struct ForumNavigationHostView: View {
                         model: PrivateMessageViewModel(
                             uid: uid,
                             titleHint: name,
-                            appContext: appContext
+                            dependencies: dependencies
                         )
                     )
                     .forumNavigationBarStyle()
                 case let .blog(blogID, uid, title):
                     BlogReaderView(
-                        model: BlogReaderViewModel(blogID: blogID, uid: uid, titleHint: title, appContext: appContext),
+                        model: BlogReaderViewModel(blogID: blogID, uid: uid, titleHint: title, dependencies: dependencies),
                         onUserTap: openUserSpace,
                         onWebTap: {
                             path.append(.web($0))
@@ -104,7 +104,7 @@ public struct ForumNavigationHostView: View {
                     .forumNavigationBarStyle()
                 case let .novelDetail(context):
                     ForumNovelDetailView(
-                        model: ForumNovelDetailViewModel(context: context, appContext: appContext),
+                        model: ForumNovelDetailViewModel(context: context, dependencies: dependencies),
                         onChapterTap: { launchContext in
                             appModel.presentNovelReader(launchContext)
                         },
@@ -116,7 +116,7 @@ public struct ForumNavigationHostView: View {
                     .forumNavigationBarStyle()
                 case let .mangaDetail(context):
                     ForumMangaDetailView(
-                        model: ForumMangaDetailViewModel(context: context, appContext: appContext),
+                        model: ForumMangaDetailViewModel(context: context, dependencies: dependencies),
                         onChapterTap: { launchContext in
                             appModel.presentMangaReader(launchContext)
                         },
@@ -127,7 +127,7 @@ public struct ForumNavigationHostView: View {
                     .forumNavigationBarStyle()
                 case let .threadReader(context):
                     ForumThreadReaderView(
-                        model: ForumThreadReaderViewModel(context: context, appContext: appContext),
+                        model: ForumThreadReaderViewModel(context: context, dependencies: dependencies),
                         onUserTap: openUserSpace,
                         onURLTap: { route($0, source: .external) }
                     )
@@ -135,7 +135,7 @@ public struct ForumNavigationHostView: View {
                 case let .web(url):
                     ForumBrowserView(
                         url: url,
-                        appContext: appContext,
+                        sessionStore: dependencies.sessionStore,
                         appModel: appModel,
                         listensToForumNavigationRequest: false
                     )
@@ -216,7 +216,7 @@ public struct ForumNavigationHostView: View {
     ) {
         Task {
             do {
-                let resolver = await appContext.makeYamiboThreadRouteResolver()
+                let resolver = await dependencies.makeThreadRouteResolver()
                 let target = try await resolver.resolve(
                     YamiboThreadRouteRequest(
                         threadURL: url,
@@ -235,7 +235,7 @@ public struct ForumNavigationHostView: View {
     private func openThread(_ thread: ForumThreadSummary, containingFid: String?) {
         Task {
             do {
-                let resolver = await appContext.makeYamiboThreadRouteResolver()
+                let resolver = await dependencies.makeThreadRouteResolver()
                 let target = try await resolver.resolve(
                     YamiboThreadRouteRequest(
                         threadURL: thread.url,
@@ -314,7 +314,7 @@ public struct ForumNavigationHostView: View {
     }
 
     private func openPostThreadFallback(fid: String) {
-        var components = URLComponents(url: YamiboRoute.baseURL, resolvingAgainstBaseURL: false)!
+        var components = URLComponents(url: YamiboDomain.baseURL, resolvingAgainstBaseURL: false)!
         components.path = "/forum.php"
         components.queryItems = [
             .init(name: "mod", value: "post"),

@@ -5,7 +5,7 @@ public actor ForumRepository {
     private let cacheStore: ForumCacheStore
     private let now: @Sendable () -> Date
 
-    public init(
+    init(
         client: YamiboClient,
         cacheStore: ForumCacheStore,
         now: @escaping @Sendable () -> Date = { Date() }

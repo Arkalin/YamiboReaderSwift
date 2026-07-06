@@ -14,7 +14,7 @@ public actor ForumCacheStore {
     private let cacheStore: DiskCacheStore
     private let now: @Sendable () -> Date
 
-    public init(
+    init(
         databasePool: DatabasePool? = nil,
         fileManager: FileManager = .default,
         rootDirectory: URL? = nil,
@@ -234,7 +234,7 @@ public actor ForumCacheStore {
 
     private static func openDatabase(rootDirectory: URL, fileManager: FileManager) -> DatabasePool {
         do {
-            return try YamiboDatabase.openSharedPool(rootDirectory: rootDirectory, fileManager: fileManager)
+            return try YamiboDatabase.openPool(rootDirectory: rootDirectory, fileManager: fileManager)
         } catch {
             fatalError("Failed to open ForumCacheStore database: \(error)")
         }
@@ -244,11 +244,4 @@ public actor ForumCacheStore {
 private struct ForumCacheEntry<Value: Codable & Sendable>: Codable, Sendable {
     var value: Value
     var fetchedAt: Date
-}
-
-private extension String {
-    var nilIfBlank: String? {
-        let value = trimmingCharacters(in: .whitespacesAndNewlines)
-        return value.isEmpty ? nil : value
-    }
 }

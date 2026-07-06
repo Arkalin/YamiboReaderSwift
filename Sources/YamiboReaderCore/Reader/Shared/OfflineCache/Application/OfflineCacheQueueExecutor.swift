@@ -1,39 +1,39 @@
 import Foundation
 
-public enum OfflineCacheImageAcquisitionSource: Hashable, Sendable {
+enum OfflineCacheImageAcquisitionSource: Hashable, Sendable {
     case network
 }
 
-public struct OfflineCacheImageAcquisition: Hashable, Sendable {
-    public var data: Data
-    public var source: OfflineCacheImageAcquisitionSource
+struct OfflineCacheImageAcquisition: Hashable, Sendable {
+    var data: Data
+    var source: OfflineCacheImageAcquisitionSource
 
-    public init(data: Data, source: OfflineCacheImageAcquisitionSource) {
+    init(data: Data, source: OfflineCacheImageAcquisitionSource) {
         self.data = data
         self.source = source
     }
 }
 
-public protocol OfflineCacheImageAcquiring: Sendable {
+protocol OfflineCacheImageAcquiring: Sendable {
     func acquireImageData(for source: YamiboImageSource) async throws -> OfflineCacheImageAcquisition
 }
 
-public protocol OfflineCacheImageTransporting: Sendable {
+protocol OfflineCacheImageTransporting: Sendable {
     func downloadImageData(for source: YamiboImageSource) async throws -> Data
 }
 
-public protocol OfflineCacheQueueRunObserving: Sendable {
+protocol OfflineCacheQueueRunObserving: Sendable {
     func submitUserInitiatedRun() async
     func queueRunDidUpdateProgress(completedImageCount: Int, targetImageCount: Int) async
     func queueRunDidFinish(success: Bool) async
     func queueRunDidCancel() async
 }
 
-public actor OfflineCacheImageAcquirer: OfflineCacheImageAcquiring {
+actor OfflineCacheImageAcquirer: OfflineCacheImageAcquiring {
     private let imagePipeline: YamiboImagePipeline
     private let backgroundTransport: (any OfflineCacheImageTransporting)?
 
-    public init(
+    init(
         imagePipeline: YamiboImagePipeline = .shared,
         backgroundTransport: (any OfflineCacheImageTransporting)? = nil
     ) {
@@ -41,7 +41,7 @@ public actor OfflineCacheImageAcquirer: OfflineCacheImageAcquiring {
         self.backgroundTransport = backgroundTransport
     }
 
-    public func acquireImageData(for source: YamiboImageSource) async throws -> OfflineCacheImageAcquisition {
+    func acquireImageData(for source: YamiboImageSource) async throws -> OfflineCacheImageAcquisition {
         let data: Data
         if let backgroundTransport {
             data = try await backgroundTransport.downloadImageData(for: source)
@@ -60,7 +60,7 @@ public actor OfflineCacheQueueExecutor {
     private var runTask: Task<Void, Never>?
     private var runGeneration = 0
 
-    public init(
+    init(
         store: any OfflineCacheQueueStoring & OfflineCacheImageAssetStoring,
         mangaCacheStore: any MangaOfflineCacheStoring,
         novelCacheStore: (any NovelOfflineCacheStoring)? = nil,

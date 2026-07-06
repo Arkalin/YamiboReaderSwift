@@ -3,19 +3,20 @@ import Foundation
 @preconcurrency import GRDB
 
 extension OfflineCacheStore: YamiboOfflineImageDataProviding {
-    public func offlineImageData(url: URL, scope: YamiboImageOfflineScope) async -> Data? {
-        if let ownerName = scope.ownerName,
-           let membership = await mangaOfflineCacheMembership(ownerName: ownerName, tid: scope.tid),
-           membership.imageURLs.contains(where: { $0.absoluteString == url.absoluteString }),
-           let data = await offlineImageData(for: url) {
-            return data
+    func offlineImageData(url: URL, scope: YamiboImageOfflineScope) async -> Data? {
+        if let ownerName = scope.ownerName {
+            guard let membership = await mangaOfflineCacheMembership(ownerName: ownerName, tid: scope.tid),
+                  membership.imageURLs.contains(where: { $0.absoluteString == url.absoluteString }) else {
+                return nil
+            }
+            return await offlineImageData(for: url)
         }
         return await novelOfflineImageData(for: url, threadID: scope.tid)
     }
 }
 
 extension OfflineCacheStore {
-    public func offlineImageData(for imageURL: URL) async -> Data? {
+    func offlineImageData(for imageURL: URL) async -> Data? {
         try? await recoverQueueStateAfterRestart()
         let imageURLString = imageURL.absoluteString
         guard let fileName = try? await database.read({ db in
@@ -31,7 +32,7 @@ extension OfflineCacheStore {
         return await offlineImageData(imageURLString: imageURLString, fileName: fileName)
     }
 
-    public func novelOfflineImageData(for imageURL: URL, threadID: String) async -> Data? {
+    func novelOfflineImageData(for imageURL: URL, threadID: String) async -> Data? {
         try? await recoverQueueStateAfterRestart()
         let imageURLString = imageURL.absoluteString
         let normalizedThreadID = threadID.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -71,7 +72,7 @@ extension OfflineCacheStore {
         return data
     }
 
-    public func saveOfflineImageData(_ data: Data, for imageURL: URL) async throws {
+    func saveOfflineImageData(_ data: Data, for imageURL: URL) async throws {
         try await recoverQueueStateAfterRestart()
         do {
             let imageURLString = imageURL.absoluteString
@@ -120,7 +121,7 @@ extension OfflineCacheStore {
         }
     }
 
-    public func mangaOfflineCacheDiskUsageByOwner() async -> [MangaOfflineCacheOwnerUsage] {
+    func mangaOfflineCacheDiskUsageByOwner() async -> [MangaOfflineCacheOwnerUsage] {
         try? await recoverQueueStateAfterRestart()
         return (try? await database.read { db in
             var imageURLsByOwner: [String: Set<String>] = [:]

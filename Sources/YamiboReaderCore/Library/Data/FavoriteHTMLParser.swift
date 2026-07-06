@@ -1,23 +1,23 @@
 import Foundation
 
-public enum FavoriteHTMLParser {
-    public struct FavoritePageResult: Sendable {
-        public var favorites: [Favorite]
-        public var currentPage: Int
-        public var totalPages: Int
+enum FavoriteHTMLParser {
+    struct FavoritePageResult: Sendable {
+        var favorites: [Favorite]
+        var currentPage: Int
+        var totalPages: Int
 
-        public init(favorites: [Favorite], currentPage: Int = 1, totalPages: Int = 1) {
+        init(favorites: [Favorite], currentPage: Int = 1, totalPages: Int = 1) {
             self.favorites = favorites
             self.currentPage = max(1, currentPage)
             self.totalPages = max(1, totalPages)
         }
     }
 
-    public static func parseFavorites(from html: String) -> [Favorite] {
+    static func parseFavorites(from html: String) -> [Favorite] {
         parseFavoritePage(from: html).favorites
     }
 
-    public static func parseFavoritePage(from html: String) -> FavoritePageResult {
+    static func parseFavoritePage(from html: String) -> FavoritePageResult {
         guard let document = try? KannaSoup.parse(html) else {
             return FavoritePageResult(favorites: [])
         }

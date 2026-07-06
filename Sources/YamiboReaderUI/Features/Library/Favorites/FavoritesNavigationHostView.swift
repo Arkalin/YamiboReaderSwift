@@ -2,12 +2,12 @@ import SwiftUI
 import YamiboReaderCore
 
 struct FavoritesNavigationHostView: View {
-    let appContext: YamiboAppContext
+    let dependencies: LibraryDependencies
     let appModel: YamiboAppModel
 
     var body: some View {
         NavigationStack {
-            LocalFavoritesRootView(appContext: appContext, appModel: appModel)
+            LocalFavoritesRootView(dependencies: dependencies, appModel: appModel)
         }
     }
 }

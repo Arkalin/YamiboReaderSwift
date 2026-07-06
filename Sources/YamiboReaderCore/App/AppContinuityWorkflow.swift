@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 public struct AppContinuityLaunchResult: Sendable {
     public let bootstrapState: YamiboBootstrapState
@@ -10,14 +11,20 @@ public struct AppContinuityLaunchResult: Sendable {
     }
 }
 
-@MainActor
-public final class AppContinuityWorkflow {
+/// Thread-agnostic: mutable state sits behind an unfair lock so the
+/// fire-and-forget lifecycle entry points stay synchronous and, for any single
+/// caller, strictly ordered (presented → position changed → dismissed).
+public final class AppContinuityWorkflow: Sendable {
+    private struct MutableState {
+        var foregroundSyncTask: Task<Void, Never>?
+        var debouncedUploadTask: Task<Void, Never>?
+        var isWebDAVSyncInProgress = false
+        var hasRestoredReaderResumeRoute = false
+        var isReaderRoutePresented = false
+    }
+
     private let appContext: YamiboAppContext
-    private var foregroundSyncTask: Task<Void, Never>?
-    private var debouncedUploadTask: Task<Void, Never>?
-    private var isWebDAVSyncInProgress = false
-    private var hasRestoredReaderResumeRoute = false
-    private var isReaderRoutePresented = false
+    private let state = OSAllocatedUnfairLock(initialState: MutableState())
 
     public init(appContext: YamiboAppContext) {
         self.appContext = appContext
@@ -37,8 +44,12 @@ public final class AppContinuityWorkflow {
         canRestoreReaderRoute: Bool,
         reconcilesWithReadingProgress: Bool = false
     ) async -> ReaderResumeRoute? {
-        guard !hasRestoredReaderResumeRoute else { return nil }
-        hasRestoredReaderResumeRoute = true
+        let isFirstRestore = state.withLock { mutableState in
+            if mutableState.hasRestoredReaderResumeRoute { return false }
+            mutableState.hasRestoredReaderResumeRoute = true
+            return true
+        }
+        guard isFirstRestore else { return nil }
         guard canRestoreReaderRoute else { return nil }
         guard let route = await appContext.readerResumeRouteStore.load() else { return nil }
 
@@ -53,68 +64,97 @@ public final class AppContinuityWorkflow {
         if restoredRoute != route {
             try? await appContext.readerResumeRouteStore.save(restoredRoute)
         }
-        isReaderRoutePresented = true
+        state.withLock { $0.isReaderRoutePresented = true }
         return restoredRoute
     }
 
     public func foregroundBecameActive() {
-        foregroundSyncTask?.cancel()
-        foregroundSyncTask = Task { @MainActor [weak self] in
-            _ = await self?.synchronizeWebDAVSilently()
-        }
+        replaceForegroundSyncTask(
+            with: Task { [weak self] in
+                _ = await self?.synchronizeWebDAVSilently()
+            }
+        )
     }
 
     public func localDataChanged(touchesAppSettings: Bool = false) {
-        guard !isWebDAVSyncInProgress else { return }
-        debouncedUploadTask?.cancel()
-        debouncedUploadTask = Task { @MainActor [weak self] in
-            guard let self else { return }
-            do {
-                let service = appContext.makeWebDAVSyncService()
-                try await service.markLocalDataChanged(touchesAppSettings: touchesAppSettings)
-                try await Task.sleep(for: .seconds(2))
+        guard state.withLock({ !$0.isWebDAVSyncInProgress }) else { return }
+        replaceDebouncedUploadTask(
+            with: Task { [weak self] in
+                guard let self else { return }
+                do {
+                    let service = appContext.makeWebDAVSyncService()
+                    try await service.markLocalDataChanged(touchesAppSettings: touchesAppSettings)
+                    try await Task.sleep(for: .seconds(2))
 
-                guard !isWebDAVSyncInProgress else { return }
-                isWebDAVSyncInProgress = true
-                defer { isWebDAVSyncInProgress = false }
+                    guard beginWebDAVSync() else { return }
+                    defer { endWebDAVSync() }
 
-                try await service.synchronizeAutomatically()
-            } catch {
-                // Keep local data authoritative until the next foreground or manual sync.
+                    try await service.synchronizeAutomatically()
+                } catch {
+                    // Keep local data authoritative until the next foreground or manual sync.
+                }
             }
-        }
+        )
     }
 
     public func willEnterBackground() {
-        debouncedUploadTask?.cancel()
-        debouncedUploadTask = nil
-        Task { @MainActor [weak self] in
+        replaceDebouncedUploadTask(with: nil)
+        Task { [weak self] in
             await self?.flushWebDAVSyncBeforeBackground()
         }
     }
 
     public func readerRoutePresented(_ route: ReaderResumeRoute) {
-        isReaderRoutePresented = true
+        state.withLock { $0.isReaderRoutePresented = true }
         Task { [appContext] in
             try? await appContext.readerResumeRouteStore.save(route)
         }
     }
 
     public func readerRouteDismissed() {
-        isReaderRoutePresented = false
+        state.withLock { $0.isReaderRoutePresented = false }
         appContext.readerResumeRouteStore.clearSync()
     }
 
     public func readerReadingPositionChanged(_ route: ReaderResumeRoute) {
-        guard isReaderRoutePresented else { return }
+        guard state.withLock({ $0.isReaderRoutePresented }) else { return }
         Task { [appContext] in
             try? await appContext.readerResumeRouteStore.saveReadingPosition(route)
         }
     }
 
+    private func replaceForegroundSyncTask(with task: Task<Void, Never>?) {
+        let previous = state.withLock { mutableState in
+            let previous = mutableState.foregroundSyncTask
+            mutableState.foregroundSyncTask = task
+            return previous
+        }
+        previous?.cancel()
+    }
+
+    private func replaceDebouncedUploadTask(with task: Task<Void, Never>?) {
+        let previous = state.withLock { mutableState in
+            let previous = mutableState.debouncedUploadTask
+            mutableState.debouncedUploadTask = task
+            return previous
+        }
+        previous?.cancel()
+    }
+
+    private func beginWebDAVSync() -> Bool {
+        state.withLock { mutableState in
+            if mutableState.isWebDAVSyncInProgress { return false }
+            mutableState.isWebDAVSyncInProgress = true
+            return true
+        }
+    }
+
+    private func endWebDAVSync() {
+        state.withLock { $0.isWebDAVSyncInProgress = false }
+    }
+
     private func synchronizeWebDAVForStartup() async -> Bool {
-        foregroundSyncTask?.cancel()
-        foregroundSyncTask = nil
+        replaceForegroundSyncTask(with: nil)
         let result = await synchronizeWebDAVSilently()
         if case .downloaded = result {
             return true
@@ -123,9 +163,8 @@ public final class AppContinuityWorkflow {
     }
 
     private func synchronizeWebDAVSilently() async -> WebDAVAutomaticSyncResult {
-        guard !isWebDAVSyncInProgress else { return .skipped }
-        isWebDAVSyncInProgress = true
-        defer { isWebDAVSyncInProgress = false }
+        guard beginWebDAVSync() else { return .skipped }
+        defer { endWebDAVSync() }
 
         do {
             return try await appContext.makeWebDAVSyncService().synchronizeAutomatically()
@@ -136,9 +175,8 @@ public final class AppContinuityWorkflow {
     }
 
     private func flushWebDAVSyncBeforeBackground() async {
-        guard !isWebDAVSyncInProgress else { return }
-        isWebDAVSyncInProgress = true
-        defer { isWebDAVSyncInProgress = false }
+        guard beginWebDAVSync() else { return }
+        defer { endWebDAVSync() }
 
         do {
             try await appContext.makeWebDAVSyncService().synchronizeAutomatically()

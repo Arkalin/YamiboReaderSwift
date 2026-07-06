@@ -13,13 +13,13 @@ final class ForumMangaDetailViewModel {
 
     let context: MangaDetailLaunchContext
 
-    @ObservationIgnored private let appContext: YamiboAppContext
+    @ObservationIgnored private let dependencies: ForumDependencies
     @ObservationIgnored private var readingProgressUpdatesTask: Task<Void, Never>?
 
-    init(context: MangaDetailLaunchContext, appContext: YamiboAppContext) {
+    init(context: MangaDetailLaunchContext, dependencies: ForumDependencies) {
         self.context = context
-        self.appContext = appContext
-        readingProgressUpdatesTask = Task { @MainActor [weak self, readingProgressStore = appContext.readingProgressStore] in
+        self.dependencies = dependencies
+        readingProgressUpdatesTask = Task { @MainActor [weak self, readingProgressStore = dependencies.readingProgressStore] in
             for await notification in NotificationCenter.default.notifications(named: ReadingProgressStore.didChangeNotification) {
                 guard !Task.isCancelled else { return }
                 guard let self else { return }
@@ -52,20 +52,20 @@ final class ForumMangaDetailViewModel {
     func reload() async {
         isLoading = true
         errorMessage = nil
-        readingProgress = await appContext.readingProgressStore.load(threadID: context.thread.tid)
+        readingProgress = await dependencies.readingProgressStore.load(threadID: context.thread.tid)
         defer { isLoading = false }
 
         do {
-            let loader = await appContext.makeMangaReaderProjectionLoader()
-            let repository = await appContext.makeMangaDirectoryRepository()
-            let store = appContext.makeMangaDirectoryStore()
+            let loader = await dependencies.makeMangaReaderProjectionLoader()
+            let repository = await dependencies.makeMangaDirectoryRepository()
+            let store = dependencies.mangaDirectoryStore
             let document = try await loader.loadReaderProjection(
                 MangaReaderProjectionRequest(threadID: context.thread.tid)
             )
             let workflow = MangaDirectoryWorkflow(
                 repository: repository,
                 store: store,
-                searchCooldownState: appContext.mangaDirectorySearchCooldownState
+                searchCooldownState: dependencies.mangaDirectorySearchCooldownState
             )
             let launchContext = MangaLaunchContext(
                 originalThreadID: context.thread.tid,
@@ -89,7 +89,7 @@ final class ForumMangaDetailViewModel {
         } catch {
             currentDocument = nil
             directory = nil
-            readingProgress = await appContext.readingProgressStore.load(threadID: context.thread.tid)
+            readingProgress = await dependencies.readingProgressStore.load(threadID: context.thread.tid)
             errorMessage = error.localizedDescription
         }
     }

@@ -9,7 +9,7 @@ public struct YamiboAccountService: Sendable {
     private let profileStore: YamiboProfileStore
     private let userAgent: String
 
-    public init(
+    init(
         session: URLSession = YamiboNetworkConfiguration.makeSession(),
         sessionStore: SessionStore,
         profileStore: YamiboProfileStore,
@@ -138,10 +138,7 @@ public struct YamiboAccountService: Sendable {
     private func currentCookieHeader() -> String {
         let storageCookies = cookieStorages()
             .flatMap { $0.cookies ?? [] }
-            .filter { cookie in
-                let domain = cookie.domain.lowercased()
-                return domain == "bbs.yamibo.com" || domain.hasSuffix(".yamibo.com") || domain == "yamibo.com"
-            }
+            .filter { YamiboDomain.isYamiboCookieDomain($0.domain) }
 
         var uniqueCookies: [String: HTTPCookie] = [:]
         for cookie in storageCookies {
@@ -167,9 +164,7 @@ public struct YamiboAccountService: Sendable {
 
     private func clearHTTPCookies() {
         for storage in cookieStorages() {
-            for cookie in storage.cookies ?? [] {
-                let domain = cookie.domain.lowercased()
-                guard domain.contains("yamibo.com") else { continue }
+            for cookie in storage.cookies ?? [] where YamiboDomain.containsYamiboDomain(cookie.domain) {
                 storage.deleteCookie(cookie)
             }
         }
@@ -180,7 +175,7 @@ public struct YamiboAccountService: Sendable {
     private func clearWebKitCookies() async {
         let cookieStore = WKWebsiteDataStore.default().httpCookieStore
         let cookies = await cookieStore.allCookies()
-        for cookie in cookies where cookie.domain.lowercased().contains("yamibo.com") {
+        for cookie in cookies where YamiboDomain.containsYamiboDomain(cookie.domain) {
             await cookieStore.deleteCookieAsync(cookie)
         }
     }

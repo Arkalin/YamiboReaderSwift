@@ -1,6 +1,7 @@
 import Foundation
 import XCTest
 @testable import YamiboReaderCore
+import YamiboReaderTestSupport
 @testable import YamiboReaderUI
 
 @MainActor
@@ -17,7 +18,7 @@ final class MineHomeViewModelTests: XCTestCase {
         }
         defer { MineProfileRefreshTestURLProtocol.handler = nil }
 
-        let viewModel = MineHomeViewModel(appContext: fixture.appContext)
+        let viewModel = MineHomeViewModel(dependencies: fixture.appContext.accountDependencies)
         await viewModel.load()
         await viewModel.load()
 
@@ -34,7 +35,7 @@ final class MineHomeViewModelTests: XCTestCase {
         }
         defer { MineProfileRefreshTestURLProtocol.handler = nil }
 
-        let viewModel = MineHomeViewModel(appContext: fixture.appContext)
+        let viewModel = MineHomeViewModel(dependencies: fixture.appContext.accountDependencies)
         await viewModel.load()
         await viewModel.load()
 
@@ -54,7 +55,7 @@ final class MineHomeViewModelTests: XCTestCase {
         }
         defer { MineProfileRefreshTestURLProtocol.handler = nil }
 
-        let viewModel = MineHomeViewModel(appContext: fixture.appContext)
+        let viewModel = MineHomeViewModel(dependencies: fixture.appContext.accountDependencies)
         await viewModel.load()
         await viewModel.refreshProfile()
 
@@ -74,7 +75,7 @@ final class MineHomeViewModelTests: XCTestCase {
         }
         defer { MineProfileRefreshTestURLProtocol.handler = nil }
 
-        let viewModel = MineHomeViewModel(appContext: fixture.appContext)
+        let viewModel = MineHomeViewModel(dependencies: fixture.appContext.accountDependencies)
         await viewModel.load()
         await viewModel.load()
 
@@ -94,7 +95,7 @@ final class MineHomeViewModelTests: XCTestCase {
         }
         defer { MineProfileRefreshTestURLProtocol.handler = nil }
 
-        let viewModel = MineHomeViewModel(appContext: fixture.appContext)
+        let viewModel = MineHomeViewModel(dependencies: fixture.appContext.accountDependencies)
         await viewModel.load()
 
         XCTAssertEqual(requestCount, 1)
@@ -118,7 +119,7 @@ final class MineHomeViewModelTests: XCTestCase {
         }
         defer { MineProfileRefreshTestURLProtocol.handler = nil }
 
-        let viewModel = MineHomeViewModel(appContext: fixture.appContext)
+        let viewModel = MineHomeViewModel(dependencies: fixture.appContext.accountDependencies)
         await viewModel.load()
         shouldFail = true
         await viewModel.refreshProfile()
@@ -132,7 +133,7 @@ final class MineHomeViewModelTests: XCTestCase {
         let fixture = try await makeMineHomeFixture()
         let checkInService = RecordingCheckInService(result: .skippedToday)
         let viewModel = MineHomeViewModel(
-            appContext: fixture.appContext,
+            dependencies: fixture.appContext.accountDependencies,
             checkInService: checkInService
         )
 
@@ -153,7 +154,7 @@ final class MineHomeViewModelTests: XCTestCase {
         let fixture = try await makeMineHomeFixture()
         let checkInService = RecordingCheckInService(result: .alreadyCheckedInToday)
         let viewModel = MineHomeViewModel(
-            appContext: fixture.appContext,
+            dependencies: fixture.appContext.accountDependencies,
             checkInService: checkInService
         )
 
@@ -180,7 +181,7 @@ final class MineHomeViewModelTests: XCTestCase {
         defer { MineProfileRefreshTestURLProtocol.handler = nil }
 
         let viewModel = MineHomeViewModel(
-            appContext: fixture.appContext,
+            dependencies: fixture.appContext.accountDependencies,
             checkInService: checkInService
         )
         viewModel.session = await fixture.appContext.sessionStore.load()
@@ -200,7 +201,7 @@ final class MineHomeViewModelTests: XCTestCase {
         let fixture = try await makeMineHomeFixture()
         let checkInService = RecordingCheckInService(result: .verificationFailed)
         let viewModel = MineHomeViewModel(
-            appContext: fixture.appContext,
+            dependencies: fixture.appContext.accountDependencies,
             checkInService: checkInService
         )
 
@@ -218,7 +219,7 @@ final class MineHomeViewModelTests: XCTestCase {
         let fixture = try await makeMineHomeFixture(cachedProfile: makeProfile(uid: "535977"))
         let session = await fixture.appContext.sessionStore.load()
         await fixture.checkInStore.markCheckedIn(session: session)
-        let viewModel = MineHomeViewModel(appContext: fixture.appContext)
+        let viewModel = MineHomeViewModel(dependencies: fixture.appContext.accountDependencies)
 
         await viewModel.load()
 
@@ -231,7 +232,7 @@ final class MineHomeViewModelTests: XCTestCase {
         await fixture.checkInStore.markCheckedIn(session: session)
         let checkInService = RecordingCheckInService(result: .success)
         let viewModel = MineHomeViewModel(
-            appContext: fixture.appContext,
+            dependencies: fixture.appContext.accountDependencies,
             checkInService: checkInService
         )
         await viewModel.load()
@@ -291,7 +292,7 @@ final class MineHomeViewModelTests: XCTestCase {
             )
         )
 
-        let viewModel = MineHomeViewModel(appContext: fixture.appContext)
+        let viewModel = MineHomeViewModel(dependencies: fixture.appContext.accountDependencies)
         await viewModel.refreshOfflineCacheQueue()
 
         XCTAssertEqual(viewModel.offlineCacheQueueEntryCount, 3)
@@ -328,7 +329,7 @@ final class MineHomeViewModelTests: XCTestCase {
             try makeMineOfflineCacheWorkRequest(ownerName: "作品A", tid: "200")
         )
 
-        let viewModel = MineHomeViewModel(appContext: fixture.appContext)
+        let viewModel = MineHomeViewModel(dependencies: fixture.appContext.accountDependencies)
         await viewModel.refreshOfflineCacheQueue()
 
         XCTAssertEqual(viewModel.offlineCacheQueueEntryCount, 1)
@@ -370,7 +371,7 @@ final class MineHomeViewModelTests: XCTestCase {
             try makeMineNovelOfflineCacheWorkRequest(ownerTitle: "小说A", tid: "200", view: 1)
         )
 
-        let viewModel = MineHomeViewModel(appContext: fixture.appContext)
+        let viewModel = MineHomeViewModel(dependencies: fixture.appContext.accountDependencies)
         await viewModel.refreshOfflineCacheQueue()
 
         XCTAssertEqual(viewModel.offlineCacheQueueEntryCount, 2)
@@ -388,7 +389,7 @@ final class MineHomeViewModelTests: XCTestCase {
         try await fixture.offlineCacheStore.markOfflineCacheWorkFailed(id: workID, message: "Timeout")
         let controller = RecordingOfflineCacheQueueController(store: fixture.offlineCacheStore)
         let viewModel = MineHomeViewModel(
-            appContext: fixture.appContext,
+            dependencies: fixture.appContext.accountDependencies,
             offlineCacheQueueController: controller
         )
 
@@ -414,7 +415,7 @@ final class MineHomeViewModelTests: XCTestCase {
                 targetImageURLs: [firstImage, secondImage]
             )
         )
-        let viewModel = MineHomeViewModel(appContext: fixture.appContext)
+        let viewModel = MineHomeViewModel(dependencies: fixture.appContext.accountDependencies)
 
         await viewModel.load()
         XCTAssertEqual(viewModel.offlineCacheQueueGroups.first?.chapters.first?.completedImageCount, 0)
@@ -439,7 +440,7 @@ final class MineHomeViewModelTests: XCTestCase {
 
     func testLoadOfflineCacheQueueAutomaticallyRefreshesWhenStoreChanges() async throws {
         let fixture = try await makeMineHomeFixture()
-        let viewModel = MineHomeViewModel(appContext: fixture.appContext)
+        let viewModel = MineHomeViewModel(dependencies: fixture.appContext.accountDependencies)
 
         await viewModel.loadOfflineCacheQueue()
         XCTAssertEqual(viewModel.offlineCacheQueueEntryCount, 0)
@@ -462,7 +463,7 @@ final class MineHomeViewModelTests: XCTestCase {
             return profileResponse(for: request, uid: "535977")
         }
         defer { MineProfileRefreshTestURLProtocol.handler = nil }
-        let viewModel = MineHomeViewModel(appContext: fixture.appContext)
+        let viewModel = MineHomeViewModel(dependencies: fixture.appContext.accountDependencies)
 
         await viewModel.loadOfflineCacheQueue()
 
@@ -472,7 +473,7 @@ final class MineHomeViewModelTests: XCTestCase {
 
     func testOfflineCacheQueueEmptyStateHidesControls() async throws {
         let fixture = try await makeMineHomeFixture()
-        let viewModel = MineHomeViewModel(appContext: fixture.appContext)
+        let viewModel = MineHomeViewModel(dependencies: fixture.appContext.accountDependencies)
 
         await viewModel.refreshOfflineCacheQueue()
 
@@ -488,7 +489,7 @@ final class MineHomeViewModelTests: XCTestCase {
         )
         let controller = RecordingOfflineCacheQueueController(store: fixture.offlineCacheStore)
         let viewModel = MineHomeViewModel(
-            appContext: fixture.appContext,
+            dependencies: fixture.appContext.accountDependencies,
             offlineCacheQueueController: controller
         )
 
@@ -521,7 +522,7 @@ final class MineHomeViewModelTests: XCTestCase {
         )
         let controller = RecordingOfflineCacheQueueController(store: fixture.offlineCacheStore)
         let viewModel = MineHomeViewModel(
-            appContext: fixture.appContext,
+            dependencies: fixture.appContext.accountDependencies,
             offlineCacheQueueController: controller
         )
 
@@ -544,7 +545,7 @@ final class MineHomeViewModelTests: XCTestCase {
         )
         let controller = RecordingOfflineCacheQueueController(store: fixture.offlineCacheStore)
         let viewModel = MineHomeViewModel(
-            appContext: fixture.appContext,
+            dependencies: fixture.appContext.accountDependencies,
             offlineCacheQueueController: controller
         )
         await viewModel.refreshOfflineCacheQueue()
@@ -577,7 +578,7 @@ final class MineHomeViewModelTests: XCTestCase {
         _ = try await fixture.offlineCacheStore.enqueueMangaOfflineCacheWork(
             try makeMineOfflineCacheWorkRequest(ownerName: "作品B", tid: "300")
         )
-        let viewModel = MineHomeViewModel(appContext: fixture.appContext)
+        let viewModel = MineHomeViewModel(dependencies: fixture.appContext.accountDependencies)
         await viewModel.refreshOfflineCacheQueue()
         let ownerAWorkIDs = Set(
             viewModel.offlineCacheQueueGroups

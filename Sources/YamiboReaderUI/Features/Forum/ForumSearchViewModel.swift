@@ -12,7 +12,7 @@ extension ForumRepository: ForumSearchPageLoading {}
 @MainActor
 @Observable
 final class ForumSearchViewModel {
-    struct PageSnapshot: Equatable {
+    private struct PageSnapshot {
         var page: ForumSearchPage?
         var errorMessage: String?
         var currentPage: Int
@@ -30,15 +30,30 @@ final class ForumSearchViewModel {
 
     @ObservationIgnored private let repositoryProvider: @Sendable () async -> any ForumSearchPageLoading
     @ObservationIgnored private let formHashProvider: @Sendable () async -> String?
-    @ObservationIgnored private var pageHistory: [PageSnapshot] = []
+    @ObservationIgnored private lazy var pageNavigator = ForumPageNavigator<PageSnapshot>(
+        capture: { [unowned self] in
+            PageSnapshot(
+                page: page,
+                errorMessage: errorMessage,
+                currentPage: currentPage,
+                currentSearchID: currentSearchID
+            )
+        },
+        restore: { [unowned self] snapshot in
+            page = snapshot.page
+            errorMessage = snapshot.errorMessage
+            currentPage = snapshot.currentPage
+            currentSearchID = snapshot.currentSearchID
+        }
+    )
 
-    init(forumID: String?, appContext: YamiboAppContext) {
+    init(forumID: String?, dependencies: ForumDependencies) {
         self.forumID = forumID
         repositoryProvider = {
-            await appContext.makeForumRepository()
+            await dependencies.makeForumRepository()
         }
         formHashProvider = {
-            await appContext.profileStore.load()?.formHash
+            await dependencies.profileStore.load()?.formHash
         }
     }
 
@@ -70,11 +85,11 @@ final class ForumSearchViewModel {
     }
 
     var canRestorePreviousPage: Bool {
-        !pageHistory.isEmpty
+        pageNavigator.canRestorePreviousPage
     }
 
     func searchFirstPage() async {
-        pageHistory.removeAll()
+        pageNavigator.reset()
         currentPage = 1
         currentSearchID = nil
         await search(pageNumber: 1, recordsHistory: false)
@@ -86,13 +101,9 @@ final class ForumSearchViewModel {
         await search(pageNumber: nextPage, recordsHistory: true)
     }
 
+    @discardableResult
     func restorePreviousPage() -> Bool {
-        guard let snapshot = pageHistory.popLast() else { return false }
-        page = snapshot.page
-        errorMessage = snapshot.errorMessage
-        currentPage = snapshot.currentPage
-        currentSearchID = snapshot.currentSearchID
-        return true
+        pageNavigator.restorePreviousPage()
     }
 
     private func search(pageNumber: Int, recordsHistory: Bool) async {
@@ -100,14 +111,7 @@ final class ForumSearchViewModel {
         guard !trimmedQuery.isEmpty else { return }
 
         if recordsHistory {
-            pageHistory.append(
-                PageSnapshot(
-                    page: page,
-                    errorMessage: errorMessage,
-                    currentPage: currentPage,
-                    currentSearchID: currentSearchID
-                )
-            )
+            pageNavigator.recordCurrentPage()
         }
 
         isLoading = true
@@ -136,7 +140,7 @@ final class ForumSearchViewModel {
             errorMessage = nil
         } catch {
             if recordsHistory {
-                _ = pageHistory.popLast()
+                pageNavigator.discardLastRecord()
             }
             page = nil
             currentPage = pageNumber

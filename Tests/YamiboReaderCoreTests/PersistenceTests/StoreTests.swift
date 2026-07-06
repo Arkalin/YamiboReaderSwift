@@ -3,6 +3,7 @@ import Foundation
 import Testing
 @preconcurrency import GRDB
 @testable import YamiboReaderCore
+import YamiboReaderTestSupport
 
 @Test func sessionStorePersistsCookieAndLoginState() async throws {
     let defaults = try #require(UserDefaults(suiteName: "session-store-tests"))
@@ -169,6 +170,10 @@ import Testing
             pageTurnDirection: .rightToLeft,
             translationMode: .traditional
         ),
+        novelOfflineCache: NovelOfflineCacheSettings(
+            retainsInlineImages: true,
+            isAutoRefreshEnabled: false
+        ),
         manga: MangaReaderSettings(
             readingMode: .paged,
             pagedTurnStyle: .pageCurl,
@@ -180,24 +185,24 @@ import Testing
             showsTwoPagesInLandscapeOnPad: true,
             directorySortOrder: .descending
         ),
-        novelOfflineCache: NovelOfflineCacheSettings(
-            retainsInlineImages: true,
-            isAutoRefreshEnabled: false
+        favorites: FavoriteLibrarySettings(
+            appearance: FavoriteAppearanceSettings(
+                collection: .purple,
+                novel: .red,
+                manga: .green,
+                other: .gray
+            ),
+            collapsesSections: true
         ),
         webBrowser: WebBrowserSettings(showsNavigationBar: false),
-        favoriteAppearance: FavoriteAppearanceSettings(
-            collection: .purple,
-            novel: .red,
-            manga: .green,
-            other: .gray
-        ),
-        applePencilPageTurn: ApplePencilPageTurnSettings(
-            isEnabled: true,
-            behavior: .doubleTapNextSqueezePrevious
-        ),
-        homePage: .favorites,
-        usesDataSaverMode: true,
-        collapsesFavoriteSections: true
+        system: SystemSettings(
+            homePage: .favorites,
+            usesDataSaverMode: true,
+            applePencilPageTurn: ApplePencilPageTurnSettings(
+                isEnabled: true,
+                behavior: .doubleTapNextSqueezePrevious
+            )
+        )
     )
 
     try await store.save(settings)
@@ -206,29 +211,25 @@ import Testing
     #expect(loaded == settings)
 }
 
-@Test func appSettingsDecodesLegacyPayloadWithDefaultWebBrowserSettings() async throws {
-    let legacy = """
+@Test func settingsStoreFallsBackToDefaultsWhenStoredDataDoesNotDecode() async throws {
+    let defaults = try #require(UserDefaults(suiteName: "settings-store-fallback-tests"))
+    defaults.removePersistentDomain(forName: "settings-store-fallback-tests")
+    let staleShape = """
     {
       "reader": {
         "fontScale": 1.0
       },
-      "manga": {
-        "readingMode": "vertical"
-      },
-      "usesDataSaverMode": false,
-      "collapsesFavoriteSections": true
+      "usesDataSaverMode": false
     }
     """
+    defaults.set(Data(staleShape.utf8), forKey: "settings")
+    let store = SettingsStore(defaults: defaults, key: "settings")
 
-    let decoded = try JSONDecoder().decode(AppSettings.self, from: Data(legacy.utf8))
+    let loaded = await store.load()
+    let syncLoaded = SettingsStore.loadSync(defaults: defaults, key: "settings")
 
-    #expect(decoded.webBrowser.showsNavigationBar == true)
-    #expect(decoded.homePage == .forum)
-    #expect(decoded.favoriteAppearance == FavoriteAppearanceSettings())
-    #expect(decoded.favoriteBackground == FavoriteBackgroundSettings())
-    #expect(decoded.novelOfflineCache == NovelOfflineCacheSettings())
-    #expect(decoded.applePencilPageTurn == ApplePencilPageTurnSettings())
-    #expect(decoded.collapsesFavoriteSections == true)
+    #expect(loaded == AppSettings())
+    #expect(syncLoaded == AppSettings())
 }
 
 @Test func favoriteBackgroundSettingsEncodesDecodesAndClampsValues() throws {
@@ -264,57 +265,23 @@ import Testing
     #expect(ApplePencilPageTurnBehavior.doubleTapNextSqueezePrevious.pageDelta(for: .squeeze) == -1)
 }
 
-@Test func appSettingsDecodesPartialFavoriteAppearanceWithDefaults() async throws {
-    let legacy = """
-    {
-      "favoriteAppearance": {
-        "novel": "red"
-      }
-    }
-    """
+@Test func favoriteLibrarySettingsNormalizesSelectedIdentifiers() {
+    let favorites = FavoriteLibrarySettings(
+        selectedCategoryID: "  category-1  ",
+        selectedCollectionID: "   "
+    )
 
-    let decoded = try JSONDecoder().decode(AppSettings.self, from: Data(legacy.utf8))
-
-    #expect(decoded.favoriteAppearance.collection == .orange)
-    #expect(decoded.favoriteAppearance.novel == .red)
-    #expect(decoded.favoriteAppearance.manga == .blue)
-    #expect(decoded.favoriteAppearance.other == .cyan)
+    #expect(favorites.selectedCategoryID == "category-1")
+    #expect(favorites.selectedCollectionID == nil)
 }
 
 @Test func appSettingsPersistsHomePageWhenEncodingAndDecoding() throws {
-    let settings = AppSettings(homePage: .favorites)
+    let settings = AppSettings(system: SystemSettings(homePage: .favorites))
 
     let encoded = try JSONEncoder().encode(settings)
     let decoded = try JSONDecoder().decode(AppSettings.self, from: encoded)
 
-    #expect(decoded.homePage == .favorites)
-}
-
-@Test func readerAppearanceSettingsDecodesLegacyPayloadWithFontDefaults() async throws {
-    let legacy = """
-    {
-      "fontScale": 1.2,
-      "lineHeightScale": 1.5,
-      "horizontalPadding": 18,
-      "usesNightMode": true,
-      "loadsInlineImages": false,
-      "backgroundStyle": "paper",
-      "readingMode": "vertical",
-      "translationMode": "traditional"
-    }
-    """
-
-    let decoded = try JSONDecoder().decode(NovelReaderAppearanceSettings.self, from: Data(legacy.utf8))
-
-    #expect(decoded.fontFamily == .systemSans)
-    #expect(decoded.characterSpacingScale == 0)
-    #expect(decoded.usesJustifiedText == false)
-    #expect(decoded.showsAuthorRepliesToOthers == true)
-    #expect(decoded.showsTwoPagesInLandscapeOnPad == false)
-    #expect(decoded.pagedTurnStyle == .slide)
-    #expect(decoded.pageTurnDirection == .leftToRight)
-    #expect(decoded.fontScale == 1.2)
-    #expect(decoded.lineHeightScale == 1.5)
+    #expect(decoded.system.homePage == .favorites)
 }
 
 @Test func readerAppearanceSettingsEncodesAndDecodesPagedTurnOptions() throws {
@@ -330,26 +297,6 @@ import Testing
     #expect(decoded.readingMode == .paged)
     #expect(decoded.pagedTurnStyle == .pageCurl)
     #expect(decoded.pageTurnDirection == .rightToLeft)
-}
-
-@Test func mangaReaderSettingsDecodesLegacyPayloadWithAscendingDirectorySortOrder() async throws {
-    let legacy = """
-    {
-      "readingMode": "paged",
-      "brightness": 0.8,
-      "zoomEnabled": false
-    }
-    """
-
-    let decoded = try JSONDecoder().decode(MangaReaderSettings.self, from: Data(legacy.utf8))
-
-    #expect(decoded.readingMode == .paged)
-    #expect(decoded.pagedTurnStyle == .slide)
-    #expect(decoded.pageTurnDirection == .leftToRight)
-    #expect(decoded.pageScaleMode == .fitWidth)
-    #expect(decoded.pageEdgeFillStyle == .black)
-    #expect(decoded.showsTwoPagesInLandscapeOnPad == false)
-    #expect(decoded.directorySortOrder == .ascending)
 }
 
 @Test func mangaReaderSettingsEncodesAndDecodesPagedOptions() throws {
@@ -375,12 +322,15 @@ import Testing
     let defaults = try makeIsolatedDefaults(prefix: "settings-reset-tests")
     let store = SettingsStore(defaults: defaults, key: "settings")
 
-    try await store.save(AppSettings(webBrowser: WebBrowserSettings(showsNavigationBar: false), homePage: .favorites))
+    try await store.save(AppSettings(
+        webBrowser: WebBrowserSettings(showsNavigationBar: false),
+        system: SystemSettings(homePage: .favorites)
+    ))
     try await store.reset()
 
     let loaded = await store.load()
     #expect(loaded == AppSettings())
-    #expect(loaded.homePage == .forum)
+    #expect(loaded.system.homePage == .forum)
 }
 
 @Test func settingsStoreLoadSyncMatchesAsyncLoad() async throws {
@@ -391,8 +341,7 @@ import Testing
     let store = SettingsStore(defaults: actorDefaults, key: "settings")
     let saved = AppSettings(
         webBrowser: WebBrowserSettings(showsNavigationBar: false),
-        homePage: .favorites,
-        usesDataSaverMode: true
+        system: SystemSettings(homePage: .favorites, usesDataSaverMode: true)
     )
 
     try await store.save(saved)

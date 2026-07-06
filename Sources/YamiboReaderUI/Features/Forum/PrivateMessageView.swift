@@ -210,7 +210,7 @@ private struct PrivateMessageAvatarView: View {
         } placeholder: {
             Image(systemName: "person.crop.circle")
                 .foregroundStyle(ForumColors.secondaryText)
-        } failure: { _ in
+        } failure: {
             Image(systemName: "person.crop.circle")
                 .foregroundStyle(ForumColors.secondaryText)
         }

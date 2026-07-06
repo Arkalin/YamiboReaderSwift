@@ -2,6 +2,7 @@ import Foundation
 @preconcurrency import GRDB
 import Testing
 @testable import YamiboReaderCore
+import YamiboReaderTestSupport
 
 @Suite("GRDB store migration issue 001")
 struct StoreMigrationIssue001Tests {

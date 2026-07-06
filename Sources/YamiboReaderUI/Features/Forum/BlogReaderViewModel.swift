@@ -28,15 +28,15 @@ final class BlogReaderViewModel {
     @ObservationIgnored private let repositoryProvider: @Sendable () async -> any BlogReaderPageLoading
     @ObservationIgnored private let currentProfileProvider: @Sendable () async -> YamiboProfile?
 
-    init(blogID: String, uid: String?, titleHint: String?, appContext: YamiboAppContext) {
+    init(blogID: String, uid: String?, titleHint: String?, dependencies: ForumDependencies) {
         self.blogID = blogID.trimmingCharacters(in: .whitespacesAndNewlines)
         self.uid = uid?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
         self.titleHint = titleHint?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
         repositoryProvider = {
-            await appContext.makeBlogReaderRepository()
+            await dependencies.makeBlogReaderRepository()
         }
         currentProfileProvider = {
-            await appContext.profileStore.load()
+            await dependencies.profileStore.load()
         }
     }
 

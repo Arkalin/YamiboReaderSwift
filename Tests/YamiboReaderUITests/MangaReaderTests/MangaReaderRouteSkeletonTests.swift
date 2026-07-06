@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 @testable import YamiboReaderCore
+import YamiboReaderTestSupport
 @testable import YamiboReaderUI
 
 @Suite("MangaReaderTests: UI Route Contracts")
@@ -18,10 +19,15 @@ struct MangaReaderTestsUIRouteContracts {
     @MainActor
     @Test func mangaReaderViewIsConstructible() throws {
         #if os(iOS)
-        let appModel = try makeAppModel()
+        let appContext = try makeAppContext()
+        let appModel = YamiboAppModel(appContext: appContext)
         let nativeContext = try makeLaunchContext(tid: "700")
 
-        _ = MangaReaderView(context: nativeContext, appModel: appModel)
+        _ = MangaReaderView(
+            context: nativeContext,
+            dependencies: appContext.mangaReaderDependencies,
+            appModel: appModel
+        )
         #else
         #expect(true)
         #endif

@@ -24,19 +24,6 @@ enum FavoriteTagSortOrder: String, CaseIterable, Identifiable {
     case associationCountDescending
 
     var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .manual: L10n.string("favorites.tag_sort.manual")
-        case .name: L10n.string("favorites.tag_sort.name")
-        case .nameDescending: L10n.string("favorites.tag_sort.name_desc")
-        case .updatedAt: L10n.string("favorites.tag_sort.updated_at")
-        case .updatedAtDescending: L10n.string("favorites.tag_sort.updated_at_desc")
-        case .associationCount: L10n.string("favorites.tag_sort.association_count")
-        case .associationCountDescending: L10n.string("favorites.tag_sort.association_count_desc")
-        }
-    }
-
 }
 
 let favoriteTagSelectionLimit = 20

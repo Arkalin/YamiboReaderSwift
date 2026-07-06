@@ -1,5 +1,6 @@
 import XCTest
 @testable import YamiboReaderCore
+import YamiboReaderTestSupport
 @testable import YamiboReaderUI
 
 @MainActor
@@ -258,20 +259,17 @@ private func makeAdjacentPrefetchFixture(
     let settingsStore = try SettingsStore(testSuiteName: defaultsSuiteName, key: "settings")
     try await settingsStore.save(AppSettings())
     let resumeRouteStore = try ReaderResumeRouteStore(testSuiteName: defaultsSuiteName, key: "resume")
-    let appContext = YamiboAppContext(
-        sessionStore: try SessionStore(testSuiteName: defaultsSuiteName, key: "session"),
-        settingsStore: settingsStore,
-        readerResumeRouteStore: resumeRouteStore,
-    )
+    let readingProgressStore = try ReadingProgressStore(testSuiteName: defaultsSuiteName, key: "reading-progress")
     let resolvedLoader = loader ?? AdjacentPrefetchProjectionLoader(documents: [document] + extraDocuments)
     let resolvedProgressSync = progressSync ?? ProgressSyncModule(
         adapter: FavoriteLibraryProgressSyncAdapter(
-                    readingProgressStore: appContext.readingProgressStore
+            readingProgressStore: readingProgressStore
         ),
         debounceNanoseconds: 0
     )
     #if os(iOS)
     let dependencies = MangaReaderViewModelDependencies(
+        settingsStore: settingsStore,
         makeProjectionLoader: { resolvedLoader },
         makeDirectoryRepository: { AdjacentPrefetchDirectoryRepository(seed: makeAdjacentPrefetchSeed(document: document)) },
         makeDirectoryStore: { AdjacentPrefetchDirectoryStore(directories: [directory]) },
@@ -280,6 +278,7 @@ private func makeAdjacentPrefetchFixture(
     )
     #else
     let dependencies = MangaReaderViewModelDependencies(
+        settingsStore: settingsStore,
         makeProjectionLoader: { resolvedLoader },
         makeDirectoryRepository: { AdjacentPrefetchDirectoryRepository(seed: makeAdjacentPrefetchSeed(document: document)) },
         makeDirectoryStore: { AdjacentPrefetchDirectoryStore(directories: [directory]) },
@@ -298,8 +297,7 @@ private func makeAdjacentPrefetchFixture(
     return AdjacentPrefetchFixture(
         model: MangaReaderViewModel(
             context: context,
-            appContext: appContext,
-            dependencies: dependencies,
+            viewModelDependencies: dependencies,
             onReaderResumeRouteChange: { route in
                 try? await resumeRouteStore.saveReadingPosition(route)
             }

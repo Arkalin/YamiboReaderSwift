@@ -10,7 +10,7 @@ public struct AboutView: View {
     @Environment(\.openURL) private var openURL
     @StateObject private var updateViewModel: AboutUpdateViewModel
 
-    public init(appContext: YamiboAppContext) {
+    public init() {
         _updateViewModel = StateObject(wrappedValue: AboutUpdateViewModel())
     }
 

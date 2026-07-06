@@ -7,7 +7,7 @@ extension OfflineCacheStore {
     source_page_file_name, source_page_schema_version, source_page_fingerprint, byte_count, created_at, updated_at
     """
 
-    public func removeOfflineCacheGroup(_ id: OfflineCacheGroupID) async throws {
+    func removeOfflineCacheGroup(_ id: OfflineCacheGroupID) async throws {
         switch id.readerKind {
         case .manga:
             try await removeMangaOfflineCacheMemberships(forOwnerName: id.ownerKey)
@@ -16,7 +16,7 @@ extension OfflineCacheStore {
         }
     }
 
-    public func removeOfflineCacheEntry(_ id: OfflineCacheEntryID) async throws {
+    func removeOfflineCacheEntry(_ id: OfflineCacheEntryID) async throws {
         switch id.readerKind {
         case .manga:
             try await removeMangaOfflineCacheMembership(ownerName: id.ownerKey, tid: id.entryKey)
@@ -25,7 +25,7 @@ extension OfflineCacheStore {
         }
     }
 
-    public func saveNovelOfflineCacheEntry(_ entry: NovelOfflineCacheEntry) async throws {
+    func saveNovelOfflineCacheEntry(_ entry: NovelOfflineCacheEntry) async throws {
         let request = NovelOfflineCacheWorkRequest(
             ownerTitle: entry.ownerTitle,
             title: entry.title,
@@ -43,7 +43,7 @@ extension OfflineCacheStore {
         )
     }
 
-    public func novelOfflineCacheEntry(id: OfflineCacheEntryID) async -> NovelOfflineCacheEntry? {
+    func novelOfflineCacheEntry(id: OfflineCacheEntryID) async -> NovelOfflineCacheEntry? {
         try? await recoverQueueStateAfterRestart()
         guard id.readerKind == .novel else { return nil }
         return try? await database.read { db in
@@ -51,14 +51,14 @@ extension OfflineCacheStore {
         }
     }
 
-    public func allNovelOfflineCacheEntries() async -> [NovelOfflineCacheEntry] {
+    func allNovelOfflineCacheEntries() async -> [NovelOfflineCacheEntry] {
         try? await recoverQueueStateAfterRestart()
         return (try? await database.read { db in
             try Self.allNovelEntries(in: db)
         }) ?? []
     }
 
-    public func novelOfflineCacheViewsSnapshot(
+    func novelOfflineCacheViewsSnapshot(
         ownerTitle: String,
         threadID: String,
         authorID: String?,
@@ -142,7 +142,7 @@ extension OfflineCacheStore {
         }) ?? NovelOfflineCacheViewsSnapshot()
     }
 
-    public func removeNovelOfflineCacheViews(
+    func removeNovelOfflineCacheViews(
         _ views: Set<Int>,
         ownerTitle: String,
         threadID: String,

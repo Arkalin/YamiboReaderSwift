@@ -68,10 +68,9 @@
 
 ### 环境要求
 
-- Swift 6.0+
-- iOS 17+
-- macOS 14+（Swift Package 目标支持）
-- Xcode 15+ 或更新版本
+- Swift 6.2+
+- iOS 17+（Swift Package 仅面向 iOS）
+- 支持 Swift 6.2 工具链的 Xcode 版本
 
 ### Swift Package
 
@@ -79,10 +78,13 @@
 
 - `YamiboReaderCore`：数据模型、网络访问、HTML 解析、缓存、同步与本地存储
 - `YamiboReaderUI`：SwiftUI 界面、论坛容器、收藏页、小说阅读器与漫画阅读器
+- `YamiboReaderTestSupport`：跨测试目标共享的测试基础设施
 
 依赖：
 
 - [`Kanna`](https://github.com/tid-kijyun/Kanna)
+- [`GRDB.swift`](https://github.com/groue/GRDB.swift)
+- [`Nuke`](https://github.com/kean/Nuke)
 
 在仓库根目录执行测试。将示例中的模拟器名称替换为本机可用的 iOS Simulator：
 
@@ -104,8 +106,9 @@ iOS App 入口位于 [`YamiboReader/YamiboReaderApp.swift`](YamiboReader/YamiboR
 
 ## 项目结构
 
-- [`Sources/YamiboReaderCore`](Sources/YamiboReaderCore)：核心模型、网络访问、解析、同步、缓存与存储
-- [`Sources/YamiboReaderUI`](Sources/YamiboReaderUI)：SwiftUI 界面、论坛 Web 容器、阅读器和收藏管理
+- [`Sources/YamiboReaderCore`](Sources/YamiboReaderCore)：核心模型、网络访问、解析、同步、缓存与存储，按 feature 目录组织，基础设施位于 `Infrastructure/`
+- [`Sources/YamiboReaderUI`](Sources/YamiboReaderUI)：SwiftUI 界面、论坛 Web 容器、阅读器和收藏管理，按 `Features/` 组织，跨 feature 组件位于 `Platform/`
+- [`Sources/YamiboReaderTestSupport`](Sources/YamiboReaderTestSupport)：测试目标共享的测试支撑代码
 - [`YamiboReader`](YamiboReader)：独立 iOS App 入口、资源和系统集成能力
 - [`Tests/YamiboReaderCoreTests`](Tests/YamiboReaderCoreTests)：核心解析、缓存、存储、签到与 WebDAV 同步测试
 - [`Tests/YamiboReaderUITests`](Tests/YamiboReaderUITests)：界面模型、路由、阅读器状态和漫画流程测试

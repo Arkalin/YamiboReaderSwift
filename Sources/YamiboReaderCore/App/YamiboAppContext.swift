@@ -4,11 +4,12 @@
 import WebKit
 #endif
 
-public protocol FavoriteRepositoryProviding {
-    func makeFavoriteRepository() async -> FavoriteRepository
-}
-
-public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
+/// Composition root. Owns the infrastructure singletons, assembles each
+/// feature's dependency package, and is referenced only by the app-entry
+/// layer (`YamiboReaderApp`, `YamiboAppModel`, `RootTabView`,
+/// `AppContinuityWorkflow`). Feature views and view models receive their
+/// `*Dependencies` package instead of this context.
+public final class YamiboAppContext: Sendable {
     private static let resettableUserDefaultsKeys = [
         "yamibo.favorite.filter",
         "yamibo.favorite.sort",
@@ -16,26 +17,31 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
         "yamibo.favorite.showHidden"
     ]
 
-    public let sessionStore: SessionStore
-    public let profileStore: YamiboProfileStore
-    public let checkInStore: YamiboCheckInStore
+    let sessionStore: SessionStore
+    let profileStore: YamiboProfileStore
+    let checkInStore: YamiboCheckInStore
+    /// Public for change-ID observation in the app-entry layer.
     public let settingsStore: SettingsStore
-    public let webDAVSyncSettingsStore: WebDAVSyncSettingsStore
-    public let readerResumeRouteStore: ReaderResumeRouteStore
+    let webDAVSyncSettingsStore: WebDAVSyncSettingsStore
+    let readerResumeRouteStore: ReaderResumeRouteStore
+    /// Public for change-ID observation in the app-entry layer.
     public let localFavoriteLibraryStore: FavoriteLibraryStore
-    public let favoriteUpdateStore: FavoriteUpdateStore
+    let favoriteUpdateStore: FavoriteUpdateStore
+    /// Public for change-ID observation in the app-entry layer.
     public let readingProgressStore: ReadingProgressStore
-    public let contentCoverStore: ContentCoverStore
-    public let novelReaderCacheStore: NovelReaderProjectionStore
-    public let favoriteBackgroundImageStore: FavoriteBackgroundImageStore
-    public let mangaDirectoryStore: any MangaDirectoryPersisting & MangaDirectoryStorageReporting & MangaDirectoryClearing
-    public let mangaDirectorySearchCooldownState: MangaDirectorySearchCooldownState
-    public let mangaReaderProjectionStore: any MangaReaderProjectionPersisting & MangaReaderProjectionStorageReporting
-    public let offlineCacheStore: any OfflineCacheStoreCore & MangaOfflineCacheStoring & NovelOfflineCacheStoring & YamiboOfflineImageDataProviding
-    public let forumCacheStore: ForumCacheStore
-    public let ordinaryImageCache: any YamiboOrdinaryImageCacheClearing
+    let contentCoverStore: ContentCoverStore
+    let novelReaderCacheStore: NovelReaderProjectionStore
+    let favoriteBackgroundImageStore: FavoriteBackgroundImageStore
+    let mangaDirectoryStore: MangaDirectoryStore
+    let mangaDirectorySearchCooldownState: MangaDirectorySearchCooldownState
+    let mangaReaderProjectionStore: MangaReaderProjectionStore
+    let offlineCacheStore: any OfflineCacheStoring
+    let forumCacheStore: ForumCacheStore
+    let ordinaryImageCache: any YamiboOrdinaryImageCacheClearing
     public let offlineCacheBackgroundDownloadTransport: OfflineCacheBackgroundDownloadTransport
     public let offlineCacheContinuedProcessingCoordinator: OfflineCacheContinuedProcessingCoordinator
+    /// The single pool for `yamibo.sqlite`; every GRDB-backed store receives this instance.
+    let databasePool: DatabasePool
     let session: URLSession
     private let offlineCacheQueueExecutorBox = OfflineCacheQueueExecutorBox()
     private nonisolated(unsafe) let uiDefaults: UserDefaults
@@ -54,21 +60,23 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
         contentCoverStore: ContentCoverStore = ContentCoverStore(),
         novelReaderCacheStore: NovelReaderProjectionStore? = nil,
         favoriteBackgroundImageStore: FavoriteBackgroundImageStore? = nil,
-        mangaDirectoryStore: (any MangaDirectoryPersisting & MangaDirectoryStorageReporting & MangaDirectoryClearing)? = nil,
+        mangaDirectoryStore: MangaDirectoryStore? = nil,
         mangaDirectorySearchCooldownState: MangaDirectorySearchCooldownState = MangaDirectorySearchCooldownState(),
-        mangaReaderProjectionStore: (any MangaReaderProjectionPersisting & MangaReaderProjectionStorageReporting)? = nil,
-        offlineCacheStore: (any OfflineCacheStoreCore & MangaOfflineCacheStoring & NovelOfflineCacheStoring & YamiboOfflineImageDataProviding)? = nil,
+        mangaReaderProjectionStore: MangaReaderProjectionStore? = nil,
+        offlineCacheStore: (any OfflineCacheStoring)? = nil,
         forumCacheStore: ForumCacheStore? = nil,
-        ordinaryImageCache: any YamiboOrdinaryImageCacheClearing = YamiboImageDataPipeline.shared,
+        ordinaryImageCache: (any YamiboOrdinaryImageCacheClearing)? = nil,
         offlineCacheBackgroundDownloadTransport: OfflineCacheBackgroundDownloadTransport = OfflineCacheBackgroundDownloadTransport(),
         offlineCacheContinuedProcessingCoordinator: OfflineCacheContinuedProcessingCoordinator = OfflineCacheContinuedProcessingCoordinator(),
+        databasePool: DatabasePool? = nil,
         grdbRootDirectory: URL? = nil,
         uiDefaults: UserDefaults = .standard,
         clearsWebDataOnReset: Bool = true,
         session: URLSession = YamiboNetworkConfiguration.makeSession()
     ) {
         let resolvedGRDBRootDirectory = grdbRootDirectory ?? YamiboDatabase.defaultRootDirectory()
-        let resolvedGRDBDatabasePool = Self.openGRDBDatabase(rootDirectory: resolvedGRDBRootDirectory)
+        let resolvedGRDBDatabasePool = databasePool ?? Self.openGRDBDatabase(rootDirectory: resolvedGRDBRootDirectory)
+        self.databasePool = resolvedGRDBDatabasePool
         let diskCacheStore = DiskCacheStore(
             writer: resolvedGRDBDatabasePool,
             rootDirectory: resolvedGRDBRootDirectory
@@ -102,32 +110,133 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
         self.forumCacheStore = forumCacheStore ?? ForumCacheStore(
             diskCacheStore: diskCacheStore
         )
-        self.ordinaryImageCache = ordinaryImageCache
+        self.ordinaryImageCache = ordinaryImageCache ?? YamiboImageDataPipeline.shared
         self.offlineCacheBackgroundDownloadTransport = offlineCacheBackgroundDownloadTransport
         self.offlineCacheContinuedProcessingCoordinator = offlineCacheContinuedProcessingCoordinator
         self.session = session
         YamiboImagePipeline.shared.setOfflineImageProvider(resolvedOfflineCacheStore)
     }
 
-    public func makeFavoriteRepository() async -> FavoriteRepository {
-        let sessionState = await sessionStore.load()
-        let client = YamiboClient(
-            session: session,
-            cookie: sessionState.cookie,
-            userAgent: sessionState.userAgent
+    // MARK: - Feature dependency packages
+
+    public var forumDependencies: ForumDependencies {
+        ForumDependencies(
+            sessionStore: sessionStore,
+            profileStore: profileStore,
+            localFavoriteLibraryStore: localFavoriteLibraryStore,
+            readingProgressStore: readingProgressStore,
+            settingsStore: settingsStore,
+            contentCoverStore: contentCoverStore,
+            mangaDirectoryStore: mangaDirectoryStore,
+            mangaDirectorySearchCooldownState: mangaDirectorySearchCooldownState,
+            makeForumRepository: { [self] in await makeForumRepository() },
+            makeForumThreadReaderRepository: { [self] in await makeForumThreadReaderRepository() },
+            makeUserSpaceRepository: { [self] in await makeUserSpaceRepository() },
+            makeBlogReaderRepository: { [self] in await makeBlogReaderRepository() },
+            makeFavoriteRepository: { [self] in await makeFavoriteRepository() },
+            makeNovelReaderRepository: { [self] in await makeNovelReaderRepository() },
+            makeMangaReaderProjectionLoader: { [self] in await makeMangaReaderProjectionLoader() },
+            makeMangaDirectoryRepository: { [self] in await makeMangaDirectoryRepository() },
+            makeThreadRouteResolver: { [self] in await makeThreadRouteResolver() }
         )
-        return FavoriteRepository(client: client)
     }
 
-    public func makeNovelReaderRepository() async -> NovelReaderRepository {
+    public var libraryDependencies: LibraryDependencies {
+        LibraryDependencies(
+            localFavoriteLibraryStore: localFavoriteLibraryStore,
+            favoriteUpdateStore: favoriteUpdateStore,
+            readingProgressStore: readingProgressStore,
+            settingsStore: settingsStore,
+            contentCoverStore: contentCoverStore,
+            makeFavoriteRepository: { [self] in await makeFavoriteRepository() },
+            makeForumThreadReaderRepository: { [self] in await makeForumThreadReaderRepository() },
+            makeThreadRouteResolver: { [self] in await makeThreadRouteResolver() }
+        )
+    }
+
+    public var mangaReaderDependencies: MangaReaderDependencies {
+        MangaReaderDependencies(
+            settingsStore: settingsStore,
+            readingProgressStore: readingProgressStore,
+            localFavoriteLibraryStore: localFavoriteLibraryStore,
+            mangaDirectoryStore: mangaDirectoryStore,
+            mangaDirectorySearchCooldownState: mangaDirectorySearchCooldownState,
+            offlineCacheStore: offlineCacheStore,
+            makeProjectionLoader: { [self] in await makeMangaReaderProjectionLoader() },
+            makeDirectoryRepository: { [self] in await makeMangaDirectoryRepository() },
+            makeChapterCommentsRepository: { [self] in await makeReaderChapterCommentsRepository() },
+            makeOfflineCacheQueueExecutor: { [self] in await makeOfflineCacheQueueExecutor() },
+            account: accountDependencies
+        )
+    }
+
+    public var novelReaderDependencies: NovelReaderDependencies {
+        NovelReaderDependencies(
+            sessionStore: sessionStore,
+            settingsStore: settingsStore,
+            readingProgressStore: readingProgressStore,
+            offlineCacheStore: offlineCacheStore,
+            makeNovelReaderRepository: { [self] in await makeNovelReaderRepository() },
+            makeChapterCommentsRepository: { [self] in await makeReaderChapterCommentsRepository() },
+            makeOfflineCacheQueueExecutor: { [self] in await makeOfflineCacheQueueExecutor() },
+            account: accountDependencies
+        )
+    }
+
+    public var accountDependencies: AccountDependencies {
+        AccountDependencies(
+            sessionStore: sessionStore,
+            profileStore: profileStore,
+            checkInStore: checkInStore,
+            mangaDirectoryStore: mangaDirectoryStore,
+            offlineCacheStore: offlineCacheStore,
+            makeAccountService: { [self] in makeAccountService() },
+            makeCheckInService: { [self] in makeCheckInService() },
+            makeOfflineCacheQueueExecutor: { [self] in await makeOfflineCacheQueueExecutor() }
+        )
+    }
+
+    public var settingsDependencies: SettingsDependencies {
+        SettingsDependencies(
+            sessionStore: sessionStore,
+            settingsStore: settingsStore,
+            favoriteBackgroundImageStore: favoriteBackgroundImageStore,
+            novelReaderCacheStore: novelReaderCacheStore,
+            mangaDirectoryStore: mangaDirectoryStore,
+            mangaReaderProjectionStore: mangaReaderProjectionStore,
+            offlineCacheStore: offlineCacheStore,
+            clearOrdinaryImageCache: { [self] in await clearOrdinaryImageCache() },
+            resetApplicationData: { [self] in try await resetApplicationData() },
+            library: libraryDependencies,
+            webDAVSync: webDAVSyncDependencies
+        )
+    }
+
+    public var webDAVSyncDependencies: WebDAVSyncDependencies {
+        WebDAVSyncDependencies(
+            settingsStore: webDAVSyncSettingsStore,
+            makeSyncService: { [self] in makeWebDAVSyncService() }
+        )
+    }
+
+    // MARK: - Factories
+
+    private func makeClient() async -> YamiboClient {
         let sessionState = await sessionStore.load()
-        let client = YamiboClient(
+        return YamiboClient(
             session: session,
             cookie: sessionState.cookie,
             userAgent: sessionState.userAgent
         )
-        return NovelReaderRepository(
-            client: client,
+    }
+
+    func makeFavoriteRepository() async -> FavoriteRepository {
+        FavoriteRepository(client: await makeClient())
+    }
+
+    func makeNovelReaderRepository() async -> NovelReaderRepository {
+        NovelReaderRepository(
+            client: await makeClient(),
             cacheStore: novelReaderCacheStore,
             forumCacheStore: forumCacheStore,
             offlineCacheStore: offlineCacheStore,
@@ -140,101 +249,41 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
         )
     }
 
-    public func makeReaderChapterCommentsRepository() async -> ReaderChapterCommentsRepository {
-        let sessionState = await sessionStore.load()
-        let client = YamiboClient(
-            session: session,
-            cookie: sessionState.cookie,
-            userAgent: sessionState.userAgent
-        )
-        return ReaderChapterCommentsRepository(client: client)
+    func makeReaderChapterCommentsRepository() async -> ReaderChapterCommentsRepository {
+        ReaderChapterCommentsRepository(client: await makeClient())
     }
 
-    public func makeProfileAvatarLoader() -> any YamiboProfileAvatarLoading {
-        YamiboProfileAvatarLoader(sessionStore: sessionStore)
+    func makeThreadRouteResolver() async -> YamiboThreadRouteResolver {
+        YamiboThreadRouteResolver(client: await makeClient())
     }
 
-    public func makeYamiboThreadRouteResolver() async -> YamiboThreadRouteResolver {
-        let sessionState = await sessionStore.load()
-        let client = YamiboClient(
-            session: session,
-            cookie: sessionState.cookie,
-            userAgent: sessionState.userAgent
-        )
-        return YamiboThreadRouteResolver(client: client)
+    func makeForumThreadReaderRepository() async -> ForumThreadReaderRepository {
+        ForumThreadReaderRepository(client: await makeClient(), cacheStore: forumCacheStore)
     }
 
-    public func makeForumThreadReaderRepository() async -> ForumThreadReaderRepository {
-        let sessionState = await sessionStore.load()
-        let client = YamiboClient(
-            session: session,
-            cookie: sessionState.cookie,
-            userAgent: sessionState.userAgent
-        )
-        return ForumThreadReaderRepository(client: client, cacheStore: forumCacheStore)
+    func makeForumRepository() async -> ForumRepository {
+        ForumRepository(client: await makeClient(), cacheStore: forumCacheStore)
     }
 
-    public func makeForumRepository() async -> ForumRepository {
-        let sessionState = await sessionStore.load()
-        let client = YamiboClient(
-            session: session,
-            cookie: sessionState.cookie,
-            userAgent: sessionState.userAgent
-        )
-        return ForumRepository(client: client, cacheStore: forumCacheStore)
+    func makeUserSpaceRepository() async -> UserSpaceRepository {
+        UserSpaceRepository(client: await makeClient())
     }
 
-    public func makeUserSpaceRepository() async -> UserSpaceRepository {
-        let sessionState = await sessionStore.load()
-        let client = YamiboClient(
-            session: session,
-            cookie: sessionState.cookie,
-            userAgent: sessionState.userAgent
-        )
-        return UserSpaceRepository(client: client)
+    func makeBlogReaderRepository() async -> BlogReaderRepository {
+        BlogReaderRepository(client: await makeClient())
     }
 
-    public func makeBlogReaderRepository() async -> BlogReaderRepository {
-        let sessionState = await sessionStore.load()
-        let client = YamiboClient(
-            session: session,
-            cookie: sessionState.cookie,
-            userAgent: sessionState.userAgent
-        )
-        return BlogReaderRepository(client: client)
-    }
-
-    public func makeMangaReaderProjectionLoader() async -> any MangaReaderProjectionSnapshotLoading {
-        let sessionState = await sessionStore.load()
-        let client = YamiboClient(
-            session: session,
-            cookie: sessionState.cookie,
-            userAgent: sessionState.userAgent
-        )
-        return MangaReaderProjectionLoader(
-            client: client,
+    func makeMangaReaderProjectionLoader() async -> any MangaReaderProjectionSnapshotLoading {
+        MangaReaderProjectionLoader(
+            client: await makeClient(),
             projectionStore: mangaReaderProjectionStore,
             forumCacheStore: forumCacheStore,
             offlineCacheStore: offlineCacheStore
         )
     }
 
-    public func makeMangaDirectoryRepository() async -> any MangaDirectoryRepository {
-        let sessionState = await sessionStore.load()
-        let client = YamiboClient(
-            session: session,
-            cookie: sessionState.cookie,
-            userAgent: sessionState.userAgent
-        )
-        return YamiboMangaDirectoryRepository(client: client)
-    }
-
-    public func makeMangaDirectoryStore() -> any MangaDirectoryPersisting {
-        mangaDirectoryStore
-    }
-
-    public func makeOfflineCacheStore() -> any OfflineCacheStoreCore & MangaOfflineCacheStoring & NovelOfflineCacheStoring & YamiboOfflineImageDataProviding {
-        offlineCacheStore
+    func makeMangaDirectoryRepository() async -> any MangaDirectoryRepository {
+        YamiboMangaDirectoryRepository(client: await makeClient())
     }
 
     public func makeOfflineCacheQueueExecutor() async -> OfflineCacheQueueExecutor {
@@ -264,7 +313,7 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
         )
     }
 
-    public func makeAccountService() -> YamiboAccountService {
+    func makeAccountService() -> YamiboAccountService {
         YamiboAccountService(
             session: session,
             sessionStore: sessionStore,
@@ -272,18 +321,20 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
         )
     }
 
-    public func makeWebDAVSyncService() -> WebDAVSyncService {
+    func makeWebDAVSyncService() -> WebDAVSyncService {
         WebDAVSyncService(
             settingsStore: webDAVSyncSettingsStore,
-            localFavoriteLibraryStore: localFavoriteLibraryStore,
-            readingProgressStore: readingProgressStore,
             sessionStore: sessionStore,
-            appSettingsStore: settingsStore,
+            participants: [
+                FavoriteLibraryWebDAVParticipant(store: localFavoriteLibraryStore),
+                ReadingProgressWebDAVParticipant(store: readingProgressStore),
+                AppSettingsWebDAVParticipant(store: settingsStore),
+            ],
             client: WebDAVClient(session: session)
         )
     }
 
-    public func clearOrdinaryImageCache() async {
+    func clearOrdinaryImageCache() async {
         await ordinaryImageCache.removeAllCachedData()
     }
 
@@ -296,7 +347,7 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
         )
     }
 
-    public func resetApplicationData() async throws {
+    func resetApplicationData() async throws {
         try await sessionStore.reset()
         await profileStore.clear()
         try await settingsStore.reset()
@@ -325,18 +376,10 @@ public final class YamiboAppContext: FavoriteRepositoryProviding, Sendable {
 
     private static func openGRDBDatabase(rootDirectory: URL) -> DatabasePool {
         do {
-            return try YamiboDatabase.openSharedPool(rootDirectory: rootDirectory)
+            return try YamiboDatabase.openPool(rootDirectory: rootDirectory)
         } catch {
             fatalError("Failed to open Yamibo app database: \(error)")
         }
-    }
-
-    private static func forumCacheDirectory(rootDirectory: URL) -> URL {
-        rootDirectory.appendingPathComponent("forum-cache", isDirectory: true)
-    }
-
-    private static func readerCacheDirectory(rootDirectory: URL) -> URL {
-        rootDirectory.appendingPathComponent("reader-cache", isDirectory: true)
     }
 
     private static func favoriteBackgroundDirectory(rootDirectory: URL) -> URL {

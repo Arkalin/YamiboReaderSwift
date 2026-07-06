@@ -32,18 +32,18 @@ public final class ForumBrowserModel: ObservableObject {
 
 public struct ForumBrowserView: View {
     @StateObject private var model: ForumBrowserModel
-    private let appContext: YamiboAppContext
+    private let sessionStore: SessionStore
     private let appModel: YamiboAppModel
     private let listensToForumNavigationRequest: Bool
 
     public init(
         url: URL,
-        appContext: YamiboAppContext,
+        sessionStore: SessionStore,
         appModel: YamiboAppModel,
         listensToForumNavigationRequest: Bool = true
     ) {
         _model = StateObject(wrappedValue: ForumBrowserModel(initialURL: url))
-        self.appContext = appContext
+        self.sessionStore = sessionStore
         self.appModel = appModel
         self.listensToForumNavigationRequest = listensToForumNavigationRequest
     }
@@ -52,7 +52,7 @@ public struct ForumBrowserView: View {
         ZStack(alignment: .top) {
             IOSForumWebView(
                 model: model,
-                appContext: appContext,
+                sessionStore: sessionStore,
                 isSelected: appModel.selectedTab == .forum
             )
             if model.isLoading {

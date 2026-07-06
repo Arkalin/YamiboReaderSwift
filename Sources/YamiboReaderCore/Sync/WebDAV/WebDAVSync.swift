@@ -8,8 +8,12 @@ public struct WebDAVSyncSettings: Codable, Equatable, Sendable {
     public var lastSyncedAt: Date?
     public var lastRemoteUpdatedAt: Date?
     public var localUpdatedAt: Date?
-    public var appSettingsUpdatedAt: Date?
-    public var lastSyncedAppSettings: WebDAVSyncedAppSettings?
+    /// Datasets flagged as changed since the last sync; only consulted for
+    /// participants that upload exclusively when marked dirty.
+    public var dirtyDatasetIDs: Set<String>
+    /// Fingerprint of each fingerprint-tracked dataset as of the last time it
+    /// was marked or synchronized, used for change detection.
+    public var lastSyncedFingerprintByDatasetID: [String: String]
 
     public init(
         baseURLString: String = "",
@@ -19,8 +23,8 @@ public struct WebDAVSyncSettings: Codable, Equatable, Sendable {
         lastSyncedAt: Date? = nil,
         lastRemoteUpdatedAt: Date? = nil,
         localUpdatedAt: Date? = nil,
-        appSettingsUpdatedAt: Date? = nil,
-        lastSyncedAppSettings: WebDAVSyncedAppSettings? = nil
+        dirtyDatasetIDs: Set<String> = [],
+        lastSyncedFingerprintByDatasetID: [String: String] = [:]
     ) {
         self.baseURLString = baseURLString
         self.username = username
@@ -29,8 +33,8 @@ public struct WebDAVSyncSettings: Codable, Equatable, Sendable {
         self.lastSyncedAt = lastSyncedAt
         self.lastRemoteUpdatedAt = lastRemoteUpdatedAt
         self.localUpdatedAt = localUpdatedAt
-        self.appSettingsUpdatedAt = appSettingsUpdatedAt
-        self.lastSyncedAppSettings = lastSyncedAppSettings
+        self.dirtyDatasetIDs = dirtyDatasetIDs
+        self.lastSyncedFingerprintByDatasetID = lastSyncedFingerprintByDatasetID
     }
 
     public var trimmedBaseURLString: String {
@@ -82,59 +86,12 @@ public actor WebDAVSyncSettingsStore {
         try await save(WebDAVSyncSettings())
     }
 
-    public func markLocalDataChanged(at date: Date = .now) async throws {
-        var settings = await load()
-        settings.localUpdatedAt = date
-        try await save(settings)
-    }
-
-    public func markSynchronized(remoteUpdatedAt: Date, at date: Date = .now) async throws {
-        var settings = await load()
-        settings.lastSyncedAt = date
-        settings.lastRemoteUpdatedAt = remoteUpdatedAt
-        settings.localUpdatedAt = remoteUpdatedAt
-        settings.appSettingsUpdatedAt = nil
-        try await save(settings)
-    }
-
     private nonisolated func postChangeNotification() {
         NotificationCenter.default.post(
             name: Self.didChangeNotification,
             object: nil,
             userInfo: [Self.changeIDUserInfoKey: changeID]
         )
-    }
-}
-
-public struct WebDAVSyncedAppSettings: Codable, Equatable, Sendable {
-    public var homePage: AppHomePage
-    public var webBrowser: WebBrowserSettings
-    public var favoriteAppearance: FavoriteAppearanceSettings
-
-    public init(
-        homePage: AppHomePage,
-        webBrowser: WebBrowserSettings,
-        favoriteAppearance: FavoriteAppearanceSettings
-    ) {
-        self.homePage = homePage
-        self.webBrowser = webBrowser
-        self.favoriteAppearance = favoriteAppearance
-    }
-
-    public init(settings: AppSettings) {
-        self.init(
-            homePage: settings.homePage,
-            webBrowser: settings.webBrowser,
-            favoriteAppearance: settings.favoriteAppearance
-        )
-    }
-
-    public func applying(to settings: AppSettings) -> AppSettings {
-        var updated = settings
-        updated.homePage = homePage
-        updated.webBrowser = webBrowser
-        updated.favoriteAppearance = favoriteAppearance
-        return updated
     }
 }
 
@@ -185,69 +142,14 @@ public enum WebDAVSyncError: LocalizedError, Equatable, Sendable {
     }
 }
 
-public struct WebDAVClient: Sendable {
-    private static let favoriteLibraryPayloadFileName = "yamibo-favorite-library-v1.json"
-    private static let readingProgressPayloadFileName = "yamibo-reading-progress-v1.json"
-    private static let appSettingsPayloadFileName = "yamibo-app-settings-v1.json"
-
+struct WebDAVClient: Sendable {
     let session: URLSession
-    private let encoder = JSONEncoder()
-    private let decoder = JSONDecoder()
 
-    public init(session: URLSession = YamiboNetworkConfiguration.makeSession()) {
+    init(session: URLSession = YamiboNetworkConfiguration.makeSession()) {
         self.session = session
     }
 
-    public func fetchFavoriteLibraryPayload(settings: WebDAVSyncSettings) async throws -> FavoriteLibraryWebDAVPayload {
-        try await fetchPayload(
-            settings: settings,
-            fileName: Self.favoriteLibraryPayloadFileName,
-            as: FavoriteLibraryWebDAVPayload.self
-        )
-    }
-
-    public func fetchReadingProgressPayload(settings: WebDAVSyncSettings) async throws -> ReadingProgressWebDAVPayload {
-        try await fetchPayload(
-            settings: settings,
-            fileName: Self.readingProgressPayloadFileName,
-            as: ReadingProgressWebDAVPayload.self
-        )
-    }
-
-    public func fetchAppSettingsPayload(settings: WebDAVSyncSettings) async throws -> AppSettingsWebDAVPayload {
-        try await fetchPayload(
-            settings: settings,
-            fileName: Self.appSettingsPayloadFileName,
-            as: AppSettingsWebDAVPayload.self
-        )
-    }
-
-    public func uploadFavoriteLibraryPayload(
-        _ payload: FavoriteLibraryWebDAVPayload,
-        settings: WebDAVSyncSettings
-    ) async throws {
-        try await uploadPayload(payload, settings: settings, fileName: Self.favoriteLibraryPayloadFileName)
-    }
-
-    public func uploadReadingProgressPayload(
-        _ payload: ReadingProgressWebDAVPayload,
-        settings: WebDAVSyncSettings
-    ) async throws {
-        try await uploadPayload(payload, settings: settings, fileName: Self.readingProgressPayloadFileName)
-    }
-
-    public func uploadAppSettingsPayload(
-        _ payload: AppSettingsWebDAVPayload,
-        settings: WebDAVSyncSettings
-    ) async throws {
-        try await uploadPayload(payload, settings: settings, fileName: Self.appSettingsPayloadFileName)
-    }
-
-    private func fetchPayload<Payload: Decodable>(
-        settings: WebDAVSyncSettings,
-        fileName: String,
-        as _: Payload.Type
-    ) async throws -> Payload {
+    func fetchPayloadData(settings: WebDAVSyncSettings, fileName: String) async throws -> Data {
         let config = try configuration(from: settings, fileName: fileName)
         var request = YamiboNetworkConfiguration.makeRequest(url: config.fileURL)
         request.httpMethod = "GET"
@@ -259,27 +161,16 @@ public struct WebDAVClient: Sendable {
         guard statusCode != 401 && statusCode != 403 else { throw WebDAVSyncError.notAuthenticated }
         guard 200 ..< 300 ~= statusCode else { throw WebDAVSyncError.invalidResponse(statusCode) }
         guard !data.isEmpty else { throw WebDAVSyncError.emptyPayload }
-
-        do {
-            return try decoder.decode(Payload.self, from: data)
-        } catch let error as WebDAVSyncError {
-            throw error
-        } catch {
-            throw WebDAVSyncError.underlying(error.localizedDescription)
-        }
+        return data
     }
 
-    private func uploadPayload<Payload: Encodable>(
-        _ payload: Payload,
-        settings: WebDAVSyncSettings,
-        fileName: String
-    ) async throws {
+    func uploadPayloadData(_ data: Data, settings: WebDAVSyncSettings, fileName: String) async throws {
         let config = try configuration(from: settings, fileName: fileName)
         try await createDirectoryIfNeeded(configuration: config)
 
         var request = YamiboNetworkConfiguration.makeRequest(url: config.fileURL)
         request.httpMethod = "PUT"
-        request.httpBody = try encoder.encode(payload)
+        request.httpBody = data
         request.setValue("application/json; charset=utf-8", forHTTPHeaderField: "Content-Type")
         applyHeaders(to: &request, configuration: config)
 
@@ -342,27 +233,21 @@ public struct WebDAVClient: Sendable {
 
 public actor WebDAVSyncService {
     private let settingsStore: WebDAVSyncSettingsStore
-    private let localFavoriteLibraryStore: FavoriteLibraryStore
-    private let readingProgressStore: ReadingProgressStore
     private let sessionStore: SessionStore
-    private let appSettingsStore: (any SettingsStoring)?
+    private let participants: [any WebDAVSyncParticipant]
     private let client: WebDAVClient
     private let policyModule: WebDAVSyncPolicyModule
 
-    public init(
+    init(
         settingsStore: WebDAVSyncSettingsStore,
-        localFavoriteLibraryStore: FavoriteLibraryStore,
-        readingProgressStore: ReadingProgressStore,
         sessionStore: SessionStore,
-        appSettingsStore: (any SettingsStoring)? = nil,
+        participants: [any WebDAVSyncParticipant],
         client: WebDAVClient = WebDAVClient(),
         policyModule: WebDAVSyncPolicyModule = WebDAVSyncPolicyModule()
     ) {
         self.settingsStore = settingsStore
-        self.localFavoriteLibraryStore = localFavoriteLibraryStore
-        self.readingProgressStore = readingProgressStore
         self.sessionStore = sessionStore
-        self.appSettingsStore = appSettingsStore
+        self.participants = participants
         self.client = client
         self.policyModule = policyModule
     }
@@ -376,14 +261,24 @@ public actor WebDAVSyncService {
     @discardableResult
     public func upload(using settings: WebDAVSyncSettings, allowingAccountMismatch: Bool = false) async throws -> Date {
         let accountUID = try await currentAccountUID()
+        let remotePayloads = try await fetchRemotePayloads(settings: settings)
         if !allowingAccountMismatch {
-            try await validateRemoteAccountIfPresent(settings: settings, localUID: accountUID)
+            try validateAccount(of: remotePayloads, localUID: accountUID)
         }
-        return try await upload(
-            using: settings,
+        let updatedAt = Date.now
+        try await uploadParticipants(
+            participants,
+            remotePayloads: remotePayloads,
+            settings: settings,
             accountUID: accountUID,
-            allowingAccountMismatch: allowingAccountMismatch
+            updatedAt: updatedAt
         )
+        try await updateSettingsAfterSync(
+            settings,
+            updatedAt: updatedAt,
+            syncedDatasetIDs: Set(participants.map(\.datasetID))
+        )
+        return updatedAt
     }
 
     @discardableResult
@@ -395,12 +290,17 @@ public actor WebDAVSyncService {
     @discardableResult
     public func download(using settings: WebDAVSyncSettings, allowingAccountMismatch _: Bool = false) async throws -> Date {
         let accountUID = try await currentAccountUID()
-        let metadata = try await downloadLocalFirstPayloadsIfPresent(settings: settings, accountUID: accountUID)
-        guard let metadata else {
+        let remotePayloads = try await fetchRemotePayloads(settings: settings)
+        try validateAccount(of: remotePayloads, localUID: accountUID)
+        guard let updatedAt = try await applyRemotePayloads(remotePayloads) else {
             throw WebDAVSyncError.notFound
         }
-        try await updateSettingsAfterSync(settings, metadata: metadata)
-        return metadata.updatedAt
+        try await updateSettingsAfterSync(
+            settings,
+            updatedAt: updatedAt,
+            syncedDatasetIDs: Set(remotePayloads.keys)
+        )
+        return updatedAt
     }
 
     @discardableResult
@@ -410,7 +310,61 @@ public actor WebDAVSyncService {
         guard policyModule.canSynchronizeAutomatically(settings: settings, session: sessionState) else { return .skipped }
         guard let accountUID = try? currentAccountUID(from: sessionState) else { return .skipped }
 
-        return try await synchronizeLocalFirstAutomatically(settings: settings, accountUID: accountUID)
+        let remotePayloads = try await fetchRemotePayloads(settings: settings)
+        try validateAccount(of: remotePayloads, localUID: accountUID)
+        let newestRemoteUpdatedAt = remotePayloads.values.map(\.info.updatedAt).max()
+        let localUpdatedAt = settings.localUpdatedAt ?? .distantPast
+
+        if let newestRemoteUpdatedAt, newestRemoteUpdatedAt > localUpdatedAt {
+            _ = try await applyRemotePayloads(remotePayloads)
+            try await updateSettingsAfterSync(
+                settings,
+                updatedAt: newestRemoteUpdatedAt,
+                syncedDatasetIDs: Set(remotePayloads.keys)
+            )
+            return .downloaded
+        }
+
+        if newestRemoteUpdatedAt == nil || localUpdatedAt > (newestRemoteUpdatedAt ?? .distantPast) {
+            let included = participants.filter {
+                !$0.uploadsOnlyWhenMarkedDirty || settings.dirtyDatasetIDs.contains($0.datasetID)
+            }
+            let updatedAt = Date.now
+            try await uploadParticipants(
+                included,
+                remotePayloads: remotePayloads,
+                settings: settings,
+                accountUID: accountUID,
+                updatedAt: updatedAt
+            )
+            try await updateSettingsAfterSync(
+                settings,
+                updatedAt: updatedAt,
+                syncedDatasetIDs: Set(included.map(\.datasetID))
+            )
+            return .uploaded
+        }
+
+        return .skipped
+    }
+
+    /// Records that locally synchronized data changed. When `touchesAppSettings`
+    /// is true, fingerprint-tracked participants are re-fingerprinted and marked
+    /// dirty if their synchronized subset actually changed.
+    public func markLocalDataChanged(at date: Date = .now, touchesAppSettings: Bool = false) async throws {
+        var settings = await settingsStore.load()
+        guard settings.isAutoSyncEnabled else { return }
+        settings.localUpdatedAt = date
+        if touchesAppSettings {
+            for participant in participants where participant.uploadsOnlyWhenMarkedDirty {
+                guard let fingerprint = await participant.localFingerprint() else { continue }
+                if settings.lastSyncedFingerprintByDatasetID[participant.datasetID] != fingerprint {
+                    settings.dirtyDatasetIDs.insert(participant.datasetID)
+                    settings.lastSyncedFingerprintByDatasetID[participant.datasetID] = fingerprint
+                }
+            }
+        }
+        try await settingsStore.save(settings)
     }
 
     private func currentAccountUID() async throws -> String {
@@ -428,208 +382,75 @@ public actor WebDAVSyncService {
         return accountUID
     }
 
-    public func markLocalDataChanged(at date: Date = .now, touchesAppSettings: Bool = false) async throws {
-        var settings = await settingsStore.load()
-        guard settings.isAutoSyncEnabled else { return }
-        settings.localUpdatedAt = date
-        if touchesAppSettings, let appSettingsStore {
-            let syncedAppSettings = WebDAVSyncedAppSettings(settings: await appSettingsStore.load())
-            if settings.lastSyncedAppSettings != syncedAppSettings {
-                settings.appSettingsUpdatedAt = date
-                settings.lastSyncedAppSettings = syncedAppSettings
+    private struct RemotePayload: Sendable {
+        var data: Data
+        var info: WebDAVRemotePayloadInfo
+    }
+
+    private func fetchRemotePayloads(settings: WebDAVSyncSettings) async throws -> [String: RemotePayload] {
+        var payloads: [String: RemotePayload] = [:]
+        for participant in participants {
+            if let payload = try await fetchRemotePayloadIfPresent(for: participant, settings: settings) {
+                payloads[participant.datasetID] = payload
             }
         }
-        try await settingsStore.save(settings)
+        return payloads
     }
 
-    private func upload(
-        using settings: WebDAVSyncSettings,
-        accountUID: String,
-        allowingAccountMismatch: Bool
-    ) async throws -> Date {
-        let updatedAt = Date.now
-        let metadata = try await synchronizeLocalFirstPayloads(
-            settings: settings,
-            accountUID: accountUID,
-            updatedAt: updatedAt,
-            includesAppSettings: true,
-            allowingAccountMismatch: allowingAccountMismatch
-        )
-        try await updateSettingsAfterSync(settings, metadata: metadata)
-        return updatedAt
-    }
-
-    private func validateRemoteAccountIfPresent(settings: WebDAVSyncSettings, localUID: String) async throws {
-        if let remotePayload = try await fetchFavoriteLibraryPayloadIfPresent(settings: settings) {
-            try validateLocalFirstAccount(remoteAccountUID: remotePayload.accountUID, localUID: localUID)
-            return
+    private func fetchRemotePayloadIfPresent(
+        for participant: any WebDAVSyncParticipant,
+        settings: WebDAVSyncSettings
+    ) async throws -> RemotePayload? {
+        let data: Data
+        do {
+            data = try await client.fetchPayloadData(settings: settings, fileName: participant.remoteFileName)
+        } catch WebDAVSyncError.notFound {
+            return nil
         }
-        if let appSettingsPayload = try await fetchAppSettingsPayloadIfPresent(settings: settings) {
-            try validateLocalFirstAccount(remoteAccountUID: appSettingsPayload.accountUID, localUID: localUID)
+        do {
+            return RemotePayload(data: data, info: try participant.inspectRemote(data))
+        } catch let error as WebDAVSyncError {
+            if case .underlying = error { return nil }
+            throw error
+        } catch {
+            return nil
         }
     }
 
-    private func synchronizeLocalFirstAutomatically(
+    private func uploadParticipants(
+        _ included: [any WebDAVSyncParticipant],
+        remotePayloads: [String: RemotePayload],
         settings: WebDAVSyncSettings,
-        accountUID: String
-    ) async throws -> WebDAVAutomaticSyncResult {
-        let remoteFavoriteLibraryPayload = try await fetchFavoriteLibraryPayloadIfPresent(settings: settings)
-        try validateLocalFirstAccount(remoteAccountUID: remoteFavoriteLibraryPayload?.accountUID, localUID: accountUID)
-        let remoteReadingProgressPayload = try await fetchReadingProgressPayloadIfPresent(settings: settings)
-        let remoteAppSettingsPayload = try await fetchAppSettingsPayloadIfPresent(settings: settings)
-        try validateLocalFirstAccount(remoteAccountUID: remoteAppSettingsPayload?.accountUID, localUID: accountUID)
-        let newestRemoteUpdatedAt = max(
-            max(remoteFavoriteLibraryPayload?.updatedAt, remoteReadingProgressPayload?.updatedAt),
-            remoteAppSettingsPayload?.updatedAt
-        )
-        let localUpdatedAt = settings.localUpdatedAt ?? .distantPast
-
-        if let newestRemoteUpdatedAt, newestRemoteUpdatedAt > localUpdatedAt {
-            let metadata = try await downloadLocalFirstPayloadsIfPresent(settings: settings, accountUID: accountUID) ??
-                WebDAVSyncMetadata(updatedAt: newestRemoteUpdatedAt)
-            try await updateSettingsAfterSync(settings, metadata: metadata)
-            return .downloaded
-        }
-
-        if newestRemoteUpdatedAt == nil || localUpdatedAt > (newestRemoteUpdatedAt ?? .distantPast) {
-            let now = Date.now
-            let metadata = try await synchronizeLocalFirstPayloads(
-                settings: settings,
-                accountUID: accountUID,
-                updatedAt: now,
-                includesAppSettings: settings.appSettingsUpdatedAt != nil,
-                allowingAccountMismatch: false
+        accountUID: String,
+        updatedAt: Date
+    ) async throws {
+        for participant in included {
+            let payloadData = try await participant.mergeAndExport(
+                remoteData: remotePayloads[participant.datasetID]?.data,
+                updatedAt: updatedAt,
+                accountUID: accountUID
             )
-            try await updateSettingsAfterSync(settings, metadata: metadata)
-            return .uploaded
+            try await client.uploadPayloadData(payloadData, settings: settings, fileName: participant.remoteFileName)
         }
-
-        return .skipped
     }
 
-    private func synchronizeLocalFirstPayloads(
-        settings: WebDAVSyncSettings,
-        accountUID: String,
-        updatedAt: Date,
-        includesAppSettings: Bool,
-        allowingAccountMismatch: Bool
-    ) async throws -> WebDAVSyncMetadata {
-        let localFavoriteLibraryPayload = FavoriteLibraryWebDAVPayload(
-            updatedAt: updatedAt,
-            accountUID: accountUID,
-            library: await localFavoriteLibraryStore.load()
-        )
-        let remoteFavoriteLibraryPayload = try await fetchFavoriteLibraryPayloadIfPresent(settings: settings)
-        if !allowingAccountMismatch {
-            try validateLocalFirstAccount(remoteAccountUID: remoteFavoriteLibraryPayload?.accountUID, localUID: accountUID)
-        }
-        let mergedFavoriteLibrary = FavoriteLibraryWebDAVMerger().merge(
-            local: localFavoriteLibraryPayload,
-            remote: remoteFavoriteLibraryPayload,
-            updatedAt: updatedAt
-        )
-        try await localFavoriteLibraryStore.save(mergedFavoriteLibrary.library)
-        try await client.uploadFavoriteLibraryPayload(mergedFavoriteLibrary, settings: settings)
-
-        let localReadingProgressPayload = ReadingProgressWebDAVPayload(
-            updatedAt: updatedAt,
-            records: await readingProgressStore.loadAll()
-        )
-        let remoteReadingProgressPayload = try await fetchReadingProgressPayloadIfPresent(settings: settings)
-        let mergedReadingProgress = ReadingProgressWebDAVMerger().merge(
-            local: localReadingProgressPayload,
-            remote: remoteReadingProgressPayload,
-            updatedAt: updatedAt
-        )
-        try await readingProgressStore.replaceAll(mergedReadingProgress.records)
-        try await client.uploadReadingProgressPayload(mergedReadingProgress, settings: settings)
-
-        guard includesAppSettings, let appSettingsStore else {
-            return WebDAVSyncMetadata(updatedAt: updatedAt)
-        }
-        let remoteAppSettingsPayload = try await fetchAppSettingsPayloadIfPresent(settings: settings)
-        if !allowingAccountMismatch {
-            try validateLocalFirstAccount(remoteAccountUID: remoteAppSettingsPayload?.accountUID, localUID: accountUID)
-        }
-        let syncedAppSettings = WebDAVSyncedAppSettings(settings: await appSettingsStore.load())
-        let appSettingsPayload = AppSettingsWebDAVPayload(
-            updatedAt: updatedAt,
-            accountUID: accountUID,
-            appSettings: syncedAppSettings
-        )
-        try await client.uploadAppSettingsPayload(appSettingsPayload, settings: settings)
-        return WebDAVSyncMetadata(
-            updatedAt: updatedAt,
-            appSettings: syncedAppSettings,
-            appSettingsUpdatedAt: updatedAt
-        )
-    }
-
-    private func downloadLocalFirstPayloadsIfPresent(
-        settings: WebDAVSyncSettings,
-        accountUID: String
-    ) async throws -> WebDAVSyncMetadata? {
+    private func applyRemotePayloads(_ remotePayloads: [String: RemotePayload]) async throws -> Date? {
         var newestUpdatedAt: Date?
-        var syncedAppSettings: WebDAVSyncedAppSettings?
-        if let payload = try await fetchFavoriteLibraryPayloadIfPresent(settings: settings) {
-            try validateLocalFirstAccount(remoteAccountUID: payload.accountUID, localUID: accountUID)
-            try await localFavoriteLibraryStore.save(payload.library)
-            newestUpdatedAt = max(newestUpdatedAt, payload.updatedAt)
+        for participant in participants {
+            guard let payload = remotePayloads[participant.datasetID] else { continue }
+            try await participant.applyRemote(payload.data)
+            newestUpdatedAt = Swift.max(newestUpdatedAt ?? .distantPast, payload.info.updatedAt)
         }
-
-        if let payload = try await fetchReadingProgressPayloadIfPresent(settings: settings) {
-            try await readingProgressStore.replaceAll(payload.records)
-            newestUpdatedAt = max(newestUpdatedAt, payload.updatedAt)
-        }
-
-        if let appSettingsStore,
-           let payload = try await fetchAppSettingsPayloadIfPresent(settings: settings) {
-            try validateLocalFirstAccount(remoteAccountUID: payload.accountUID, localUID: accountUID)
-            let currentSettings = await appSettingsStore.load()
-            try await appSettingsStore.save(payload.appSettings.applying(to: currentSettings))
-            syncedAppSettings = payload.appSettings
-            newestUpdatedAt = max(newestUpdatedAt, payload.updatedAt)
-        }
-
-        guard let newestUpdatedAt else { return nil }
-        return WebDAVSyncMetadata(
-            updatedAt: newestUpdatedAt,
-            appSettings: syncedAppSettings,
-            appSettingsUpdatedAt: nil
-        )
+        return newestUpdatedAt
     }
 
-    private func fetchFavoriteLibraryPayloadIfPresent(settings: WebDAVSyncSettings) async throws -> FavoriteLibraryWebDAVPayload? {
-        do {
-            return try await client.fetchFavoriteLibraryPayload(settings: settings)
-        } catch WebDAVSyncError.notFound {
-            return nil
-        } catch WebDAVSyncError.underlying {
-            return nil
+    private func validateAccount(of remotePayloads: [String: RemotePayload], localUID: String) throws {
+        for payload in remotePayloads.values {
+            try validateAccount(remoteAccountUID: payload.info.accountUID, localUID: localUID)
         }
     }
 
-    private func fetchReadingProgressPayloadIfPresent(settings: WebDAVSyncSettings) async throws -> ReadingProgressWebDAVPayload? {
-        do {
-            return try await client.fetchReadingProgressPayload(settings: settings)
-        } catch WebDAVSyncError.notFound {
-            return nil
-        } catch WebDAVSyncError.underlying {
-            return nil
-        }
-    }
-
-    private func fetchAppSettingsPayloadIfPresent(settings: WebDAVSyncSettings) async throws -> AppSettingsWebDAVPayload? {
-        do {
-            return try await client.fetchAppSettingsPayload(settings: settings)
-        } catch WebDAVSyncError.notFound {
-            return nil
-        } catch WebDAVSyncError.underlying {
-            return nil
-        }
-    }
-
-    private func validateLocalFirstAccount(remoteAccountUID: String?, localUID: String) throws {
+    private func validateAccount(remoteAccountUID: String?, localUID: String) throws {
         guard let remoteAccountUID,
               !remoteAccountUID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
               remoteAccountUID != localUID else {
@@ -638,42 +459,21 @@ public actor WebDAVSyncService {
         throw WebDAVSyncError.accountMismatch(localUID: localUID, remoteUID: remoteAccountUID)
     }
 
-    private func updateSettingsAfterSync(_ settings: WebDAVSyncSettings, metadata: WebDAVSyncMetadata) async throws {
+    private func updateSettingsAfterSync(
+        _ settings: WebDAVSyncSettings,
+        updatedAt: Date,
+        syncedDatasetIDs: Set<String>
+    ) async throws {
         var updated = settings
         updated.lastSyncedAt = .now
-        updated.lastRemoteUpdatedAt = metadata.updatedAt
-        updated.localUpdatedAt = metadata.updatedAt
-        updated.appSettingsUpdatedAt = metadata.appSettingsUpdatedAt
-        updated.lastSyncedAppSettings = metadata.appSettings
+        updated.lastRemoteUpdatedAt = updatedAt
+        updated.localUpdatedAt = updatedAt
+        for participant in participants where syncedDatasetIDs.contains(participant.datasetID) {
+            updated.dirtyDatasetIDs.remove(participant.datasetID)
+            if let fingerprint = await participant.localFingerprint() {
+                updated.lastSyncedFingerprintByDatasetID[participant.datasetID] = fingerprint
+            }
+        }
         try await settingsStore.save(updated)
-    }
-}
-
-private struct WebDAVSyncMetadata: Sendable {
-    var updatedAt: Date
-    var appSettings: WebDAVSyncedAppSettings?
-    var appSettingsUpdatedAt: Date?
-
-    init(
-        updatedAt: Date,
-        appSettings: WebDAVSyncedAppSettings? = nil,
-        appSettingsUpdatedAt: Date? = nil
-    ) {
-        self.updatedAt = updatedAt
-        self.appSettings = appSettings
-        self.appSettingsUpdatedAt = appSettingsUpdatedAt
-    }
-}
-
-private func max(_ lhs: Date?, _ rhs: Date?) -> Date? {
-    switch (lhs, rhs) {
-    case let (lhs?, rhs?):
-        Swift.max(lhs, rhs)
-    case let (lhs?, nil):
-        lhs
-    case let (nil, rhs?):
-        rhs
-    case (nil, nil):
-        nil
     }
 }

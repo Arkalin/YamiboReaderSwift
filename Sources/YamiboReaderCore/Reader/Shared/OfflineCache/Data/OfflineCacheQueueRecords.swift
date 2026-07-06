@@ -2,21 +2,21 @@ import Foundation
 @preconcurrency import GRDB
 
 extension OfflineCacheStore {
-    public func offlineCacheQueueWorks() async -> [OfflineCacheQueueWorkProjection] {
+    func offlineCacheQueueWorks() async -> [OfflineCacheQueueWorkProjection] {
         try? await recoverQueueStateAfterRestart()
         return (try? await database.read { db in
             try Self.allRawWorks(in: db).map(Self.queueWorkProjection(from:))
         }) ?? []
     }
 
-    public func nextOfflineCacheProcessingWork() async -> OfflineCacheProcessingWork? {
+    func nextOfflineCacheProcessingWork() async -> OfflineCacheProcessingWork? {
         try? await recoverQueueStateAfterRestart()
         return try? await database.read { db in
             try Self.allRawWorks(in: db).first.map(Self.processingWork(from:))
         }
     }
 
-    public func offlineCacheProcessingWork(id: OfflineCacheWorkID) async -> OfflineCacheProcessingWork? {
+    func offlineCacheProcessingWork(id: OfflineCacheWorkID) async -> OfflineCacheProcessingWork? {
         try? await recoverQueueStateAfterRestart()
         return try? await database.read { db in
             try Self.rawWork(workID: id.rawValue, readerKind: id.readerKind, in: db)
@@ -24,11 +24,11 @@ extension OfflineCacheStore {
         }
     }
 
-    public func enqueueNovelOfflineCacheWork(_ request: NovelOfflineCacheWorkRequest) async throws -> NovelOfflineCacheEnqueueResult {
+    func enqueueNovelOfflineCacheWork(_ request: NovelOfflineCacheWorkRequest) async throws -> NovelOfflineCacheEnqueueResult {
         try await enqueueNovelOfflineCacheWork(request, skipsExistingCachedEntry: true)
     }
 
-    public func enqueueNovelOfflineCacheUpdateWork(_ request: NovelOfflineCacheWorkRequest) async throws -> NovelOfflineCacheEnqueueResult {
+    func enqueueNovelOfflineCacheUpdateWork(_ request: NovelOfflineCacheWorkRequest) async throws -> NovelOfflineCacheEnqueueResult {
         try await enqueueNovelOfflineCacheWork(request, skipsExistingCachedEntry: false)
     }
 
@@ -102,7 +102,7 @@ extension OfflineCacheStore {
         }
     }
 
-    public func retryFailedOfflineCacheWorks() async throws {
+    func retryFailedOfflineCacheWorks() async throws {
         try await recoverQueueStateAfterRestart()
         do {
             try await database.write { db in
@@ -125,7 +125,7 @@ extension OfflineCacheStore {
         }
     }
 
-    public func updateOfflineCacheWorkProgress(
+    func updateOfflineCacheWorkProgress(
         id: OfflineCacheWorkID,
         targetImageURLs: [URL]?,
         completedImageURLs: [URL],
@@ -141,7 +141,7 @@ extension OfflineCacheStore {
         }
     }
 
-    public func prepareOfflineCacheWorkForRun(
+    func prepareOfflineCacheWorkForRun(
         id: OfflineCacheWorkID,
         targetImageURLs: [URL]?,
         completedImageURLs: [URL]
@@ -152,7 +152,7 @@ extension OfflineCacheStore {
         }
     }
 
-    public func finishOfflineCacheWork(id: OfflineCacheWorkID) async throws {
+    func finishOfflineCacheWork(id: OfflineCacheWorkID) async throws {
         try await recoverQueueStateAfterRestart()
         do {
             try await database.write { db in
@@ -172,11 +172,11 @@ extension OfflineCacheStore {
         }
     }
 
-    public func finishNovelOfflineCacheWork(id: OfflineCacheWorkID) async throws {
+    func finishNovelOfflineCacheWork(id: OfflineCacheWorkID) async throws {
         try await finishOfflineCacheWork(id: id)
     }
 
-    public func markOfflineCacheWorkFailed(id: OfflineCacheWorkID, message: String?) async throws {
+    func markOfflineCacheWorkFailed(id: OfflineCacheWorkID, message: String?) async throws {
         try await recoverQueueStateAfterRestart()
         do {
             try await database.write { db in
@@ -198,7 +198,7 @@ extension OfflineCacheStore {
         }
     }
 
-    public func cancelOfflineCacheWork(id: OfflineCacheWorkID) async throws {
+    func cancelOfflineCacheWork(id: OfflineCacheWorkID) async throws {
         try await recoverQueueStateAfterRestart()
         do {
             try await database.write { db in
@@ -224,7 +224,7 @@ extension OfflineCacheStore {
         }
     }
 
-    public func cancelOfflineCacheEntry(_ id: OfflineCacheEntryID) async throws {
+    func cancelOfflineCacheEntry(_ id: OfflineCacheEntryID) async throws {
         try await recoverQueueStateAfterRestart()
         do {
             try await database.write { db in
@@ -250,7 +250,7 @@ extension OfflineCacheStore {
         }
     }
 
-    public func cancelOfflineCacheGroup(_ id: OfflineCacheGroupID) async throws {
+    func cancelOfflineCacheGroup(_ id: OfflineCacheGroupID) async throws {
         try await cancelOfflineCacheWorks(readerKind: id.readerKind, ownerKey: id.ownerKey)
     }
 

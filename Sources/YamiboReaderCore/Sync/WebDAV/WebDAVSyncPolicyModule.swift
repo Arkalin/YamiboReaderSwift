@@ -1,9 +1,9 @@
 import Foundation
 
-public struct WebDAVSyncPolicyModule: Sendable {
-    public init() {}
+struct WebDAVSyncPolicyModule: Sendable {
+    init() {}
 
-    public func canSynchronizeAutomatically(
+    func canSynchronizeAutomatically(
         settings: WebDAVSyncSettings,
         session: SessionState
     ) -> Bool {

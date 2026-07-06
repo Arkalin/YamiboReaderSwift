@@ -2,7 +2,7 @@ import CryptoKit
 import Foundation
 @preconcurrency import GRDB
 
-public actor OfflineCacheStore {
+actor OfflineCacheStore {
     let database: DatabasePool
     nonisolated(unsafe) let fileManager: FileManager
     private let baseDirectory: URL
@@ -13,7 +13,7 @@ public actor OfflineCacheStore {
     private var didRecoverQueueState = false
     private static let mangaReaderKind = "manga"
 
-    public init(
+    init(
         databasePool: DatabasePool? = nil,
         fileManager: FileManager = .default,
         baseDirectory: URL? = nil
@@ -31,7 +31,7 @@ public actor OfflineCacheStore {
         updateNotifier.stream()
     }
 
-    public func mangaOfflineCacheMembership(ownerName: String, tid: String) async -> MangaOfflineCacheMembership? {
+    func mangaOfflineCacheMembership(ownerName: String, tid: String) async -> MangaOfflineCacheMembership? {
         try? await recoverQueueStateAfterRestart()
         guard let id = normalizedID(ownerName: ownerName, tid: tid) else { return nil }
         return try? await database.read { db in
@@ -45,7 +45,7 @@ public actor OfflineCacheStore {
         }
     }
 
-    public func mangaOfflineCacheMemberships(forOwnerName ownerName: String) async -> [MangaOfflineCacheMembership] {
+    func mangaOfflineCacheMemberships(forOwnerName ownerName: String) async -> [MangaOfflineCacheMembership] {
         try? await recoverQueueStateAfterRestart()
         guard let ownerName = ownerName.mangaReaderTrimmedNonEmpty else { return [] }
         return (try? await database.read { db in
@@ -58,7 +58,7 @@ public actor OfflineCacheStore {
         }) ?? []
     }
 
-    public func allMangaOfflineCacheMemberships() async -> [MangaOfflineCacheMembership] {
+    func allMangaOfflineCacheMemberships() async -> [MangaOfflineCacheMembership] {
         try? await recoverQueueStateAfterRestart()
         return (try? await database.read { db in
             try Self.allMangaMemberships(
@@ -69,7 +69,7 @@ public actor OfflineCacheStore {
         }) ?? []
     }
 
-    public func saveMangaOfflineCacheMembership(_ membership: MangaOfflineCacheMembership) async throws {
+    func saveMangaOfflineCacheMembership(_ membership: MangaOfflineCacheMembership) async throws {
         try await recoverQueueStateAfterRestart()
         var writtenPayload: MangaSourcePagePayload?
         do {
@@ -110,7 +110,7 @@ public actor OfflineCacheStore {
         }
     }
 
-    public func removeMangaOfflineCacheMembership(ownerName: String, tid: String) async throws {
+    func removeMangaOfflineCacheMembership(ownerName: String, tid: String) async throws {
         try await recoverQueueStateAfterRestart()
         guard let id = normalizedID(ownerName: ownerName, tid: tid) else { return }
         do {
@@ -144,7 +144,7 @@ public actor OfflineCacheStore {
         }
     }
 
-    public func removeMangaOfflineCacheMemberships(forOwnerName ownerName: String) async throws {
+    func removeMangaOfflineCacheMemberships(forOwnerName ownerName: String) async throws {
         try await recoverQueueStateAfterRestart()
         guard let ownerName = ownerName.mangaReaderTrimmedNonEmpty else { return }
         do {
@@ -176,7 +176,7 @@ public actor OfflineCacheStore {
         }
     }
 
-    public func renameMangaOfflineCacheOwner(from oldOwnerName: String, to newOwnerName: String) async throws {
+    func renameMangaOfflineCacheOwner(from oldOwnerName: String, to newOwnerName: String) async throws {
         try await recoverQueueStateAfterRestart()
         guard let oldOwnerName = oldOwnerName.mangaReaderTrimmedNonEmpty,
               let newOwnerName = newOwnerName.mangaReaderTrimmedNonEmpty,
@@ -262,7 +262,7 @@ public actor OfflineCacheStore {
         }
     }
 
-    public func enqueueMangaOfflineCacheWork(_ request: MangaOfflineCacheWorkRequest) async throws -> MangaOfflineCacheEnqueueResult {
+    func enqueueMangaOfflineCacheWork(_ request: MangaOfflineCacheWorkRequest) async throws -> MangaOfflineCacheEnqueueResult {
         try await recoverQueueStateAfterRestart()
         do {
             let result: MangaOfflineCacheEnqueueResult = try await database.write { db in
@@ -320,7 +320,7 @@ public actor OfflineCacheStore {
         }
     }
 
-    public func clearOfflineCacheQueue() async throws {
+    func clearOfflineCacheQueue() async throws {
         try await recoverQueueStateAfterRestart()
         try await database.write { db in
             try db.execute(sql: "DELETE FROM offline_cache_works")
@@ -329,14 +329,14 @@ public actor OfflineCacheStore {
         notifyOfflineCacheDidChange()
     }
 
-    public func offlineCacheQueueRunState() async -> OfflineCacheQueueRunState {
+    func offlineCacheQueueRunState() async -> OfflineCacheQueueRunState {
         try? await recoverQueueStateAfterRestart()
         return (try? await database.read { db in
             try Self.queueRunState(in: db)
         }) ?? .paused
     }
 
-    public func setOfflineCacheQueueRunState(_ state: OfflineCacheQueueRunState) async throws {
+    func setOfflineCacheQueueRunState(_ state: OfflineCacheQueueRunState) async throws {
         didRecoverQueueState = true
         do {
             try await database.write { db in
@@ -351,7 +351,7 @@ public actor OfflineCacheStore {
         }
     }
 
-    public func mangaOfflineCacheState(ownerName: String, tid: String) async -> MangaOfflineCacheState {
+    func mangaOfflineCacheState(ownerName: String, tid: String) async -> MangaOfflineCacheState {
         try? await recoverQueueStateAfterRestart()
         guard let id = normalizedID(ownerName: ownerName, tid: tid) else { return .uncached }
         return (try? await database.read { db in
@@ -372,7 +372,7 @@ public actor OfflineCacheStore {
         }) ?? .uncached
     }
 
-    public func clearAll() async throws {
+    func clearAll() async throws {
         do {
             try await database.write { db in
                 try db.execute(sql: "DELETE FROM offline_cache_completed_images")
@@ -395,7 +395,7 @@ public actor OfflineCacheStore {
         }
     }
 
-    public func totalDiskUsageBytes() async -> Int {
+    func totalDiskUsageBytes() async -> Int {
         try? await recoverQueueStateAfterRestart()
         return (try? await database.read { db in
             let imageBytes = try Int.fetchOne(
@@ -877,7 +877,7 @@ public actor OfflineCacheStore {
 
     private static func openDatabase() -> DatabasePool {
         do {
-            return try YamiboDatabase.openSharedPool()
+            return try YamiboDatabase.openPool()
         } catch {
             fatalError("Failed to open OfflineCacheStore database: \(error)")
         }

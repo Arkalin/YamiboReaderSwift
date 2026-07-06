@@ -1,16 +1,16 @@
 import Foundation
 
-public enum ReaderProjectionLoadSource: Hashable, Sendable {
+enum ReaderProjectionLoadSource: Hashable, Sendable {
     case online(sourceLoadedOnline: Bool)
     case offlineFallback(updatedAt: Date?)
 }
 
-public struct ReaderProjectionLoadedValue<Projection: Sendable, SourcePage: Sendable>: Sendable {
-    public var projection: Projection
-    public var sourcePage: SourcePage
-    public var source: ReaderProjectionLoadSource
+struct ReaderProjectionLoadedValue<Projection: Sendable, SourcePage: Sendable>: Sendable {
+    var projection: Projection
+    var sourcePage: SourcePage
+    var source: ReaderProjectionLoadSource
 
-    public init(
+    init(
         projection: Projection,
         sourcePage: SourcePage,
         source: ReaderProjectionLoadSource
@@ -21,12 +21,12 @@ public struct ReaderProjectionLoadedValue<Projection: Sendable, SourcePage: Send
     }
 }
 
-public struct ReaderProjectionPreparedSourcePage<Projection: Sendable, SourcePage: Sendable>: Sendable {
-    public var projection: Projection
-    public var sourcePage: SourcePage
-    public var sourceLoadedOnline: Bool
+struct ReaderProjectionPreparedSourcePage<Projection: Sendable, SourcePage: Sendable>: Sendable {
+    var projection: Projection
+    var sourcePage: SourcePage
+    var sourceLoadedOnline: Bool
 
-    public init(
+    init(
         projection: Projection,
         sourcePage: SourcePage,
         sourceLoadedOnline: Bool
@@ -37,8 +37,8 @@ public struct ReaderProjectionPreparedSourcePage<Projection: Sendable, SourcePag
     }
 }
 
-public enum ReaderProjectionFallbackPolicy {
-    public static func isEligibleOfflineFallbackTrigger(_ error: Error) -> Bool {
+enum ReaderProjectionFallbackPolicy {
+    static func isEligibleOfflineFallbackTrigger(_ error: Error) -> Bool {
         if error is CancellationError {
             return false
         }
@@ -75,7 +75,7 @@ public enum ReaderProjectionFallbackPolicy {
     }
 }
 
-public protocol ReaderProjectionLoadingStrategy: Sendable {
+protocol ReaderProjectionLoadingStrategy: Sendable {
     associatedtype Request: Sendable
     associatedtype Identity: Hashable & Sendable
     associatedtype Projection: Sendable
@@ -97,39 +97,39 @@ public protocol ReaderProjectionLoadingStrategy: Sendable {
     func saveProjection(_ projection: Projection) async throws
 }
 
-public struct ReaderProjectionSourcePageLoad<SourcePage: Sendable>: Sendable {
-    public var sourcePage: SourcePage
-    public var loadedOnline: Bool
+struct ReaderProjectionSourcePageLoad<SourcePage: Sendable>: Sendable {
+    var sourcePage: SourcePage
+    var loadedOnline: Bool
 
-    public init(sourcePage: SourcePage, loadedOnline: Bool) {
+    init(sourcePage: SourcePage, loadedOnline: Bool) {
         self.sourcePage = sourcePage
         self.loadedOnline = loadedOnline
     }
 }
 
-public struct ReaderProjectionOfflineSourcePageLoad<Identity: Hashable & Sendable, SourcePage: Sendable>: Sendable {
-    public var sourcePage: SourcePage
-    public var identity: Identity
-    public var updatedAt: Date?
+struct ReaderProjectionOfflineSourcePageLoad<Identity: Hashable & Sendable, SourcePage: Sendable>: Sendable {
+    var sourcePage: SourcePage
+    var identity: Identity
+    var updatedAt: Date?
 
-    public init(sourcePage: SourcePage, identity: Identity, updatedAt: Date?) {
+    init(sourcePage: SourcePage, identity: Identity, updatedAt: Date?) {
         self.sourcePage = sourcePage
         self.identity = identity
         self.updatedAt = updatedAt
     }
 }
 
-public actor ReaderProjectionLoader<Strategy: ReaderProjectionLoadingStrategy> {
+actor ReaderProjectionLoader<Strategy: ReaderProjectionLoadingStrategy> {
     private let strategy: Strategy
     private let coalescesInFlightRequests: Bool
     private var inFlightTasks: [ReaderProjectionLoadKey<Strategy.Identity>: Task<ReaderProjectionPreparedSourcePage<Strategy.Projection, Strategy.SourcePage>, Error>] = [:]
 
-    public init(strategy: Strategy, coalescesInFlightRequests: Bool = false) {
+    init(strategy: Strategy, coalescesInFlightRequests: Bool = false) {
         self.strategy = strategy
         self.coalescesInFlightRequests = coalescesInFlightRequests
     }
 
-    public func load(
+    func load(
         _ request: Strategy.Request,
         ignoresCache: Bool = false
     ) async throws -> ReaderProjectionLoadedValue<Strategy.Projection, Strategy.SourcePage> {
@@ -149,7 +149,7 @@ public actor ReaderProjectionLoader<Strategy: ReaderProjectionLoadingStrategy> {
         }
     }
 
-    public func loadOnlineOnly(
+    func loadOnlineOnly(
         _ request: Strategy.Request,
         ignoresCache: Bool = false
     ) async throws -> ReaderProjectionPreparedSourcePage<Strategy.Projection, Strategy.SourcePage> {
