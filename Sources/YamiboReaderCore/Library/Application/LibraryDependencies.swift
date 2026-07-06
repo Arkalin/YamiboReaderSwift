@@ -1,11 +1,12 @@
 import Foundation
 
-/// Everything the favorite library feature UI needs from the composition
-/// root. Intentionally wide today because `LocalFavoritesViewModel` still
-/// owns organization, remote sync, update detection, and open-target
-/// resolution in one type; it narrows when that view model is split.
+/// Dependency package the favorites feature's composition roots use to build
+/// their modules. Each module (`FavoriteLibraryOrganizer`,
+/// `FavoriteRemoteSyncSession`, `FavoriteUpdateMonitor`,
+/// `LocalFavoriteOpenTargetResolver`) declares a narrow initializer taking
+/// only the stores it uses; this struct just carries them from the app
+/// composition root to those call sites.
 public struct LibraryDependencies: Sendable {
-    public let sessionStore: SessionStore
     public let localFavoriteLibraryStore: FavoriteLibraryStore
     public let favoriteUpdateStore: FavoriteUpdateStore
     public let readingProgressStore: ReadingProgressStore
@@ -16,7 +17,6 @@ public struct LibraryDependencies: Sendable {
     public let makeThreadRouteResolver: @Sendable () async -> YamiboThreadRouteResolver
 
     public init(
-        sessionStore: SessionStore,
         localFavoriteLibraryStore: FavoriteLibraryStore,
         favoriteUpdateStore: FavoriteUpdateStore,
         readingProgressStore: ReadingProgressStore,
@@ -26,7 +26,6 @@ public struct LibraryDependencies: Sendable {
         makeForumThreadReaderRepository: @escaping @Sendable () async -> ForumThreadReaderRepository,
         makeThreadRouteResolver: @escaping @Sendable () async -> YamiboThreadRouteResolver
     ) {
-        self.sessionStore = sessionStore
         self.localFavoriteLibraryStore = localFavoriteLibraryStore
         self.favoriteUpdateStore = favoriteUpdateStore
         self.readingProgressStore = readingProgressStore
