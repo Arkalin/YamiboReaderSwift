@@ -50,19 +50,23 @@ public struct RootTabView: View {
 
     private var content: some View {
         TabView(selection: selectedTabBinding) {
-            ForumNavigationHostView(appContext: appModel.appContext, appModel: appModel)
+            ForumNavigationHostView(dependencies: appModel.appContext.forumDependencies, appModel: appModel)
                 .tag(AppTab.forum)
                 .tabItem {
                     Label(L10n.string("tab.forum"), systemImage: "text.bubble")
                 }
 
-            FavoritesNavigationHostView(appContext: appModel.appContext, appModel: appModel)
+            FavoritesNavigationHostView(dependencies: appModel.appContext.libraryDependencies, appModel: appModel)
                 .tag(AppTab.favorites)
                 .tabItem {
                     Label(L10n.string("tab.favorites"), systemImage: "heart.text.square")
                 }
 
-            MineHomeView(appContext: appModel.appContext, appModel: appModel)
+            MineHomeView(
+                dependencies: appModel.appContext.accountDependencies,
+                settingsDependencies: appModel.appContext.settingsDependencies,
+                appModel: appModel
+            )
                 .tag(AppTab.mine)
                 .tabItem {
                     Label(L10n.string("tab.mine"), systemImage: "person.crop.circle")
@@ -166,12 +170,20 @@ private struct ReaderPresentationModifier: ViewModifier {
     func body(content: Content) -> some View {
         content
             .fullScreenCover(item: binding(for: \.activeNovelContext)) { context in
-                NovelReaderView(context: context, appModel: appModel)
+                NovelReaderView(
+                    context: context,
+                    dependencies: appModel.appContext.novelReaderDependencies,
+                    appModel: appModel
+                )
                     .ignoresSafeArea()
                     .modifier(ClipboardForumLinkPromptAlert(appModel: appModel, isActive: true))
             }
             .fullScreenCover(item: binding(for: \.activeMangaContext)) { context in
-                MangaReaderView(context: context, appModel: appModel)
+                MangaReaderView(
+                    context: context,
+                    dependencies: appModel.appContext.mangaReaderDependencies,
+                    appModel: appModel
+                )
                     .ignoresSafeArea()
                     .modifier(ClipboardForumLinkPromptAlert(appModel: appModel, isActive: true))
             }

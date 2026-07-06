@@ -47,13 +47,13 @@ final class ForumSearchViewModel {
         }
     )
 
-    init(forumID: String?, appContext: YamiboAppContext) {
+    init(forumID: String?, dependencies: ForumDependencies) {
         self.forumID = forumID
         repositoryProvider = {
-            await appContext.makeForumRepository()
+            await dependencies.makeForumRepository()
         }
         formHashProvider = {
-            await appContext.profileStore.load()?.formHash
+            await dependencies.profileStore.load()?.formHash
         }
     }
 

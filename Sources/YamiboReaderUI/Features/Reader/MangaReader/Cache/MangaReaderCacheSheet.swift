@@ -15,20 +15,20 @@ struct MangaReaderCacheSheet: View {
     init(
         context: MangaLaunchContext,
         panel: MangaDirectoryPanelPresentation,
-        appContext: YamiboAppContext
+        dependencies: MangaReaderDependencies
     ) {
         _model = StateObject(
             wrappedValue: MangaReaderCacheViewModel(
                 context: context,
                 panel: panel,
-                localFavoriteLibraryStore: appContext.localFavoriteLibraryStore,
-                offlineCacheStore: appContext.offlineCacheStore,
+                localFavoriteLibraryStore: dependencies.localFavoriteLibraryStore,
+                offlineCacheStore: dependencies.offlineCacheStore,
                 offlineCacheQueueControllerProvider: {
-                    await appContext.makeOfflineCacheQueueExecutor()
+                    await dependencies.makeOfflineCacheQueueExecutor()
                 }
             )
         )
-        _queueViewModel = State(initialValue: MineHomeViewModel(appContext: appContext))
+        _queueViewModel = State(initialValue: MineHomeViewModel(dependencies: dependencies.account))
     }
 
     var body: some View {

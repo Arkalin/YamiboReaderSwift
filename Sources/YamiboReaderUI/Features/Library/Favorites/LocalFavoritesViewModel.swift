@@ -70,7 +70,7 @@ final class LocalFavoritesViewModel: ObservableObject {
         didSet { rebuildCards() }
     }
 
-    private let appContext: YamiboAppContext
+    private let dependencies: LibraryDependencies
     private var readingProgress: [ReadingProgressRecord] = []
     private var contentCoverURLsByTargetID: [String: URL] = [:]
     private var libraryUpdatesTask: Task<Void, Never>?
@@ -91,16 +91,16 @@ final class LocalFavoritesViewModel: ObservableObject {
     }
 
     init(
-        appContext: YamiboAppContext,
+        dependencies: LibraryDependencies,
         remoteFavoriteSyncExecutor: ((String, String) async throws -> YamiboFavoriteSyncReport)? = nil,
         favoriteUpdatePageFetcher: ((FavoriteItem) async throws -> ForumThreadPage)? = nil,
         remoteFavoriteDeleteHandler: (([FavoriteItem]) async throws -> Void)? = nil
     ) {
-        self.appContext = appContext
+        self.dependencies = dependencies
         self.remoteFavoriteSyncExecutor = remoteFavoriteSyncExecutor
         self.favoriteUpdatePageFetcher = favoriteUpdatePageFetcher
         self.remoteFavoriteDeleteHandler = remoteFavoriteDeleteHandler
-        libraryUpdatesTask = Task { @MainActor [weak self, store = appContext.localFavoriteLibraryStore] in
+        libraryUpdatesTask = Task { @MainActor [weak self, store = dependencies.localFavoriteLibraryStore] in
             for await notification in NotificationCenter.default.notifications(named: FavoriteLibraryStore.didChangeNotification) {
                 guard !Task.isCancelled else { return }
                 guard let self else { return }
@@ -111,7 +111,7 @@ final class LocalFavoritesViewModel: ObservableObject {
                 await self.reload()
             }
         }
-        progressUpdatesTask = Task { @MainActor [weak self, store = appContext.readingProgressStore] in
+        progressUpdatesTask = Task { @MainActor [weak self, store = dependencies.readingProgressStore] in
             for await notification in NotificationCenter.default.notifications(named: ReadingProgressStore.didChangeNotification) {
                 guard !Task.isCancelled else { return }
                 guard let self else { return }
@@ -192,10 +192,10 @@ final class LocalFavoritesViewModel: ObservableObject {
     }
 
     func load() async {
-        document = await appContext.localFavoriteLibraryStore.load()
-        readingProgress = await appContext.readingProgressStore.loadAll()
+        document = await dependencies.localFavoriteLibraryStore.load()
+        readingProgress = await dependencies.readingProgressStore.loadAll()
         contentCoverURLsByTargetID = await contentCoverURLs(for: document.items)
-        let settings = await appContext.settingsStore.load()
+        let settings = await dependencies.settingsStore.load()
         layoutMode = settings.favorites.layoutMode
         sortOrder = settings.favorites.sortOrder
         sortDescending = settings.favorites.sortDescending
@@ -236,7 +236,7 @@ final class LocalFavoritesViewModel: ObservableObject {
         )
         favoriteUpdateSnapshot = snapshot
         do {
-            try await appContext.favoriteUpdateStore.saveRun(snapshot)
+            try await dependencies.favoriteUpdateStore.saveRun(snapshot)
         } catch {
             errorMessage = error.localizedDescription
             return nil
@@ -262,7 +262,7 @@ final class LocalFavoritesViewModel: ObservableObject {
 
     func markFavoriteUpdateEventRead(_ eventID: String) async {
         do {
-            try await appContext.favoriteUpdateStore.markEventRead(eventID)
+            try await dependencies.favoriteUpdateStore.markEventRead(eventID)
             await reloadFavoriteUpdateState()
         } catch {
             errorMessage = error.localizedDescription
@@ -271,7 +271,7 @@ final class LocalFavoritesViewModel: ObservableObject {
 
     func dismissFavoriteUpdateEvent(_ eventID: String) async {
         do {
-            try await appContext.favoriteUpdateStore.dismissEvent(eventID)
+            try await dependencies.favoriteUpdateStore.dismissEvent(eventID)
             await reloadFavoriteUpdateState()
         } catch {
             errorMessage = error.localizedDescription
@@ -280,7 +280,7 @@ final class LocalFavoritesViewModel: ObservableObject {
 
     func dismissAllFavoriteUpdateEvents() async {
         do {
-            try await appContext.favoriteUpdateStore.dismissAllEvents()
+            try await dependencies.favoriteUpdateStore.dismissAllEvents()
             await reloadFavoriteUpdateState()
         } catch {
             errorMessage = error.localizedDescription
@@ -289,7 +289,7 @@ final class LocalFavoritesViewModel: ObservableObject {
 
     func setFavoriteUpdateFidFilter(_ fid: String, enabled: Bool) async {
         do {
-            try await appContext.favoriteUpdateStore.setFidEnabled(fid, enabled: enabled)
+            try await dependencies.favoriteUpdateStore.setFidEnabled(fid, enabled: enabled)
             await reloadFavoriteUpdateState()
         } catch {
             errorMessage = error.localizedDescription
@@ -298,7 +298,7 @@ final class LocalFavoritesViewModel: ObservableObject {
 
     func setFavoriteUpdateCategoryFilter(_ categoryID: String, enabled: Bool) async {
         do {
-            try await appContext.favoriteUpdateStore.setCategoryEnabled(categoryID, enabled: enabled)
+            try await dependencies.favoriteUpdateStore.setCategoryEnabled(categoryID, enabled: enabled)
             await reloadFavoriteUpdateState()
         } catch {
             errorMessage = error.localizedDescription
@@ -311,13 +311,13 @@ final class LocalFavoritesViewModel: ObservableObject {
         layoutMode = value
 
         Task {
-            var settings = await appContext.settingsStore.load()
+            var settings = await dependencies.settingsStore.load()
             settings.favorites.layoutMode = value
             settings.favorites.showsCategoryCounts = showsCategoryCounts
             settings.favorites.sortOrder = sortOrder
             settings.favorites.sortDescending = sortDescending
             do {
-                try await appContext.settingsStore.save(settings)
+                try await dependencies.settingsStore.save(settings)
             } catch {
                 await MainActor.run {
                     if layoutMode == value {
@@ -335,13 +335,13 @@ final class LocalFavoritesViewModel: ObservableObject {
         showsCategoryCounts = value
 
         Task {
-            var settings = await appContext.settingsStore.load()
+            var settings = await dependencies.settingsStore.load()
             settings.favorites.showsCategoryCounts = value
             settings.favorites.layoutMode = layoutMode
             settings.favorites.sortOrder = sortOrder
             settings.favorites.sortDescending = sortDescending
             do {
-                try await appContext.settingsStore.save(settings)
+                try await dependencies.settingsStore.save(settings)
             } catch {
                 await MainActor.run {
                     if showsCategoryCounts == value {
@@ -359,13 +359,13 @@ final class LocalFavoritesViewModel: ObservableObject {
         sortOrder = value
 
         Task {
-            var settings = await appContext.settingsStore.load()
+            var settings = await dependencies.settingsStore.load()
             settings.favorites.sortOrder = value
             settings.favorites.sortDescending = sortDescending
             settings.favorites.layoutMode = layoutMode
             settings.favorites.showsCategoryCounts = showsCategoryCounts
             do {
-                try await appContext.settingsStore.save(settings)
+                try await dependencies.settingsStore.save(settings)
             } catch {
                 await MainActor.run {
                     if sortOrder == value {
@@ -384,13 +384,13 @@ final class LocalFavoritesViewModel: ObservableObject {
         rebuildCards()
 
         Task {
-            var settings = await appContext.settingsStore.load()
+            var settings = await dependencies.settingsStore.load()
             settings.favorites.sortOrder = sortOrder
             settings.favorites.sortDescending = value
             settings.favorites.layoutMode = layoutMode
             settings.favorites.showsCategoryCounts = showsCategoryCounts
             do {
-                try await appContext.settingsStore.save(settings)
+                try await dependencies.settingsStore.save(settings)
             } catch {
                 await MainActor.run {
                     if sortDescending == value {
@@ -508,9 +508,9 @@ final class LocalFavoritesViewModel: ObservableObject {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
         do {
-            var updatedDocument = await appContext.localFavoriteLibraryStore.load()
+            var updatedDocument = await dependencies.localFavoriteLibraryStore.load()
             let category = updatedDocument.createCategory(name: trimmed)
-            try await appContext.localFavoriteLibraryStore.save(updatedDocument)
+            try await dependencies.localFavoriteLibraryStore.save(updatedDocument)
             document = updatedDocument
             selectedCategoryID = category.id
             rebuildCards()
@@ -525,9 +525,9 @@ final class LocalFavoritesViewModel: ObservableObject {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         do {
-            var updatedDocument = await appContext.localFavoriteLibraryStore.load()
+            var updatedDocument = await dependencies.localFavoriteLibraryStore.load()
             updatedDocument.renameCategory(id: id, name: trimmed)
-            try await appContext.localFavoriteLibraryStore.save(updatedDocument)
+            try await dependencies.localFavoriteLibraryStore.save(updatedDocument)
             document = updatedDocument
             rebuildCards()
         } catch {
@@ -537,9 +537,9 @@ final class LocalFavoritesViewModel: ObservableObject {
 
     func deleteCategory(id: String) async {
         do {
-            var updatedDocument = await appContext.localFavoriteLibraryStore.load()
+            var updatedDocument = await dependencies.localFavoriteLibraryStore.load()
             updatedDocument.deleteCategory(id: id)
-            try await appContext.localFavoriteLibraryStore.save(updatedDocument)
+            try await dependencies.localFavoriteLibraryStore.save(updatedDocument)
             document = updatedDocument
             if !updatedDocument.categories.contains(where: { $0.id == selectedCategoryID }) {
                 selectedCategoryID = updatedDocument.defaultCategory.id
@@ -561,9 +561,9 @@ final class LocalFavoritesViewModel: ObservableObject {
         orderedIDs.swapAt(index, targetIndex)
 
         do {
-            var updatedDocument = await appContext.localFavoriteLibraryStore.load()
+            var updatedDocument = await dependencies.localFavoriteLibraryStore.load()
             updatedDocument.reorderCategories(orderedIDs: orderedIDs)
-            try await appContext.localFavoriteLibraryStore.save(updatedDocument)
+            try await dependencies.localFavoriteLibraryStore.save(updatedDocument)
             document = updatedDocument
             rebuildCards()
         } catch {
@@ -590,9 +590,9 @@ final class LocalFavoritesViewModel: ObservableObject {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
         do {
-            var updatedDocument = await appContext.localFavoriteLibraryStore.load()
+            var updatedDocument = await dependencies.localFavoriteLibraryStore.load()
             let collection = updatedDocument.createCollection(categoryID: selectedCategoryID, name: trimmed, color: color)
-            try await appContext.localFavoriteLibraryStore.save(updatedDocument)
+            try await dependencies.localFavoriteLibraryStore.save(updatedDocument)
             document = updatedDocument
             selectedCollectionID = collection.id
             rebuildCards()
@@ -607,10 +607,10 @@ final class LocalFavoritesViewModel: ObservableObject {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         do {
-            var updatedDocument = await appContext.localFavoriteLibraryStore.load()
+            var updatedDocument = await dependencies.localFavoriteLibraryStore.load()
             updatedDocument.renameCollection(id: id, name: trimmed)
             updatedDocument.recolorCollection(id: id, color: color)
-            try await appContext.localFavoriteLibraryStore.save(updatedDocument)
+            try await dependencies.localFavoriteLibraryStore.save(updatedDocument)
             document = updatedDocument
             rebuildCards()
         } catch {
@@ -620,9 +620,9 @@ final class LocalFavoritesViewModel: ObservableObject {
 
     func dissolveCollection(id: String) async {
         do {
-            var updatedDocument = await appContext.localFavoriteLibraryStore.load()
+            var updatedDocument = await dependencies.localFavoriteLibraryStore.load()
             updatedDocument.dissolveCollection(id: id)
-            try await appContext.localFavoriteLibraryStore.save(updatedDocument)
+            try await dependencies.localFavoriteLibraryStore.save(updatedDocument)
             document = updatedDocument
             if selectedCollectionID == id {
                 selectedCollectionID = nil
@@ -645,9 +645,9 @@ final class LocalFavoritesViewModel: ObservableObject {
         orderedIDs.swapAt(index, targetIndex)
 
         do {
-            var updatedDocument = await appContext.localFavoriteLibraryStore.load()
+            var updatedDocument = await dependencies.localFavoriteLibraryStore.load()
             updatedDocument.reorderCollections(categoryID: collection.categoryID, orderedIDs: orderedIDs)
-            try await appContext.localFavoriteLibraryStore.save(updatedDocument)
+            try await dependencies.localFavoriteLibraryStore.save(updatedDocument)
             document = updatedDocument
             rebuildCards()
         } catch {
@@ -657,9 +657,9 @@ final class LocalFavoritesViewModel: ObservableObject {
 
     func moveCollection(id: String, toCategoryID categoryID: String) async {
         do {
-            var updatedDocument = await appContext.localFavoriteLibraryStore.load()
+            var updatedDocument = await dependencies.localFavoriteLibraryStore.load()
             updatedDocument.moveCollection(id: id, toCategoryID: categoryID)
-            try await appContext.localFavoriteLibraryStore.save(updatedDocument)
+            try await dependencies.localFavoriteLibraryStore.save(updatedDocument)
             document = updatedDocument
             if selectedCollectionID == id {
                 selectedCategoryID = categoryID
@@ -675,7 +675,7 @@ final class LocalFavoritesViewModel: ObservableObject {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, !selectedFavoriteIDs.isEmpty else { return nil }
         do {
-            var updatedDocument = await appContext.localFavoriteLibraryStore.load()
+            var updatedDocument = await dependencies.localFavoriteLibraryStore.load()
             let collection = updatedDocument.createCollection(categoryID: selectedCategoryID, name: trimmed, color: color)
             Self.moveItems(
                 ids: selectedFavoriteIDs,
@@ -683,7 +683,7 @@ final class LocalFavoritesViewModel: ObservableObject {
                 removing: selectionSourceLocation,
                 in: &updatedDocument
             )
-            try await appContext.localFavoriteLibraryStore.save(updatedDocument)
+            try await dependencies.localFavoriteLibraryStore.save(updatedDocument)
             document = updatedDocument
             selectedCollectionID = collection.id
             clearSelection()
@@ -699,7 +699,7 @@ final class LocalFavoritesViewModel: ObservableObject {
     func moveSelectionToCategory(id categoryID: String) async {
         guard selectedEntryCount > 0 else { return }
         do {
-            var updatedDocument = await appContext.localFavoriteLibraryStore.load()
+            var updatedDocument = await dependencies.localFavoriteLibraryStore.load()
             for collectionID in selectedCollectionIDs {
                 updatedDocument.moveCollection(id: collectionID, toCategoryID: categoryID)
             }
@@ -709,7 +709,7 @@ final class LocalFavoritesViewModel: ObservableObject {
                 removing: selectionSourceLocation,
                 in: &updatedDocument
             )
-            try await appContext.localFavoriteLibraryStore.save(updatedDocument)
+            try await dependencies.localFavoriteLibraryStore.save(updatedDocument)
             document = updatedDocument
             selectedCategoryID = categoryID
             clearSelection()
@@ -724,14 +724,14 @@ final class LocalFavoritesViewModel: ObservableObject {
         guard !selectedFavoriteIDs.isEmpty,
               let collection = document.collections.first(where: { $0.id == collectionID }) else { return }
         do {
-            var updatedDocument = await appContext.localFavoriteLibraryStore.load()
+            var updatedDocument = await dependencies.localFavoriteLibraryStore.load()
             Self.moveItems(
                 ids: selectedFavoriteIDs,
                 to: .collection(categoryID: collection.categoryID, collectionID: collection.id),
                 removing: selectionSourceLocation,
                 in: &updatedDocument
             )
-            try await appContext.localFavoriteLibraryStore.save(updatedDocument)
+            try await dependencies.localFavoriteLibraryStore.save(updatedDocument)
             document = updatedDocument
             selectedCategoryID = collection.categoryID
             selectedCollectionID = collection.id
@@ -746,14 +746,14 @@ final class LocalFavoritesViewModel: ObservableObject {
     func addSelectionToCategory(id categoryID: String) async {
         guard !selectedFavoriteIDs.isEmpty else { return }
         do {
-            var updatedDocument = await appContext.localFavoriteLibraryStore.load()
+            var updatedDocument = await dependencies.localFavoriteLibraryStore.load()
             Self.moveItems(
                 ids: selectedFavoriteIDs,
                 to: .category(categoryID),
                 removing: nil,
                 in: &updatedDocument
             )
-            try await appContext.localFavoriteLibraryStore.save(updatedDocument)
+            try await dependencies.localFavoriteLibraryStore.save(updatedDocument)
             document = updatedDocument
             clearSelection()
             isSelectionMode = false
@@ -767,14 +767,14 @@ final class LocalFavoritesViewModel: ObservableObject {
         guard !selectedFavoriteIDs.isEmpty,
               let collection = document.collections.first(where: { $0.id == collectionID }) else { return }
         do {
-            var updatedDocument = await appContext.localFavoriteLibraryStore.load()
+            var updatedDocument = await dependencies.localFavoriteLibraryStore.load()
             Self.moveItems(
                 ids: selectedFavoriteIDs,
                 to: .collection(categoryID: collection.categoryID, collectionID: collection.id),
                 removing: nil,
                 in: &updatedDocument
             )
-            try await appContext.localFavoriteLibraryStore.save(updatedDocument)
+            try await dependencies.localFavoriteLibraryStore.save(updatedDocument)
             document = updatedDocument
             clearSelection()
             isSelectionMode = false
@@ -787,13 +787,13 @@ final class LocalFavoritesViewModel: ObservableObject {
     func removeSelectionFromCurrentLocation() async {
         guard !selectedFavoriteIDs.isEmpty else { return }
         do {
-            var updatedDocument = await appContext.localFavoriteLibraryStore.load()
+            var updatedDocument = await dependencies.localFavoriteLibraryStore.load()
             Self.removeItems(
                 ids: selectedFavoriteIDs,
                 from: selectionSourceLocation,
                 in: &updatedDocument
             )
-            try await appContext.localFavoriteLibraryStore.save(updatedDocument)
+            try await dependencies.localFavoriteLibraryStore.save(updatedDocument)
             document = updatedDocument
             clearSelection()
             isSelectionMode = false
@@ -806,11 +806,11 @@ final class LocalFavoritesViewModel: ObservableObject {
     func dissolveSelectedCollections() async {
         guard !selectedCollectionIDs.isEmpty else { return }
         do {
-            var updatedDocument = await appContext.localFavoriteLibraryStore.load()
+            var updatedDocument = await dependencies.localFavoriteLibraryStore.load()
             for collectionID in selectedCollectionIDs {
                 updatedDocument.dissolveCollection(id: collectionID)
             }
-            try await appContext.localFavoriteLibraryStore.save(updatedDocument)
+            try await dependencies.localFavoriteLibraryStore.save(updatedDocument)
             document = updatedDocument
             clearSelection()
             isSelectionMode = false
@@ -825,7 +825,7 @@ final class LocalFavoritesViewModel: ObservableObject {
         let favoriteIDs = selectedFavoriteIDs
         let collectionIDs = selectedCollectionIDs
         do {
-            var updatedDocument = await appContext.localFavoriteLibraryStore.load()
+            var updatedDocument = await dependencies.localFavoriteLibraryStore.load()
             let selectedItems = updatedDocument.items.filter { favoriteIDs.contains($0.id) }
             let itemsDeletedEverywhere: [FavoriteItem]
             let collectionsDeletedEverywhere: Set<String>
@@ -849,7 +849,7 @@ final class LocalFavoritesViewModel: ObservableObject {
             for collectionID in collectionsDeletedEverywhere {
                 updatedDocument.dissolveCollection(id: collectionID)
             }
-            try await appContext.localFavoriteLibraryStore.save(updatedDocument)
+            try await dependencies.localFavoriteLibraryStore.save(updatedDocument)
             document = updatedDocument
             clearSelection()
             isSelectionMode = false
@@ -865,9 +865,9 @@ final class LocalFavoritesViewModel: ObservableObject {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
         do {
-            var updatedDocument = await appContext.localFavoriteLibraryStore.load()
+            var updatedDocument = await dependencies.localFavoriteLibraryStore.load()
             let tag = updatedDocument.createTag(name: trimmed, color: color)
-            try await appContext.localFavoriteLibraryStore.save(updatedDocument)
+            try await dependencies.localFavoriteLibraryStore.save(updatedDocument)
             document = updatedDocument
             rebuildCards()
             return tag
@@ -881,10 +881,10 @@ final class LocalFavoritesViewModel: ObservableObject {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         do {
-            var updatedDocument = await appContext.localFavoriteLibraryStore.load()
+            var updatedDocument = await dependencies.localFavoriteLibraryStore.load()
             updatedDocument.renameTag(id: tagID, name: trimmed)
             updatedDocument.recolorTag(id: tagID, color: color)
-            try await appContext.localFavoriteLibraryStore.save(updatedDocument)
+            try await dependencies.localFavoriteLibraryStore.save(updatedDocument)
             document = updatedDocument
             rebuildCards()
         } catch {
@@ -894,9 +894,9 @@ final class LocalFavoritesViewModel: ObservableObject {
 
     func deleteTag(id tagID: String) async {
         do {
-            var updatedDocument = await appContext.localFavoriteLibraryStore.load()
+            var updatedDocument = await dependencies.localFavoriteLibraryStore.load()
             updatedDocument.deleteTag(id: tagID)
-            try await appContext.localFavoriteLibraryStore.save(updatedDocument)
+            try await dependencies.localFavoriteLibraryStore.save(updatedDocument)
             document = updatedDocument
             selectedTagIDs.remove(tagID)
             rebuildCards()
@@ -907,9 +907,9 @@ final class LocalFavoritesViewModel: ObservableObject {
 
     func updateTags(for itemID: String, tagIDs: Set<String>) async {
         do {
-            var updatedDocument = await appContext.localFavoriteLibraryStore.load()
+            var updatedDocument = await dependencies.localFavoriteLibraryStore.load()
             Self.replaceTags(for: [itemID], with: tagIDs, in: &updatedDocument)
-            try await appContext.localFavoriteLibraryStore.save(updatedDocument)
+            try await dependencies.localFavoriteLibraryStore.save(updatedDocument)
             document = updatedDocument
             rebuildCards()
         } catch {
@@ -920,9 +920,9 @@ final class LocalFavoritesViewModel: ObservableObject {
     func updateTagsForSelection(_ tagIDs: Set<String>) async {
         guard !selectedFavoriteIDs.isEmpty else { return }
         do {
-            var updatedDocument = await appContext.localFavoriteLibraryStore.load()
+            var updatedDocument = await dependencies.localFavoriteLibraryStore.load()
             Self.replaceTags(for: selectedFavoriteIDs, with: tagIDs, in: &updatedDocument)
-            try await appContext.localFavoriteLibraryStore.save(updatedDocument)
+            try await dependencies.localFavoriteLibraryStore.save(updatedDocument)
             document = updatedDocument
             clearSelection()
             isSelectionMode = false
@@ -933,7 +933,7 @@ final class LocalFavoritesViewModel: ObservableObject {
     }
 
     func reload() async {
-        document = await appContext.localFavoriteLibraryStore.load()
+        document = await dependencies.localFavoriteLibraryStore.load()
         contentCoverURLsByTargetID = await contentCoverURLs(for: document.items)
         if !document.categories.contains(where: { $0.id == selectedCategoryID }) {
             selectedCategoryID = document.defaultCategory.id
@@ -946,7 +946,7 @@ final class LocalFavoritesViewModel: ObservableObject {
     }
 
     func reloadReadingProgress() async {
-        readingProgress = await appContext.readingProgressStore.loadAll()
+        readingProgress = await dependencies.readingProgressStore.loadAll()
         rebuildCards()
     }
 
@@ -1030,10 +1030,10 @@ final class LocalFavoritesViewModel: ObservableObject {
                 await finishRemoteFavoriteSync(runID: runID, report: report)
                 return
             }
-            let repository = await appContext.makeFavoriteRepository()
+            let repository = await dependencies.makeFavoriteRepository()
             let remoteFavorites = try await repository.fetchFavorites()
             try Task.checkCancellation()
-            var updatedDocument = await appContext.localFavoriteLibraryStore.load()
+            var updatedDocument = await dependencies.localFavoriteLibraryStore.load()
             let entries = remoteFavorites.enumerated().map { index, favorite in
                 YamiboRemoteFavoriteEntry(
                     remoteFavoriteID: favorite.remoteFavoriteID ?? favorite.id,
@@ -1048,8 +1048,8 @@ final class LocalFavoritesViewModel: ObservableObject {
                 snapshot.scannedCount = entries.count
                 snapshot.logMessages.append(L10n.string("favorites.sync.log.fetched", entries.count))
             }
-            let resolver = await appContext.makeYamiboThreadRouteResolver()
-            let coverRepository = await appContext.makeForumThreadReaderRepository()
+            let resolver = await dependencies.makeThreadRouteResolver()
+            let coverRepository = await dependencies.makeForumThreadReaderRepository()
             let report = await updatedDocument.syncYamiboRemoteFavorites(
                 into: targetCategoryID,
                 remoteEntries: entries,
@@ -1065,7 +1065,7 @@ final class LocalFavoritesViewModel: ObservableObject {
                 }
             )
             try Task.checkCancellation()
-            try await appContext.localFavoriteLibraryStore.save(updatedDocument)
+            try await dependencies.localFavoriteLibraryStore.save(updatedDocument)
             document = updatedDocument
             contentCoverURLsByTargetID = await contentCoverURLs(for: updatedDocument.items)
             errorMessage = nil
@@ -1114,18 +1114,18 @@ final class LocalFavoritesViewModel: ObservableObject {
     }
 
     private func reloadFavoriteUpdateState() async {
-        var latest = await appContext.favoriteUpdateStore.latestRun()
+        var latest = await dependencies.favoriteUpdateStore.latestRun()
         if var loaded = latest, loaded.status == .running {
             loaded.status = .interrupted
             loaded.phase = .interrupted
             loaded.finishedAt = loaded.finishedAt ?? .now
             loaded.updatedAt = .now
             loaded.errorMessage = L10n.string("favorites.updates.task_lost")
-            try? await appContext.favoriteUpdateStore.saveRun(loaded)
+            try? await dependencies.favoriteUpdateStore.saveRun(loaded)
             latest = loaded
         }
         favoriteUpdateSnapshot = latest
-        let state = await appContext.favoriteUpdateStore.loadState()
+        let state = await dependencies.favoriteUpdateStore.loadState()
         favoriteUpdateEvents = state.events
             .filter { $0.dismissedAt == nil }
             .sorted { lhs, rhs in
@@ -1144,7 +1144,7 @@ final class LocalFavoritesViewModel: ObservableObject {
 
     private func runFavoriteUpdateCheck(runID: String) async {
         do {
-            let loadedDocument = await appContext.localFavoriteLibraryStore.load()
+            let loadedDocument = await dependencies.localFavoriteLibraryStore.load()
             let candidates = favoriteUpdateCandidates(in: loadedDocument)
             try await refreshFavoriteUpdateFilters(candidates: candidates, document: loadedDocument)
             let scopedCandidates = await scopedFavoriteUpdateCandidates(candidates)
@@ -1222,7 +1222,7 @@ final class LocalFavoritesViewModel: ObservableObject {
         snapshot.updatedAt = .now
         favoriteUpdateSnapshot = snapshot
         do {
-            try await appContext.favoriteUpdateStore.saveRun(snapshot)
+            try await dependencies.favoriteUpdateStore.saveRun(snapshot)
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -1257,14 +1257,14 @@ final class LocalFavoritesViewModel: ObservableObject {
             guard case let .forumBoard(id, label) = sourceGroup else { return nil }
             return FavoriteUpdateFidFilter(fid: id, forumName: label, itemCount: count, updatedAt: now)
         }
-        try await appContext.favoriteUpdateStore.replaceFilters(
+        try await dependencies.favoriteUpdateStore.replaceFilters(
             fidFilters: fidFilters.sorted { $0.fid < $1.fid },
             categoryFilters: categoryFilters.sorted { $0.categoryID < $1.categoryID }
         )
     }
 
     private func scopedFavoriteUpdateCandidates(_ candidates: [FavoriteItem]) async -> [FavoriteItem] {
-        let state = await appContext.favoriteUpdateStore.loadState()
+        let state = await dependencies.favoriteUpdateStore.loadState()
         let enabledFids = Set(state.fidFilters.filter(\.enabled).map(\.fid))
         let disabledFidsExist = state.fidFilters.contains { !$0.enabled }
         let enabledCategories = Set(state.categoryFilters.filter(\.enabled).map(\.categoryID))
@@ -1286,7 +1286,7 @@ final class LocalFavoritesViewModel: ObservableObject {
     }
 
     private func replaceFavoriteUpdateTargetsIfNeeded(_ candidates: [FavoriteItem]) async throws {
-        let state = await appContext.favoriteUpdateStore.loadState()
+        let state = await dependencies.favoriteUpdateStore.loadState()
         let existingByID = Dictionary(uniqueKeysWithValues: state.trackedTargets.map { ($0.id, $0) })
         let targets = candidates.map { item -> FavoriteUpdateTrackedTarget in
             var existing = existingByID[item.target.id] ?? FavoriteUpdateTrackedTarget(
@@ -1304,7 +1304,7 @@ final class LocalFavoritesViewModel: ObservableObject {
             existing.coverURL = item.coverURL
             return existing
         }
-        try await appContext.favoriteUpdateStore.replaceTrackedTargets(targets)
+        try await dependencies.favoriteUpdateStore.replaceTrackedTargets(targets)
     }
 
     private enum FavoriteUpdateCheckResult {
@@ -1316,7 +1316,7 @@ final class LocalFavoritesViewModel: ObservableObject {
     private func checkFavoriteUpdate(for item: FavoriteItem) async -> FavoriteUpdateCheckResult {
         guard let page = await favoriteUpdatePage(for: item) else { return .skipped }
         let fingerprint = FavoriteUpdateFingerprint(page: page)
-        let state = await appContext.favoriteUpdateStore.loadState()
+        let state = await dependencies.favoriteUpdateStore.loadState()
         var target = state.trackedTargets.first { $0.target == item.target } ?? FavoriteUpdateTrackedTarget(
             target: item.target,
             title: item.resolvedDisplayTitle,
@@ -1338,7 +1338,7 @@ final class LocalFavoritesViewModel: ObservableObject {
         }
 
         do {
-            try await appContext.favoriteUpdateStore.upsertTrackedTarget(target)
+            try await dependencies.favoriteUpdateStore.upsertTrackedTarget(target)
             guard previous.isReady, fingerprint.isNewer(than: previous) else {
                 return .checked(detected: 0)
             }
@@ -1355,7 +1355,7 @@ final class LocalFavoritesViewModel: ObservableObject {
                 detectedAt: .now,
                 ambiguous: fingerprint.latestPostID == nil
             )
-            try await appContext.favoriteUpdateStore.insertEvent(event)
+            try await dependencies.favoriteUpdateStore.insertEvent(event)
             return .checked(detected: 1)
         } catch {
             return .failed(error.localizedDescription)
@@ -1370,7 +1370,7 @@ final class LocalFavoritesViewModel: ObservableObject {
             guard let tid = item.target.threadID else {
                 return nil
             }
-            let repository = await appContext.makeForumThreadReaderRepository()
+            let repository = await dependencies.makeForumThreadReaderRepository()
             let thread = ThreadIdentity(tid: tid, fid: item.fid)
             let context = ThreadNovelLaunchContext(thread: thread, title: item.resolvedDisplayTitle)
             return try await repository.fetchThreadPage(context: context, page: 1)
@@ -1406,10 +1406,10 @@ final class LocalFavoritesViewModel: ObservableObject {
     }
 
     private func persistRemoteSyncSnapshot(_ snapshot: FavoriteRemoteSyncSnapshot) async {
-        var settings = await appContext.settingsStore.load()
+        var settings = await dependencies.settingsStore.load()
         settings.favorites.remoteSyncSnapshot = snapshot
         do {
-            try await appContext.settingsStore.save(settings)
+            try await dependencies.settingsStore.save(settings)
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -1448,7 +1448,7 @@ final class LocalFavoritesViewModel: ObservableObject {
 
     func deleteItem(_ item: FavoriteItem, scope: LocalFavoriteDeleteScope = .everywhere) async {
         do {
-            var updatedDocument = await appContext.localFavoriteLibraryStore.load()
+            var updatedDocument = await dependencies.localFavoriteLibraryStore.load()
             guard let latestItem = updatedDocument.items.first(where: { $0.id == item.id }) else { return }
             switch scope {
             case .currentLocation:
@@ -1462,7 +1462,7 @@ final class LocalFavoritesViewModel: ObservableObject {
                 try await deleteRemoteFavorites(for: [latestItem])
                 updatedDocument.removeItem(target: latestItem.target)
             }
-            try await appContext.localFavoriteLibraryStore.save(updatedDocument)
+            try await dependencies.localFavoriteLibraryStore.save(updatedDocument)
             document = updatedDocument
             rebuildCards()
             errorMessage = nil
@@ -1472,7 +1472,7 @@ final class LocalFavoritesViewModel: ObservableObject {
     }
 
     func openTarget(for item: FavoriteItem, mode: FavoriteLaunchMode = .resume) async -> LocalFavoriteOpenTarget? {
-        let latestDocument = await appContext.localFavoriteLibraryStore.load()
+        let latestDocument = await dependencies.localFavoriteLibraryStore.load()
         guard let latestItem = latestDocument.items.first(where: { $0.id == item.id }) ?? document.items.first(where: { $0.id == item.id }) else {
             return nil
         }
@@ -1525,13 +1525,13 @@ final class LocalFavoritesViewModel: ObservableObject {
     private func progressRecord(for item: FavoriteItem) async -> ReadingProgressRecord? {
         switch item.target {
         case let .normalThread(threadID), let .novelThread(threadID):
-            return await appContext.readingProgressStore.load(threadID: threadID)
+            return await dependencies.readingProgressStore.load(threadID: threadID)
         case .mangaTitle:
-            if let progress = await appContext.readingProgressStore.load(for: item.target) {
+            if let progress = await dependencies.readingProgressStore.load(for: item.target) {
                 return progress
             }
             if let threadID = item.mangaChapterMetadata?.chapterTID {
-                return await appContext.readingProgressStore.load(threadID: threadID)
+                return await dependencies.readingProgressStore.load(threadID: threadID)
             }
             return nil
         }
@@ -1613,7 +1613,7 @@ final class LocalFavoritesViewModel: ObservableObject {
             return item.remoteMapping != nil && item.target.threadID != nil
         }
         guard !remoteItems.isEmpty else { return }
-        let repository = await appContext.makeFavoriteRepository()
+        let repository = await dependencies.makeFavoriteRepository()
         for item in remoteItems {
             let remoteFavoriteID = try await remoteFavoriteID(for: item, repository: repository)
             try await repository.deleteFavorite(remoteFavoriteID: remoteFavoriteID)
@@ -1645,7 +1645,7 @@ final class LocalFavoritesViewModel: ObservableObject {
         var urlsByTargetID: [String: URL] = [:]
         for item in items {
             guard let key = Self.contentCoverKey(for: item.target),
-                  let cover = await appContext.contentCoverStore.cover(for: key),
+                  let cover = await dependencies.contentCoverStore.cover(for: key),
                   let resolvedURL = cover.resolvedURL else {
                 continue
             }
@@ -1875,12 +1875,12 @@ final class LocalFavoritesViewModel: ObservableObject {
             document.collections.contains { $0.id == id && $0.categoryID == categoryID } ? id : nil
         }
         Task {
-            var settings = await appContext.settingsStore.load()
+            var settings = await dependencies.settingsStore.load()
             guard settings.favorites.selectedCategoryID != categoryID
                     || settings.favorites.selectedCollectionID != validCollectionID else { return }
             settings.favorites.selectedCategoryID = categoryID
             settings.favorites.selectedCollectionID = validCollectionID
-            try? await appContext.settingsStore.save(settings)
+            try? await dependencies.settingsStore.save(settings)
         }
     }
 

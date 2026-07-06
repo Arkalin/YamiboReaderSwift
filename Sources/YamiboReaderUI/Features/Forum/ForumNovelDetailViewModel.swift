@@ -73,7 +73,7 @@ final class ForumNovelDetailViewModel {
 
     let context: NovelDetailLaunchContext
 
-    @ObservationIgnored private let appContext: YamiboAppContext
+    @ObservationIgnored private let dependencies: ForumDependencies
     // Detail-scoped page cache mirroring Android's pagePostsCache; reload owns invalidation.
     @ObservationIgnored private var loadedThreadPages: [Int: ForumThreadPage] = [:]
     @ObservationIgnored private var resolvedAuthorID: String?
@@ -89,19 +89,19 @@ final class ForumNovelDetailViewModel {
 
     init(
         context: NovelDetailLaunchContext,
-        appContext: YamiboAppContext,
+        dependencies: ForumDependencies,
         novelRepositoryProvider: (@Sendable () async -> any ForumNovelDocumentLoading)? = nil,
         threadRepositoryProvider: (@Sendable () async -> any ForumNovelThreadPageLoading)? = nil
     ) {
         self.context = context
-        self.appContext = appContext
+        self.dependencies = dependencies
         self.novelRepositoryProvider = novelRepositoryProvider ?? {
-            await appContext.makeNovelReaderRepository()
+            await dependencies.makeNovelReaderRepository()
         }
         self.threadRepositoryProvider = threadRepositoryProvider ?? {
-            await appContext.makeForumThreadReaderRepository()
+            await dependencies.makeForumThreadReaderRepository()
         }
-        favoriteUpdatesTask = Task { @MainActor [weak self, localFavoriteLibraryStore = appContext.localFavoriteLibraryStore] in
+        favoriteUpdatesTask = Task { @MainActor [weak self, localFavoriteLibraryStore = dependencies.localFavoriteLibraryStore] in
             for await notification in NotificationCenter.default.notifications(named: FavoriteLibraryStore.didChangeNotification) {
                 guard !Task.isCancelled else { return }
                 guard let self else { return }
@@ -112,7 +112,7 @@ final class ForumNovelDetailViewModel {
                 await self.refreshFavorite(from: localFavoriteLibraryStore)
             }
         }
-        readingProgressUpdatesTask = Task { @MainActor [weak self, readingProgressStore = appContext.readingProgressStore] in
+        readingProgressUpdatesTask = Task { @MainActor [weak self, readingProgressStore = dependencies.readingProgressStore] in
             for await notification in NotificationCenter.default.notifications(named: ReadingProgressStore.didChangeNotification) {
                 guard !Task.isCancelled else { return }
                 guard let self else { return }
@@ -196,9 +196,9 @@ final class ForumNovelDetailViewModel {
 
         do {
             favorite = await localFavoriteItem()?.favorite(type: .novel)
-            readingProgress = await appContext.readingProgressStore.load(threadID: context.thread.tid)
+            readingProgress = await dependencies.readingProgressStore.load(threadID: context.thread.tid)
             contentCover = await loadContentCover()
-            novelReaderSettings = await appContext.settingsStore.load().novelReader
+            novelReaderSettings = await dependencies.settingsStore.load().novelReader
             favoriteErrorMessage = nil
             let threadRepository = await threadRepositoryProvider()
             let initialPages = try await loadInitialPages(repository: threadRepository, preferCache: preferCache)
@@ -224,7 +224,7 @@ final class ForumNovelDetailViewModel {
             rebuildChapterDirectory()
             preloadReaderDocument()
         } catch {
-            readingProgress = await appContext.readingProgressStore.load(threadID: context.thread.tid)
+            readingProgress = await dependencies.readingProgressStore.load(threadID: context.thread.tid)
             contentCover = await loadContentCover()
             if preservesCurrentContentOnFailure {
                 document = nil
@@ -380,9 +380,9 @@ final class ForumNovelDetailViewModel {
             if let favorite {
                 try await ForumThreadFavoriteSync.removeFavorite(
                     favorite,
-                    localFavoriteLibraryStore: appContext.localFavoriteLibraryStore,
-                    readingProgressStore: appContext.readingProgressStore,
-                    remoteRepository: await appContext.makeFavoriteRepository()
+                    localFavoriteLibraryStore: dependencies.localFavoriteLibraryStore,
+                    readingProgressStore: dependencies.readingProgressStore,
+                    remoteRepository: await dependencies.makeFavoriteRepository()
                 )
                 self.favorite = nil
                 rebuildChapterDirectory()
@@ -399,8 +399,8 @@ final class ForumNovelDetailViewModel {
                 coverURL: resolvedHeaderCoverURL,
                 contentUpdatedAt: Self.contentUpdatedAt(from: threadPage),
                 formHash: threadPage?.formHash,
-                localFavoriteLibraryStore: appContext.localFavoriteLibraryStore,
-                remoteRepository: await appContext.makeFavoriteRepository()
+                localFavoriteLibraryStore: dependencies.localFavoriteLibraryStore,
+                remoteRepository: await dependencies.makeFavoriteRepository()
             )
             self.favorite = favorite
             rebuildChapterDirectory()
@@ -487,19 +487,19 @@ final class ForumNovelDetailViewModel {
         guard let key = contentCoverKey else { return }
         if let candidate = ThreadCoverResolver.findThreadCoverCandidate(in: page) {
             do {
-                _ = try await appContext.contentCoverStore.setAutomaticCover(candidate, for: key)
+                _ = try await dependencies.contentCoverStore.setAutomaticCover(candidate, for: key)
             } catch {
                 return
             }
         }
         if let historyCover = readingProgress?.novel?.threadCoverURL {
             do {
-                _ = try await appContext.contentCoverStore.setAutomaticCover(historyCover, for: key)
+                _ = try await dependencies.contentCoverStore.setAutomaticCover(historyCover, for: key)
             } catch {
                 return
             }
         }
-        contentCover = await appContext.contentCoverStore.cover(for: key)
+        contentCover = await dependencies.contentCoverStore.cover(for: key)
     }
 
     private static func chapterSummaries(
@@ -683,7 +683,7 @@ final class ForumNovelDetailViewModel {
     }
 
     private func localFavoriteItem() async -> FavoriteItem? {
-        await localFavoriteItem(from: appContext.localFavoriteLibraryStore)
+        await localFavoriteItem(from: dependencies.localFavoriteLibraryStore)
     }
 
     private func localFavoriteItem(from store: FavoriteLibraryStore) async -> FavoriteItem? {
@@ -701,7 +701,7 @@ final class ForumNovelDetailViewModel {
 
     private func loadContentCover() async -> ContentCover? {
         guard let key = contentCoverKey else { return nil }
-        return await appContext.contentCoverStore.cover(for: key)
+        return await dependencies.contentCoverStore.cover(for: key)
     }
 
     private static func lastUpdatedText(editedText: String?, postedAtText: String?) -> String? {

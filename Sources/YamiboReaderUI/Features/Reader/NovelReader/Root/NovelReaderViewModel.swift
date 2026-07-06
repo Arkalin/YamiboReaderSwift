@@ -36,7 +36,7 @@ public final class NovelReaderViewModel: ObservableObject {
 
     public let context: NovelLaunchContext
 
-    private let appContext: YamiboAppContext
+    private let dependencies: NovelReaderDependencies
     private var repository: NovelReaderRepository?
     private var chapterCommentsRepository: ReaderChapterCommentsRepository?
     private var readingWorkflow: NovelReadingWorkflow?
@@ -87,12 +87,12 @@ public final class NovelReaderViewModel: ObservableObject {
 
     public init(
         context: NovelLaunchContext,
-        appContext: YamiboAppContext,
+        dependencies: NovelReaderDependencies,
         initialSettings: NovelReaderAppearanceSettings? = nil,
         onReaderResumeRouteChange: @escaping ReaderResumeRouteChangeHandler = { _ in }
     ) {
         self.context = context
-        self.appContext = appContext
+        self.dependencies = dependencies
         self.onReaderResumeRouteChange = onReaderResumeRouteChange
         if let initialSettings {
             bootstrapSettings = initialSettings
@@ -100,7 +100,7 @@ public final class NovelReaderViewModel: ObservableObject {
         runtimeAdapter = nil
         progressSync = ProgressSyncModule(
             adapter: FavoriteLibraryProgressSyncAdapter(
-                readingProgressStore: appContext.readingProgressStore
+                readingProgressStore: dependencies.readingProgressStore
             )
         )
         cacheOperationModule.onChange = { [weak self] snapshot, state in
@@ -116,13 +116,13 @@ public final class NovelReaderViewModel: ObservableObject {
 
     package init(
         context: NovelLaunchContext,
-        appContext: YamiboAppContext,
+        dependencies: NovelReaderDependencies,
         initialSettings: NovelReaderAppearanceSettings? = nil,
         runtimeAdapter: any NovelTextLayoutRuntimeAdapter,
         onReaderResumeRouteChange: @escaping ReaderResumeRouteChangeHandler = { _ in }
     ) {
         self.context = context
-        self.appContext = appContext
+        self.dependencies = dependencies
         self.onReaderResumeRouteChange = onReaderResumeRouteChange
         if let initialSettings {
             bootstrapSettings = initialSettings
@@ -130,7 +130,7 @@ public final class NovelReaderViewModel: ObservableObject {
         self.runtimeAdapter = runtimeAdapter
         progressSync = ProgressSyncModule(
             adapter: FavoriteLibraryProgressSyncAdapter(
-                readingProgressStore: appContext.readingProgressStore
+                readingProgressStore: dependencies.readingProgressStore
             )
         )
         cacheOperationModule.onChange = { [weak self] snapshot, state in
@@ -483,17 +483,17 @@ public final class NovelReaderViewModel: ObservableObject {
         latestRequestedLayout = layout
         layoutRequestSequence &+= 1
         if repository == nil {
-            repository = await appContext.makeNovelReaderRepository()
-            let appSettings = await appContext.settingsStore.load()
+            repository = await dependencies.makeNovelReaderRepository()
+            let appSettings = await dependencies.settingsStore.load()
             bootstrapSettings = appSettings.novelReader
             applePencilPageTurnSettings = appSettings.system.applePencilPageTurn
-            sessionState = await appContext.sessionStore.load()
+            sessionState = await dependencies.sessionStore.load()
             if let repository {
                 readingWorkflow = makeReadingWorkflow(repository: repository)
             }
         }
         if novelReaderSurfaces.isEmpty {
-            let progress = await appContext.readingProgressStore.load(threadID: context.threadID)
+            let progress = await dependencies.readingProgressStore.load(threadID: context.threadID)
             let novelProgress = progress?.novel
             await startReadingWorkflow(
                 resumePoint: context.initialResumePoint ?? novelProgress?.novelResumePoint,
@@ -949,7 +949,7 @@ public final class NovelReaderViewModel: ObservableObject {
 
     private func startObservingOfflineCacheUpdates() {
         guard offlineCacheUpdatesTask == nil else { return }
-        let updates = appContext.makeOfflineCacheStore().offlineCacheUpdates()
+        let updates = dependencies.offlineCacheStore.offlineCacheUpdates()
         offlineCacheUpdatesTask = Task { @MainActor [weak self] in
             for await _ in updates {
                 guard !Task.isCancelled else { return }
@@ -1065,11 +1065,11 @@ public final class NovelReaderViewModel: ObservableObject {
     }
 
     func makeOfflineCacheQueueViewModel() -> MineHomeViewModel {
-        MineHomeViewModel(appContext: appContext)
+        MineHomeViewModel(dependencies: dependencies.account)
     }
 
     public func refreshOfflineCacheQueueCount() async {
-        let store = appContext.makeOfflineCacheStore()
+        let store = dependencies.offlineCacheStore
         offlineCacheQueueEntryCount = await store.offlineCacheQueueWorks().count
     }
 
@@ -1143,7 +1143,7 @@ public final class NovelReaderViewModel: ObservableObject {
 
     private func ensureNovelReaderRepository() async -> NovelReaderRepository {
         if repository == nil {
-            repository = await appContext.makeNovelReaderRepository()
+            repository = await dependencies.makeNovelReaderRepository()
         }
         guard let repository else {
             preconditionFailure("Reader repository should be initialized")
@@ -1153,7 +1153,7 @@ public final class NovelReaderViewModel: ObservableObject {
 
     private func ensureChapterCommentsRepository() async -> ReaderChapterCommentsRepository {
         if chapterCommentsRepository == nil {
-            chapterCommentsRepository = await appContext.makeReaderChapterCommentsRepository()
+            chapterCommentsRepository = await dependencies.makeChapterCommentsRepository()
         }
         guard let chapterCommentsRepository else {
             preconditionFailure("Reader chapter comments repository should be initialized")
@@ -1548,12 +1548,12 @@ public final class NovelReaderViewModel: ObservableObject {
 
     private var cacheOperationRepository: NovelReaderCacheOperationRepository? {
         NovelOfflineStoreReaderCacheOperationAdapter(
-            store: appContext.makeOfflineCacheStore(),
-            novelOfflineCacheSettings: { [settingsStore = appContext.settingsStore] in
+            store: dependencies.offlineCacheStore,
+            novelOfflineCacheSettings: { [settingsStore = dependencies.settingsStore] in
                 await settingsStore.load().novelOfflineCache
             },
-            continueOfflineCacheQueue: { [appContext] in
-                try await appContext.makeOfflineCacheQueueExecutor().continueQueue()
+            continueOfflineCacheQueue: { [makeOfflineCacheQueueExecutor = dependencies.makeOfflineCacheQueueExecutor] in
+                try await makeOfflineCacheQueueExecutor().continueQueue()
             }
         )
     }
@@ -1618,7 +1618,7 @@ public final class NovelReaderViewModel: ObservableObject {
     ) {
         Task { [weak self] in
             guard let self else { return }
-            var appSettings = await appContext.settingsStore.load()
+            var appSettings = await dependencies.settingsStore.load()
             if let novelReaderSettings {
                 appSettings.novelReader = novelReaderSettings
             }
@@ -1626,7 +1626,7 @@ public final class NovelReaderViewModel: ObservableObject {
                 appSettings.system.applePencilPageTurn = applePencilPageTurnSettings
             }
             do {
-                try await appContext.settingsStore.save(appSettings)
+                try await dependencies.settingsStore.save(appSettings)
             } catch {
                 await MainActor.run {
                     self.errorMessage = error.localizedDescription

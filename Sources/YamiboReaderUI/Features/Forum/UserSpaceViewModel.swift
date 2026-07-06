@@ -51,29 +51,12 @@ final class UserSpaceViewModel {
     @ObservationIgnored private let repositoryProvider: @Sendable () async -> any UserSpacePageLoading
     @ObservationIgnored private let accountUIDProvider: @Sendable () async -> String?
 
-    init(uid: String?, titleHint: String?, appContext: YamiboAppContext) {
-        self.uid = uid?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
-        self.titleHint = titleHint?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
-        self.isSelf = self.uid == nil
-        repositoryProvider = {
-            await appContext.makeUserSpaceRepository()
-        }
-        accountUIDProvider = {
-            let session = await appContext.sessionStore.load()
-            if let accountUID = session.accountUID?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty {
-                return accountUID
-            }
-            let profile = await appContext.profileStore.load()
-            return profile?.uid.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
-        }
-    }
-
     init(
         uid: String?,
         titleHint: String?,
-        initialSection: UserSpaceSection,
-        initialSubPage: UserSpaceSubPage,
-        appContext: YamiboAppContext
+        initialSection: UserSpaceSection = .space,
+        initialSubPage: UserSpaceSubPage = .profile,
+        dependencies: ForumDependencies
     ) {
         self.uid = uid?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
         self.titleHint = titleHint?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
@@ -82,14 +65,14 @@ final class UserSpaceViewModel {
         selectedSection = initialSection
         selectedSubPage = initialSubPage.section == initialSection ? initialSubPage : Self.subPages(for: initialSection, isSelf: initialIsSelf).first ?? .profile
         repositoryProvider = {
-            await appContext.makeUserSpaceRepository()
+            await dependencies.makeUserSpaceRepository()
         }
         accountUIDProvider = {
-            let session = await appContext.sessionStore.load()
+            let session = await dependencies.sessionStore.load()
             if let accountUID = session.accountUID?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty {
                 return accountUID
             }
-            let profile = await appContext.profileStore.load()
+            let profile = await dependencies.profileStore.load()
             return profile?.uid.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
         }
     }

@@ -52,7 +52,6 @@ final class MangaReaderViewModelSettingsProgressTests: XCTestCase {
     func testRetryInitialLoadReloadsAfterFailedInitialLoad() async throws {
         let defaultsSuiteName = YamiboTestDefaults.suiteName(prefix: "manga-retry-initial-load")
         let settingsStore = try SettingsStore(testSuiteName: defaultsSuiteName, key: "settings")
-        let resumeRouteStore = try ReaderResumeRouteStore(testSuiteName: defaultsSuiteName, key: "resume")
         try await settingsStore.save(AppSettings())
 
         let context = MangaLaunchContext(
@@ -88,37 +87,35 @@ final class MangaReaderViewModelSettingsProgressTests: XCTestCase {
             )
         )
         let store = StubMangaDirectoryStore()
-        let appContext = YamiboAppContext(
-            sessionStore: try SessionStore(testSuiteName: defaultsSuiteName, key: "session"),
-            settingsStore: settingsStore,
-            readerResumeRouteStore: resumeRouteStore,
-        )
+        let readingProgressStore = try ReadingProgressStore(testSuiteName: defaultsSuiteName, key: "reading-progress")
         #if os(iOS)
         let dependencies = MangaReaderViewModelDependencies(
+            settingsStore: settingsStore,
             makeProjectionLoader: { loader },
             makeDirectoryRepository: { repository },
             makeDirectoryStore: { store },
             progressSync: ProgressSyncModule(
                 adapter: FavoriteLibraryProgressSyncAdapter(
-                    readingProgressStore: appContext.readingProgressStore
+                    readingProgressStore: readingProgressStore
                 ),
                 debounceNanoseconds: 0
             )
         )
         #else
         let dependencies = MangaReaderViewModelDependencies(
+            settingsStore: settingsStore,
             makeProjectionLoader: { loader },
             makeDirectoryRepository: { repository },
             makeDirectoryStore: { store },
             progressSync: ProgressSyncModule(
                 adapter: FavoriteLibraryProgressSyncAdapter(
-                    readingProgressStore: appContext.readingProgressStore
+                    readingProgressStore: readingProgressStore
                 ),
                 debounceNanoseconds: 0
             )
         )
         #endif
-        let model = MangaReaderViewModel(context: context, appContext: appContext, dependencies: dependencies)
+        let model = MangaReaderViewModel(context: context, viewModelDependencies: dependencies)
 
         await model.prepare()
 
@@ -716,19 +713,20 @@ private func makeFixture(
         )
     )
     let store = StubMangaDirectoryStore(directories: suppliedDirectory.map { [$0] } ?? [])
-    let appContext = YamiboAppContext(
-        sessionStore: try SessionStore(testSuiteName: defaultsSuiteName, key: "session"),
-        settingsStore: settingsStore,
-        readerResumeRouteStore: resumeRouteStore,
+    let readingProgressStore = try ReadingProgressStore(testSuiteName: defaultsSuiteName, key: "reading-progress")
+    let localFavoriteLibraryStore = FavoriteLibraryStore(
+        defaults: try YamiboTestDefaults.defaults(suiteName: defaultsSuiteName),
+        key: "local-favorites"
     )
     let resolvedProgressSync = progressSync ?? ProgressSyncModule(
         adapter: FavoriteLibraryProgressSyncAdapter(
-                    readingProgressStore: appContext.readingProgressStore
+                    readingProgressStore: readingProgressStore
         ),
         debounceNanoseconds: 0
     )
     #if os(iOS)
     let dependencies = MangaReaderViewModelDependencies(
+        settingsStore: settingsStore,
         makeProjectionLoader: { StubMangaReaderProjectionLoader(documents: suppliedDocuments ?? [document]) },
         makeDirectoryRepository: { repository },
         makeDirectoryStore: { store },
@@ -736,6 +734,7 @@ private func makeFixture(
     )
     #else
     let dependencies = MangaReaderViewModelDependencies(
+        settingsStore: settingsStore,
         makeProjectionLoader: { StubMangaReaderProjectionLoader(documents: suppliedDocuments ?? [document]) },
         makeDirectoryRepository: { repository },
         makeDirectoryStore: { store },
@@ -744,8 +743,7 @@ private func makeFixture(
     #endif
     let model = MangaReaderViewModel(
         context: context,
-        appContext: appContext,
-        dependencies: dependencies,
+        viewModelDependencies: dependencies,
         onReaderResumeRouteChange: { route in
             try? await resumeRouteStore.saveReadingPosition(route)
         }
@@ -756,7 +754,7 @@ private func makeFixture(
         context: context,
         settingsStore: settingsStore,
         resumeRouteStore: resumeRouteStore,
-        localFavoriteLibraryStore: appContext.localFavoriteLibraryStore
+        localFavoriteLibraryStore: localFavoriteLibraryStore
     )
 }
 

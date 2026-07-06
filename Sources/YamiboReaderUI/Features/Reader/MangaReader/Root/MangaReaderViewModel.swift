@@ -2,15 +2,18 @@ import SwiftUI
 import YamiboReaderCore
 
 struct MangaReaderViewModelDependencies {
+    var settingsStore: SettingsStore
     var makeProjectionLoader: @Sendable () async -> any MangaReaderProjectionLoading
     var makeDirectoryRepository: @Sendable () async -> any MangaDirectoryRepository
     var makeDirectoryStore: @Sendable () -> any MangaDirectoryPersisting
     var makeOfflineCacheStore: @Sendable () -> (any MangaOfflineCacheStoring & OfflineCacheQueueStoring)?
     var makeDirectorySearchCooldownState: @Sendable () -> MangaDirectorySearchCooldownState
+    var makeChapterCommentsRepository: (@Sendable () async -> ReaderChapterCommentsRepository)?
     var directoryWorkflowConfiguration: MangaDirectoryWorkflowConfiguration
     var progressSync: ProgressSyncModule
 
     init(
+        settingsStore: SettingsStore,
         makeProjectionLoader: @escaping @Sendable () async -> any MangaReaderProjectionLoading,
         makeDirectoryRepository: @escaping @Sendable () async -> any MangaDirectoryRepository,
         makeDirectoryStore: @escaping @Sendable () -> any MangaDirectoryPersisting,
@@ -18,28 +21,33 @@ struct MangaReaderViewModelDependencies {
         makeDirectorySearchCooldownState: @escaping @Sendable () -> MangaDirectorySearchCooldownState = {
             MangaDirectorySearchCooldownState()
         },
+        makeChapterCommentsRepository: (@Sendable () async -> ReaderChapterCommentsRepository)? = nil,
         directoryWorkflowConfiguration: MangaDirectoryWorkflowConfiguration = MangaDirectoryWorkflowConfiguration(),
         progressSync: ProgressSyncModule
     ) {
+        self.settingsStore = settingsStore
         self.makeProjectionLoader = makeProjectionLoader
         self.makeDirectoryRepository = makeDirectoryRepository
         self.makeDirectoryStore = makeDirectoryStore
         self.makeOfflineCacheStore = makeOfflineCacheStore
         self.makeDirectorySearchCooldownState = makeDirectorySearchCooldownState
+        self.makeChapterCommentsRepository = makeChapterCommentsRepository
         self.directoryWorkflowConfiguration = directoryWorkflowConfiguration
         self.progressSync = progressSync
     }
 
-    init(appContext: YamiboAppContext) {
+    init(dependencies: MangaReaderDependencies) {
         self.init(
-            makeProjectionLoader: { await appContext.makeMangaReaderProjectionLoader() },
-            makeDirectoryRepository: { await appContext.makeMangaDirectoryRepository() },
-            makeDirectoryStore: { appContext.makeMangaDirectoryStore() },
-            makeOfflineCacheStore: { appContext.makeOfflineCacheStore() },
-            makeDirectorySearchCooldownState: { appContext.mangaDirectorySearchCooldownState },
+            settingsStore: dependencies.settingsStore,
+            makeProjectionLoader: { await dependencies.makeProjectionLoader() },
+            makeDirectoryRepository: { await dependencies.makeDirectoryRepository() },
+            makeDirectoryStore: { dependencies.mangaDirectoryStore },
+            makeOfflineCacheStore: { dependencies.offlineCacheStore },
+            makeDirectorySearchCooldownState: { dependencies.mangaDirectorySearchCooldownState },
+            makeChapterCommentsRepository: { await dependencies.makeChapterCommentsRepository() },
             progressSync: ProgressSyncModule(
                 adapter: FavoriteLibraryProgressSyncAdapter(
-                    readingProgressStore: appContext.readingProgressStore
+                    readingProgressStore: dependencies.readingProgressStore
                 )
             )
         )
@@ -60,7 +68,6 @@ public final class MangaReaderViewModel: ObservableObject {
     public let context: MangaLaunchContext
     private(set) var imageLoader: MangaReaderPageImageLoader?
 
-    private let appContext: YamiboAppContext
     private let dependencies: MangaReaderViewModelDependencies
     private let onReaderResumeRouteChange: ReaderResumeRouteChangeHandler
     private var chapterCommentsRepository: ReaderChapterCommentsRepository?
@@ -87,14 +94,14 @@ public final class MangaReaderViewModel: ObservableObject {
                 guard let self else {
                     throw ReaderChapterCommentsUnavailableError()
                 }
-                let repository = await self.ensureChapterCommentsRepository()
+                let repository = try await self.ensureChapterCommentsRepository()
                 return try await repository.loadChapterComments(for: target)
             },
             loadMore: { [weak self] target, view in
                 guard let self else {
                     throw ReaderChapterCommentsUnavailableError()
                 }
-                let repository = await self.ensureChapterCommentsRepository()
+                let repository = try await self.ensureChapterCommentsRepository()
                 return try await repository.loadMoreChapterComments(for: target, view: view)
             }
         ),
@@ -115,30 +122,25 @@ public final class MangaReaderViewModel: ObservableObject {
         adjacentPrefetchTask?.cancel()
     }
 
-    public init(
+    public convenience init(
         context: MangaLaunchContext,
-        appContext: YamiboAppContext,
+        dependencies: MangaReaderDependencies,
         onReaderResumeRouteChange: @escaping ReaderResumeRouteChangeHandler = { _ in }
     ) {
-        self.context = context
-        self.appContext = appContext
-        self.dependencies = MangaReaderViewModelDependencies(appContext: appContext)
-        self.onReaderResumeRouteChange = onReaderResumeRouteChange
-        self.imageLoader = nil
-        self.presentation = MangaReaderPresentation(
-            state: .loading(MangaReaderLoadingPresentation(title: Self.presentationTitle(for: context)))
+        self.init(
+            context: context,
+            viewModelDependencies: MangaReaderViewModelDependencies(dependencies: dependencies),
+            onReaderResumeRouteChange: onReaderResumeRouteChange
         )
     }
 
     init(
         context: MangaLaunchContext,
-        appContext: YamiboAppContext,
-        dependencies: MangaReaderViewModelDependencies,
+        viewModelDependencies: MangaReaderViewModelDependencies,
         onReaderResumeRouteChange: @escaping ReaderResumeRouteChangeHandler = { _ in }
     ) {
         self.context = context
-        self.appContext = appContext
-        self.dependencies = dependencies
+        self.dependencies = viewModelDependencies
         self.onReaderResumeRouteChange = onReaderResumeRouteChange
         self.imageLoader = nil
         self.presentation = MangaReaderPresentation(
@@ -152,7 +154,7 @@ public final class MangaReaderViewModel: ObservableObject {
         invalidateReaderContent()
         lastQueuedProgressSnapshot = nil
 
-        let appSettings = await appContext.settingsStore.load()
+        let appSettings = await dependencies.settingsStore.load()
         committedSettings = Self.normalizedSettings(appSettings.manga)
         applePencilPageTurnSettings = appSettings.system.applePencilPageTurn
         presentation = presentationWithCommittedSettings(presentation)
@@ -364,10 +366,10 @@ public final class MangaReaderViewModel: ObservableObject {
             presentation = presentationWithCommittedSettings(presentation)
         }
 
-        Task { [appContext, normalizedSettings] in
-            var appSettings = await appContext.settingsStore.load()
+        Task { [settingsStore = dependencies.settingsStore, normalizedSettings] in
+            var appSettings = await settingsStore.load()
             appSettings.manga = normalizedSettings
-            try? await appContext.settingsStore.save(appSettings)
+            try? await settingsStore.save(appSettings)
         }
     }
 
@@ -1024,9 +1026,12 @@ public final class MangaReaderViewModel: ObservableObject {
         return normalized?.isEmpty == false ? normalized : nil
     }
 
-    private func ensureChapterCommentsRepository() async -> ReaderChapterCommentsRepository {
+    private func ensureChapterCommentsRepository() async throws -> ReaderChapterCommentsRepository {
         if chapterCommentsRepository == nil {
-            chapterCommentsRepository = await appContext.makeReaderChapterCommentsRepository()
+            guard let makeChapterCommentsRepository = dependencies.makeChapterCommentsRepository else {
+                throw ReaderChapterCommentsUnavailableError()
+            }
+            chapterCommentsRepository = await makeChapterCommentsRepository()
         }
         guard let chapterCommentsRepository else {
             preconditionFailure("Reader chapter comments repository should be initialized")

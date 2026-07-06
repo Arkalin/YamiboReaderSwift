@@ -228,10 +228,8 @@ import YamiboReaderTestSupport
     let persisted = try #require(URL(string: "https://img.example.com/persisted.jpg"))
     let pageCandidate = try #require(URL(string: "https://img.example.com/page.jpg"))
     try await coverStore.setAutomaticCover(persisted, for: key)
-    let appContext = YamiboAppContext(
-        contentCoverStore: coverStore
-    )
-    let model = try makeForumNovelDetailViewModel(appContext: appContext)
+    let dependencies = try makeForumDetailDependencies(contentCoverStore: coverStore)
+    let model = try makeForumNovelDetailViewModel(dependencies: dependencies)
     model.contentCover = await coverStore.cover(for: key)
     model.threadPage = ForumThreadPage(
         thread: model.context.thread,
@@ -264,9 +262,7 @@ import YamiboReaderTestSupport
         defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
         key: "content-covers"
     )
-    let appContext = YamiboAppContext(
-        contentCoverStore: coverStore
-    )
+    let dependencies = try makeForumDetailDependencies(contentCoverStore: coverStore)
     let initialImage = try #require(URL(string: "https://img.example.com/initial-owner.jpg"))
     let threadPageLoader = FakeForumNovelThreadPageLoader(pages: [
         1: ForumThreadPage(
@@ -294,7 +290,7 @@ import YamiboReaderTestSupport
         )
     ])
     let model = try makeForumNovelDetailViewModel(
-        appContext: appContext,
+        dependencies: dependencies,
         documentLoader: FakeForumNovelDocumentLoader(),
         threadPageLoader: threadPageLoader
     )
@@ -429,10 +425,8 @@ import YamiboReaderTestSupport
         defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
         key: "content-covers"
     )
-    let appContext = YamiboAppContext(
-        contentCoverStore: coverStore
-    )
-    let model = try makeForumNovelDetailViewModel(appContext: appContext)
+    let dependencies = try makeForumDetailDependencies(contentCoverStore: coverStore)
+    let model = try makeForumNovelDetailViewModel(dependencies: dependencies)
     let key = ContentCoverKey(targetType: .threadNovel, targetID: "900")
     let replyImage = try #require(URL(string: "https://img.example.com/reply.jpg"))
     let ownerImage = try #require(URL(string: "https://img.example.com/owner.jpg"))
@@ -500,10 +494,8 @@ import YamiboReaderTestSupport
         defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
         key: "content-covers"
     )
-    let appContext = YamiboAppContext(
-        contentCoverStore: coverStore
-    )
-    let model = try makeForumNovelDetailViewModel(appContext: appContext)
+    let dependencies = try makeForumDetailDependencies(contentCoverStore: coverStore)
+    let model = try makeForumNovelDetailViewModel(dependencies: dependencies)
     let key = ContentCoverKey(targetType: .threadNovel, targetID: "900")
     let page = ForumThreadPage(
         thread: model.context.thread,
@@ -548,9 +540,9 @@ import YamiboReaderTestSupport
         defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
         key: "content-covers"
     )
-    let appContext = YamiboAppContext(
-        readingProgressStore: readingProgressStore,
-        contentCoverStore: coverStore
+    let dependencies = try makeForumDetailDependencies(
+        contentCoverStore: coverStore,
+        readingProgressStore: readingProgressStore
     )
     let historyCover = try #require(URL(string: "https://img.example.com/history-cover.jpg"))
     try await readingProgressStore.saveNovel(
@@ -579,7 +571,7 @@ import YamiboReaderTestSupport
         )
     ])
     let model = try makeForumNovelDetailViewModel(
-        appContext: appContext,
+        dependencies: dependencies,
         documentLoader: FakeForumNovelDocumentLoader(),
         threadPageLoader: threadPageLoader
     )
@@ -603,9 +595,7 @@ import YamiboReaderTestSupport
         defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
         key: "content-covers"
     )
-    let appContext = YamiboAppContext(
-        contentCoverStore: coverStore
-    )
+    let dependencies = try makeForumDetailDependencies(contentCoverStore: coverStore)
     let threadPageLoader = FakeForumNovelThreadPageLoader(pages: [
         1: ForumThreadPage(
             thread: ThreadIdentity(tid: "900", fid: "49"),
@@ -667,7 +657,7 @@ import YamiboReaderTestSupport
         )
     ])
     let model = try makeForumNovelDetailViewModel(
-        appContext: appContext,
+        dependencies: dependencies,
         documentLoader: FakeForumNovelDocumentLoader(),
         threadPageLoader: threadPageLoader
     )
@@ -1140,14 +1130,14 @@ import YamiboReaderTestSupport
         defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
         key: "reading-progress"
     )
-    let appContext = YamiboAppContext(
-        readingProgressStore: readingProgressStore,
+    let dependencies = try makeForumDetailDependencies(
         contentCoverStore: ContentCoverStore(
             defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
             key: "content-covers"
-        )
+        ),
+        readingProgressStore: readingProgressStore
     )
-    let model = try makeForumNovelDetailViewModel(appContext: appContext)
+    let model = try makeForumNovelDetailViewModel(dependencies: dependencies)
     let threadID = model.context.thread.tid
 
     try await readingProgressStore.saveNovel(
@@ -1191,26 +1181,65 @@ import YamiboReaderTestSupport
     #expect(model.headerSummary.readingProgressText == "第二章")
 }
 
+/// Builds a `ForumDependencies` package backed by isolated per-test stores.
+/// Factories for repositories this file never exercises trap loudly.
+@MainActor
+private func makeForumDetailDependencies(
+    contentCoverStore: ContentCoverStore? = nil,
+    readingProgressStore: ReadingProgressStore? = nil
+) throws -> ForumDependencies {
+    let suiteName = YamiboTestDefaults.suiteName(prefix: "novel-detail-deps")
+    let defaults = try YamiboTestDefaults.make(suiteName: suiteName)
+    let sessionStore = SessionStore(defaults: defaults, key: "session")
+    let session = YamiboNetworkConfiguration.makeSession()
+    @Sendable func makeClient() async -> YamiboClient {
+        let sessionState = await sessionStore.load()
+        return YamiboClient(
+            session: session,
+            cookie: sessionState.cookie,
+            userAgent: sessionState.userAgent
+        )
+    }
+    let forumCacheStore = ForumCacheStore(
+        baseDirectory: FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    )
+    return ForumDependencies(
+        sessionStore: sessionStore,
+        profileStore: YamiboProfileStore(defaults: defaults, key: "profile"),
+        localFavoriteLibraryStore: FavoriteLibraryStore(defaults: defaults, key: "local-favorites"),
+        readingProgressStore: readingProgressStore ?? ReadingProgressStore(defaults: defaults, key: "reading-progress"),
+        settingsStore: SettingsStore(defaults: defaults, key: "settings"),
+        contentCoverStore: contentCoverStore ?? ContentCoverStore(defaults: defaults, key: "content-covers"),
+        mangaDirectoryStore: ForumDetailTestsUnusedMangaDirectoryStore(),
+        mangaDirectorySearchCooldownState: MangaDirectorySearchCooldownState(),
+        makeForumRepository: { ForumRepository(client: await makeClient(), cacheStore: forumCacheStore) },
+        makeForumThreadReaderRepository: { ForumThreadReaderRepository(client: await makeClient(), cacheStore: forumCacheStore) },
+        makeUserSpaceRepository: { UserSpaceRepository(client: await makeClient()) },
+        makeBlogReaderRepository: { BlogReaderRepository(client: await makeClient()) },
+        makeFavoriteRepository: { FavoriteRepository(client: await makeClient()) },
+        makeNovelReaderRepository: { fatalError("makeNovelReaderRepository is not exercised by ForumNovelDetailViewModelTests") },
+        makeMangaReaderProjectionLoader: { fatalError("makeMangaReaderProjectionLoader is not exercised by ForumNovelDetailViewModelTests") },
+        makeMangaDirectoryRepository: { fatalError("makeMangaDirectoryRepository is not exercised by ForumNovelDetailViewModelTests") },
+        makeThreadRouteResolver: { YamiboThreadRouteResolver(client: await makeClient()) }
+    )
+}
+
+private struct ForumDetailTestsUnusedMangaDirectoryStore: MangaDirectoryPersisting {
+    func directory(named name: String) async throws -> MangaDirectory? { nil }
+    func directory(containingTID tid: String) async throws -> MangaDirectory? { nil }
+    func saveDirectory(_ directory: MangaDirectory) async throws {}
+    func deleteDirectory(named name: String) async throws {}
+}
+
 @MainActor
 private func makeForumNovelDetailViewModel(
-    appContext: YamiboAppContext? = nil,
+    dependencies: ForumDependencies? = nil,
     documentLoader: (any ForumNovelDocumentLoading)? = nil,
     threadPageLoader: (any ForumNovelThreadPageLoading)? = nil,
     authorID: String? = "42"
 ) throws -> ForumNovelDetailViewModel {
-    let resolvedAppContext: YamiboAppContext
-    if let appContext {
-        resolvedAppContext = appContext
-    } else {
-        let suiteName = YamiboTestDefaults.suiteName(prefix: "novel-detail")
-        _ = try YamiboTestDefaults.make(suiteName: suiteName)
-        resolvedAppContext = YamiboAppContext(
-            contentCoverStore: ContentCoverStore(
-                defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
-                key: "content-covers"
-            )
-        )
-    }
+    let resolvedDependencies = try dependencies ?? makeForumDetailDependencies()
     let novelRepositoryProvider: (@Sendable () async -> any ForumNovelDocumentLoading)? = documentLoader.map { loader in
         { @Sendable in loader }
     }
@@ -1223,7 +1252,7 @@ private func makeForumNovelDetailViewModel(
             title: "小说标题",
             authorID: authorID
         ),
-        appContext: resolvedAppContext,
+        dependencies: resolvedDependencies,
         novelRepositoryProvider: novelRepositoryProvider,
         threadRepositoryProvider: threadRepositoryProvider
     )

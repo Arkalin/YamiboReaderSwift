@@ -33,11 +33,11 @@ public struct NovelReaderView: View {
     @State private var novelTextSelectionController = NovelTextSelectionController()
     private let appModel: YamiboAppModel
 
-    public init(context: NovelLaunchContext, appModel: YamiboAppModel) {
+    public init(context: NovelLaunchContext, dependencies: NovelReaderDependencies, appModel: YamiboAppModel) {
         let initialSettings = appModel.bootstrapState?.settings.novelReader
         _model = StateObject(wrappedValue: NovelReaderViewModel(
             context: context,
-            appContext: appModel.appContext,
+            dependencies: dependencies,
             initialSettings: initialSettings,
             onReaderResumeRouteChange: { route in
                 appModel.updateReaderResumeRoute(route)

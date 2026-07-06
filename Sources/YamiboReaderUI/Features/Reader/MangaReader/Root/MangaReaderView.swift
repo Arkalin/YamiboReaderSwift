@@ -6,6 +6,7 @@ import UIKit
 
 public struct MangaReaderView: View {
     private let context: MangaLaunchContext
+    private let dependencies: MangaReaderDependencies
     private let appModel: YamiboAppModel
     @StateObject private var model: MangaReaderViewModel
     @State private var isDismissing = false
@@ -17,13 +18,14 @@ public struct MangaReaderView: View {
     @State private var imageSavePresentation = MangaImageSavePresentationState()
     @State private var isSavingImage = false
 
-    public init(context: MangaLaunchContext, appModel: YamiboAppModel) {
+    public init(context: MangaLaunchContext, dependencies: MangaReaderDependencies, appModel: YamiboAppModel) {
         self.context = context
+        self.dependencies = dependencies
         self.appModel = appModel
         _model = StateObject(
             wrappedValue: MangaReaderViewModel(
                 context: context,
-                appContext: appModel.appContext,
+                dependencies: dependencies,
                 onReaderResumeRouteChange: { route in
                     appModel.updateReaderResumeRoute(route)
                 }
@@ -173,7 +175,7 @@ public struct MangaReaderView: View {
                 MangaReaderCacheSheet(
                     context: context,
                     panel: loaded.directoryPanel,
-                    appContext: appModel.appContext
+                    dependencies: dependencies
                 )
             } else {
                 MangaDirectoryUnavailableSheet()

@@ -25,10 +25,10 @@ final class MessageCenterViewModel {
 
     @ObservationIgnored private let repositoryProvider: @Sendable () async -> any MessageCenterPageLoading
 
-    init(initialTab: MessageCenterTab = .privateMessages, appContext: YamiboAppContext) {
+    init(initialTab: MessageCenterTab = .privateMessages, dependencies: ForumDependencies) {
         selectedTab = initialTab
         repositoryProvider = {
-            await appContext.makeUserSpaceRepository()
+            await dependencies.makeUserSpaceRepository()
         }
     }
 

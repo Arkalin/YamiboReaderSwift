@@ -3871,7 +3871,7 @@ private extension NovelReaderViewModel {
     ) {
         self.init(
             context: context,
-            appContext: appContext,
+            dependencies: appContext.novelReaderDependencies,
             initialSettings: initialSettings,
             runtimeAdapter: NovelReaderViewModelFixtureRuntimeAdapter(fixture: pagination),
             onReaderResumeRouteChange: onReaderResumeRouteChange

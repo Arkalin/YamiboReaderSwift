@@ -40,21 +40,21 @@ final class MineHomeViewModel {
     let loginQuestions = YamiboLoginQuestion.defaultQuestions
     @ObservationIgnored let profileAvatarLoader: YamiboProfileAvatarLoader
 
-    private let appContext: YamiboAppContext
+    private let dependencies: AccountDependencies
     @ObservationIgnored private let checkInService: any YamiboCheckInServicing
     @ObservationIgnored private var offlineCacheQueueController: (any OfflineCacheQueueControlling)?
     @ObservationIgnored private var offlineCacheQueueUpdatesTask: Task<Void, Never>?
     @ObservationIgnored private var lastAutomaticProfileRefreshCredential: String?
 
     init(
-        appContext: YamiboAppContext,
+        dependencies: AccountDependencies,
         offlineCacheQueueController: (any OfflineCacheQueueControlling)? = nil,
         checkInService: (any YamiboCheckInServicing)? = nil
     ) {
-        self.appContext = appContext
+        self.dependencies = dependencies
         self.offlineCacheQueueController = offlineCacheQueueController
-        self.checkInService = checkInService ?? appContext.makeCheckInService()
-        profileAvatarLoader = appContext.makeProfileAvatarLoader()
+        self.checkInService = checkInService ?? dependencies.makeCheckInService()
+        profileAvatarLoader = YamiboProfileAvatarLoader(sessionStore: dependencies.sessionStore)
     }
 
     deinit {
@@ -86,8 +86,8 @@ final class MineHomeViewModel {
         isLoading = true
         defer { isLoading = false }
 
-        session = await appContext.sessionStore.load()
-        profile = await appContext.profileStore.load()
+        session = await dependencies.sessionStore.load()
+        profile = await dependencies.profileStore.load()
         await refreshCheckInState()
         await loadOfflineCacheQueue()
 
@@ -122,7 +122,7 @@ final class MineHomeViewModel {
         defer { isLoggingIn = false }
 
         do {
-            profile = try await appContext.makeAccountService().login(
+            profile = try await dependencies.makeAccountService().login(
                 YamiboLoginRequest(
                     username: username,
                     password: password,
@@ -130,7 +130,7 @@ final class MineHomeViewModel {
                     answer: answer
                 )
             )
-            session = await appContext.sessionStore.load()
+            session = await dependencies.sessionStore.load()
             await refreshCheckInState()
             errorMessage = nil
             checkInResultMessage = nil
@@ -147,9 +147,9 @@ final class MineHomeViewModel {
         defer { isSigningOut = false }
 
         do {
-            try await appContext.makeAccountService().signOut()
-            session = await appContext.sessionStore.load()
-            profile = await appContext.profileStore.load()
+            try await dependencies.makeAccountService().signOut()
+            session = await dependencies.sessionStore.load()
+            profile = await dependencies.profileStore.load()
             lastAutomaticProfileRefreshCredential = nil
             hasCheckedInToday = false
             errorMessage = nil
@@ -194,7 +194,7 @@ final class MineHomeViewModel {
             hasCheckedInToday = false
             return
         }
-        hasCheckedInToday = !(await appContext.checkInStore.needsCheckIn(session: session))
+        hasCheckedInToday = !(await dependencies.checkInStore.needsCheckIn(session: session))
     }
 
     func loadOfflineCacheQueue() async {
@@ -207,7 +207,7 @@ final class MineHomeViewModel {
         isLoadingOfflineCacheQueue = true
         defer { isLoadingOfflineCacheQueue = false }
 
-        let store = appContext.makeOfflineCacheStore()
+        let store = dependencies.offlineCacheStore
         let works = await store.offlineCacheQueueWorks()
         let directoriesByOwnerName = await offlineCacheDirectoriesByOwnerName(for: works)
         let projection = OfflineCacheQueueProjection.project(
@@ -360,14 +360,14 @@ final class MineHomeViewModel {
             return offlineCacheQueueController
         }
 
-        let controller = await appContext.makeOfflineCacheQueueExecutor()
+        let controller = await dependencies.makeOfflineCacheQueueExecutor()
         offlineCacheQueueController = controller
         return controller
     }
 
     private func startObservingOfflineCacheQueueUpdates() {
         guard offlineCacheQueueUpdatesTask == nil else { return }
-        let store = appContext.makeOfflineCacheStore()
+        let store = dependencies.offlineCacheStore
         let updates = store.offlineCacheUpdates()
         offlineCacheQueueUpdatesTask = Task { @MainActor [weak self] in
             for await _ in updates {
@@ -384,7 +384,7 @@ final class MineHomeViewModel {
         for work in works.sorted(by: { $0.insertionIndex < $1.insertionIndex }) {
             guard work.groupID.readerKind == .manga else { continue }
             guard directoriesByOwnerName[work.groupID.ownerKey] == nil else { continue }
-            if let directory = try? await appContext.mangaDirectoryStore.directory(named: work.groupID.ownerKey) {
+            if let directory = try? await dependencies.mangaDirectoryStore.directory(named: work.groupID.ownerKey) {
                 directoriesByOwnerName[work.groupID.ownerKey] = directory
             }
         }
@@ -397,13 +397,13 @@ final class MineHomeViewModel {
         defer { isRefreshingProfile = false }
 
         do {
-            profile = try await appContext.makeAccountService().refreshProfile()
-            session = await appContext.sessionStore.load()
+            profile = try await dependencies.makeAccountService().refreshProfile()
+            session = await dependencies.sessionStore.load()
             errorMessage = nil
         } catch YamiboError.notAuthenticated {
-            try? await appContext.makeAccountService().clearLocalAuthentication()
-            session = await appContext.sessionStore.load()
-            profile = await appContext.profileStore.load()
+            try? await dependencies.makeAccountService().clearLocalAuthentication()
+            session = await dependencies.sessionStore.load()
+            profile = await dependencies.profileStore.load()
             await refreshCheckInState()
             if presentsErrors {
                 errorMessage = YamiboError.notAuthenticated.localizedDescription

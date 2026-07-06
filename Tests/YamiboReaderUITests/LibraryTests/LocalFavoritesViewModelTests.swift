@@ -12,8 +12,8 @@ final class LocalFavoritesViewModelTests: XCTestCase {
             defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
             key: "local-favorites"
         )
-        let appContext = YamiboAppContext(localFavoriteLibraryStore: localFavoriteLibraryStore)
-        let viewModel = LocalFavoritesViewModel(appContext: appContext)
+        let dependencies = try makeLibraryDependencies(localFavoriteLibraryStore: localFavoriteLibraryStore)
+        let viewModel = LocalFavoritesViewModel(dependencies: dependencies)
         await viewModel.load()
 
         let boardA = FavoriteSourceGroup.forumBoard(id: "10", label: "版区A")
@@ -80,8 +80,8 @@ final class LocalFavoritesViewModelTests: XCTestCase {
             defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
             key: "local-favorites"
         )
-        let appContext = YamiboAppContext(localFavoriteLibraryStore: localFavoriteLibraryStore)
-        let viewModel = LocalFavoritesViewModel(appContext: appContext)
+        let dependencies = try makeLibraryDependencies(localFavoriteLibraryStore: localFavoriteLibraryStore)
+        let viewModel = LocalFavoritesViewModel(dependencies: dependencies)
         await viewModel.load()
 
         let firstTarget = FavoriteContentTarget(kind: .normalThread, threadID: "930")
@@ -135,8 +135,8 @@ final class LocalFavoritesViewModelTests: XCTestCase {
             defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
             key: "local-favorites"
         )
-        let appContext = YamiboAppContext(localFavoriteLibraryStore: localFavoriteLibraryStore)
-        let viewModel = LocalFavoritesViewModel(appContext: appContext)
+        let dependencies = try makeLibraryDependencies(localFavoriteLibraryStore: localFavoriteLibraryStore)
+        let viewModel = LocalFavoritesViewModel(dependencies: dependencies)
         await viewModel.load()
 
         let createdCategory = await viewModel.createCategory(name: "分类A")
@@ -200,8 +200,8 @@ final class LocalFavoritesViewModelTests: XCTestCase {
             defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
             key: "local-favorites"
         )
-        let appContext = YamiboAppContext(localFavoriteLibraryStore: localFavoriteLibraryStore)
-        let viewModel = LocalFavoritesViewModel(appContext: appContext)
+        let dependencies = try makeLibraryDependencies(localFavoriteLibraryStore: localFavoriteLibraryStore)
+        let viewModel = LocalFavoritesViewModel(dependencies: dependencies)
         await viewModel.load()
 
         let createdSourceCategory = await viewModel.createCategory(name: "分类A")
@@ -259,9 +259,9 @@ final class LocalFavoritesViewModelTests: XCTestCase {
             key: "local-favorites"
         )
         let recorder = FavoriteDeleteTestRecorder()
-        let appContext = YamiboAppContext(localFavoriteLibraryStore: localFavoriteLibraryStore)
+        let dependencies = try makeLibraryDependencies(localFavoriteLibraryStore: localFavoriteLibraryStore)
         let viewModel = LocalFavoritesViewModel(
-            appContext: appContext,
+            dependencies: dependencies,
             remoteFavoriteDeleteHandler: { items in
                 try await recorder.record(items)
             }
@@ -302,8 +302,8 @@ final class LocalFavoritesViewModelTests: XCTestCase {
             defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
             key: "local-favorites"
         )
-        let appContext = YamiboAppContext(localFavoriteLibraryStore: localFavoriteLibraryStore)
-        let viewModel = LocalFavoritesViewModel(appContext: appContext)
+        let dependencies = try makeLibraryDependencies(localFavoriteLibraryStore: localFavoriteLibraryStore)
+        let viewModel = LocalFavoritesViewModel(dependencies: dependencies)
         await viewModel.load()
 
         let createdCategory = await viewModel.createCategory(name: "分类A")
@@ -344,9 +344,9 @@ final class LocalFavoritesViewModelTests: XCTestCase {
             key: "local-favorites"
         )
         let recorder = FavoriteDeleteTestRecorder(error: YamiboError.favoriteDeleteFailed)
-        let appContext = YamiboAppContext(localFavoriteLibraryStore: localFavoriteLibraryStore)
+        let dependencies = try makeLibraryDependencies(localFavoriteLibraryStore: localFavoriteLibraryStore)
         let viewModel = LocalFavoritesViewModel(
-            appContext: appContext,
+            dependencies: dependencies,
             remoteFavoriteDeleteHandler: { items in
                 try await recorder.record(items)
             }
@@ -383,11 +383,11 @@ final class LocalFavoritesViewModelTests: XCTestCase {
             defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
             key: "local-favorites"
         )
-        let appContext = YamiboAppContext(
+        let dependencies = try makeLibraryDependencies(
             localFavoriteLibraryStore: localFavoriteLibraryStore,
             session: makeLocalFavoriteDeleteTestSession()
         )
-        let viewModel = LocalFavoritesViewModel(appContext: appContext)
+        let viewModel = LocalFavoritesViewModel(dependencies: dependencies)
         await viewModel.load()
 
         let target = FavoriteContentTarget(kind: .normalThread, threadID: "955")
@@ -417,8 +417,8 @@ final class LocalFavoritesViewModelTests: XCTestCase {
             defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
             key: "local-favorites"
         )
-        let appContext = YamiboAppContext(localFavoriteLibraryStore: localFavoriteLibraryStore)
-        let viewModel = LocalFavoritesViewModel(appContext: appContext)
+        let dependencies = try makeLibraryDependencies(localFavoriteLibraryStore: localFavoriteLibraryStore)
+        let viewModel = LocalFavoritesViewModel(dependencies: dependencies)
         await viewModel.load()
 
         let target = FavoriteContentTarget(kind: .normalThread, threadID: "954")
@@ -446,8 +446,8 @@ final class LocalFavoritesViewModelTests: XCTestCase {
             defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
             key: "local-favorites"
         )
-        let appContext = YamiboAppContext(localFavoriteLibraryStore: localFavoriteLibraryStore)
-        let viewModel = LocalFavoritesViewModel(appContext: appContext)
+        let dependencies = try makeLibraryDependencies(localFavoriteLibraryStore: localFavoriteLibraryStore)
+        let viewModel = LocalFavoritesViewModel(dependencies: dependencies)
         await viewModel.load()
 
         let createdCategory = await viewModel.createCategory(name: "分类A")
@@ -518,11 +518,11 @@ final class LocalFavoritesViewModelTests: XCTestCase {
             defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
             key: "local-favorites"
         )
-        let appContext = YamiboAppContext(
-            settingsStore: settingsStore,
-            localFavoriteLibraryStore: localFavoriteLibraryStore
+        let dependencies = try makeLibraryDependencies(
+            localFavoriteLibraryStore: localFavoriteLibraryStore,
+            settingsStore: settingsStore
         )
-        let viewModel = LocalFavoritesViewModel(appContext: appContext)
+        let viewModel = LocalFavoritesViewModel(dependencies: dependencies)
         await viewModel.load()
 
         let createdCategory = await viewModel.createCategory(name: "待读")
@@ -576,12 +576,12 @@ final class LocalFavoritesViewModelTests: XCTestCase {
             selectedCategoryID: FavoriteCategory.defaultID,
             selectedCollectionID: collection.id
         )))
-        let appContext = YamiboAppContext(
-            settingsStore: settingsStore,
-            localFavoriteLibraryStore: localFavoriteLibraryStore
+        let dependencies = try makeLibraryDependencies(
+            localFavoriteLibraryStore: localFavoriteLibraryStore,
+            settingsStore: settingsStore
         )
 
-        let viewModel = LocalFavoritesViewModel(appContext: appContext)
+        let viewModel = LocalFavoritesViewModel(dependencies: dependencies)
         await viewModel.load()
 
         XCTAssertEqual(viewModel.selectedCategoryID, category.id)
@@ -611,9 +611,9 @@ final class LocalFavoritesViewModelTests: XCTestCase {
             defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
             key: "local-favorites"
         )
-        let appContext = YamiboAppContext(
-            settingsStore: settingsStore,
-            localFavoriteLibraryStore: localFavoriteLibraryStore
+        let dependencies = try makeLibraryDependencies(
+            localFavoriteLibraryStore: localFavoriteLibraryStore,
+            settingsStore: settingsStore
         )
         try await settingsStore.save(AppSettings(favorites: FavoriteLibrarySettings(
             layoutMode: .staggered,
@@ -622,7 +622,7 @@ final class LocalFavoritesViewModelTests: XCTestCase {
             showsCategoryCounts: false
         )))
 
-        let viewModel = LocalFavoritesViewModel(appContext: appContext)
+        let viewModel = LocalFavoritesViewModel(dependencies: dependencies)
         await viewModel.load()
         XCTAssertEqual(viewModel.layoutMode, .staggered)
         XCTAssertEqual(viewModel.sortOrder, .displayTitle)
@@ -665,12 +665,12 @@ final class LocalFavoritesViewModelTests: XCTestCase {
             importedCount: 1
         )
         try await settingsStore.save(AppSettings(favorites: FavoriteLibrarySettings(remoteSyncSnapshot: runningSnapshot)))
-        let appContext = YamiboAppContext(
-            settingsStore: settingsStore,
-            localFavoriteLibraryStore: localFavoriteLibraryStore
+        let dependencies = try makeLibraryDependencies(
+            localFavoriteLibraryStore: localFavoriteLibraryStore,
+            settingsStore: settingsStore
         )
 
-        let viewModel = LocalFavoritesViewModel(appContext: appContext)
+        let viewModel = LocalFavoritesViewModel(dependencies: dependencies)
         await viewModel.load()
 
         XCTAssertEqual(viewModel.remoteSyncSnapshot?.runID, "sync-run")
@@ -696,12 +696,12 @@ final class LocalFavoritesViewModelTests: XCTestCase {
             key: "local-favorites"
         )
         let recorder = FavoriteRemoteSyncTestRecorder()
-        let appContext = YamiboAppContext(
-            settingsStore: settingsStore,
-            localFavoriteLibraryStore: localFavoriteLibraryStore
+        let dependencies = try makeLibraryDependencies(
+            localFavoriteLibraryStore: localFavoriteLibraryStore,
+            settingsStore: settingsStore
         )
         let viewModel = LocalFavoritesViewModel(
-            appContext: appContext,
+            dependencies: dependencies,
             remoteFavoriteSyncExecutor: { _, categoryID in
                 await recorder.record(categoryID)
                 return YamiboFavoriteSyncReport(
@@ -739,9 +739,9 @@ final class LocalFavoritesViewModelTests: XCTestCase {
             defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
             key: "settings"
         )
-        let appContext = YamiboAppContext(settingsStore: settingsStore)
+        let dependencies = try makeLibraryDependencies(settingsStore: settingsStore)
         let viewModel = LocalFavoritesViewModel(
-            appContext: appContext,
+            dependencies: dependencies,
             remoteFavoriteSyncExecutor: { _, _ in
                 try await Task.sleep(nanoseconds: 2_000_000_000)
                 return YamiboFavoriteSyncReport(importedTargetIDs: ["late"])
@@ -770,7 +770,7 @@ final class LocalFavoritesViewModelTests: XCTestCase {
             defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
             key: "favorite-updates"
         )
-        let appContext = YamiboAppContext(
+        let dependencies = try makeLibraryDependencies(
             localFavoriteLibraryStore: localFavoriteLibraryStore,
             favoriteUpdateStore: favoriteUpdateStore
         )
@@ -812,7 +812,7 @@ final class LocalFavoritesViewModelTests: XCTestCase {
         ]
         var fetchedThreadIDs: [String] = []
         let viewModel = LocalFavoritesViewModel(
-            appContext: appContext,
+            dependencies: dependencies,
             favoriteUpdatePageFetcher: { item in
                 let threadID = try XCTUnwrap(item.target.threadID)
                 fetchedThreadIDs.append(threadID)
@@ -924,7 +924,7 @@ final class LocalFavoritesViewModelTests: XCTestCase {
             defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
             key: "content-covers"
         )
-        let appContext = YamiboAppContext(
+        let dependencies = try makeLibraryDependencies(
             localFavoriteLibraryStore: localFavoriteLibraryStore,
             readingProgressStore: readingProgressStore,
             contentCoverStore: contentCoverStore
@@ -944,7 +944,7 @@ final class LocalFavoritesViewModelTests: XCTestCase {
             for: ContentCoverKey(targetType: .threadNormal, targetID: "903")
         )
 
-        let viewModel = LocalFavoritesViewModel(appContext: appContext)
+        let viewModel = LocalFavoritesViewModel(dependencies: dependencies)
         await viewModel.load()
 
         XCTAssertEqual(viewModel.cards.first?.coverURL, coverURL)
@@ -965,7 +965,7 @@ final class LocalFavoritesViewModelTests: XCTestCase {
             defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
             key: "content-covers"
         )
-        let appContext = YamiboAppContext(
+        let dependencies = try makeLibraryDependencies(
             localFavoriteLibraryStore: localFavoriteLibraryStore,
             readingProgressStore: readingProgressStore,
             contentCoverStore: contentCoverStore
@@ -986,7 +986,7 @@ final class LocalFavoritesViewModelTests: XCTestCase {
             for: ContentCoverKey(targetType: .threadNormal, targetID: "904")
         )
 
-        let viewModel = LocalFavoritesViewModel(appContext: appContext)
+        let viewModel = LocalFavoritesViewModel(dependencies: dependencies)
         await viewModel.load()
 
         XCTAssertEqual(viewModel.cards.first?.coverURL, resolvedCoverURL)
@@ -1009,7 +1009,7 @@ final class LocalFavoritesViewModelTests: XCTestCase {
             defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
             key: "content-covers"
         )
-        let appContext = YamiboAppContext(
+        let dependencies = try makeLibraryDependencies(
             localFavoriteLibraryStore: localFavoriteLibraryStore,
             readingProgressStore: readingProgressStore,
             contentCoverStore: contentCoverStore
@@ -1030,7 +1030,7 @@ final class LocalFavoritesViewModelTests: XCTestCase {
             for: ContentCoverKey(targetType: .threadNovel, targetID: "905")
         )
 
-        let viewModel = LocalFavoritesViewModel(appContext: appContext)
+        let viewModel = LocalFavoritesViewModel(dependencies: dependencies)
         await viewModel.load()
 
         XCTAssertEqual(viewModel.cards.first?.coverURL, resolvedCoverURL)
@@ -1049,7 +1049,7 @@ final class LocalFavoritesViewModelTests: XCTestCase {
             defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
             key: "reading-progress"
         )
-        let appContext = YamiboAppContext(
+        let dependencies = try makeLibraryDependencies(
             localFavoriteLibraryStore: localFavoriteLibraryStore,
             readingProgressStore: readingProgressStore
         )
@@ -1064,7 +1064,7 @@ final class LocalFavoritesViewModelTests: XCTestCase {
         document.addItem(item)
         try await localFavoriteLibraryStore.save(document)
 
-        let viewModel = LocalFavoritesViewModel(appContext: appContext)
+        let viewModel = LocalFavoritesViewModel(dependencies: dependencies)
         await viewModel.load()
         let opened = await viewModel.openTarget(for: item)
 
@@ -1084,7 +1084,7 @@ final class LocalFavoritesViewModelTests: XCTestCase {
             defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
             key: "local-favorites"
         )
-        let appContext = YamiboAppContext(localFavoriteLibraryStore: localFavoriteLibraryStore)
+        let dependencies = try makeLibraryDependencies(localFavoriteLibraryStore: localFavoriteLibraryStore)
         var document = FavoriteLibraryDocument()
         let secondCategory = document.createCategory(name: "分类B")
         let matchingCollection = document.createCollection(categoryID: document.defaultCategory.id, name: "命中合集")
@@ -1112,7 +1112,7 @@ final class LocalFavoritesViewModelTests: XCTestCase {
         ))
         try await localFavoriteLibraryStore.save(document)
 
-        let viewModel = LocalFavoritesViewModel(appContext: appContext)
+        let viewModel = LocalFavoritesViewModel(dependencies: dependencies)
         await viewModel.load()
 
         XCTAssertEqual(viewModel.cards.map(\.item.target), [firstTarget, secondTarget])
@@ -1313,4 +1313,43 @@ private func makeLocalFavoriteDeleteTestSession() -> URLSession {
     let configuration = URLSessionConfiguration.ephemeral
     configuration.protocolClasses = [LocalFavoriteDeleteTestURLProtocol.self]
     return URLSession(configuration: configuration)
+}
+
+/// Builds a `LibraryDependencies` package backed by isolated per-test stores,
+/// mirroring the composition root's repository wiring for the given session.
+private func makeLibraryDependencies(
+    localFavoriteLibraryStore: FavoriteLibraryStore? = nil,
+    favoriteUpdateStore: FavoriteUpdateStore? = nil,
+    readingProgressStore: ReadingProgressStore? = nil,
+    settingsStore: SettingsStore? = nil,
+    contentCoverStore: ContentCoverStore? = nil,
+    session: URLSession? = nil
+) throws -> LibraryDependencies {
+    let suiteName = YamiboTestDefaults.suiteName(prefix: "local-favorites-deps")
+    let defaults = try YamiboTestDefaults.make(suiteName: suiteName)
+    let sessionStore = SessionStore(defaults: defaults, key: "session")
+    let resolvedSession = session ?? YamiboNetworkConfiguration.makeSession()
+    @Sendable func makeClient() async -> YamiboClient {
+        let sessionState = await sessionStore.load()
+        return YamiboClient(
+            session: resolvedSession,
+            cookie: sessionState.cookie,
+            userAgent: sessionState.userAgent
+        )
+    }
+    let forumCacheStore = ForumCacheStore(
+        baseDirectory: FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    )
+    return LibraryDependencies(
+        sessionStore: sessionStore,
+        localFavoriteLibraryStore: localFavoriteLibraryStore ?? FavoriteLibraryStore(defaults: defaults, key: "local-favorites"),
+        favoriteUpdateStore: favoriteUpdateStore ?? FavoriteUpdateStore(defaults: defaults, key: "favorite-updates"),
+        readingProgressStore: readingProgressStore ?? ReadingProgressStore(defaults: defaults, key: "reading-progress"),
+        settingsStore: settingsStore ?? SettingsStore(defaults: defaults, key: "settings"),
+        contentCoverStore: contentCoverStore ?? ContentCoverStore(defaults: defaults, key: "content-covers"),
+        makeFavoriteRepository: { FavoriteRepository(client: await makeClient()) },
+        makeForumThreadReaderRepository: { ForumThreadReaderRepository(client: await makeClient(), cacheStore: forumCacheStore) },
+        makeThreadRouteResolver: { YamiboThreadRouteResolver(client: await makeClient()) }
+    )
 }

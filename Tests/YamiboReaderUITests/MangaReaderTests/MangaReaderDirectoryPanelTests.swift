@@ -222,13 +222,10 @@ private func makeDirectoryPanelFixture(
     let documents = Dictionary(
         uniqueKeysWithValues: ([resolvedDocument] + extraDocuments).map { ($0.tid, $0) }
     )
-    let appContext = YamiboAppContext(
-        sessionStore: try SessionStore(testSuiteName: defaultsSuiteName, key: "session"),
-        settingsStore: settingsStore,
-        readerResumeRouteStore: try ReaderResumeRouteStore(testSuiteName: defaultsSuiteName, key: "resume"),
-    )
+    let readingProgressStore = try ReadingProgressStore(testSuiteName: defaultsSuiteName, key: "reading-progress")
     #if os(iOS)
     let dependencies = MangaReaderViewModelDependencies(
+        settingsStore: settingsStore,
         makeProjectionLoader: { DirectoryPanelProjectionLoader(documents: documents) },
         makeDirectoryRepository: { resolvedRepository },
         makeDirectoryStore: { DirectoryPanelStore(directories: storedDirectories) },
@@ -236,13 +233,14 @@ private func makeDirectoryPanelFixture(
         directoryWorkflowConfiguration: configuration,
         progressSync: ProgressSyncModule(
             adapter: FavoriteLibraryProgressSyncAdapter(
-                    readingProgressStore: appContext.readingProgressStore
+                    readingProgressStore: readingProgressStore
             ),
             debounceNanoseconds: 0
         )
     )
     #else
     let dependencies = MangaReaderViewModelDependencies(
+        settingsStore: settingsStore,
         makeProjectionLoader: { DirectoryPanelProjectionLoader(documents: documents) },
         makeDirectoryRepository: { resolvedRepository },
         makeDirectoryStore: { DirectoryPanelStore(directories: storedDirectories) },
@@ -250,14 +248,14 @@ private func makeDirectoryPanelFixture(
         directoryWorkflowConfiguration: configuration,
         progressSync: ProgressSyncModule(
             adapter: FavoriteLibraryProgressSyncAdapter(
-                    readingProgressStore: appContext.readingProgressStore
+                    readingProgressStore: readingProgressStore
             ),
             debounceNanoseconds: 0
         )
     )
     #endif
     return MangaReaderDirectoryPanelFixture(
-        model: MangaReaderViewModel(context: context, appContext: appContext, dependencies: dependencies),
+        model: MangaReaderViewModel(context: context, viewModelDependencies: dependencies),
         settingsStore: settingsStore
     )
 }

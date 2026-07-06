@@ -53,3 +53,10 @@ public protocol OfflineCacheStoreCore:
     OfflineCacheImageAssetStoring,
     OfflineCacheQueueStoring,
     OfflineCacheManagementStoring {}
+
+/// The full capability surface of the shared offline cache store, as assembled
+/// by the composition root and consumed by reader/library/account features.
+public typealias OfflineCacheStoring = OfflineCacheStoreCore
+    & MangaOfflineCacheStoring
+    & NovelOfflineCacheStoring
+    & YamiboOfflineImageDataProviding

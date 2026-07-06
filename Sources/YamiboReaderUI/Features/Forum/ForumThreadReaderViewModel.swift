@@ -40,19 +40,19 @@ final class ForumThreadReaderViewModel {
     @ObservationIgnored private let readingProgressStoreProvider: @Sendable () async -> ReadingProgressStore?
     @ObservationIgnored private let favoriteRepositoryProvider: @Sendable () async -> (any ForumThreadFavoriteRemoteOperating)?
 
-    init(context: ThreadNovelLaunchContext, appContext: YamiboAppContext) {
+    init(context: ThreadNovelLaunchContext, dependencies: ForumDependencies) {
         self.context = context
         repositoryProvider = {
-            await appContext.makeForumThreadReaderRepository()
+            await dependencies.makeForumThreadReaderRepository()
         }
         localFavoriteLibraryStoreProvider = {
-            appContext.localFavoriteLibraryStore
+            dependencies.localFavoriteLibraryStore
         }
         readingProgressStoreProvider = {
-            appContext.readingProgressStore
+            dependencies.readingProgressStore
         }
         favoriteRepositoryProvider = {
-            await appContext.makeFavoriteRepository()
+            await dependencies.makeFavoriteRepository()
         }
     }
 

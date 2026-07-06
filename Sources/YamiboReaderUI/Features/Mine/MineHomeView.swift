@@ -8,12 +8,16 @@ public struct MineHomeView: View {
     @State private var showingSignOutConfirmation = false
     @State private var showingOfflineCacheQueueSheet = false
 
-    private let appContext: YamiboAppContext
+    private let settingsDependencies: SettingsDependencies
     private let appModel: YamiboAppModel
 
-    public init(appContext: YamiboAppContext, appModel: YamiboAppModel) {
-        _viewModel = State(initialValue: MineHomeViewModel(appContext: appContext))
-        self.appContext = appContext
+    public init(
+        dependencies: AccountDependencies,
+        settingsDependencies: SettingsDependencies,
+        appModel: YamiboAppModel
+    ) {
+        _viewModel = State(initialValue: MineHomeViewModel(dependencies: dependencies))
+        self.settingsDependencies = settingsDependencies
         self.appModel = appModel
     }
 
@@ -115,7 +119,7 @@ public struct MineHomeView: View {
                 }
             }
             .sheet(isPresented: $showingSettingsSheet) {
-                SystemSettingsView(appContext: appContext) {
+                SystemSettingsView(dependencies: settingsDependencies) {
                     await appModel.bootstrap()
                 }
             }

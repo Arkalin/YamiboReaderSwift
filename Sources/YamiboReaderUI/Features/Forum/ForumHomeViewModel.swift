@@ -22,9 +22,9 @@ final class ForumHomeViewModel {
     @ObservationIgnored private let repositoryProvider: @Sendable () async -> any ForumHomePageLoading
     @ObservationIgnored private var hasInitializedExpansion = false
 
-    init(appContext: YamiboAppContext) {
+    init(dependencies: ForumDependencies) {
         repositoryProvider = {
-            await appContext.makeForumRepository()
+            await dependencies.makeForumRepository()
         }
     }
 

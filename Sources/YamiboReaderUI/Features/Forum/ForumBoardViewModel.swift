@@ -76,12 +76,12 @@ final class ForumBoardViewModel {
         }
     )
 
-    init(fid: String, title: String?, initialPage: Int = 1, appContext: YamiboAppContext) {
+    init(fid: String, title: String?, initialPage: Int = 1, dependencies: ForumDependencies) {
         self.fid = fid
         initialTitle = title
         currentPage = max(1, initialPage)
         repositoryProvider = {
-            await appContext.makeForumRepository()
+            await dependencies.makeForumRepository()
         }
     }
 

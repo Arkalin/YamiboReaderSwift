@@ -6,7 +6,7 @@ public struct SystemSettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
 
-    private let appContext: YamiboAppContext
+    private let dependencies: SettingsDependencies
     private let onApplicationReset: @MainActor () async -> Void
 
     @StateObject private var viewModel: SystemSettingsViewModel
@@ -24,12 +24,12 @@ public struct SystemSettingsView: View {
     @State private var favoriteBackgroundEditorDraft: FavoriteBackgroundEditorDraft?
 
     public init(
-        appContext: YamiboAppContext,
+        dependencies: SettingsDependencies,
         onApplicationReset: @escaping @MainActor () async -> Void
     ) {
-        _viewModel = StateObject(wrappedValue: SystemSettingsViewModel(appContext: appContext))
-        _favoriteSyncViewModel = StateObject(wrappedValue: LocalFavoritesViewModel(appContext: appContext))
-        self.appContext = appContext
+        _viewModel = StateObject(wrappedValue: SystemSettingsViewModel(dependencies: dependencies))
+        _favoriteSyncViewModel = StateObject(wrappedValue: LocalFavoritesViewModel(dependencies: dependencies.library))
+        self.dependencies = dependencies
         self.onApplicationReset = onApplicationReset
     }
 
@@ -230,7 +230,7 @@ public struct SystemSettingsView: View {
                 await favoriteSyncViewModel.load()
             }
             .sheet(isPresented: $showingWebDAVSettings) {
-                WebDAVSyncSettingsView(appContext: appContext)
+                WebDAVSyncSettingsView(dependencies: dependencies.webDAVSync)
             }
             .sheet(isPresented: $showingFavoriteRemoteSyncProgress) {
                 NavigationStack {
@@ -249,7 +249,7 @@ public struct SystemSettingsView: View {
                 }
             }
             .sheet(isPresented: $showingAboutSheet) {
-                AboutView(appContext: appContext)
+                AboutView()
             }
             .navigationDestination(isPresented: $showingPeripheralSettings) {
                 SystemSettingsPeripheralPageTurnView(viewModel: viewModel)
@@ -460,7 +460,7 @@ public struct SystemSettingsView: View {
 
     private func openWebDAVSettings() {
         Task { @MainActor in
-            let session = await appContext.sessionStore.load()
+            let session = await dependencies.sessionStore.load()
             if session.isLoggedIn, !session.cookie.isEmpty {
                 showingWebDAVSettings = true
             } else {

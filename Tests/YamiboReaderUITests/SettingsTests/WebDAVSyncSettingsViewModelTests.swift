@@ -56,7 +56,7 @@ final class WebDAVSyncSettingsViewModelTests: XCTestCase {
         }
         defer { WebDAVSettingsTestURLProtocol.removeHandler(for: host) }
 
-        let viewModel = await WebDAVSyncSettingsViewModel(appContext: appContext)
+        let viewModel = await WebDAVSyncSettingsViewModel(dependencies: appContext.webDAVSyncDependencies)
         await viewModel.load()
         await MainActor.run {
             viewModel.baseURLString = " https://\(host) "
@@ -130,7 +130,7 @@ final class WebDAVSyncSettingsViewModelTests: XCTestCase {
         }
         defer { WebDAVSettingsTestURLProtocol.removeHandler(for: host) }
 
-        let viewModel = await WebDAVSyncSettingsViewModel(appContext: appContext)
+        let viewModel = await WebDAVSyncSettingsViewModel(dependencies: appContext.webDAVSyncDependencies)
         await viewModel.load()
         await MainActor.run {
             viewModel.direction = .upload

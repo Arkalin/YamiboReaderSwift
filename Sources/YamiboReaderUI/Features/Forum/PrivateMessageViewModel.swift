@@ -27,14 +27,14 @@ final class PrivateMessageViewModel {
     @ObservationIgnored private let repositoryProvider: @Sendable () async -> any PrivateMessagePageLoading
     @ObservationIgnored private let currentProfileProvider: @Sendable () async -> YamiboProfile?
 
-    init(uid: String, titleHint: String?, appContext: YamiboAppContext) {
+    init(uid: String, titleHint: String?, dependencies: ForumDependencies) {
         self.uid = uid.trimmingCharacters(in: .whitespacesAndNewlines)
         self.titleHint = titleHint?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
         repositoryProvider = {
-            await appContext.makeUserSpaceRepository()
+            await dependencies.makeUserSpaceRepository()
         }
         currentProfileProvider = {
-            await appContext.profileStore.load()
+            await dependencies.profileStore.load()
         }
     }
 

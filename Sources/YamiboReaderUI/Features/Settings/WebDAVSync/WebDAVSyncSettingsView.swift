@@ -19,10 +19,10 @@ final class WebDAVSyncSettingsViewModel: ObservableObject {
     @Published var successMessage: String?
     @Published var isShowingAccountMismatchConfirmation = false
 
-    private let appContext: YamiboAppContext
+    private let dependencies: WebDAVSyncDependencies
 
-    init(appContext: YamiboAppContext) {
-        self.appContext = appContext
+    init(dependencies: WebDAVSyncDependencies) {
+        self.dependencies = dependencies
     }
 
     var isBusy: Bool {
@@ -39,7 +39,7 @@ final class WebDAVSyncSettingsViewModel: ObservableObject {
         activeAction = .loading
         defer { activeAction = nil }
 
-        let settings = await appContext.webDAVSyncSettingsStore.load()
+        let settings = await dependencies.settingsStore.load()
         baseURLString = settings.baseURLString
         username = settings.username
         password = settings.password
@@ -51,7 +51,7 @@ final class WebDAVSyncSettingsViewModel: ObservableObject {
         activeAction = .syncing
         defer { activeAction = nil }
 
-        var settings = await appContext.webDAVSyncSettingsStore.load()
+        var settings = await dependencies.settingsStore.load()
         settings.baseURLString = baseURLString
         settings.username = username
         settings.password = password
@@ -65,15 +65,15 @@ final class WebDAVSyncSettingsViewModel: ObservableObject {
         }
 
         do {
-            try await appContext.webDAVSyncSettingsStore.save(settings)
-            let service = appContext.makeWebDAVSyncService()
+            try await dependencies.settingsStore.save(settings)
+            let service = dependencies.makeSyncService()
             switch direction {
             case .upload:
                 _ = try await service.upload(using: settings, allowingAccountMismatch: allowingAccountMismatch)
             case .download:
                 _ = try await service.download(using: settings, allowingAccountMismatch: allowingAccountMismatch)
             }
-            let updatedSettings = await appContext.webDAVSyncSettingsStore.load()
+            let updatedSettings = await dependencies.settingsStore.load()
             lastSyncedAt = updatedSettings.lastSyncedAt
             successMessage = L10n.string("webdav.sync_success")
             return true
@@ -95,8 +95,8 @@ public struct WebDAVSyncSettingsView: View {
     @StateObject private var viewModel: WebDAVSyncSettingsViewModel
     @Environment(\.dismiss) private var dismiss
 
-    public init(appContext: YamiboAppContext) {
-        _viewModel = StateObject(wrappedValue: WebDAVSyncSettingsViewModel(appContext: appContext))
+    public init(dependencies: WebDAVSyncDependencies) {
+        _viewModel = StateObject(wrappedValue: WebDAVSyncSettingsViewModel(dependencies: dependencies))
     }
 
     public var body: some View {

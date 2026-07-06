@@ -17,10 +17,12 @@ struct LocalFavoritesRootView: View {
     @State private var webRoute: LocalFavoriteWebRoute?
 
     let appModel: YamiboAppModel
+    private let sessionStore: SessionStore
 
-    init(appContext: YamiboAppContext, appModel: YamiboAppModel) {
-        _viewModel = StateObject(wrappedValue: LocalFavoritesViewModel(appContext: appContext))
+    init(dependencies: LibraryDependencies, appModel: YamiboAppModel) {
+        _viewModel = StateObject(wrappedValue: LocalFavoritesViewModel(dependencies: dependencies))
         self.appModel = appModel
+        self.sessionStore = dependencies.sessionStore
     }
 
     var body: some View {
@@ -224,7 +226,7 @@ struct LocalFavoritesRootView: View {
         }
         .sheet(item: $webRoute) { route in
             NavigationStack {
-                ForumBrowserView(url: route.url, appContext: appModel.appContext, appModel: appModel)
+                ForumBrowserView(url: route.url, sessionStore: sessionStore, appModel: appModel)
             }
         }
     }

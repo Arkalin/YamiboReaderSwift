@@ -7,17 +7,17 @@ import UIKit
 
 public struct IOSForumWebView: UIViewRepresentable {
     public let model: ForumBrowserModel
-    public let appContext: YamiboAppContext
+    public let sessionStore: SessionStore
     public let isSelected: Bool
 
-    public init(model: ForumBrowserModel, appContext: YamiboAppContext, isSelected: Bool = true) {
+    public init(model: ForumBrowserModel, sessionStore: SessionStore, isSelected: Bool = true) {
         self.model = model
-        self.appContext = appContext
+        self.sessionStore = sessionStore
         self.isSelected = isSelected
     }
 
     public func makeCoordinator() -> Coordinator {
-        Coordinator(model: model, appContext: appContext)
+        Coordinator(model: model, sessionStore: sessionStore)
     }
 
     public func makeUIView(context: Context) -> WKWebView {
@@ -46,16 +46,16 @@ public struct IOSForumWebView: UIViewRepresentable {
 
     public final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate {
         private let model: ForumBrowserModel
-        private let appContext: YamiboAppContext
+        private let sessionStore: SessionStore
         private weak var webView: WKWebView?
         private var didPrepareInitialLoad = false
         private var didApplyAppearance = false
         private var sessionObservationTask: Task<Void, Never>?
         private var sessionSyncState = ForumWebSessionSyncState()
 
-        init(model: ForumBrowserModel, appContext: YamiboAppContext) {
+        init(model: ForumBrowserModel, sessionStore: SessionStore) {
             self.model = model
-            self.appContext = appContext
+            self.sessionStore = sessionStore
         }
 
         deinit {
@@ -72,7 +72,7 @@ public struct IOSForumWebView: UIViewRepresentable {
 
             Task { @MainActor [weak self, weak webView] in
                 guard let self, let webView else { return }
-                let sessionState = await appContext.sessionStore.load()
+                let sessionState = await sessionStore.load()
                 await synchronizeWebViewSession(sessionState, reloadIfNeeded: false)
                 if webView.url == nil {
                     model.load(model.currentURL ?? YamiboDomain.baseURL)
@@ -96,7 +96,7 @@ public struct IOSForumWebView: UIViewRepresentable {
         func synchronizeCurrentSession(reloadIfNeeded: Bool) {
             Task { @MainActor [weak self] in
                 guard let self else { return }
-                let sessionState = await appContext.sessionStore.load()
+                let sessionState = await sessionStore.load()
                 await synchronizeWebViewSession(sessionState, reloadIfNeeded: reloadIfNeeded)
             }
         }
@@ -177,11 +177,11 @@ public struct IOSForumWebView: UIViewRepresentable {
                     guard !Task.isCancelled else { return }
                     guard let self else { return }
                     guard let changeID = notification.userInfo?[SessionStore.changeIDUserInfoKey] as? String,
-                          changeID == appContext.sessionStore.changeID else {
+                          changeID == sessionStore.changeID else {
                         continue
                     }
 
-                    let sessionState = await appContext.sessionStore.load()
+                    let sessionState = await sessionStore.load()
                     await synchronizeWebViewSession(sessionState, reloadIfNeeded: true)
                 }
             }
@@ -272,7 +272,7 @@ public struct IOSForumWebView: UIViewRepresentable {
 
             let userAgent = webView.customUserAgent ?? YamiboNetworkConfiguration.defaultMobileUserAgent
             sessionSyncState.markPersistedWebSession(cookieHeader: header)
-            try await appContext.sessionStore.updateWebSession(
+            try await sessionStore.updateWebSession(
                 cookie: header,
                 userAgent: userAgent,
                 isLoggedIn: SessionState.hasAuthenticationCookie(header)
