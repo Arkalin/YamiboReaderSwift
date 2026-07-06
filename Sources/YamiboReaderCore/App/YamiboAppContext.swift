@@ -275,10 +275,12 @@ public final class YamiboAppContext: Sendable {
     public func makeWebDAVSyncService() -> WebDAVSyncService {
         WebDAVSyncService(
             settingsStore: webDAVSyncSettingsStore,
-            localFavoriteLibraryStore: localFavoriteLibraryStore,
-            readingProgressStore: readingProgressStore,
             sessionStore: sessionStore,
-            appSettingsStore: settingsStore,
+            participants: [
+                FavoriteLibraryWebDAVParticipant(store: localFavoriteLibraryStore),
+                ReadingProgressWebDAVParticipant(store: readingProgressStore),
+                AppSettingsWebDAVParticipant(store: settingsStore),
+            ],
             client: WebDAVClient(session: session)
         )
     }

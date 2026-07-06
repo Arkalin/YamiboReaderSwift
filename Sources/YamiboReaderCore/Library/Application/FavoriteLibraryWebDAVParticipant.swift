@@ -1,5 +1,42 @@
 import Foundation
 
+/// WebDAV sync participant for the local favorite library. Owns the payload
+/// format and CRDT-style merge semantics for favorites.
+public struct FavoriteLibraryWebDAVParticipant: WebDAVSyncParticipant {
+    public let datasetID = "favoriteLibrary"
+    public let remoteFileName = "yamibo-favorite-library-v1.json"
+
+    private let store: FavoriteLibraryStore
+    private let encoder = JSONEncoder()
+    private let decoder = JSONDecoder()
+
+    public init(store: FavoriteLibraryStore) {
+        self.store = store
+    }
+
+    public func inspectRemote(_ data: Data) throws -> WebDAVRemotePayloadInfo {
+        let payload = try decoder.decode(FavoriteLibraryWebDAVPayload.self, from: data)
+        return WebDAVRemotePayloadInfo(updatedAt: payload.updatedAt, accountUID: payload.accountUID)
+    }
+
+    public func mergeAndExport(remoteData: Data?, updatedAt: Date, accountUID: String) async throws -> Data {
+        let local = FavoriteLibraryWebDAVPayload(
+            updatedAt: updatedAt,
+            accountUID: accountUID,
+            library: await store.load()
+        )
+        let remote = try remoteData.map { try decoder.decode(FavoriteLibraryWebDAVPayload.self, from: $0) }
+        let merged = FavoriteLibraryWebDAVMerger().merge(local: local, remote: remote, updatedAt: updatedAt)
+        try await store.save(merged.library)
+        return try encoder.encode(merged)
+    }
+
+    public func applyRemote(_ data: Data) async throws {
+        let payload = try decoder.decode(FavoriteLibraryWebDAVPayload.self, from: data)
+        try await store.save(payload.library)
+    }
+}
+
 public struct FavoriteLibraryWebDAVPayload: Codable, Equatable, Sendable {
     public static let currentVersion = 2
 
@@ -214,97 +251,6 @@ public struct FavoriteLibraryWebDAVMerger: Sendable {
     }
 }
 
-public struct ReadingProgressWebDAVPayload: Codable, Equatable, Sendable {
-    public static let currentVersion = 2
-
-    public var version: Int
-    public var updatedAt: Date
-    public var records: [ReadingProgressRecord]
-
-    public init(version: Int = Self.currentVersion, updatedAt: Date, records: [ReadingProgressRecord]) {
-        self.version = version
-        self.updatedAt = updatedAt
-        self.records = records
-    }
-
-    private enum CodingKeys: String, CodingKey {
-        case version
-        case updatedAt
-        case records
-    }
-
-    public init(from decoder: any Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        guard let version = try container.decodeIfPresent(Int.self, forKey: .version) else {
-            throw WebDAVSyncError.unsupportedPayloadVersion(0)
-        }
-        guard version == Self.currentVersion else {
-            throw WebDAVSyncError.unsupportedPayloadVersion(version)
-        }
-        self.version = version
-        self.updatedAt = try container.decode(Date.self, forKey: .updatedAt)
-        self.records = try container.decode([ReadingProgressWebDAVRecord].self, forKey: .records)
-            .map { try $0.record() }
-    }
-
-    public func encode(to encoder: any Encoder) throws {
-        var container = encoder.container(keyedBy: CodingKeys.self)
-        try container.encode(version, forKey: .version)
-        try container.encode(updatedAt, forKey: .updatedAt)
-        try container.encode(try records.map { try ReadingProgressWebDAVRecord(record: $0) }, forKey: .records)
-    }
-}
-
-public struct ReadingProgressWebDAVMerger: Sendable {
-    public init() {}
-
-    public func merge(
-        local: ReadingProgressWebDAVPayload,
-        remote: ReadingProgressWebDAVPayload?,
-        updatedAt: Date
-    ) -> ReadingProgressWebDAVPayload {
-        guard let remote else {
-            return ReadingProgressWebDAVPayload(version: ReadingProgressWebDAVPayload.currentVersion, updatedAt: updatedAt, records: local.records)
-        }
-        var byID = Dictionary(uniqueKeysWithValues: local.records.map { ($0.id, $0) })
-        for record in remote.records {
-            if let existing = byID[record.id], existing.updatedAt >= record.updatedAt {
-                continue
-            }
-            byID[record.id] = record
-        }
-        return ReadingProgressWebDAVPayload(
-            version: ReadingProgressWebDAVPayload.currentVersion,
-            updatedAt: updatedAt,
-            records: byID.values.sorted {
-                if $0.updatedAt != $1.updatedAt { return $0.updatedAt > $1.updatedAt }
-                return $0.id < $1.id
-            }
-        )
-    }
-}
-
-public struct AppSettingsWebDAVPayload: Codable, Equatable, Sendable {
-    public static let currentVersion = 1
-
-    public var version: Int
-    public var updatedAt: Date
-    public var accountUID: String?
-    public var appSettings: WebDAVSyncedAppSettings
-
-    public init(
-        version: Int = Self.currentVersion,
-        updatedAt: Date,
-        accountUID: String? = nil,
-        appSettings: WebDAVSyncedAppSettings
-    ) {
-        self.version = version
-        self.updatedAt = updatedAt
-        self.accountUID = accountUID
-        self.appSettings = appSettings
-    }
-}
-
 private func unionSetDictionary<Value: Hashable>(
     _ lhs: [String: Set<Value>],
     _ rhs: [String: Set<Value>]
@@ -333,87 +279,6 @@ private func keyedByID<Value: Identifiable>(_ values: [Value]) -> [Value] where 
         byID[value.id] = value
     }
     return Array(byID.values)
-}
-
-private struct ReadingProgressWebDAVRecord: Codable, Equatable, Sendable {
-    var contentTarget: FavoriteContentTarget
-    var kind: ReadingProgressKind
-    var updatedAt: Date
-    var lastReadAt: Date?
-    var threadID: String?
-    var novel: NovelReadingProgressRecord?
-    var manga: MangaReadingProgressWebDAVRecord?
-
-    init(record: ReadingProgressRecord) throws {
-        guard let contentTarget = record.contentTarget else {
-            throw EncodingError.invalidValue(
-                record,
-                EncodingError.Context(
-                    codingPath: [],
-                    debugDescription: "Reading progress WebDAV records require an explicit contentTarget."
-                )
-            )
-        }
-        self.contentTarget = contentTarget
-        self.kind = record.kind
-        self.updatedAt = record.updatedAt
-        self.lastReadAt = record.lastReadAt
-        self.threadID = record.threadID
-        self.novel = record.novel
-        if let manga = record.manga {
-            self.manga = MangaReadingProgressWebDAVRecord(
-                chapterThreadID: manga.chapterThreadID,
-                chapterView: manga.chapterView,
-                lastChapter: manga.lastChapter,
-                mangaPageIndex: manga.mangaPageIndex,
-                mangaPageCount: manga.mangaPageCount
-            )
-        } else {
-            self.manga = nil
-        }
-    }
-
-    func record() throws -> ReadingProgressRecord {
-        let resolvedThreadID = contentTarget.threadID ?? threadID ?? manga?.chapterThreadID
-        let mangaRecord: MangaReadingProgressRecord?
-        if let payload = manga {
-            guard let chapterThreadID = payload.chapterThreadID?.trimmingCharacters(in: .whitespacesAndNewlines),
-                  !chapterThreadID.isEmpty else {
-                throw DecodingError.dataCorrupted(
-                    DecodingError.Context(
-                        codingPath: [],
-                        debugDescription: "Manga reading progress WebDAV records require chapterThreadID."
-                    )
-                )
-            }
-            mangaRecord = MangaReadingProgressRecord(
-                chapterThreadID: chapterThreadID,
-                chapterView: payload.chapterView,
-                lastChapter: payload.lastChapter,
-                mangaPageIndex: payload.mangaPageIndex,
-                mangaPageCount: payload.mangaPageCount
-            )
-        } else {
-            mangaRecord = nil
-        }
-        return ReadingProgressRecord(
-            contentTarget: contentTarget,
-            threadID: resolvedThreadID,
-            kind: kind,
-            updatedAt: updatedAt,
-            lastReadAt: lastReadAt,
-            novel: novel,
-            manga: mangaRecord
-        )
-    }
-}
-
-private struct MangaReadingProgressWebDAVRecord: Codable, Equatable, Sendable {
-    var chapterThreadID: String?
-    var chapterView: Int
-    var lastChapter: String
-    var mangaPageIndex: Int
-    var mangaPageCount: Int?
 }
 
 private func choose<Value>(

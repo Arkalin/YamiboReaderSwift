@@ -344,10 +344,12 @@ private struct WebDAVSyncFixture {
     func makeService() -> WebDAVSyncService {
         WebDAVSyncService(
             settingsStore: settingsStore,
-            localFavoriteLibraryStore: localFavoriteLibraryStore,
-            readingProgressStore: readingProgressStore,
             sessionStore: sessionStore,
-            appSettingsStore: appSettingsStore,
+            participants: [
+                FavoriteLibraryWebDAVParticipant(store: localFavoriteLibraryStore),
+                ReadingProgressWebDAVParticipant(store: readingProgressStore),
+                AppSettingsWebDAVParticipant(store: appSettingsStore),
+            ],
             client: WebDAVClient(session: makeWebDAVTestSession())
         )
     }
