@@ -47,9 +47,7 @@ public enum ChapterCommentsHTMLParser {
 
     public static func currentView(html: String, fallback: Int) throws -> Int {
         let document = try KannaSoup.parse(html)
-        let current = try document.select(".pg strong").first()?.text()
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        return current.flatMap(Int.init) ?? max(1, fallback)
+        return document.firstText(".pg strong").flatMap(Int.init) ?? max(1, fallback)
     }
 
     public static func fullRatingReasonsURL(
@@ -57,15 +55,7 @@ public enum ChapterCommentsHTMLParser {
         target: ReaderChapterCommentTarget
     ) throws -> URL? {
         let document = try KannaSoup.parse(html)
-        guard let href = try document
-            .select("[id=ratelog_\(target.ownerPostID)] a[href*=action=viewratings]")
-            .first()?
-            .attr("href"),
-            !href.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        else {
-            return nil
-        }
-        return URL(string: href, relativeTo: YamiboDomain.baseURL)?.absoluteURL
+        return document.firstURL("[id=ratelog_\(target.ownerPostID)] a[href*=action=viewratings]")
     }
 
     public static func parseFullRatingReasonsPage(
@@ -315,50 +305,33 @@ public enum ChapterCommentsHTMLParser {
         guard let container = postContainer(for: message) else {
             return ""
         }
-        let selectors = [
+        return container.firstText(anyOf: [
             ".authi .author",
             ".authi a[href*=space-uid]",
             ".authi a[href*=uid]",
             ".authi a",
             ".psta a.xi2",
             ".psta a"
-        ]
-        for selector in selectors {
-            if let text = try? container.select(selector).first()?.text(),
-               let normalized = nilIfEmpty(normalizeText(text)) {
-                return normalized
-            }
-        }
-        return ""
+        ]) ?? ""
     }
 
     private static func replyMetadata(for message: Element) -> String? {
         guard let container = postContainer(for: message) else {
             return nil
         }
-        let floor = firstNormalizedText(in: container, selectors: [
+        let floor = container.firstText(anyOf: [
             ".pi strong a em",
             ".pi strong em",
             ".mtit .y",
             "[id^=postnum] em",
             "[id^=postnum]"
         ])
-        let time = firstNormalizedText(in: container, selectors: [
+        let time = container.firstText(anyOf: [
             ".authi em",
             ".pti .authi em",
             ".mtime"
         ])
         return nilIfEmpty([floor, time].compactMap(\.self).joined(separator: " · "))
-    }
-
-    private static func firstNormalizedText(in element: Element, selectors: [String]) -> String? {
-        for selector in selectors {
-            if let text = try? element.select(selector).first()?.text(),
-               let normalized = nilIfEmpty(normalizeText(text)) {
-                return normalized
-            }
-        }
-        return nil
     }
 
     private static func postContainer(for element: Element) -> Element? {
@@ -412,13 +385,9 @@ public enum ChapterCommentsHTMLParser {
     }
 
     private static func authorUID(for element: Element) -> String? {
-        guard let href = try? element.select(".authi a[href*=uid]").first()?.attr("href") else {
-            return nil
-        }
-        return URLComponents(string: href)?
-            .queryItems?
-            .first(where: { $0.name == "uid" })?
-            .value
+        element.selectFirst(".authi a[href*=uid]")?
+            .attrURL("href")?
+            .queryItemValue("uid")
     }
 
     private static func nextView(

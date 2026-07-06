@@ -245,10 +245,3 @@ private struct ForumCacheEntry<Value: Codable & Sendable>: Codable, Sendable {
     var value: Value
     var fetchedAt: Date
 }
-
-private extension String {
-    var nilIfBlank: String? {
-        let value = trimmingCharacters(in: .whitespacesAndNewlines)
-        return value.isEmpty ? nil : value
-    }
-}

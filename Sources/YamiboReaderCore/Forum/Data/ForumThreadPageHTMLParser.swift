@@ -6,12 +6,7 @@ public enum ForumThreadPageHTMLParser {
         thread: ThreadIdentity,
         fallbackTitle: String?
     ) throws -> ForumThreadPage {
-        if YamiboHTMLPageInspector.isNotAuthenticated(html) {
-            throw YamiboError.notAuthenticated
-        }
-        if YamiboHTMLPageInspector.isFloodControlOrError(html) {
-            throw YamiboError.floodControl
-        }
+        try YamiboHTMLPageInspector.ensureReadable(html)
 
         let document = try KannaSoup.parse(html, baseURL: YamiboDomain.baseURL.absoluteString)
         let title = ForumThreadTitleSanitizer.sanitize(YamiboHTMLPageInspector.pageTitle(from: html))
@@ -37,16 +32,11 @@ public enum ForumThreadPageHTMLParser {
     }
 
     public static func parseRatingResults(from html: String) throws -> ForumThreadRatingResultsPage {
-        if YamiboHTMLPageInspector.isNotAuthenticated(html) {
-            throw YamiboError.notAuthenticated
-        }
-        if YamiboHTMLPageInspector.isFloodControlOrError(html) {
-            throw YamiboError.floodControl
-        }
+        try YamiboHTMLPageInspector.ensureReadable(html)
 
         let body = extractCData(from: html) ?? html
         let document = try KannaSoup.parse(body, baseURL: YamiboDomain.baseURL.absoluteString)
-        let ratings = try ratingRows(in: document)
+        let ratings = ratingRows(in: document)
         guard !ratings.isEmpty else {
             throw YamiboError.parsingFailed(context: L10n.string("forum.thread.ratings_all"))
         }
@@ -59,25 +49,18 @@ public enum ForumThreadPageHTMLParser {
     }
 
     public static func parseRateOptions(from html: String) throws -> ForumThreadRateOptionsPage {
-        if YamiboHTMLPageInspector.isNotAuthenticated(html) {
-            throw YamiboError.notAuthenticated
-        }
-        if YamiboHTMLPageInspector.isFloodControlOrError(html) {
-            throw YamiboError.floodControl
-        }
+        try YamiboHTMLPageInspector.ensureReadable(html)
 
         let body = extractCData(from: html) ?? html
         let document = try KannaSoup.parse(body, baseURL: YamiboDomain.baseURL.absoluteString)
-        let scores = try document.select("select#rate1 option").array()
+        let scores = document.selectAll("select#rate1 option")
             .compactMap { option in
-                let value = try option.attr("value").threadRoutingTrimmedNonEmpty
-                    ?? option.text().threadRoutingTrimmedNonEmpty
-                return value.flatMap(Int.init)
+                (option.attrText("value") ?? option.normalizedText().nilIfBlank)
+                    .flatMap(Int.init)
             }
-        let reasons = try document.select("select#reason option").array()
+        let reasons = document.selectAll("select#reason option")
             .compactMap { option in
-                try option.attr("value").threadRoutingTrimmedNonEmpty
-                    ?? option.text().threadRoutingTrimmedNonEmpty
+                option.attrText("value") ?? option.normalizedText().nilIfBlank
             }
         if scores.isEmpty && reasons.isEmpty,
            let message = parseMessageText(from: html) {
@@ -91,19 +74,14 @@ public enum ForumThreadPageHTMLParser {
         threadID: String,
         requestedOptionID: String? = nil
     ) throws -> ForumThreadPollVotersPage {
-        if YamiboHTMLPageInspector.isNotAuthenticated(html) {
-            throw YamiboError.notAuthenticated
-        }
-        if YamiboHTMLPageInspector.isFloodControlOrError(html) {
-            throw YamiboError.floodControl
-        }
+        try YamiboHTMLPageInspector.ensureReadable(html)
 
         let body = extractCData(from: html) ?? html
         let document = try KannaSoup.parse(body, baseURL: YamiboDomain.baseURL.absoluteString)
-        let requestedOptionID = requestedOptionID?.threadRoutingTrimmedNonEmpty
-        let options = try pollVoterOptions(in: document, requestedOptionID: requestedOptionID)
+        let requestedOptionID = requestedOptionID?.nilIfBlank
+        let options = pollVoterOptions(in: document, requestedOptionID: requestedOptionID)
         let selectedOptionID = pollSelectedOptionID(in: document) ?? requestedOptionID ?? options.first?.id
-        let voters = try pollVoters(in: document)
+        let voters = pollVoters(in: document)
         guard !options.isEmpty || !voters.isEmpty else {
             if let message = parseMessageText(from: html) {
                 throw YamiboError.underlying(message)
@@ -124,19 +102,12 @@ public enum ForumThreadPageHTMLParser {
         from html: String,
         context: String = L10n.string("context.thread_page")
     ) throws -> String {
-        if YamiboHTMLPageInspector.isNotAuthenticated(html) {
-            throw YamiboError.notAuthenticated
-        }
-        if YamiboHTMLPageInspector.isFloodControlOrError(html) {
-            throw YamiboError.floodControl
-        }
+        try YamiboHTMLPageInspector.ensureReadable(html)
 
         let body = extractCData(from: html) ?? html
         let document = try KannaSoup.parse(body, baseURL: YamiboDomain.baseURL.absoluteString)
-        let message = firstNonBlank([
-            parseMessageText(from: html),
-            try? document.select(".jump_c, .alert_info, .messagetext, .showmessage, #messagetext, .wp, body").first()?.text()
-        ])
+        let message = parseMessageText(from: html)
+            ?? document.firstText(".jump_c, .alert_info, .messagetext, .showmessage, #messagetext, .wp, body")
         guard let message else {
             throw YamiboError.parsingFailed(context: context)
         }
@@ -161,19 +132,17 @@ public enum ForumThreadPageHTMLParser {
     private static func parseMessageText(from html: String) -> String? {
         let body = extractCData(from: html) ?? html
         guard let document = try? KannaSoup.parse(body, baseURL: YamiboDomain.baseURL.absoluteString) else { return nil }
-        return firstNonBlank([
-            try? document.select("#messagetext p").first()?.text(),
-            try? document.select("#messagetext, .messagetext, .alert_info, .jump_c, .showmessage").first()?.text()
-        ])
+        return document.firstText("#messagetext p")
+            ?? document.firstText("#messagetext, .messagetext, .alert_info, .jump_c, .showmessage")
     }
 
     private static func parsePosts(in document: Document) throws -> [ForumThreadPost] {
-        let containers = try postContainers(in: document)
+        let containers = postContainers(in: document)
         var seen: Set<String> = []
         var posts: [ForumThreadPost] = []
 
         for container in containers {
-            guard let body = try postBody(in: container),
+            guard let body = postBody(in: container),
                   let postID = postID(from: container, body: body),
                   seen.insert(postID).inserted else {
                 continue
@@ -183,8 +152,8 @@ public enum ForumThreadPageHTMLParser {
             let poll = try poll(in: container, body: body)
             let ratingBlock = try ratingBlock(in: container, postID: postID)
             let comments = try comments(in: container, postID: postID)
-            let attachments = try footerAttachments(in: container, body: body)
-            let manageActions = try manageActions(in: container)
+            let attachments = footerAttachments(in: container, body: body)
+            let manageActions = manageActions(in: container)
             let contentBody = try bodyWithoutFooterMetadata(from: body)
             let contentHTML = try contentBody.html()
             let images = try postImages(in: contentBody, container: container)
@@ -226,8 +195,7 @@ public enum ForumThreadPageHTMLParser {
     }
 
     private static func postImages(in body: Element, container: Element) throws -> [ForumThreadPostImage] {
-        let imageElements = try body.select("img").array()
-            + container.select(".img_one img").array()
+        let imageElements = body.selectAll("img") + container.selectAll(".img_one img")
         return try imageElements.compactMap { image in
             guard let source = YamiboImageReferenceExtractor.forumPostImage.rawReference(from: image) else {
                 return nil
@@ -239,27 +207,24 @@ public enum ForumThreadPageHTMLParser {
         }
     }
 
-    private static func postContainers(in document: Document) throws -> [Element] {
-        let explicit = try document
-            .select("[id^=post_], [id^=pid]")
-            .array()
+    private static func postContainers(in document: Document) -> [Element] {
+        let explicit = document
+            .selectAll("[id^=post_], [id^=pid]")
             .filter { element in
-                ((try? postBody(in: element)) ?? nil) != nil
+                postBody(in: element) != nil
             }
         if !explicit.isEmpty {
             return explicit
         }
 
-        return try document
-            .select(".message, [id^=postmessage_]")
-            .array()
+        return document.selectAll(".message, [id^=postmessage_]")
     }
 
-    private static func postBody(in container: Element) throws -> Element? {
+    private static func postBody(in container: Element) -> Element? {
         if isPostBody(container) {
             return container
         }
-        return try container.select(".message, [id^=postmessage_], .t_f").first()
+        return container.selectFirst(".message, [id^=postmessage_], .t_f")
     }
 
     private static func isPostBody(_ element: Element) -> Bool {
@@ -286,98 +251,79 @@ public enum ForumThreadPageHTMLParser {
 
     private static func postID(fromRawID rawID: String, prefix: String) -> String? {
         guard rawID.hasPrefix(prefix) else { return nil }
-        return String(rawID.dropFirst(prefix.count)).threadRoutingTrimmedNonEmpty
+        return String(rawID.dropFirst(prefix.count)).nilIfBlank
     }
 
     private static func author(in container: Element) -> BlogReaderUser {
-        let link = firstAuthorLink(in: container)
-        let name = ((try? link?.text()) ?? "")
-            .threadRoutingTrimmedNonEmpty
-            ?? L10n.string("forum.thread.unknown_author")
-        let uid = link.flatMap { userID(from: (try? $0.attr("href")) ?? "") }
-        let avatarURL = HTMLTextExtractor.absoluteURL(from: (try? container.select("img[src]").first()?.attr("src")) ?? "")
-        return BlogReaderUser(uid: uid, name: name, avatarURL: avatarURL)
-    }
-
-    private static func firstAuthorLink(in container: Element) -> Element? {
-        let selectors = [
+        let link = container.selectFirst(anyOf: [
             ".authi a[href*='uid=']",
             ".authi a[href*='space-uid-']",
             "a.author",
             ".mtit a[href*='uid=']"
-        ]
-        for selector in selectors {
-            if let link = try? container.select(selector).first() {
-                return link
-            }
-        }
-        return nil
+        ])
+        let name = link?.normalizedText().nilIfBlank
+            ?? L10n.string("forum.thread.unknown_author")
+        let uid = link.flatMap { userID(from: (try? $0.attr("href")) ?? "") }
+        return BlogReaderUser(uid: uid, name: name, avatarURL: container.firstURL("img[src]", attribute: "src"))
     }
 
     private static func userID(from href: String) -> String? {
         guard let url = HTMLTextExtractor.absoluteURL(from: href) else { return nil }
-        if let value = URLComponents(url: url, resolvingAgainstBaseURL: false)?
-            .queryItems?
-            .first(where: { $0.name == "uid" })?
-            .value?
-            .threadRoutingTrimmedNonEmpty {
+        if let value = url.queryItemValue("uid") {
             return value
         }
         return HTMLTextExtractor.firstMatch(pattern: #"space-uid-(\d+)"#, in: url.absoluteString)?
             .dropFirst()
             .first?
-            .threadRoutingTrimmedNonEmpty
+            .nilIfBlank
     }
 
     private static func floorText(in container: Element) -> String? {
         let raw = [
-            (try? container.select(".authi em[title]").first()?.attr("title")) ?? "",
-            (try? container.select(".authi em").first()?.text()) ?? "",
-            (try? container.select(".mtit .y").first()?.text()) ?? "",
-            (try? container.select(".floor, .xg1").first()?.text()) ?? ""
+            container.selectFirst(".authi em[title]")?.attrText("title") ?? "",
+            container.firstText(".authi em") ?? "",
+            container.firstText(".mtit .y") ?? "",
+            container.firstText(".floor, .xg1") ?? ""
         ]
             .joined(separator: " ")
         return HTMLTextExtractor.firstMatch(pattern: #"(\d+\s*#|楼主|樓主)"#, in: raw)?
             .dropFirst()
             .first?
-            .threadRoutingTrimmedNonEmpty
+            .nilIfBlank
     }
 
     private static func postedAtText(in container: Element) -> String? {
-        let text = ((try? container.select(".authi").first()?.text()) ?? "")
-            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+        let text = container.selectFirst(".authi")?.normalizedText() ?? ""
         return HTMLTextExtractor.firstMatch(pattern: #"(发表于|發表於)\s*([^|#]+)"#, in: text)?
             .dropFirst()
             .dropFirst()
             .first?
-            .threadRoutingTrimmedNonEmpty
+            .nilIfBlank
     }
 
     private static func isPinned(_ container: Element) -> Bool {
-        let text = normalizedInlineText((try? container.text()) ?? "")
+        let text = container.normalizedText()
         if text.contains("置顶") || text.contains("置頂") {
             return true
         }
         let classAndTitle = [
             (try? container.className()) ?? "",
-            (try? container.select("[title]").array().map { try $0.attr("title") }.joined(separator: " ")) ?? "",
-            (try? container.select("[class]").array().map { try $0.className() }.joined(separator: " ")) ?? ""
+            container.selectAll("[title]").map { (try? $0.attr("title")) ?? "" }.joined(separator: " "),
+            container.selectAll("[class]").map { (try? $0.className()) ?? "" }.joined(separator: " ")
         ].joined(separator: " ").lowercased()
         return classAndTitle.contains("pin")
             || classAndTitle.contains("stick")
             || classAndTitle.contains("digest")
     }
 
-    private static func manageActions(in container: Element) throws -> [ForumThreadManageAction] {
-        let links = try container.select("a[href]").array()
+    private static func manageActions(in container: Element) -> [ForumThreadManageAction] {
         var seen: Set<String> = []
         var actions: [ForumThreadManageAction] = []
-        for link in links {
-            let rawTitle = try link.text().threadRoutingTrimmedNonEmpty
-                ?? link.attr("title").threadRoutingTrimmedNonEmpty
+        for link in container.selectAll("a[href]") {
+            let rawTitle = link.normalizedText().nilIfBlank ?? link.attrText("title")
             guard let rawTitle,
-                  try isManageActionLink(link, title: rawTitle),
-                  let url = HTMLTextExtractor.absoluteURL(from: try link.attr("href")) else {
+                  isManageActionLink(link, title: rawTitle),
+                  let url = link.attrURL("href") else {
                 continue
             }
             let action = ForumThreadManageAction(title: rawTitle, url: url)
@@ -388,9 +334,9 @@ public enum ForumThreadPageHTMLParser {
         return actions
     }
 
-    private static func isManageActionLink(_ link: Element, title: String) throws -> Bool {
+    private static func isManageActionLink(_ link: Element, title: String) -> Bool {
         guard isManageActionTitle(title) else { return false }
-        let href = try link.attr("href").lowercased()
+        let href = ((try? link.attr("href")) ?? "").lowercased()
         if href.contains("modcp")
             || href.contains("topicadmin")
             || href.contains("action=moderate")
@@ -408,7 +354,7 @@ public enum ForumThreadPageHTMLParser {
     }
 
     private static func isManageActionTitle(_ title: String) -> Bool {
-        let normalized = normalizedInlineText(title)
+        let normalized = title.htmlNormalized
         let allowed = [
             "管理",
             "编辑",
@@ -437,11 +383,8 @@ public enum ForumThreadPageHTMLParser {
             ".edited"
         ]
         for selector in selectors {
-            for element in ((try? body.select(selector).array()) ?? []) + ((try? container.select(selector).array()) ?? []) {
-                let text = ((try? element.text()) ?? "")
-                    .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
-                    .threadRoutingTrimmedNonEmpty
-                if let text {
+            for element in body.selectAll(selector) + container.selectAll(selector) {
+                if let text = element.normalizedText().nilIfBlank {
                     return text
                 }
             }
@@ -455,7 +398,7 @@ public enum ForumThreadPageHTMLParser {
         )?
             .dropFirst()
             .first?
-            .threadRoutingTrimmedNonEmpty
+            .nilIfBlank
     }
 
     private static func bodyWithoutFooterMetadata(from body: Element) throws -> Element {
@@ -488,19 +431,16 @@ public enum ForumThreadPageHTMLParser {
 
     private static func poll(in container: Element, body: Element) throws -> ForumThreadPoll? {
         let candidates = try uniqueElements(
-            [
-                body.select("#poll, .poll, .polls, .pcht").array(),
-                container.select("#poll, .poll, .polls, .pcht").array()
-            ].flatMap { $0 }
+            body.selectAll("#poll, .poll, .polls, .pcht") + container.selectAll("#poll, .poll, .polls, .pcht")
         )
         guard let pollElement = candidates.first(where: { element in
-            (((try? element.select("input[type=radio], input[type=checkbox]").isEmpty) ?? true) == false)
-                || (((try? element.text().contains("%")) ?? false) == true)
+            !element.selectAll("input[type=radio], input[type=checkbox]").isEmpty
+                || element.normalizedText().contains("%")
         }) else {
             return nil
         }
 
-        let inputElements = try pollElement.select("input[type=radio], input[type=checkbox]").array()
+        let inputElements = pollElement.selectAll("input[type=radio], input[type=checkbox]")
         let isMultipleChoice = inputElements.contains { (((try? $0.attr("type")) ?? "").lowercased() == "checkbox") }
         let status: ForumThreadPollStatus = inputElements.isEmpty
             ? .voted
@@ -508,7 +448,7 @@ public enum ForumThreadPageHTMLParser {
         let type: ForumThreadPollType = inputElements.isEmpty
             ? .unknown
             : (isMultipleChoice ? .multipleChoice : .singleChoice)
-        let options = try pollOptions(in: pollElement, inputs: inputElements)
+        let options = pollOptions(in: pollElement, inputs: inputElements)
         guard !options.isEmpty else { return nil }
 
         return ForumThreadPoll(
@@ -523,9 +463,9 @@ public enum ForumThreadPageHTMLParser {
     private static func pollOptions(
         in pollElement: Element,
         inputs: [Element]
-    ) throws -> [ForumThreadPollOption] {
+    ) -> [ForumThreadPollOption] {
         if !inputs.isEmpty {
-            return try inputs.enumerated().compactMap { index, input in
+            return inputs.enumerated().compactMap { index, input in
                 let row = nearestAncestor(
                     of: input,
                     matching: { element in
@@ -533,24 +473,24 @@ public enum ForumThreadPageHTMLParser {
                         return tag == "tr" || tag == "li" || tag == "p" || element.hasClass("polloption")
                     }
                 ) ?? input.parent()
-                let rawText = try (row ?? input).text()
-                let inputValue = try input.attr("value")
+                let rawText = (try? (row ?? input).text()) ?? ""
+                let inputValue = (try? input.attr("value")) ?? ""
                 let optionText = optionTitle(from: rawText)
-                    ?? inputValue.threadRoutingTrimmedNonEmpty
+                    ?? inputValue.nilIfBlank
                     ?? "\(index + 1)"
                 return ForumThreadPollOption(
-                    id: inputValue.threadRoutingTrimmedNonEmpty ?? "\(index)",
+                    id: inputValue.nilIfBlank ?? "\(index)",
                     title: optionText,
                     voteCount: voteCount(in: rawText),
                     percentage: percentage(in: rawText),
-                    isSelected: try !input.attr("checked").isEmpty
+                    isSelected: !((try? input.attr("checked")) ?? "").isEmpty
                 )
             }
         }
 
-        let rows = try pollElement.select("tr, li, p").array()
+        let rows = pollElement.selectAll("tr, li, p")
         return rows.enumerated().compactMap { index, row in
-            let text = normalizedInlineText((try? row.text()) ?? "")
+            let text = row.normalizedText()
             guard text.contains("%"),
                   let title = optionTitle(from: text) else {
                 return nil
@@ -565,24 +505,20 @@ public enum ForumThreadPageHTMLParser {
     }
 
     private static func pollTitle(in pollElement: Element) -> String? {
-        let selectors = ["h3", "h4", ".polltitle", ".xs2", ".pcht h4", "caption"]
-        for selector in selectors {
-            if let text = ((try? pollElement.select(selector).first()?.text()) ?? "")
-                .threadRoutingTrimmedNonEmpty {
-                return text
-            }
+        if let text = pollElement.firstText(anyOf: ["h3", "h4", ".polltitle", ".xs2", ".pcht h4", "caption"]) {
+            return text
         }
-        let text = normalizedInlineText((try? pollElement.text()) ?? "")
+        let text = pollElement.normalizedText()
         return text
             .components(separatedBy: CharacterSet(charactersIn: "。.!?？\n"))
             .first?
-            .threadRoutingTrimmedNonEmpty
+            .nilIfBlank
     }
 
     private static func pollEndTime(in pollElement: Element) -> String? {
         for selector in ["p", ".xg1", ".polltime", ".poll_time"] {
-            for element in ((try? pollElement.select(selector).array()) ?? []) {
-                let text = normalizedInlineText((try? element.text()) ?? "")
+            for element in pollElement.selectAll(selector) {
+                let text = element.normalizedText()
                 guard text.contains("结束")
                     || text.contains("結束")
                     || text.contains("截止")
@@ -595,13 +531,13 @@ public enum ForumThreadPageHTMLParser {
                 )?
                     .dropFirst()
                     .first?
-                    .threadRoutingTrimmedNonEmpty {
+                    .nilIfBlank {
                     return value
                 }
             }
         }
 
-        let text = normalizedInlineText((try? pollElement.text()) ?? "")
+        let text = pollElement.normalizedText()
         return HTMLTextExtractor.firstMatch(
             pattern: #"(结束时间|結束時間|截止时间|截止時間|投票截止)[:：]?\s*([0-9]{4}[-/年][^。；;\n ]+(?:\s+\d{1,2}:\d{2}(?::\d{2})?)?)"#,
             in: text
@@ -609,30 +545,25 @@ public enum ForumThreadPageHTMLParser {
             .dropFirst()
             .dropFirst()
             .first?
-            .threadRoutingTrimmedNonEmpty
+            .nilIfBlank
     }
 
     private static func optionTitle(from text: String) -> String? {
-        var value = text
+        let value = text
             .replacingOccurrences(of: #"\d+(?:\.\d+)?%\s*(?:\(\d+\))?"#, with: "", options: .regularExpression)
             .replacingOccurrences(of: #"\d+\s*(?:票|人|votes?)"#, with: "", options: [.regularExpression, .caseInsensitive])
             .replacingOccurrences(of: #"^\s*[\[\]☑✓○●•\-\d.、]+\s*"#, with: "", options: .regularExpression)
-        value = normalizedInlineText(value)
-        return value.threadRoutingTrimmedNonEmpty
+        return value.htmlNormalized.nilIfBlank
     }
 
     private static func ratingBlock(in container: Element, postID: String) throws -> ForumThreadRatingBlock? {
         let candidates = try uniqueElements(
-            [
-                container.select("#ratelog_\(postID)").array(),
-                container.select("[id^=ratelog_], .ratelog, .ratl").array()
-            ].flatMap { $0 }
+            container.selectAll("#ratelog_\(postID)") + container.selectAll("[id^=ratelog_], .ratelog, .ratl")
         )
         guard let element = candidates.first else { return nil }
 
-        let allRatingsURL = try element.select("a[href*='action=viewratings']").first()
-            .flatMap { HTMLTextExtractor.absoluteURL(from: try $0.attr("href")) }
-        let ratings = try ratingRows(in: element)
+        let allRatingsURL = element.firstURL("a[href*='action=viewratings']")
+        let ratings = ratingRows(in: element)
         guard !ratings.isEmpty || allRatingsURL != nil else { return nil }
         let totalScore = explicitTotalScore(in: try element.text()) ?? ratings.compactMap(scoreValue).reduce(0, +)
         let participantCount = participantCount(in: try element.text()) ?? ratings.count
@@ -644,12 +575,12 @@ public enum ForumThreadPageHTMLParser {
         )
     }
 
-    private static func ratingRows(in element: Element) throws -> [ForumThreadRating] {
-        try element.select("li, tr").array().compactMap(ratingRow)
+    private static func ratingRows(in element: Element) -> [ForumThreadRating] {
+        element.selectAll("li, tr").compactMap(ratingRow)
     }
 
-    private static func ratingRow(_ row: Element) throws -> ForumThreadRating? {
-        let text = normalizedInlineText(try row.text())
+    private static func ratingRow(_ row: Element) -> ForumThreadRating? {
+        let text = row.normalizedText()
         guard !text.isEmpty,
               !text.contains("参与人数"),
               !text.contains("參與人數"),
@@ -658,21 +589,21 @@ public enum ForumThreadPageHTMLParser {
             return nil
         }
 
-        let cells = try row.select("td, th, div").array()
+        let cells = row.selectAll("td, th, div")
         guard cells.count >= 2 else { return nil }
         let first = cells[0]
-        let userLink = try first.select("a[href*='uid='], a[href*='space-uid-'], a").first()
-        let userName = normalizedInlineText(try (userLink ?? first).text())
-            .threadRoutingTrimmedNonEmpty
+        let userLink = first.selectFirst("a[href*='uid='], a[href*='space-uid-'], a")
+        let userName = (userLink ?? first).normalizedText()
+            .nilIfBlank
             ?? L10n.string("forum.thread.unknown_author")
-        let scoreText = normalizedInlineText(try cells[1].text())
+        let scoreText = cells[1].normalizedText()
         guard scoreText.contains("+") || scoreText.contains("-") || Int(scoreText) != nil else {
             return nil
         }
         let reason = cells.dropFirst(2)
-            .map { normalizedInlineText((try? $0.text()) ?? "") }
+            .map { $0.normalizedText() }
             .joined(separator: " ")
-            .threadRoutingTrimmedNonEmpty
+            .nilIfBlank
         let uid = userLink.flatMap { userID(from: (try? $0.attr("href")) ?? "") }
         return ForumThreadRating(
             user: BlogReaderUser(uid: uid, name: userName, avatarURL: nil),
@@ -684,29 +615,24 @@ public enum ForumThreadPageHTMLParser {
     private static func pollVoterOptions(
         in document: Document,
         requestedOptionID: String?
-    ) throws -> [ForumThreadPollVoterOption] {
+    ) -> [ForumThreadPollVoterOption] {
         var options: [ForumThreadPollVoterOption] = []
         var seen: Set<String> = []
 
-        for option in try document.select("select option[value], option[value]").array() {
-            let id = try option.attr("value").threadRoutingTrimmedNonEmpty
-            let name = try option.text().threadRoutingTrimmedNonEmpty
-            guard let id, let name, seen.insert(id).inserted else { continue }
+        for option in document.selectAll("select option[value], option[value]") {
+            guard let id = option.attrText("value"),
+                  let name = option.normalizedText().nilIfBlank,
+                  seen.insert(id).inserted else { continue }
             options.append(ForumThreadPollVoterOption(id: id, name: name))
         }
 
-        for link in try document.select("a[href*='polloptionid=']").array() {
-            let href = try link.attr("href")
-            guard let url = HTMLTextExtractor.absoluteURL(from: href),
-                  let id = URLComponents(url: url, resolvingAgainstBaseURL: false)?
-                    .queryItems?
-                    .first(where: { $0.name == "polloptionid" })?
-                    .value?
-                    .threadRoutingTrimmedNonEmpty,
+        for link in document.selectAll("a[href*='polloptionid=']") {
+            guard let url = link.attrURL("href"),
+                  let id = url.queryItemValue("polloptionid"),
                   seen.insert(id).inserted else {
                 continue
             }
-            let name = try link.text().threadRoutingTrimmedNonEmpty ?? id
+            let name = link.normalizedText().nilIfBlank ?? id
             options.append(ForumThreadPollVoterOption(id: id, name: name))
         }
 
@@ -718,31 +644,24 @@ public enum ForumThreadPageHTMLParser {
     }
 
     private static func pollSelectedOptionID(in document: Document) -> String? {
-        if let value = ((try? document.select("select option[selected]").first()?.attr("value")) ?? "")
-            .threadRoutingTrimmedNonEmpty {
+        if let value = document.selectFirst("select option[selected]")?.attrText("value") {
             return value
         }
         for selector in ["a.a[href*='polloptionid=']", "a.xw1[href*='polloptionid=']", "strong a[href*='polloptionid=']"] {
-            if let href = (try? document.select(selector).first()?.attr("href")),
-               let url = HTMLTextExtractor.absoluteURL(from: href),
-               let value = URLComponents(url: url, resolvingAgainstBaseURL: false)?
-                .queryItems?
-                .first(where: { $0.name == "polloptionid" })?
-                .value?
-                .threadRoutingTrimmedNonEmpty {
+            if let value = document.firstURL(selector)?.queryItemValue("polloptionid") {
                 return value
             }
         }
         return nil
     }
 
-    private static func pollVoters(in document: Document) throws -> [BlogReaderUser] {
+    private static func pollVoters(in document: Document) -> [BlogReaderUser] {
         var voters: [BlogReaderUser] = []
         var seen: Set<String> = []
 
-        for link in try document.select("a[href*='uid='], a[href*='space-uid-']").array() {
-            let name = try link.text().threadRoutingTrimmedNonEmpty
-            let uid = userID(from: try link.attr("href"))
+        for link in document.selectAll("a[href*='uid='], a[href*='space-uid-']") {
+            let name = link.normalizedText().nilIfBlank
+            let uid = userID(from: (try? link.attr("href")) ?? "")
             guard let name, uid != nil || !name.isEmpty else { continue }
             let key = uid ?? name
             guard seen.insert(key).inserted else { continue }
@@ -754,16 +673,13 @@ public enum ForumThreadPageHTMLParser {
 
     private static func comments(in container: Element, postID: String) throws -> [ForumThreadPostComment] {
         let roots = try uniqueElements(
-            [
-                container.select("#comment_\(postID)").array(),
-                container.select(".cm, [id^=comment_]").array()
-            ].flatMap { $0 }
+            container.selectAll("#comment_\(postID)") + container.selectAll(".cm, [id^=comment_]")
         )
         var comments: [ForumThreadPostComment] = []
         var seen: Set<String> = []
 
         for root in roots {
-            let rows = try root.select(".pstl, li, .comment").array()
+            let rows = root.selectAll(".pstl, li, .comment")
             let commentRows = rows.isEmpty ? [root] : rows
             for (index, row) in commentRows.enumerated() {
                 guard let comment = try comment(in: row, root: root, postID: postID, index: index),
@@ -782,23 +698,23 @@ public enum ForumThreadPageHTMLParser {
         postID: String,
         index: Int
     ) throws -> ForumThreadPostComment? {
-        let messageElement = try row.select(".psti, .comment_content, .message").first() ?? row
-        let metadataText = try messageElement.select(".xg1, .time, .date").array()
-            .compactMap { try $0.text().threadRoutingTrimmedNonEmpty }
+        let messageElement = row.selectFirst(".psti, .comment_content, .message") ?? row
+        let metadataText = messageElement.selectAll(".xg1, .time, .date")
+            .compactMap { $0.normalizedText().nilIfBlank }
             .joined(separator: " ")
-            .threadRoutingTrimmedNonEmpty
+            .nilIfBlank
         let messageDocument = try KannaSoup.parseBodyFragment(try messageElement.html(), baseURL: YamiboDomain.baseURL.absoluteString)
         let messageBody = messageDocument.body() ?? messageDocument
         try messageBody.select(".xg1, .time, .date").remove()
-        let message = normalizedInlineText(try messageBody.text())
+        let message = messageBody.normalizedText()
         guard !message.isEmpty else { return nil }
 
-        let authorLink = try row.select(".psta a[href*='uid='], .psta a[href*='space-uid-'], .psta a, a[href*='uid='], a[href*='space-uid-']").first()
-        let authorName = normalizedInlineText(try authorLink?.text() ?? "")
-            .threadRoutingTrimmedNonEmpty
+        let authorLink = row.selectFirst(".psta a[href*='uid='], .psta a[href*='space-uid-'], .psta a, a[href*='uid='], a[href*='space-uid-']")
+        let authorName = (authorLink?.normalizedText() ?? "")
+            .nilIfBlank
             ?? L10n.string("reader.comment_anonymous")
         let uid = authorLink.flatMap { userID(from: (try? $0.attr("href")) ?? "") }
-        let id = root.id().threadRoutingTrimmedNonEmpty.map { "\($0)-\(index)" }
+        let id = root.id().nilIfBlank.map { "\($0)-\(index)" }
             ?? "\(postID)-comment-\(index)"
         return ForumThreadPostComment(
             id: id,
@@ -808,24 +724,24 @@ public enum ForumThreadPageHTMLParser {
         )
     }
 
-    private static func footerAttachments(in container: Element, body: Element) throws -> [ForumThreadAttachmentBlock] {
+    private static func footerAttachments(in container: Element, body: Element) -> [ForumThreadAttachmentBlock] {
         let bodyElementID = body.id()
-        let candidates = try container.select(".pattl, .attach, .t_attach, [id^=attach_]").array()
+        let candidates = container.selectAll(".pattl, .attach, .t_attach, [id^=attach_]")
             .filter { element in
                 guard !bodyElementID.isEmpty else { return true }
                 return element.parents().contains { $0.id() == bodyElementID } != true
             }
-        return try candidates.compactMap(attachmentFromFooterElement)
+        return candidates.compactMap(attachmentFromFooterElement)
     }
 
-    private static func attachmentFromFooterElement(_ element: Element) throws -> ForumThreadAttachmentBlock? {
-        guard let link = try element.select("a[href]").first(),
-              let url = HTMLTextExtractor.absoluteURL(from: try link.attr("href")) else {
+    private static func attachmentFromFooterElement(_ element: Element) -> ForumThreadAttachmentBlock? {
+        guard let link = element.selectFirst("a[href]"),
+              let url = link.attrURL("href") else {
             return nil
         }
-        let text = normalizedInlineText(try element.text())
-        let fileName = try link.text().threadRoutingTrimmedNonEmpty
-            ?? text.components(separatedBy: " ").first?.threadRoutingTrimmedNonEmpty
+        let text = element.normalizedText()
+        let fileName = link.normalizedText().nilIfBlank
+            ?? text.components(separatedBy: " ").first?.nilIfBlank
         guard let fileName else { return nil }
         let statInfo = HTMLTextExtractor.firstMatch(
             pattern: #"((?:\d+(?:\.\d+)?\s*(?:KB|MB|GB|字节|位元組|bytes?))|(?:\d+\s*(?:次下载|次下載|downloads?)))"#,
@@ -833,10 +749,10 @@ public enum ForumThreadPageHTMLParser {
         )?
             .dropFirst()
             .first?
-            .threadRoutingTrimmedNonEmpty
+            .nilIfBlank
         return ForumThreadAttachmentBlock(
             url: url,
-            iconURL: try element.select("img[src]").first().flatMap { HTMLTextExtractor.absoluteURL(from: try $0.attr("src")) },
+            iconURL: element.firstURL("img[src]", attribute: "src"),
             fileName: fileName,
             uploadInfo: nil,
             statInfo: statInfo
@@ -847,7 +763,7 @@ public enum ForumThreadPageHTMLParser {
         var result: [Element] = []
         var seen: Set<String> = []
         for (index, element) in elements.enumerated() {
-            let key = try element.cssSelector().threadRoutingTrimmedNonEmpty ?? "\(element.tagName())-\(element.id())-\(index)"
+            let key = try element.cssSelector().nilIfBlank ?? "\(element.tagName())-\(element.id())-\(index)"
             if seen.insert(key).inserted {
                 result.append(element)
             }
@@ -867,16 +783,6 @@ public enum ForumThreadPageHTMLParser {
             current = candidate.parent()
         }
         return nil
-    }
-
-    private static func normalizedInlineText(_ value: String) -> String {
-        HTMLTextExtractor.decodeHTMLEntities(value)
-            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    private static func firstNonBlank(_ values: [String?]) -> String? {
-        values.lazy.compactMap { $0?.threadRoutingTrimmedNonEmpty }.first
     }
 
     private static func percentage(in text: String) -> Double? {
@@ -915,12 +821,9 @@ public enum ForumThreadPageHTMLParser {
     }
 
     private static func parsePageNavigation(in document: Document) -> ForumPageNavigation? {
-        guard let pager = try? document.select(".pg").first() else { return nil }
-        let currentText = (((try? pager.select("strong").first()?.text()) ?? "") as String)
-            .threadRoutingTrimmedNonEmpty
-        let currentPage = currentText.flatMap(Int.init) ?? 1
-        let pagerText = ((try? pager.text()) ?? "")
-            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+        guard let pager = document.selectFirst(".pg") else { return nil }
+        let currentPage = pager.firstText("strong").flatMap(Int.init) ?? 1
+        let pagerText = pager.normalizedText()
         let totalPages = HTMLTextExtractor.firstMatch(pattern: #"/\s*(\d+)\s*页"#, in: pagerText)?
             .dropFirst()
             .first
@@ -947,11 +850,11 @@ public enum ForumThreadPageHTMLParser {
             "#thread_subject"
         ]
             .compactMap { selector in
-                ((try? document.select(selector).text()) ?? "").threadRoutingTrimmedNonEmpty
+                ((try? document.select(selector).text()) ?? "").nilIfBlank
             }
             .joined(separator: " ")
 
-        let fallbackText = candidateText.threadRoutingTrimmedNonEmpty
+        let fallbackText = candidateText.nilIfBlank
             ?? ((try? document.body()?.text()) ?? "")
         return (
             totalViews: intAfterAny(labels: ["查看", "浏览", "瀏覽", "阅读", "閱讀", "views", "view"], in: fallbackText),
@@ -984,10 +887,8 @@ public enum ForumThreadPageHTMLParser {
             "a[href*='forum.php?mod=forumdisplay']"
         ]
         for selector in selectors {
-            let values = ((try? document.select(selector).array()) ?? [])
-                .compactMap { element in
-                    ((try? element.text()) ?? "").threadRoutingTrimmedNonEmpty
-                }
+            let values = document.selectAll(selector)
+                .compactMap { $0.normalizedText().nilIfBlank }
                 .filter { value in
                     value != L10n.string("forum.default_title")
                 }
@@ -1006,13 +907,8 @@ public enum ForumThreadPageHTMLParser {
             "a[href*='fid=']"
         ]
         for selector in selectors {
-            for link in ((try? document.select(selector).array()) ?? []) {
-                guard let url = HTMLTextExtractor.absoluteURL(from: (try? link.attr("href")) ?? ""),
-                      let value = URLComponents(url: url, resolvingAgainstBaseURL: false)?
-                    .queryItems?
-                    .first(where: { $0.name == "fid" })?
-                    .value?
-                    .threadRoutingTrimmedNonEmpty else {
+            for link in document.selectAll(selector) {
+                guard let value = link.attrURL("href")?.queryItemValue("fid") else {
                     continue
                 }
                 return value
@@ -1022,14 +918,13 @@ public enum ForumThreadPageHTMLParser {
     }
 
     private static func parseFormHash(in document: Document, html: String) -> String? {
-        if let value = try? document.select("input[name=formhash]").first()?.attr("value"),
-           let formHash = value.threadRoutingTrimmedNonEmpty {
+        if let formHash = document.selectFirst("input[name=formhash]")?.attrText("value") {
             return formHash
         }
         return HTMLTextExtractor.firstMatch(pattern: #"formhash=([A-Za-z0-9]+)"#, in: html)?
             .dropFirst()
             .first?
-            .threadRoutingTrimmedNonEmpty
+            .nilIfBlank
     }
 }
 
@@ -1459,7 +1354,7 @@ enum ForumThreadHTMLBlockParser {
             if classes.contains("showcollapse_box") {
                 commitText()
                 let titleNode = try element.select(".showcollapse_title").first()
-                let title = try titleNode?.text().threadRoutingTrimmedNonEmpty
+                let title = try titleNode?.text().nilIfBlank
                 try titleNode?.remove()
                 let contentBlocks = try ForumThreadHTMLBlockParser.parseBlocks(fromHTML: try element.html())
                 appendBlock(
@@ -1577,7 +1472,7 @@ enum ForumThreadHTMLBlockParser {
                 .filter { $0.tagName().lowercased() == "rt" }
                 .map { try $0.text() }
                 .joined()
-                .threadRoutingTrimmedNonEmpty
+                .nilIfBlank
             let baseText = try element.getChildNodes()
                 .filter { node in
                     guard let childElement = node as? Element else { return true }
@@ -1593,7 +1488,7 @@ enum ForumThreadHTMLBlockParser {
                     return ""
                 }
                 .joined()
-                .threadRoutingTrimmedNonEmpty
+                .nilIfBlank
 
             guard let baseText, let rubyText else {
                 try parseChildren(of: element)
@@ -1669,14 +1564,14 @@ enum ForumThreadHTMLBlockParser {
                   let url = HTMLTextExtractor.absoluteURL(from: try link.attr("href")) else {
                 return nil
             }
-            let fileName = try link.select(".link").first()?.text().threadRoutingTrimmedNonEmpty
-                ?? link.select(".tit").first()?.ownText().threadRoutingTrimmedNonEmpty
+            let fileName = try link.select(".link").first()?.text().nilIfBlank
+                ?? link.select(".tit").first()?.ownText().nilIfBlank
                 ?? link.text().split(separator: "\n").map(String.init).first(where: { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty })?
-                    .threadRoutingTrimmedNonEmpty
+                    .nilIfBlank
             guard let fileName else { return nil }
 
             let metadata = try link.select("p").array()
-                .compactMap { try $0.text().threadRoutingTrimmedNonEmpty }
+                .compactMap { try $0.text().nilIfBlank }
             return ForumThreadAttachmentBlock(
                 url: url,
                 iconURL: try link.select("img[src]").first().flatMap { HTMLTextExtractor.absoluteURL(from: try $0.attr("src")) },

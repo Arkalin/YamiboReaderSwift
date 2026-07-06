@@ -32,8 +32,7 @@ public enum MangaHTMLParser {
 
     public static func findTagIDsMobile(in html: String) -> [String] {
         guard let document = try? KannaSoup.parse(html) else { return [] }
-        let links = (try? document.select("a[href*='mod=tag']")) ?? Elements()
-        return Array(Set(links.compactMap { element in
+        return Array(Set(document.selectAll("a[href*='mod=tag']").compactMap { element in
             let href = (try? element.attr("href")) ?? ""
             return HTMLTextExtractor.firstMatch(pattern: #"id=(\d+)"#, in: href)?.dropFirst().first
         }))
@@ -45,9 +44,8 @@ public enum MangaHTMLParser {
         baseURL: URL = YamiboDomain.baseURL
     ) -> [MangaChapter] {
         guard let document = try? KannaSoup.parse(html) else { return [] }
-        guard let message = try? document.select(".message").first() else { return [] }
-        let links = (try? message.select("a[href*='tid='], a[href*='thread-']")) ?? Elements()
-        return links.compactMap { link in
+        guard let message = document.selectFirst(".message") else { return [] }
+        return message.selectAll("a[href*='tid='], a[href*='thread-']").compactMap { link in
             let href = (try? link.attr("href")) ?? ""
             let title = ((try? link.text()) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             guard
@@ -74,7 +72,7 @@ public enum MangaHTMLParser {
             "[id^=post_]"
         ]
         for selector in selectors {
-            guard let rawID = try? document.select(selector).first()?.attr("id") else {
+            guard let rawID = document.selectFirst(selector)?.id() else {
                 continue
             }
             for prefix in ["postmessage_", "pid", "post_"] {
@@ -88,18 +86,11 @@ public enum MangaHTMLParser {
 
     public static func extractSectionName(from html: String) -> String? {
         guard let document = try? KannaSoup.parse(html) else { return nil }
-        let selectors = [
+        return document.firstText(anyOf: [
             ".header h2 a",
             ".z a",
             ".nvhm a:last-child"
-        ]
-        for selector in selectors {
-            if let name = try? document.select(selector).first()?.text(),
-               !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                return name.trimmingCharacters(in: .whitespacesAndNewlines)
-            }
-        }
-        return nil
+        ])
     }
 
     public static func isAllowedMangaSection(_ sectionName: String?) -> Bool {
@@ -135,7 +126,7 @@ public enum MangaHTMLParser {
         }
         guard let document = try? KannaSoup.parse(html) else { return nil }
         let text = (try? document.select(".view_tit").text()) ?? ""
-        return text.nilIfEmpty
+        return text.nilIfBlank
     }
 
     public static func isLoginPage(_ html: String) -> Bool {
@@ -276,10 +267,7 @@ public enum MangaHTMLParser {
     }
 
     private static func view(from url: URL) -> Int {
-        let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
-        let page = components?.queryItems?.first(where: { $0.name == "page" })?.value
-            .flatMap(Int.init) ?? 1
-        return max(1, page)
+        max(1, url.queryItemValue("page").flatMap(Int.init) ?? 1)
     }
 
     private static func postID(fromRawID rawID: String, prefix: String) -> String? {
@@ -295,12 +283,5 @@ public enum MangaHTMLParser {
         formatter.locale = Locale(identifier: "zh_CN")
         formatter.dateFormat = "yyyy-MM-dd"
         return formatter.date(from: raw)
-    }
-}
-
-private extension String {
-    var nilIfEmpty: String? {
-        let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? nil : trimmed
     }
 }

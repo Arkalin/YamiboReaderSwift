@@ -1,6 +1,17 @@
 import Foundation
 
 enum YamiboHTMLPageInspector {
+    /// Shared pre-flight for every Yamibo page parser: throws when the page is a
+    /// login prompt (`notAuthenticated`) or a flood-control/error page (`floodControl`).
+    static func ensureReadable(_ html: String) throws {
+        if isNotAuthenticated(html) {
+            throw YamiboError.notAuthenticated
+        }
+        if isFloodControlOrError(html) {
+            throw YamiboError.floodControl
+        }
+    }
+
     static func isNotAuthenticated(_ html: String) -> Bool {
         let markers = [
             "请先登录",

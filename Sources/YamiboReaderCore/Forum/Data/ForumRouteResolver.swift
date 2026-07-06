@@ -187,10 +187,3 @@ private extension Array where Element == URLQueryItem {
         first(where: { $0.name == name })?.value
     }
 }
-
-private extension String {
-    var nilIfBlank: String? {
-        let value = trimmingCharacters(in: .whitespacesAndNewlines)
-        return value.isEmpty ? nil : value
-    }
-}

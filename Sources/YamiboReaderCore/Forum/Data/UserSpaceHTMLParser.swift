@@ -2,16 +2,16 @@ import Foundation
 
 public enum UserSpaceHTMLParser {
     public static func parseProfile(from html: String, uidHint: String? = nil, titleHint: String? = nil) throws -> UserSpaceProfile {
-        try validate(html)
+        try YamiboHTMLPageInspector.ensureReadable(html)
         let document = try KannaSoup.parse(html, baseURL: YamiboDomain.baseURL.absoluteString)
-        let bodyText = ((try? document.body()?.text()) ?? "").normalizedUserSpaceText
+        let bodyText = document.body()?.normalizedText() ?? ""
 
         let uid = uidHint?.nilIfBlank
             ?? firstMatch(#"UID\s*[:：]?\s*(\d+)"#, in: bodyText)
             ?? firstUserID(in: document)
             ?? ""
         let username = firstNonBlank([
-            try? document.select(".username, .mtit, h2, h1").first()?.text(),
+            document.firstText(".username, .mtit, h2, h1"),
             titleHint,
             try? document.title().replacingOccurrences(of: "-  百合会", with: "")
         ]) ?? L10n.string("user_space.unknown_user")
@@ -21,19 +21,23 @@ public enum UserSpaceHTMLParser {
             uid: uid,
             username: username,
             userGroup: infoRows.first(where: { $0.label.contains("用户组") || $0.label.contains("用戶組") })?.value,
-            avatarURL: firstImageURL(in: document, selectors: [
-                ".avatar img[src]",
-                ".mimg img[src]",
-                "img[src*='avatar']"
-            ]),
-            avatarBackgroundURL: firstImageURL(in: document, selectors: [
-                ".space_bg img[src]",
-                ".profile_bg img[src]",
-                "img[src*='avatar_big']"
-            ]),
-            signature: firstNonBlank([
-                try? document.select(".signature, .sign, .pf_l").first()?.text()
-            ]),
+            avatarURL: document.firstURL(
+                anyOf: [
+                    ".avatar img[src]",
+                    ".mimg img[src]",
+                    "img[src*='avatar']"
+                ],
+                attribute: "src"
+            ),
+            avatarBackgroundURL: document.firstURL(
+                anyOf: [
+                    ".space_bg img[src]",
+                    ".profile_bg img[src]",
+                    "img[src*='avatar_big']"
+                ],
+                attribute: "src"
+            ),
+            signature: document.firstText(".signature, .sign, .pf_l"),
             totalPoints: intAfterAny(labels: ["总积分", "總積分"], in: bodyText),
             points: plainPoints(in: bodyText),
             partner: intAfterAny(labels: ["对象", "對象"], in: bodyText),
@@ -42,7 +46,7 @@ public enum UserSpaceHTMLParser {
     }
 
     public static func parseThreads(from html: String) throws -> UserSpaceThreadPage {
-        try validate(html)
+        try YamiboHTMLPageInspector.ensureReadable(html)
         let document = try KannaSoup.parse(html, baseURL: YamiboDomain.baseURL.absoluteString)
         return UserSpaceThreadPage(
             threads: parseThreadSummaries(in: document),
@@ -51,19 +55,18 @@ public enum UserSpaceHTMLParser {
     }
 
     public static func parseReplies(from html: String) throws -> UserSpaceReplyPage {
-        try validate(html)
+        try YamiboHTMLPageInspector.ensureReadable(html)
         let document = try KannaSoup.parse(html, baseURL: YamiboDomain.baseURL.absoluteString)
-        let links = (try? document.select("a[href*='viewthread'][href*='tid='], a[href*='thread-']")) ?? Elements()
         var replies: [UserSpaceReplyGroup] = []
         var seen = Set<String>()
 
-        for link in links {
-            guard let url = HTMLTextExtractor.absoluteURL(from: (try? link.attr("href")) ?? ""),
+        for link in document.selectAll("a[href*='viewthread'][href*='tid='], a[href*='thread-']") {
+            guard let url = link.attrURL("href"),
                   let tid = threadID(from: url),
                   seen.insert(tid).inserted else {
                 continue
             }
-            let title = ((try? link.text()) ?? "").normalizedUserSpaceText
+            let title = link.normalizedText()
             guard !title.isEmpty else { continue }
             let container = nearestListContainer(for: link)
             replies.append(
@@ -71,7 +74,7 @@ public enum UserSpaceHTMLParser {
                     threadID: tid,
                     threadTitle: title,
                     threadURL: url,
-                    excerpt: ((try? container?.text()) ?? "").normalizedUserSpaceText.nilIfBlank,
+                    excerpt: container?.normalizedText().nilIfBlank,
                     lastActivityText: firstDateText(in: container)
                 )
             )
@@ -81,22 +84,21 @@ public enum UserSpaceHTMLParser {
     }
 
     public static func parseBlogs(from html: String) throws -> UserSpaceBlogPage {
-        try validate(html)
+        try YamiboHTMLPageInspector.ensureReadable(html)
         let document = try KannaSoup.parse(html, baseURL: YamiboDomain.baseURL.absoluteString)
-        let links = (try? document.select("a[href*='do=blog'][href*='id='], a[href*='blog-']")) ?? Elements()
         var blogs: [UserSpaceBlogSummary] = []
         var seen = Set<String>()
 
-        for link in links {
-            guard let url = HTMLTextExtractor.absoluteURL(from: (try? link.attr("href")) ?? ""),
+        for link in document.selectAll("a[href*='do=blog'][href*='id='], a[href*='blog-']") {
+            guard let url = link.attrURL("href"),
                   let blogID = blogID(from: url),
                   seen.insert(blogID).inserted else {
                 continue
             }
-            let title = ((try? link.text()) ?? "").normalizedUserSpaceText
+            let title = link.normalizedText()
             guard !title.isEmpty else { continue }
             let container = nearestListContainer(for: link)
-            let text = ((try? container?.text()) ?? "").normalizedUserSpaceText
+            let text = container?.normalizedText() ?? ""
             blogs.append(
                 UserSpaceBlogSummary(
                     blogID: blogID,
@@ -116,28 +118,28 @@ public enum UserSpaceHTMLParser {
     }
 
     public static func parseFriends(from html: String) throws -> UserSpaceFriendPage {
-        try validate(html)
+        try YamiboHTMLPageInspector.ensureReadable(html)
         let document = try KannaSoup.parse(html, baseURL: YamiboDomain.baseURL.absoluteString)
         let containers = friendListContainers(in: document)
-        let links = (try? containers.select("a[href*='mod=space'][href*='uid='], a[href*='space-uid-']")) ?? Elements()
+        let links = containers.flatMap { $0.selectAll("a[href*='mod=space'][href*='uid='], a[href*='space-uid-']") }
         var friends: [UserSpaceFriendSummary] = []
         var seen = Set<String>()
 
         for link in links {
-            guard let url = HTMLTextExtractor.absoluteURL(from: (try? link.attr("href")) ?? ""),
+            guard let url = link.attrURL("href"),
                   let uid = userID(from: url),
                   seen.insert(uid).inserted else {
                 continue
             }
-            let name = ((try? link.text()) ?? "").normalizedUserSpaceText
+            let name = link.normalizedText()
             guard !name.isEmpty else { continue }
             let container = nearestListContainer(for: link)
             friends.append(
                 UserSpaceFriendSummary(
                     uid: uid,
                     name: name,
-                    avatarURL: firstImageURL(in: container, selectors: ["img[src]"]),
-                    detail: ((try? container?.text()) ?? "").normalizedUserSpaceText.nilIfBlank,
+                    avatarURL: container?.firstURL("img[src]", attribute: "src"),
+                    detail: container?.normalizedText().nilIfBlank,
                     privateMessageURL: firstActionURL(in: container, patterns: ["ac=pm", "op=showmsg", "sendpm"]),
                     deleteURL: firstActionURL(in: container, patterns: ["op=ignore", "op=delete", "ac=friend&op=delete"])
                 )
@@ -148,35 +150,34 @@ public enum UserSpaceHTMLParser {
     }
 
     public static func parsePrivateMessageList(from html: String) throws -> UserSpacePrivateMessagePage {
-        try validate(html)
+        try YamiboHTMLPageInspector.ensureReadable(html)
         let document = try KannaSoup.parse(html, baseURL: YamiboDomain.baseURL.absoluteString)
-        let links = (try? document.select("a[href*='op=showmsg'][href*='touid='], a[href*='ac=pm'][href*='touid=']")) ?? Elements()
         var messages: [UserSpacePrivateMessageSummary] = []
         var seen = Set<String>()
 
-        for link in links {
-            guard let url = HTMLTextExtractor.absoluteURL(from: (try? link.attr("href")) ?? ""),
-                  let uid = queryValue("touid", in: url) ?? queryValue("uid", in: url),
+        for link in document.selectAll("a[href*='op=showmsg'][href*='touid='], a[href*='ac=pm'][href*='touid=']") {
+            guard let url = link.attrURL("href"),
+                  let uid = url.queryItemValue("touid") ?? url.queryItemValue("uid"),
                   seen.insert(uid).inserted else {
                 continue
             }
 
             let container = nearestListContainer(for: link)
-            let text = ((try? container?.text()) ?? (try? link.text()) ?? "").normalizedUserSpaceText
+            let text = container?.normalizedText() ?? link.normalizedText()
             let name = firstNonBlank([
                 firstUserName(uid: uid, in: container),
-                try? link.text()
+                link.normalizedText()
             ]) ?? L10n.string("user_space.unknown_user")
             let title = firstNonBlank([
-                try? container?.select(".title, .subject, h3, h4").first()?.text(),
-                try? link.text()
+                container?.firstText(".title, .subject, h3, h4"),
+                link.normalizedText()
             ]) ?? name
 
             messages.append(
                 UserSpacePrivateMessageSummary(
                     uid: uid,
                     name: name,
-                    avatarURL: firstImageURL(in: container, selectors: ["img[src*='avatar']", ".avatar img[src]", ".mimg img[src]", "img[src]"]),
+                    avatarURL: avatarImageURL(in: container),
                     title: title,
                     message: privateMessageListPreview(text: text, title: title, name: name),
                     timeText: firstDateText(in: container),
@@ -193,21 +194,20 @@ public enum UserSpaceHTMLParser {
     }
 
     public static func parseNotices(from html: String) throws -> UserSpaceNoticePage {
-        try validate(html)
+        try YamiboHTMLPageInspector.ensureReadable(html)
         let document = try KannaSoup.parse(html, baseURL: YamiboDomain.baseURL.absoluteString)
-        let containers = noticeContainers(in: document)
         var notices: [UserSpaceNoticeSummary] = []
         var seen = Set<String>()
 
-        for container in containers {
+        for container in noticeContainers(in: document) {
             let content = noticeContentElement(in: container) ?? container
             let contentHTML = ((try? content.html()) ?? "").nilIfBlank ?? ((try? container.html()) ?? "")
-            let contentText = ((try? content.text()) ?? "").normalizedUserSpaceText
+            let contentText = content.normalizedText()
             guard !contentText.isEmpty else { continue }
 
             let noticeID = noticeID(in: container) ?? [firstDateText(in: container), contentText].compactMap { $0 }.joined(separator: "|")
             guard !noticeID.isEmpty, seen.insert(noticeID).inserted else { continue }
-            let avatarURL = firstImageURL(in: container, selectors: ["img[src*='avatar']", ".avatar img[src]", ".mimg img[src]", "img[src]"])
+            let avatarURL = avatarImageURL(in: container)
 
             notices.append(
                 UserSpaceNoticeSummary(
@@ -216,9 +216,7 @@ public enum UserSpaceHTMLParser {
                     userID: firstUserID(in: container) ?? avatarURL.flatMap(userIDFromAvatarURL),
                     contentHTML: contentHTML,
                     contentText: contentText,
-                    quote: firstNonBlank([
-                        try? container.select("blockquote, .quote, .notice_quote").first()?.text()
-                    ]),
+                    quote: container.firstText("blockquote, .quote, .notice_quote"),
                     timeText: firstDateText(in: container)
                 )
             )
@@ -228,7 +226,7 @@ public enum UserSpaceHTMLParser {
     }
 
     public static func parseAddFriendForm(from html: String, uid: String, nameHint: String? = nil) throws -> UserSpaceAddFriendForm {
-        try validate(html)
+        try YamiboHTMLPageInspector.ensureReadable(html)
         let document = try KannaSoup.parse(html, baseURL: YamiboDomain.baseURL.absoluteString)
         guard let formHash = parseFormHash(in: document, html: html) else {
             throw YamiboError.parsingFailed(context: L10n.string("context.user_space_add_friend"))
@@ -237,26 +235,26 @@ public enum UserSpaceHTMLParser {
         return UserSpaceAddFriendForm(
             uid: uid,
             name: firstNonBlank([
-                try? document.select(".username, .mtit, h3, h2, a[href*='uid=\(uid)']").first()?.text(),
+                document.firstText(".username, .mtit, h3, h2, a[href*='uid=\(uid)']"),
                 nameHint
             ]),
-            avatarURL: firstImageURL(in: document, selectors: [
-                ".avatar img[src]",
-                ".mimg img[src]",
-                "img[src*='avatar']"
-            ]),
+            avatarURL: document.firstURL(
+                anyOf: [
+                    ".avatar img[src]",
+                    ".mimg img[src]",
+                    "img[src*='avatar']"
+                ],
+                attribute: "src"
+            ),
             formHash: formHash,
             options: parseAddFriendOptions(in: document)
         )
     }
 
     public static func parseAddFriendResult(from html: String) throws -> String {
-        try validate(html)
+        try YamiboHTMLPageInspector.ensureReadable(html)
         let document = try KannaSoup.parse(html, baseURL: YamiboDomain.baseURL.absoluteString)
-        let message = (
-            (try? document.select(".jump_c, .alert_info, .messagetext, .showmessage, .wp, body").first()?.text())
-                ?? ""
-        ).normalizedUserSpaceText
+        let message = document.selectFirst(".jump_c, .alert_info, .messagetext, .showmessage, .wp, body")?.normalizedText() ?? ""
 
         if message.contains("请先登录") || message.contains("請先登錄") || message.contains("请登录") {
             throw YamiboError.notAuthenticated
@@ -271,16 +269,16 @@ public enum UserSpaceHTMLParser {
     }
 
     public static func parsePrivateMessagePage(from html: String, toUID: String, titleHint: String? = nil) throws -> PrivateMessagePage {
-        try validate(html)
+        try YamiboHTMLPageInspector.ensureReadable(html)
         let document = try KannaSoup.parse(html, baseURL: YamiboDomain.baseURL.absoluteString)
         let normalizedToUID = toUID.trimmingCharacters(in: .whitespacesAndNewlines)
         let toName = firstNonBlank([
             titleHint,
             firstUserName(uid: normalizedToUID, in: document),
-            try? document.select(".username, .mtit, h2, h1").first()?.text()
+            document.firstText(".username, .mtit, h2, h1")
         ])
         let title = firstNonBlank([
-            try? document.select(".header h2, .mtit, h1, h2").first()?.text(),
+            document.firstText(".header h2, .mtit, h1, h2"),
             toName.map { L10n.string("private_message.chat_with", $0) },
             try? document.title().replacingOccurrences(of: "-  百合会", with: "")
         ]) ?? L10n.string("private_message.title")
@@ -299,12 +297,9 @@ public enum UserSpaceHTMLParser {
     }
 
     public static func parsePrivateMessageSendResult(from html: String) throws -> String {
-        try validate(html)
+        try YamiboHTMLPageInspector.ensureReadable(html)
         let document = try KannaSoup.parse(html, baseURL: YamiboDomain.baseURL.absoluteString)
-        let message = (
-            (try? document.select(".jump_c, .alert_info, .messagetext, .showmessage, .wp, body").first()?.text())
-                ?? ""
-        ).normalizedUserSpaceText
+        let message = document.selectFirst(".jump_c, .alert_info, .messagetext, .showmessage, .wp, body")?.normalizedText() ?? ""
 
         if message.contains("请先登录") || message.contains("請先登錄") || message.contains("请登录") {
             throw YamiboError.notAuthenticated
@@ -318,30 +313,20 @@ public enum UserSpaceHTMLParser {
         return message
     }
 
-    private static func validate(_ html: String) throws {
-        if YamiboHTMLPageInspector.isNotAuthenticated(html) {
-            throw YamiboError.notAuthenticated
-        }
-        if YamiboHTMLPageInspector.isFloodControlOrError(html) {
-            throw YamiboError.floodControl
-        }
-    }
-
     private static func parseThreadSummaries(in document: Document) -> [ForumThreadSummary] {
-        let links = (try? document.select("a[href*='viewthread'][href*='tid='], a[href*='thread-']")) ?? Elements()
         var threads: [ForumThreadSummary] = []
         var seen = Set<String>()
 
-        for link in links {
-            guard let url = HTMLTextExtractor.absoluteURL(from: (try? link.attr("href")) ?? ""),
+        for link in document.selectAll("a[href*='viewthread'][href*='tid='], a[href*='thread-']") {
+            guard let url = link.attrURL("href"),
                   let tid = threadID(from: url),
                   seen.insert(tid).inserted else {
                 continue
             }
-            let title = ((try? link.text()) ?? "").normalizedUserSpaceText
+            let title = link.normalizedText()
             guard !title.isEmpty else { continue }
             let container = nearestListContainer(for: link)
-            let text = ((try? container?.text()) ?? "").normalizedUserSpaceText
+            let text = container?.normalizedText() ?? ""
             threads.append(
                 ForumThreadSummary(
                     tid: tid,
@@ -349,7 +334,7 @@ public enum UserSpaceHTMLParser {
                     url: url,
                     authorName: firstAuthorName(in: container),
                     authorID: firstUserID(in: container),
-                    authorAvatarURL: firstImageURL(in: container, selectors: ["img[src*='avatar']", "img[src]"]),
+                    authorAvatarURL: container?.firstURL(anyOf: ["img[src*='avatar']", "img[src]"], attribute: "src"),
                     description: text.nilIfBlank,
                     replyCount: intAfterAny(labels: ["回复", "回復"], in: text),
                     viewCount: intAfterAny(labels: ["查看", "浏览", "瀏覽"], in: text),
@@ -362,17 +347,16 @@ public enum UserSpaceHTMLParser {
     }
 
     private static func parseInfoRows(in document: Document) -> [UserSpaceInfoRow] {
-        let rows = (try? document.select("li, tr, .pbm, .pf_l li, .profile_info li")) ?? Elements()
         var info: [UserSpaceInfoRow] = []
         var seen = Set<String>()
 
-        for row in rows {
-            let text = ((try? row.text()) ?? "").normalizedUserSpaceText
+        for row in document.selectAll("li, tr, .pbm, .pf_l li, .profile_info li") {
+            let text = row.normalizedText()
             guard let separator = text.firstIndex(where: { $0 == ":" || $0 == "：" }) else { continue }
-            let label = String(text[..<separator]).normalizedUserSpaceText
-            let value = String(text[text.index(after: separator)...]).normalizedUserSpaceText
+            let label = String(text[..<separator]).htmlNormalized
+            let value = String(text[text.index(after: separator)...]).htmlNormalized
             guard !label.isEmpty, !value.isEmpty else { continue }
-            let url = (try? row.select("a[href]").first()?.attr("href")).flatMap { HTMLTextExtractor.absoluteURL(from: $0) }
+            let url = row.firstURL("a[href]")
             let item = UserSpaceInfoRow(label: label, value: value, url: url)
             guard seen.insert(item.id).inserted else { continue }
             info.append(item)
@@ -382,14 +366,12 @@ public enum UserSpaceHTMLParser {
     }
 
     private static func parseAddFriendOptions(in document: Document) -> [UserSpaceAddFriendOption] {
-        let options = (try? document.select("select[name=gid] option, select[name=groupid] option, select[name=group] option")) ?? Elements()
         var result: [UserSpaceAddFriendOption] = []
         var seen = Set<Int>()
 
-        for option in options {
-            let rawID = ((try? option.attr("value")) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-            guard let id = Int(rawID), seen.insert(id).inserted else { continue }
-            let name = ((try? option.text()) ?? "").normalizedUserSpaceText
+        for option in document.selectAll("select[name=gid] option, select[name=groupid] option, select[name=group] option") {
+            guard let id = option.attrText("value").flatMap(Int.init), seen.insert(id).inserted else { continue }
+            let name = option.normalizedText()
             guard !name.isEmpty else { continue }
             result.append(UserSpaceAddFriendOption(id: id, name: name))
         }
@@ -398,9 +380,8 @@ public enum UserSpaceHTMLParser {
     }
 
     private static func parseFormHash(in document: Document, html: String) -> String? {
-        if let value = try? document.select("input[name=formhash]").first()?.attr("value"),
-           !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return value.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let value = document.selectFirst("input[name=formhash]")?.attrText("value") {
+            return value
         }
         return HTMLTextExtractor.firstMatch(pattern: #"formhash=([A-Za-z0-9]+)"#, in: html)?
             .dropFirst()
@@ -409,14 +390,13 @@ public enum UserSpaceHTMLParser {
     }
 
     private static func parsePrivateMessages(in document: Document, toUID: String, toName: String?) -> [PrivateMessage] {
-        let containers = privateMessageContainers(in: document)
         var messages: [PrivateMessage] = []
         var seen = Set<String>()
 
-        for container in containers {
+        for container in privateMessageContainers(in: document) {
             let content = privateMessageContentElement(in: container) ?? container
             let contentHTML = ((try? content.html()) ?? "").nilIfBlank ?? ((try? container.html()) ?? "")
-            let contentText = ((try? content.text()) ?? "").normalizedUserSpaceText
+            let contentText = content.normalizedText()
             guard !contentText.isEmpty else { continue }
 
             let user = privateMessageUser(in: container, toUID: toUID, toName: toName)
@@ -443,27 +423,29 @@ public enum UserSpaceHTMLParser {
         return messages
     }
 
-    private static func privateMessageContainers(in document: Document) -> Elements {
-        let scoped = (try? document.select([
-            ".pm_msg",
-            ".pmb",
-            ".pmlist li",
-            ".pm_list li",
-            ".messageitem",
-            ".message_item",
-            "li[id^=pm_]",
-            "div[id^=pm_]",
-            ".bbda"
-        ].joined(separator: ","))) ?? Elements()
+    private static func privateMessageContainers(in document: Document) -> [Element] {
+        let scoped = document.selectAll(
+            [
+                ".pm_msg",
+                ".pmb",
+                ".pmlist li",
+                ".pm_list li",
+                ".messageitem",
+                ".message_item",
+                "li[id^=pm_]",
+                "div[id^=pm_]",
+                ".bbda"
+            ].joined(separator: ",")
+        )
         if !scoped.isEmpty {
             return scoped
         }
-        return (try? document.select("li, .cl")) ?? Elements()
+        return document.selectAll("li, .cl")
     }
 
     private static func privateMessageContentElement(in container: Element) -> Element? {
         for selector in [".pmcontent", ".message", ".content", ".t_f", ".txt", "blockquote"] {
-            if let element = try? container.select(selector).last() {
+            if let element = container.selectAll(selector).last {
                 return element
             }
         }
@@ -472,39 +454,27 @@ public enum UserSpaceHTMLParser {
 
     private static func privateMessageUser(in container: Element, toUID: String, toName: String?) -> PrivateMessageUser {
         let link = firstUserLink(in: container)
-        let href = (try? link?.attr("href")).flatMap { HTMLTextExtractor.absoluteURL(from: $0) }
-        let uid = href.flatMap(userID(from:))
+        let uid = link?.attrURL("href").flatMap(userID(from:))
         let name = firstNonBlank([
-            try? link?.text(),
+            link?.normalizedText(),
             uid == toUID ? toName : nil,
             uid == nil ? toName : nil
         ]) ?? L10n.string("private_message.me")
         return PrivateMessageUser(
             uid: uid,
             name: name,
-            avatarURL: firstImageURL(in: container, selectors: ["img[src*='avatar']", ".avatar img[src]", ".mimg img[src]", "img[src]"])
+            avatarURL: avatarImageURL(in: container)
         )
     }
 
     private static func firstUserLink(in element: Element) -> Element? {
-        try? element.select("a[href*='uid='], a[href*='space-uid-']").first()
-    }
-
-    private static func firstUserName(uid: String, in document: Document) -> String? {
-        let links = (try? document.select("a[href*='uid=\(uid)'], a[href*='space-uid-\(uid)']")) ?? Elements()
-        for link in links {
-            if let name = (try? link.text())?.normalizedUserSpaceText.nilIfBlank {
-                return name
-            }
-        }
-        return nil
+        element.selectFirst("a[href*='uid='], a[href*='space-uid-']")
     }
 
     private static func firstUserName(uid: String, in element: Element?) -> String? {
         guard let element else { return nil }
-        let links = (try? element.select("a[href*='uid=\(uid)'], a[href*='space-uid-\(uid)']")) ?? Elements()
-        for link in links {
-            if let name = (try? link.text())?.normalizedUserSpaceText.nilIfBlank {
+        for link in element.selectAll("a[href*='uid=\(uid)'], a[href*='space-uid-\(uid)']") {
+            if let name = link.normalizedText().nilIfBlank {
                 return name
             }
         }
@@ -513,7 +483,7 @@ public enum UserSpaceHTMLParser {
 
     private static func privateMessageItemID(in container: Element) -> String? {
         for attribute in ["data-id", "data-pmid", "id"] {
-            if let value = (try? container.attr(attribute))?.nilIfBlank {
+            if let value = container.attrText(attribute) {
                 return HTMLTextExtractor.firstMatch(pattern: #"(\d+)"#, in: value)?.first ?? value
             }
         }
@@ -521,15 +491,13 @@ public enum UserSpaceHTMLParser {
     }
 
     private static func parsePrivateMessageID(in document: Document, html: String) -> String? {
-        if let value = try? document.select("input[name=pmid]").first()?.attr("value"),
-           let normalized = value.nilIfBlank {
-            return normalized
+        if let value = document.selectFirst("input[name=pmid]")?.attrText("value") {
+            return value
         }
-        let links = (try? document.select("form[action*='pmid='], a[href*='pmid=']")) ?? Elements()
-        for link in links {
-            let rawURL = ((try? link.attr("action")) ?? (try? link.attr("href")) ?? "")
+        for link in document.selectAll("form[action*='pmid='], a[href*='pmid=']") {
+            let rawURL = ((try? link.attr("action")) ?? "").nilIfBlank ?? ((try? link.attr("href")) ?? "")
             guard let url = HTMLTextExtractor.absoluteURL(from: rawURL),
-                  let pmid = queryValue("pmid", in: url) else {
+                  let pmid = url.queryItemValue("pmid") else {
                 continue
             }
             return pmid
@@ -540,48 +508,44 @@ public enum UserSpaceHTMLParser {
             .nilIfBlank
     }
 
-    private static func friendListContainers(in document: Document) -> Elements {
-        let scoped = (try? document.select(".friendlist, .buddy, .ulist, .ml, .buddylist, #friend_ul")) ?? Elements()
+    private static func friendListContainers(in document: Document) -> [Element] {
+        let scoped = document.selectAll(".friendlist, .buddy, .ulist, .ml, .buddylist, #friend_ul")
         if !scoped.isEmpty {
             return scoped
         }
-        return (try? document.select("body")) ?? Elements()
+        return document.selectAll("body")
     }
 
-    private static func noticeContainers(in document: Document) -> Elements {
-        let scoped = (try? document.select([
-            "li[id^=notice_]",
-            "div[id^=notice_]",
-            ".notice li",
-            ".nts li",
-            ".ntc li",
-            ".xld li",
-            ".bbda"
-        ].joined(separator: ","))) ?? Elements()
+    private static func noticeContainers(in document: Document) -> [Element] {
+        let scoped = document.selectAll(
+            [
+                "li[id^=notice_]",
+                "div[id^=notice_]",
+                ".notice li",
+                ".nts li",
+                ".ntc li",
+                ".xld li",
+                ".bbda"
+            ].joined(separator: ",")
+        )
         if !scoped.isEmpty {
             return scoped
         }
-        return (try? document.select("li, .cl")) ?? Elements()
+        return document.selectAll("li, .cl")
     }
 
     private static func noticeContentElement(in container: Element) -> Element? {
-        for selector in [".ntc_body", ".notice_body", ".content", ".detail", ".xw0", ".txt"] {
-            if let element = try? container.select(selector).first() {
-                return element
-            }
-        }
-        return nil
+        container.selectFirst(anyOf: [".ntc_body", ".notice_body", ".content", ".detail", ".xw0", ".txt"])
     }
 
     private static func noticeID(in container: Element) -> String? {
         for attribute in ["data-id", "data-notice-id", "id"] {
-            if let value = (try? container.attr(attribute))?.nilIfBlank {
+            if let value = container.attrText(attribute) {
                 return HTMLTextExtractor.firstMatch(pattern: #"(\d+)"#, in: value)?.first ?? value
             }
         }
-        if let href = try? container.select("a[href*='noticeid=']").first()?.attr("href"),
-           let url = HTMLTextExtractor.absoluteURL(from: href),
-           let noticeID = queryValue("noticeid", in: url) {
+        if let url = container.firstURL("a[href*='noticeid=']"),
+           let noticeID = url.queryItemValue("noticeid") {
             return noticeID
         }
         return nil
@@ -591,14 +555,14 @@ public enum UserSpaceHTMLParser {
         var preview = text
         for prefix in [title, name] where !prefix.isEmpty {
             if preview.hasPrefix(prefix) {
-                preview = String(preview.dropFirst(prefix.count)).normalizedUserSpaceText
+                preview = String(preview.dropFirst(prefix.count)).htmlNormalized
             }
         }
         return preview.nilIfBlank ?? title
     }
 
     private static func unreadCount(in document: Document) -> Int? {
-        let text = ((try? document.body()?.text()) ?? "").normalizedUserSpaceText
+        let text = document.body()?.normalizedText() ?? ""
         return HTMLTextExtractor.firstMatch(pattern: #"(?:未读|未讀)\s*[:：]?\s*(\d+)"#, in: text)?
             .dropFirst()
             .first
@@ -607,7 +571,7 @@ public enum UserSpaceHTMLParser {
 
     private static func firstUnreadCount(in element: Element?) -> Int? {
         guard let element else { return nil }
-        let text = ((try? element.text()) ?? "").normalizedUserSpaceText
+        let text = element.normalizedText()
         if let value = HTMLTextExtractor.firstMatch(pattern: #"(?:未读|未讀|新消息)\s*[:：]?\s*(\d+)"#, in: text)?
             .dropFirst()
             .first
@@ -615,7 +579,7 @@ public enum UserSpaceHTMLParser {
             return value
         }
         for selector in [".unread", ".badge", ".num"] {
-            if let value = try? element.select(selector).first()?.text(),
+            if let value = element.firstText(selector),
                let number = HTMLTextExtractor.firstMatch(pattern: #"(\d+)"#, in: value)?.first.flatMap(Int.init) {
                 return number
             }
@@ -633,10 +597,9 @@ public enum UserSpaceHTMLParser {
     }
 
     private static func parsePageNavigation(in document: Document) -> ForumPageNavigation? {
-        guard let pager = try? document.select(".pg").first() else { return nil }
-        let currentText = ((try? pager.select("strong").first()?.text()) ?? "").normalizedUserSpaceText
-        let currentPage = Int(currentText) ?? 1
-        let pagerText = ((try? pager.text()) ?? "").normalizedUserSpaceText
+        guard let pager = document.selectFirst(".pg") else { return nil }
+        let currentPage = pager.firstText("strong").flatMap(Int.init) ?? 1
+        let pagerText = pager.normalizedText()
         let totalPages = HTMLTextExtractor.firstMatch(pattern: #"共\s*(\d+)\s*页"#, in: pagerText)?
             .dropFirst()
             .first
@@ -658,43 +621,28 @@ public enum UserSpaceHTMLParser {
         return element
     }
 
-    private static func firstImageURL(in element: Element?, selectors: [String]) -> URL? {
-        guard let element else { return nil }
-        for selector in selectors {
-            if let href = try? element.select(selector).first()?.attr("src"),
-               let url = HTMLTextExtractor.absoluteURL(from: href) {
-                return url
-            }
-        }
-        return nil
-    }
-
-    private static func firstImageURL(in document: Document, selectors: [String]) -> URL? {
-        for selector in selectors {
-            if let href = try? document.select(selector).first()?.attr("src"),
-               let url = HTMLTextExtractor.absoluteURL(from: href) {
-                return url
-            }
-        }
-        return nil
+    private static func avatarImageURL(in element: Element?) -> URL? {
+        element?.firstURL(
+            anyOf: ["img[src*='avatar']", ".avatar img[src]", ".mimg img[src]", "img[src]"],
+            attribute: "src"
+        )
     }
 
     private static func firstActionURL(in element: Element?, patterns: [String]) -> URL? {
         guard let element else { return nil }
-        let links = (try? element.select("a[href]")) ?? Elements()
-        for link in links {
+        for link in element.selectAll("a[href]") {
             let href = ((try? link.attr("href")) ?? "")
                 .replacingOccurrences(of: "&amp;", with: "&")
-            let text = ((try? link.text()) ?? "").normalizedUserSpaceText
+            let text = link.normalizedText()
             if patterns.contains(where: { href.contains($0) || text.contains($0) }),
                let url = HTMLTextExtractor.absoluteURL(from: href) {
                 return url
             }
-            if patterns.contains("ac=pm"), (text.contains("发消息") || text.contains("發消息") || text.contains("短消息")),
+            if patterns.contains("ac=pm"), text.contains("发消息") || text.contains("發消息") || text.contains("短消息"),
                let url = HTMLTextExtractor.absoluteURL(from: href) {
                 return url
             }
-            if patterns.contains("op=delete"), (text.contains("删除") || text.contains("刪除") || text.contains("解除")),
+            if patterns.contains("op=delete"), text.contains("删除") || text.contains("刪除") || text.contains("解除"),
                let url = HTMLTextExtractor.absoluteURL(from: href) {
                 return url
             }
@@ -703,28 +651,13 @@ public enum UserSpaceHTMLParser {
     }
 
     private static func firstAuthorName(in element: Element?) -> String? {
-        firstNonBlank([
-            try? element?.select(".mmc, a[href*='uid=']").first()?.text()
-        ])
-    }
-
-    private static func firstUserID(in document: Document) -> String? {
-        let links = (try? document.select("a[href*='uid='], a[href*='space-uid-']")) ?? Elements()
-        for link in links {
-            guard let url = HTMLTextExtractor.absoluteURL(from: (try? link.attr("href")) ?? ""),
-                  let uid = userID(from: url) else {
-                continue
-            }
-            return uid
-        }
-        return nil
+        element?.firstText(".mmc, a[href*='uid=']")
     }
 
     private static func firstUserID(in element: Element?) -> String? {
         guard let element else { return nil }
-        let links = (try? element.select("a[href*='uid='], a[href*='space-uid-']")) ?? Elements()
-        for link in links {
-            guard let url = HTMLTextExtractor.absoluteURL(from: (try? link.attr("href")) ?? ""),
+        for link in element.selectAll("a[href*='uid='], a[href*='space-uid-']") {
+            guard let url = link.attrURL("href"),
                   let uid = userID(from: url) else {
                 continue
             }
@@ -734,33 +667,25 @@ public enum UserSpaceHTMLParser {
     }
 
     private static func firstDateText(in element: Element?) -> String? {
-        let text = ((try? element?.text()) ?? "").normalizedUserSpaceText
+        let text = element?.normalizedText() ?? ""
         return HTMLTextExtractor.firstMatch(pattern: #"\d{4}[-/]\d{1,2}[-/]\d{1,2}(?:\s+\d{1,2}:\d{2})?"#, in: text)?
             .first?
             .nilIfBlank
     }
 
     private static func threadID(from url: URL) -> String? {
-        queryValue("tid", in: url)
+        url.queryItemValue("tid")
             ?? HTMLTextExtractor.firstMatch(pattern: #"thread-(\d+)-"#, in: url.absoluteString)?.dropFirst().first
     }
 
     private static func userID(from url: URL) -> String? {
-        queryValue("uid", in: url)
+        url.queryItemValue("uid")
             ?? HTMLTextExtractor.firstMatch(pattern: #"space-uid-(\d+)"#, in: url.absoluteString)?.dropFirst().first
     }
 
     private static func blogID(from url: URL) -> String? {
-        queryValue("id", in: url)
+        url.queryItemValue("id")
             ?? HTMLTextExtractor.firstMatch(pattern: #"blog-(\d+)-"#, in: url.absoluteString)?.dropFirst().first
-    }
-
-    private static func queryValue(_ name: String, in url: URL) -> String? {
-        URLComponents(url: url, resolvingAgainstBaseURL: false)?
-            .queryItems?
-            .first(where: { $0.name == name })?
-            .value?
-            .nilIfBlank
     }
 
     private static func intAfterAny(labels: [String], in text: String) -> Int? {
@@ -795,19 +720,6 @@ public enum UserSpaceHTMLParser {
     }
 
     private static func firstNonBlank(_ values: [String?]) -> String? {
-        values.compactMap { $0?.normalizedUserSpaceText.nilIfBlank }.first
-    }
-}
-
-private extension String {
-    var nilIfBlank: String? {
-        let value = trimmingCharacters(in: .whitespacesAndNewlines)
-        return value.isEmpty ? nil : value
-    }
-
-    var normalizedUserSpaceText: String {
-        HTMLTextExtractor.decodeHTMLEntities(self)
-            .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+        values.compactMap { $0?.htmlNormalized.nilIfBlank }.first
     }
 }

@@ -28,9 +28,9 @@ public struct ForumThreadPage: Codable, Equatable, Sendable {
         self.pageNavigation = pageNavigation
         self.totalViews = totalViews
         self.totalReplies = totalReplies
-        self.forumID = forumID?.threadRoutingTrimmedNonEmpty
-        self.forumName = forumName?.threadRoutingTrimmedNonEmpty
-        self.formHash = formHash?.threadRoutingTrimmedNonEmpty
+        self.forumID = forumID?.nilIfBlank
+        self.forumName = forumName?.nilIfBlank
+        self.formHash = formHash?.nilIfBlank
     }
 }
 
@@ -89,10 +89,10 @@ public struct ForumThreadPost: Codable, Equatable, Identifiable, Hashable, Senda
         manageActions: [ForumThreadManageAction] = []
     ) {
         self.postID = postID.trimmingCharacters(in: .whitespacesAndNewlines)
-        self.floorText = floorText?.threadRoutingTrimmedNonEmpty
+        self.floorText = floorText?.nilIfBlank
         self.author = author
-        self.postedAtText = postedAtText?.threadRoutingTrimmedNonEmpty
-        self.lastEditedText = lastEditedText?.threadRoutingTrimmedNonEmpty
+        self.postedAtText = postedAtText?.nilIfBlank
+        self.lastEditedText = lastEditedText?.nilIfBlank
         self.contentHTML = contentHTML
         self.contentText = contentText.trimmingCharacters(in: .whitespacesAndNewlines)
         self.contentBlocks = contentBlocks
@@ -137,7 +137,7 @@ public struct ForumThreadPostImage: Codable, Equatable, Identifiable, Hashable, 
 
     public init(url: String, altText: String? = nil) {
         self.url = url.trimmingCharacters(in: .whitespacesAndNewlines)
-        self.altText = altText?.threadRoutingTrimmedNonEmpty
+        self.altText = altText?.nilIfBlank
     }
 }
 
@@ -150,7 +150,7 @@ public struct ForumThreadManageAction: Codable, Equatable, Identifiable, Hashabl
     }
 
     public init(title: String, url: URL) {
-        self.title = title.threadRoutingTrimmedNonEmpty ?? url.absoluteString
+        self.title = title.nilIfBlank ?? url.absoluteString
         self.url = url
     }
 }
@@ -169,8 +169,8 @@ public struct ForumThreadPoll: Codable, Equatable, Hashable, Sendable {
         status: ForumThreadPollStatus = .unknown,
         options: [ForumThreadPollOption]
     ) {
-        self.title = title.threadRoutingTrimmedNonEmpty ?? L10n.string("forum.thread.poll")
-        self.endTimeText = endTimeText?.threadRoutingTrimmedNonEmpty
+        self.title = title.nilIfBlank ?? L10n.string("forum.thread.poll")
+        self.endTimeText = endTimeText?.nilIfBlank
         self.type = type
         self.status = status
         self.options = options
@@ -204,8 +204,8 @@ public struct ForumThreadPollOption: Codable, Equatable, Identifiable, Hashable,
         percentage: Double? = nil,
         isSelected: Bool = false
     ) {
-        self.id = id.threadRoutingTrimmedNonEmpty ?? title
-        self.title = title.threadRoutingTrimmedNonEmpty ?? id
+        self.id = id.nilIfBlank ?? title
+        self.title = title.nilIfBlank ?? id
         self.voteCount = voteCount
         self.percentage = percentage
         self.isSelected = isSelected
@@ -242,8 +242,8 @@ public struct ForumThreadRating: Codable, Equatable, Identifiable, Hashable, Sen
 
     public init(user: BlogReaderUser, scoreText: String, reason: String? = nil) {
         self.user = user
-        self.scoreText = scoreText.threadRoutingTrimmedNonEmpty ?? "0"
-        self.reason = reason?.threadRoutingTrimmedNonEmpty
+        self.scoreText = scoreText.nilIfBlank ?? "0"
+        self.reason = reason?.nilIfBlank
     }
 }
 
@@ -282,7 +282,7 @@ public struct ForumThreadPollVotersPage: Codable, Equatable, Hashable, Sendable 
         pageNavigation: ForumPageNavigation? = nil
     ) {
         self.threadID = threadID
-        self.selectedOptionID = selectedOptionID?.threadRoutingTrimmedNonEmpty
+        self.selectedOptionID = selectedOptionID?.nilIfBlank
         self.pollOptions = pollOptions
         self.voters = voters
         self.pageNavigation = pageNavigation
@@ -294,8 +294,8 @@ public struct ForumThreadPollVoterOption: Codable, Equatable, Identifiable, Hash
     public var name: String
 
     public init(id: String, name: String) {
-        self.id = id.threadRoutingTrimmedNonEmpty ?? name
-        self.name = name.threadRoutingTrimmedNonEmpty ?? id
+        self.id = id.nilIfBlank ?? name
+        self.name = name.nilIfBlank ?? id
     }
 }
 
@@ -311,10 +311,10 @@ public struct ForumThreadPostComment: Codable, Equatable, Identifiable, Hashable
         postedAtText: String? = nil,
         message: String
     ) {
-        self.id = id.threadRoutingTrimmedNonEmpty ?? [author.uid ?? author.name, message].joined(separator: "\u{1F}")
+        self.id = id.nilIfBlank ?? [author.uid ?? author.name, message].joined(separator: "\u{1F}")
         self.author = author
-        self.postedAtText = postedAtText?.threadRoutingTrimmedNonEmpty
-        self.message = message.threadRoutingTrimmedNonEmpty ?? ""
+        self.postedAtText = postedAtText?.nilIfBlank
+        self.message = message.nilIfBlank ?? ""
     }
 }
 
@@ -446,8 +446,8 @@ public struct ForumThreadTextStyle: Codable, Equatable, Hashable, Sendable {
         self.isItalic = isItalic
         self.isUnderline = isUnderline
         self.isStrikethrough = isStrikethrough
-        self.foregroundHex = foregroundHex?.threadRoutingTrimmedNonEmpty
-        self.backgroundHex = backgroundHex?.threadRoutingTrimmedNonEmpty
+        self.foregroundHex = foregroundHex?.nilIfBlank
+        self.backgroundHex = backgroundHex?.nilIfBlank
         self.relativeFontSize = relativeFontSize
     }
 
@@ -470,7 +470,7 @@ public struct ForumThreadImageBlock: Codable, Equatable, Hashable, Sendable {
 
     public init(url: URL, altText: String? = nil, linkURL: URL? = nil, isEmoticon: Bool = false) {
         self.url = url
-        self.altText = altText?.threadRoutingTrimmedNonEmpty
+        self.altText = altText?.nilIfBlank
         self.linkURL = linkURL
         self.isEmoticon = isEmoticon
     }
@@ -492,9 +492,9 @@ public struct ForumThreadAttachmentBlock: Codable, Equatable, Hashable, Sendable
     ) {
         self.url = url
         self.iconURL = iconURL
-        self.fileName = fileName.threadRoutingTrimmedNonEmpty ?? url.absoluteString
-        self.uploadInfo = uploadInfo?.threadRoutingTrimmedNonEmpty
-        self.statInfo = statInfo?.threadRoutingTrimmedNonEmpty
+        self.fileName = fileName.nilIfBlank ?? url.absoluteString
+        self.uploadInfo = uploadInfo?.nilIfBlank
+        self.statInfo = statInfo?.nilIfBlank
     }
 }
 

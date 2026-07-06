@@ -13,7 +13,7 @@ public struct ThreadIdentity: Codable, Hashable, Sendable {
 
     public init(tid: String, fid: String? = nil) {
         self.tid = tid.trimmingCharacters(in: .whitespacesAndNewlines)
-        self.fid = fid?.threadRoutingTrimmedNonEmpty
+        self.fid = fid?.nilIfBlank
     }
 }
 
@@ -22,7 +22,7 @@ public struct YamiboThreadTapContext: Codable, Hashable, Sendable {
     public var isTagMangaMode: Bool
 
     public init(containingFid: String? = nil, isTagMangaMode: Bool = false) {
-        self.containingFid = containingFid?.threadRoutingTrimmedNonEmpty
+        self.containingFid = containingFid?.nilIfBlank
         self.isTagMangaMode = isTagMangaMode
     }
 }
@@ -55,11 +55,11 @@ public struct YamiboThreadRouteRequest: Codable, Hashable, Sendable {
         tapContext: YamiboThreadTapContext = YamiboThreadTapContext()
     ) {
         self.threadURL = threadURL
-        self.threadID = threadID?.threadRoutingTrimmedNonEmpty
-        self.title = title?.threadRoutingTrimmedNonEmpty
-        self.authorID = authorID?.threadRoutingTrimmedNonEmpty
-        self.threadFid = threadFid?.threadRoutingTrimmedNonEmpty
-        self.targetPostID = targetPostID?.threadRoutingTrimmedNonEmpty
+        self.threadID = threadID?.nilIfBlank
+        self.title = title?.nilIfBlank
+        self.authorID = authorID?.nilIfBlank
+        self.threadFid = threadFid?.nilIfBlank
+        self.targetPostID = targetPostID?.nilIfBlank
         self.knownThreadKind = knownThreadKind
         self.intent = intent
         self.tapContext = tapContext
@@ -73,8 +73,8 @@ public struct NovelDetailLaunchContext: Codable, Hashable, Sendable {
 
     public init(thread: ThreadIdentity, title: String, authorID: String? = nil) {
         self.thread = thread
-        self.title = title.threadRoutingTrimmedNonEmpty ?? L10n.string("reader.title")
-        self.authorID = authorID?.threadRoutingTrimmedNonEmpty
+        self.title = title.nilIfBlank ?? L10n.string("reader.title")
+        self.authorID = authorID?.nilIfBlank
     }
 }
 
@@ -91,9 +91,9 @@ public struct MangaDetailLaunchContext: Codable, Hashable, Sendable {
         directoryNameHint: String? = nil
     ) {
         self.thread = thread
-        self.title = title.threadRoutingTrimmedNonEmpty ?? L10n.string("manga.reader.title")
-        self.focusedChapterTID = focusedChapterTID?.threadRoutingTrimmedNonEmpty
-        self.directoryNameHint = directoryNameHint?.threadRoutingTrimmedNonEmpty
+        self.title = title.nilIfBlank ?? L10n.string("manga.reader.title")
+        self.focusedChapterTID = focusedChapterTID?.nilIfBlank
+        self.directoryNameHint = directoryNameHint?.nilIfBlank
     }
 }
 
@@ -114,10 +114,10 @@ public struct ThreadNovelLaunchContext: Codable, Hashable, Sendable {
         authorID: String? = nil
     ) {
         self.thread = thread
-        self.title = title.threadRoutingTrimmedNonEmpty ?? L10n.string("forum.default_title")
+        self.title = title.nilIfBlank ?? L10n.string("forum.default_title")
         self.initialPage = max(1, initialPage)
-        self.targetPostID = targetPostID?.threadRoutingTrimmedNonEmpty
-        self.authorID = authorID?.threadRoutingTrimmedNonEmpty
+        self.targetPostID = targetPostID?.nilIfBlank
+        self.authorID = authorID?.nilIfBlank
     }
 }
 
@@ -140,12 +140,12 @@ public struct YamiboThreadRoutePayload: Hashable, Sendable {
         targetPostID: String? = nil
     ) {
         self.thread = thread
-        self.title = title.threadRoutingTrimmedNonEmpty ?? L10n.string("forum.default_title")
-        self.authorID = authorID?.threadRoutingTrimmedNonEmpty
+        self.title = title.nilIfBlank ?? L10n.string("forum.default_title")
+        self.authorID = authorID?.nilIfBlank
         self.canonicalURL = canonicalURL
         self.requestedURL = requestedURL
         self.initialPage = max(1, initialPage)
-        self.targetPostID = targetPostID?.threadRoutingTrimmedNonEmpty
+        self.targetPostID = targetPostID?.nilIfBlank
     }
 }
 
@@ -154,11 +154,4 @@ public enum YamiboThreadRouteTarget: Hashable, Sendable {
     case manga(YamiboThreadRoutePayload)
     case thread(YamiboThreadRoutePayload)
     case webFallback(URL)
-}
-
-extension String {
-    var threadRoutingTrimmedNonEmpty: String? {
-        let value = trimmingCharacters(in: .whitespacesAndNewlines)
-        return value.isEmpty ? nil : value
-    }
 }

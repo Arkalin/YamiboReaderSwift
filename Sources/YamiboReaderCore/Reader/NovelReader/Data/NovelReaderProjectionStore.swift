@@ -197,10 +197,3 @@ private struct ProjectionKeyComponents: Sendable {
     var authorID: String?
     var view: Int
 }
-
-private extension String {
-    var nilIfBlank: String? {
-        let value = trimmingCharacters(in: .whitespacesAndNewlines)
-        return value.isEmpty ? nil : value
-    }
-}

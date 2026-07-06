@@ -204,14 +204,14 @@ public actor YamiboThreadRouteResolver {
             .queryItems?
             .first(where: { $0.name == "pid" })?
             .value?
-            .threadRoutingTrimmedNonEmpty {
+            .nilIfBlank {
             return queryPostID
         }
 
-        guard let fragment = url.fragment?.threadRoutingTrimmedNonEmpty else { return nil }
+        guard let fragment = url.fragment?.nilIfBlank else { return nil }
         if let match = HTMLTextExtractor.firstMatch(pattern: #"^pid(\d+)$"#, in: fragment),
            match.count >= 2 {
-            return match[1].threadRoutingTrimmedNonEmpty
+            return match[1].nilIfBlank
         }
         return nil
     }
