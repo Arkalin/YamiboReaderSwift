@@ -96,12 +96,14 @@ final class NovelReadingSessionTests: XCTestCase {
                 ("第二章", String(repeating: "第二章 内容。", count: 20)),
             ]
         )
-        let resumePoint = legacyResumePoint(
+        let secondSemantics = try XCTUnwrap(document.semantics(forSegmentIndex: 1))
+        let resumePoint = NovelResumePoint(
             view: 1,
+            chapterIdentity: secondSemantics.chapterIdentity,
+            textSegmentIdentity: secondSemantics.textSegmentIdentity,
+            displayedTextOffset: 15,
             chapterOrdinal: 1,
             chapterTitle: "第二章",
-            segmentIndex: 1,
-            segmentOffset: 15,
             segmentProgress: 0.4,
             readingModeHint: .paged
         )
@@ -361,7 +363,7 @@ final class NovelReadingSessionTests: XCTestCase {
         XCTAssertNil(object["displayedPageNumber"])
     }
 
-    func testNovelResumePointDecodesLegacySegmentHintsForOneTimeMigration() throws {
+    func testNovelResumePointRejectsOutdatedSchemaVersionOnDecode() throws {
         let payload: [String: Any] = [
             "schemaVersion": 2,
             "view": 1,
@@ -373,12 +375,8 @@ final class NovelReadingSessionTests: XCTestCase {
             "readingModeHint": "vertical"
         ]
         let data = try JSONSerialization.data(withJSONObject: payload)
-        let resumePoint = try JSONDecoder().decode(NovelResumePoint.self, from: data)
 
-        XCTAssertNil(resumePoint.textSegmentIdentity)
-        XCTAssertEqual(resumePoint.displayedTextOffset, 42)
-        XCTAssertEqual(resumePoint.legacySegmentIndex, 3)
-        XCTAssertEqual(resumePoint.legacySegmentOffset, 42)
+        XCTAssertThrowsError(try JSONDecoder().decode(NovelResumePoint.self, from: data))
     }
 
     func testCapturesNovelReadingPositionFromNovelTextViewportIndexRanges() throws {
@@ -533,12 +531,14 @@ final class NovelReadingSessionTests: XCTestCase {
                 ("第二章", String(repeating: "第二章 内容。", count: 20)),
             ]
         )
-        let resumePoint = legacyResumePoint(
+        let secondSemantics = try XCTUnwrap(document.semantics(forSegmentIndex: 1))
+        let resumePoint = NovelResumePoint(
             view: 1,
+            chapterIdentity: secondSemantics.chapterIdentity,
+            textSegmentIdentity: secondSemantics.textSegmentIdentity,
+            displayedTextOffset: 15,
             chapterOrdinal: 1,
             chapterTitle: "第二章",
-            segmentIndex: 1,
-            segmentOffset: 15,
             segmentProgress: 0.4,
             readingModeHint: .paged
         )
@@ -1234,25 +1234,3 @@ private func textRangePagination(
     }
 }
 
-private func legacyResumePoint(
-    view: Int,
-    chapterOrdinal: Int,
-    chapterTitle: String?,
-    segmentIndex: Int,
-    segmentOffset: Int,
-    segmentProgress: Double,
-    authorID: String? = nil,
-    readingModeHint: ReaderReadingMode
-) -> NovelResumePoint {
-    NovelResumePoint(
-        view: view,
-        displayedTextOffset: segmentOffset,
-        chapterOrdinal: chapterOrdinal,
-        chapterTitle: chapterTitle,
-        segmentProgress: segmentProgress,
-        authorID: authorID,
-        readingModeHint: readingModeHint,
-        legacySegmentIndex: segmentIndex,
-        legacySegmentOffset: segmentOffset
-    )
-}

@@ -2985,7 +2985,7 @@ private final class StubURLProtocol: URLProtocol {
     #expect(firstBlockRange["length"] as? Int == 2)
 }
 
-@Test func readerPageDocumentDecodeDefaultsMissingStyleRangesToEmpty() async throws {
+@Test func readerPageDocumentRejectsOutdatedSchemaVersionOnDecode() async throws {
     let json = #"""
     {
       "schemaVersion": 3,
@@ -3003,7 +3003,9 @@ private final class StubURLProtocol: URLProtocol {
         {
           "chapterIdentity": {"rawValue": "post:1#chapter:0"},
           "textSegmentIdentity": {"rawValue": "post:1#chapter:0#text:0"},
-          "chapterTitleRange": {"location": 0, "length": 3}
+          "chapterTitleRange": {"location": 0, "length": 3},
+          "inlineTextStyles": [],
+          "blockTextStyles": []
         }
       ],
       "fetchedAt": "2026-06-05T00:00:00Z"
@@ -3012,68 +3014,9 @@ private final class StubURLProtocol: URLProtocol {
     let decoder = JSONDecoder()
     decoder.dateDecodingStrategy = .iso8601
 
-    let document = try decoder.decode(NovelReaderProjection.self, from: json)
-
-    #expect(document.segmentSemantics.first??.inlineTextStyles == [])
-    #expect(document.segmentSemantics.first??.blockTextStyles == [])
-}
-
-@Test func readerPageDocumentLegacyDecodeSynthesizesIdentitiesWithoutGroupingEqualTitles() async throws {
-    let json = #"""
-    {
-      "threadID": "18602",
-      "view": 1,
-      "maxView": 1,
-      "contentSource": "allPostsPage",
-      "retainedChapterCount": 2,
-      "filteredChapterCandidateCount": 0,
-      "segments": [
-        {"kind": "text", "text": "同名章\n第一处。", "chapterTitle": "同名章"},
-        {"kind": "text", "text": "同名章\n第二处。", "chapterTitle": "同名章"}
-      ],
-      "segmentSources": [null, null],
-      "fetchedAt": "2026-06-05T00:00:00Z"
+    #expect(throws: (any Error).self) {
+        _ = try decoder.decode(NovelReaderProjection.self, from: json)
     }
-    """#.data(using: .utf8)!
-    let decoder = JSONDecoder()
-    decoder.dateDecodingStrategy = .iso8601
-
-    let document = try decoder.decode(NovelReaderProjection.self, from: json)
-    let first = try #require(document.semantics(forSegmentIndex: 0))
-    let second = try #require(document.semantics(forSegmentIndex: 1))
-
-    #expect(first.chapterIdentity != second.chapterIdentity)
-    #expect(first.textSegmentIdentity != second.textSegmentIdentity)
-    #expect(first.chapterTitleRange == NovelCharacterRange(location: 0, length: "同名章".count))
-    #expect(second.chapterTitleRange == NovelCharacterRange(location: 0, length: "同名章".count))
-}
-
-@Test func readerPageDocumentLegacyDecodePreservesAmbiguousTitleTextWithoutStylingRange() async throws {
-    let json = #"""
-    {
-      "threadID": "18603",
-      "view": 1,
-      "maxView": 1,
-      "contentSource": "allPostsPage",
-      "retainedChapterCount": 1,
-      "filteredChapterCandidateCount": 0,
-      "segments": [
-        {"kind": "text", "text": "正文里才出现同名章", "chapterTitle": "同名章"}
-      ],
-      "segmentSources": [null],
-      "fetchedAt": "2026-06-05T00:00:00Z"
-    }
-    """#.data(using: .utf8)!
-    let decoder = JSONDecoder()
-    decoder.dateDecodingStrategy = .iso8601
-
-    let document = try decoder.decode(NovelReaderProjection.self, from: json)
-    let semantics = try #require(document.semantics(forSegmentIndex: 0))
-
-    #expect(document.segments == [.text("正文里才出现同名章", chapterTitle: "同名章")])
-    #expect(semantics.chapterIdentity != nil)
-    #expect(semantics.textSegmentIdentity != nil)
-    #expect(semantics.chapterTitleRange == nil)
 }
 
 @Test func novelReaderCacheStoreInvalidatesDocumentWithCorruptExplicitTitleRange() async throws {
@@ -3083,7 +3026,7 @@ private final class StubURLProtocol: URLProtocol {
     let store = NovelReaderProjectionStore(databasePool: database, baseDirectory: directory)
     let document = #"""
     {
-      "schemaVersion": 3,
+      "schemaVersion": 6,
       "threadID": "18604",
       "view": 1,
       "maxView": 1,
@@ -3098,7 +3041,9 @@ private final class StubURLProtocol: URLProtocol {
         {
           "chapterIdentity": {"rawValue": "post:1#chapter:0"},
           "textSegmentIdentity": {"rawValue": "post:1#chapter:0#text:0"},
-          "chapterTitleRange": {"location": 0, "length": 20}
+          "chapterTitleRange": {"location": 0, "length": 20},
+          "inlineTextStyles": [],
+          "blockTextStyles": []
         }
       ],
       "fetchedAt": "2026-06-05T00:00:00Z"
@@ -3135,7 +3080,7 @@ private final class StubURLProtocol: URLProtocol {
     let store = NovelReaderProjectionStore(databasePool: database, baseDirectory: directory)
     let document = #"""
     {
-      "schemaVersion": 3,
+      "schemaVersion": 6,
       "threadID": "18606",
       "view": 1,
       "maxView": 1,
@@ -3153,7 +3098,8 @@ private final class StubURLProtocol: URLProtocol {
           "chapterTitleRange": {"location": 0, "length": 2},
           "inlineTextStyles": [
             {"style": "bold", "range": {"location": 1, "length": 20}}
-          ]
+          ],
+          "blockTextStyles": []
         }
       ],
       "fetchedAt": "2026-06-05T00:00:00Z"
@@ -3539,7 +3485,6 @@ private func makeReaderRepositoryThreadPage(
     }.first
 
     #expect(text == "新 schema 缓存刷新正文")
-    #expect(document.decodedSchemaVersion == NovelReaderProjection.schemaVersion)
 }
 
 @Test func readerRepositoryDoesNotFallBackToOldSchemaProjectionWhenThreadPageRefreshIsOffline() async throws {
