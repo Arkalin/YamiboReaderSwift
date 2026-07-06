@@ -2,36 +2,68 @@ import SwiftUI
 import YamiboReaderCore
 
 struct ForumThreadRatingResultsRequest: Identifiable, Equatable {
-    var threadID: String
     var postID: String
 
     var id: String {
-        "\(threadID)\u{1F}\(postID)"
+        postID
+    }
+}
+
+@MainActor
+@Observable
+final class ForumThreadRatingResultsSheetModel {
+    private(set) var page: ForumThreadRatingResultsPage?
+    private(set) var isLoading = false
+    private(set) var errorMessage: String?
+
+    private let postID: String
+    @ObservationIgnored private let load: (String) async throws -> ForumThreadRatingResultsPage
+
+    init(postID: String, load: @escaping (String) async throws -> ForumThreadRatingResultsPage) {
+        self.postID = postID
+        self.load = load
+    }
+
+    func loadPage() async {
+        isLoading = true
+        errorMessage = nil
+        defer { isLoading = false }
+
+        do {
+            page = try await load(postID)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
     }
 }
 
 struct ForumThreadRatingResultsSheet: View {
     @Environment(\.dismiss) private var dismiss
-    @State private var page: ForumThreadRatingResultsPage?
-    @State private var isLoading = false
-    @State private var errorMessage: String?
+    @State private var model: ForumThreadRatingResultsSheetModel
 
-    let request: ForumThreadRatingResultsRequest
-    let load: (String, String) async throws -> ForumThreadRatingResultsPage
     let onUserTap: (String, String?) -> Void
+
+    init(
+        request: ForumThreadRatingResultsRequest,
+        load: @escaping (String) async throws -> ForumThreadRatingResultsPage,
+        onUserTap: @escaping (String, String?) -> Void
+    ) {
+        _model = State(wrappedValue: ForumThreadRatingResultsSheetModel(postID: request.postID, load: load))
+        self.onUserTap = onUserTap
+    }
 
     var body: some View {
         NavigationStack {
             Group {
-                if isLoading && page == nil {
-                    ForumThreadReaderLoadingView()
-                } else if let errorMessage, page == nil {
-                    ForumThreadReaderErrorView(message: errorMessage) {
+                if model.isLoading && model.page == nil {
+                    ForumContentLoadingView()
+                } else if let errorMessage = model.errorMessage, model.page == nil {
+                    ForumContentErrorView(message: errorMessage) {
                         Task {
-                            await loadPage()
+                            await model.loadPage()
                         }
                     }
-                } else if let page {
+                } else if let page = model.page {
                     VStack(alignment: .leading, spacing: 12) {
                         HStack {
                             Text(L10n.string("forum.thread.rating_participants_format", page.ratings.count))
@@ -67,27 +99,15 @@ struct ForumThreadRatingResultsSheet: View {
                 }
             }
             .overlay(alignment: .top) {
-                if isLoading && page != nil {
+                if model.isLoading && model.page != nil {
                     ProgressView()
                         .controlSize(.small)
                         .padding(.top, 8)
                 }
             }
         }
-        .task(id: request.id) {
-            await loadPage()
-        }
-    }
-
-    private func loadPage() async {
-        isLoading = true
-        errorMessage = nil
-        defer { isLoading = false }
-
-        do {
-            page = try await load(request.threadID, request.postID)
-        } catch {
-            errorMessage = error.localizedDescription
+        .task {
+            await model.loadPage()
         }
     }
 

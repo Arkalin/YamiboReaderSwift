@@ -2,49 +2,92 @@ import SwiftUI
 import YamiboReaderCore
 
 struct ForumThreadPollVotersRequest: Identifiable, Equatable {
-    var threadID: String
     var optionID: String?
 
     var id: String {
-        "\(threadID)\u{1F}\(optionID ?? "")"
+        optionID ?? ""
+    }
+}
+
+@MainActor
+@Observable
+final class ForumThreadPollVotersSheetModel {
+    private(set) var selectedOptionID: String?
+    private(set) var pageNumber = 1
+    private(set) var votersPage: ForumThreadPollVotersPage?
+    private(set) var isLoading = false
+    private(set) var errorMessage: String?
+
+    @ObservationIgnored private let load: (String?, Int) async throws -> ForumThreadPollVotersPage
+
+    init(optionID: String?, load: @escaping (String?, Int) async throws -> ForumThreadPollVotersPage) {
+        selectedOptionID = optionID
+        self.load = load
+    }
+
+    var loadIdentity: String {
+        "\(selectedOptionID ?? "")\u{1F}\(pageNumber)"
+    }
+
+    var selectedOptionName: String {
+        guard let votersPage else {
+            return L10n.string("forum.thread.poll_voters")
+        }
+        let id = selectedOptionID ?? votersPage.selectedOptionID
+        return votersPage.pollOptions.first(where: { $0.id == id })?.name
+            ?? votersPage.pollOptions.first?.name
+            ?? L10n.string("forum.thread.poll_voters")
+    }
+
+    func selectOption(_ optionID: String) {
+        selectedOptionID = optionID
+        pageNumber = 1
+    }
+
+    func goToPage(_ page: Int) {
+        pageNumber = page
+    }
+
+    func loadPage() async {
+        isLoading = true
+        errorMessage = nil
+        defer { isLoading = false }
+
+        do {
+            votersPage = try await load(selectedOptionID, pageNumber)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
     }
 }
 
 struct ForumThreadPollVotersSheet: View {
     @Environment(\.dismiss) private var dismiss
-    @State private var selectedOptionID: String?
-    @State private var pageNumber = 1
-    @State private var votersPage: ForumThreadPollVotersPage?
-    @State private var isLoading = false
-    @State private var errorMessage: String?
+    @State private var model: ForumThreadPollVotersSheetModel
 
-    let request: ForumThreadPollVotersRequest
-    let load: (String, String?, Int) async throws -> ForumThreadPollVotersPage
     let onUserTap: (String, String?) -> Void
 
     init(
         request: ForumThreadPollVotersRequest,
-        load: @escaping (String, String?, Int) async throws -> ForumThreadPollVotersPage,
+        load: @escaping (String?, Int) async throws -> ForumThreadPollVotersPage,
         onUserTap: @escaping (String, String?) -> Void
     ) {
-        self.request = request
-        self.load = load
+        _model = State(wrappedValue: ForumThreadPollVotersSheetModel(optionID: request.optionID, load: load))
         self.onUserTap = onUserTap
-        _selectedOptionID = State(initialValue: request.optionID)
     }
 
     var body: some View {
         NavigationStack {
             Group {
-                if isLoading && votersPage == nil {
-                    ForumThreadReaderLoadingView()
-                } else if let errorMessage, votersPage == nil {
-                    ForumThreadReaderErrorView(message: errorMessage) {
+                if model.isLoading && model.votersPage == nil {
+                    ForumContentLoadingView()
+                } else if let errorMessage = model.errorMessage, model.votersPage == nil {
+                    ForumContentErrorView(message: errorMessage) {
                         Task {
-                            await loadPage()
+                            await model.loadPage()
                         }
                     }
-                } else if let votersPage {
+                } else if let votersPage = model.votersPage {
                     VStack(alignment: .leading, spacing: 14) {
                         optionMenu(votersPage)
 
@@ -67,11 +110,11 @@ struct ForumThreadPollVotersSheet: View {
                             }
                         }
 
-                        ForumThreadReaderPageNavigationView(
+                        ForumPageNavigationBar(
                             navigation: votersPage.pageNavigation,
-                            currentPage: votersPage.pageNavigation?.currentPage ?? pageNumber,
+                            currentPage: votersPage.pageNavigation?.currentPage ?? model.pageNumber,
                             goToPage: { page in
-                                pageNumber = page
+                                model.goToPage(page)
                             }
                         )
                     }
@@ -88,15 +131,15 @@ struct ForumThreadPollVotersSheet: View {
                 }
             }
             .overlay(alignment: .top) {
-                if isLoading && votersPage != nil {
+                if model.isLoading && model.votersPage != nil {
                     ProgressView()
                         .controlSize(.small)
                         .padding(.top, 8)
                 }
             }
         }
-        .task(id: loadIdentity) {
-            await loadPage()
+        .task(id: model.loadIdentity) {
+            await model.loadPage()
         }
     }
 
@@ -106,13 +149,12 @@ struct ForumThreadPollVotersSheet: View {
             Menu {
                 ForEach(page.pollOptions) { option in
                     Button(option.name) {
-                        selectedOptionID = option.id
-                        pageNumber = 1
+                        model.selectOption(option.id)
                     }
                 }
             } label: {
                 HStack {
-                    Text(selectedOptionName(in: page))
+                    Text(model.selectedOptionName)
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(ForumColors.textDark)
                         .lineLimit(1)
@@ -125,29 +167,6 @@ struct ForumThreadPollVotersSheet: View {
                 .padding(.vertical, 10)
                 .background(ForumColors.creamBackground, in: RoundedRectangle(cornerRadius: 8))
             }
-        }
-    }
-
-    private var loadIdentity: String {
-        "\(selectedOptionID ?? "")\u{1F}\(pageNumber)"
-    }
-
-    private func selectedOptionName(in page: ForumThreadPollVotersPage) -> String {
-        let id = selectedOptionID ?? page.selectedOptionID
-        return page.pollOptions.first(where: { $0.id == id })?.name
-            ?? page.pollOptions.first?.name
-            ?? L10n.string("forum.thread.poll_voters")
-    }
-
-    private func loadPage() async {
-        isLoading = true
-        errorMessage = nil
-        defer { isLoading = false }
-
-        do {
-            votersPage = try await load(request.threadID, selectedOptionID, pageNumber)
-        } catch {
-            errorMessage = error.localizedDescription
         }
     }
 

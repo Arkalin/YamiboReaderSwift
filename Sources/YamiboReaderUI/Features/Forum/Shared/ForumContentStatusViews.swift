@@ -1,7 +1,7 @@
 import SwiftUI
 import YamiboReaderCore
 
-struct ForumThreadReaderLoadingView: View {
+struct ForumContentLoadingView: View {
     var body: some View {
         VStack(spacing: 12) {
             ProgressView()
@@ -14,7 +14,7 @@ struct ForumThreadReaderLoadingView: View {
     }
 }
 
-struct ForumThreadReaderErrorView: View {
+struct ForumContentErrorView: View {
     let message: String
     let retry: () -> Void
 

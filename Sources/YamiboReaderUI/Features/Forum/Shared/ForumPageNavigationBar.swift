@@ -1,13 +1,13 @@
 import SwiftUI
 import YamiboReaderCore
 
-struct UserSpacePageNavigationView: View {
+struct ForumPageNavigationBar: View {
     let navigation: ForumPageNavigation?
     let currentPage: Int
     let goToPage: (Int) -> Void
 
     var body: some View {
-        if let navigation {
+        if let navigation, (navigation.totalPages ?? navigation.currentPage) > 1 {
             HStack(spacing: 12) {
                 Button {
                     goToPage(currentPage - 1)
@@ -19,7 +19,7 @@ struct UserSpacePageNavigationView: View {
                 Spacer()
 
                 Text(pageText(navigation))
-                    .font(.subheadline.weight(.medium))
+                    .font(.caption.weight(.semibold))
                     .foregroundStyle(ForumColors.secondaryText)
 
                 Spacer()
@@ -31,10 +31,9 @@ struct UserSpacePageNavigationView: View {
                 }
                 .disabled(navigation.totalPages.map { currentPage >= $0 } ?? false)
             }
+            .font(.subheadline)
             .buttonStyle(.bordered)
-            .controlSize(.small)
             .tint(ForumColors.brownEmphasis)
-            .padding(.top, 4)
         }
     }
 

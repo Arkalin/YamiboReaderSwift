@@ -13,16 +13,14 @@ struct ForumThreadPostCard: View {
     let refererURL: URL
     let threadID: String
     let currentPage: Int
-    let forumID: String?
-    let formHash: String?
     let onUserTap: (String, String?) -> Void
     let onImageTap: (String, URL, String?, URL) -> Void
-    let onShowRatingResults: (String, String) -> Void
-    let onShowPollVoters: (String, String?) -> Void
-    let onVotePoll: (String, String, [String], String) async throws -> String
-    let onLoadRateOptions: (String, String) async throws -> ForumThreadRateOptionsPage
-    let onRatePost: (String, String, Int, String, String, Bool) async throws -> String
-    let onCommentPost: (String, String, String, String, Int) async throws -> String
+    let onShowRatingResults: (String) -> Void
+    let onShowPollVoters: (String?) -> Void
+    let onVotePoll: ([String]) async throws -> String
+    let onLoadRateOptions: (String) async throws -> ForumThreadRateOptionsPage
+    let onRatePost: (String, Int, String, Bool) async throws -> String
+    let onCommentPost: (String, String) async throws -> String
     let onURLTap: (URL) -> Void
 
     var body: some View {
@@ -56,16 +54,16 @@ struct ForumThreadPostCard: View {
             if let poll = post.poll {
                 ForumThreadPollView(
                     poll: poll,
-                    onVote: pollVoteAction,
+                    onVote: onVotePoll,
                     onShowVoters: poll.status == .voted ? {
-                        onShowPollVoters(threadID, nil)
+                        onShowPollVoters(nil)
                     } : nil
                 )
             }
 
             if let ratingBlock = post.ratingBlock {
                 ForumThreadRatingBlockView(block: ratingBlock) {
-                    onShowRatingResults(threadID, post.postID)
+                    onShowRatingResults(post.postID)
                 }
             }
 
@@ -93,37 +91,17 @@ struct ForumThreadPostCard: View {
         .forumCardBackground(fill: isTarget ? ForumColors.accentFill : ForumColors.creamSurface)
         .sheet(isPresented: $isShowingRateSheet) {
             ForumThreadRateSheet(
-                threadID: threadID,
                 postID: post.postID,
-                formHash: normalizedFormHash,
                 loadOptions: onLoadRateOptions,
                 submit: onRatePost
             )
         }
         .sheet(isPresented: $isShowingCommentSheet) {
             ForumThreadCommentSheet(
-                threadID: threadID,
                 postID: post.postID,
-                formHash: normalizedFormHash,
-                page: currentPage,
                 submit: onCommentPost
             )
         }
-    }
-
-    private var pollVoteAction: (([String]) async throws -> String)? {
-        return { optionIDs in
-            guard let forumID = forumID?.trimmingCharacters(in: .whitespacesAndNewlines), !forumID.isEmpty,
-                  let normalizedFormHash else {
-                throw YamiboError.underlying(L10n.string("forum.thread.login_info_failed"))
-            }
-            return try await onVotePoll(forumID, threadID, optionIDs, normalizedFormHash)
-        }
-    }
-
-    private var normalizedFormHash: String? {
-        let value = formHash?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        return value.isEmpty ? nil : value
     }
 }
 

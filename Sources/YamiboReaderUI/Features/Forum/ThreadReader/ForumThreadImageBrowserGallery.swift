@@ -1,7 +1,18 @@
 import Foundation
 import YamiboReaderCore
 
-#if os(iOS)
+struct ForumThreadImageBrowserRequest: Identifiable, Equatable {
+    var items: [ImageBrowserItem]
+    var initialItemID: String
+
+    var id: String {
+        [
+            initialItemID,
+            items.map(\.id).joined(separator: "\u{1E}")
+        ].joined(separator: "\u{1F}")
+    }
+}
+
 struct ForumThreadImageBrowserGallery: Equatable {
     let items: [ImageBrowserItem]
     let initialItemID: String?
@@ -76,4 +87,3 @@ struct ForumThreadImageBrowserGallery: Equatable {
         return trimmed.isEmpty ? defaultTitle : trimmed
     }
 }
-#endif

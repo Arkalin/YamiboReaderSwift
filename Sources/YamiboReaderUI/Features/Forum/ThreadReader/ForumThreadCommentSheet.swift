@@ -1,27 +1,58 @@
 import SwiftUI
 import YamiboReaderCore
 
+@MainActor
+@Observable
+final class ForumThreadCommentSheetModel {
+    var message = ""
+    private(set) var isSubmitting = false
+    private(set) var errorMessage: String?
+
+    @ObservationIgnored private let postID: String
+    @ObservationIgnored private let submit: (String, String) async throws -> String
+
+    init(postID: String, submit: @escaping (String, String) async throws -> String) {
+        self.postID = postID
+        self.submit = submit
+    }
+
+    var canSubmit: Bool {
+        !isSubmitting && !message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    /// Returns true when the comment was submitted and the sheet should dismiss.
+    func submitComment() async -> Bool {
+        isSubmitting = true
+        errorMessage = nil
+        defer { isSubmitting = false }
+
+        do {
+            _ = try await submit(postID, message)
+            return true
+        } catch {
+            errorMessage = error.localizedDescription
+            return false
+        }
+    }
+}
+
 struct ForumThreadCommentSheet: View {
     @Environment(\.dismiss) private var dismiss
-    @State private var message = ""
-    @State private var isSubmitting = false
-    @State private var errorMessage: String?
+    @State private var model: ForumThreadCommentSheetModel
 
-    let threadID: String
-    let postID: String
-    let formHash: String?
-    let page: Int
-    let submit: (String, String, String, String, Int) async throws -> String
+    init(postID: String, submit: @escaping (String, String) async throws -> String) {
+        _model = State(wrappedValue: ForumThreadCommentSheetModel(postID: postID, submit: submit))
+    }
 
     var body: some View {
         NavigationStack {
             VStack(alignment: .leading, spacing: 12) {
-                TextEditor(text: $message)
+                TextEditor(text: $model.message)
                     .frame(minHeight: 160)
                     .padding(8)
                     .background(ForumColors.creamBackground, in: RoundedRectangle(cornerRadius: 8))
                     .overlay(alignment: .topLeading) {
-                        if message.isEmpty {
+                        if model.message.isEmpty {
                             Text(L10n.string("forum.thread.comment_placeholder"))
                                 .foregroundStyle(ForumColors.secondaryText)
                                 .padding(.horizontal, 14)
@@ -30,7 +61,7 @@ struct ForumThreadCommentSheet: View {
                         }
                     }
 
-                if let errorMessage {
+                if let errorMessage = model.errorMessage {
                     Text(errorMessage)
                         .font(.caption)
                         .foregroundStyle(.red)
@@ -48,35 +79,21 @@ struct ForumThreadCommentSheet: View {
                     }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button(isSubmitting ? L10n.string("forum.thread.submitting") : L10n.string("forum.thread.publish")) {
-                        submitComment()
+                    Button(model.isSubmitting ? L10n.string("forum.thread.submitting") : L10n.string("forum.thread.publish")) {
+                        Task {
+                            if await model.submitComment() {
+                                dismiss()
+                            }
+                        }
                     }
-                    .disabled(isSubmitting || message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .disabled(!model.canSubmit)
                 }
             }
             .overlay {
-                if isSubmitting {
+                if model.isSubmitting {
                     ProgressView()
                 }
             }
-        }
-    }
-
-    private func submitComment() {
-        guard let formHash else {
-            errorMessage = L10n.string("forum.thread.login_info_failed")
-            return
-        }
-        isSubmitting = true
-        errorMessage = nil
-        Task {
-            do {
-                _ = try await submit(threadID, postID, message, formHash, page)
-                dismiss()
-            } catch {
-                errorMessage = error.localizedDescription
-            }
-            isSubmitting = false
         }
     }
 }

@@ -1,6 +1,30 @@
 import SwiftUI
 import YamiboReaderCore
 
+@MainActor
+@Observable
+final class UserSpaceAddFriendSheetModel {
+    static let noteMaxLength = 10
+
+    var note = "" {
+        didSet {
+            if note.count > Self.noteMaxLength {
+                note = String(note.prefix(Self.noteMaxLength))
+            }
+        }
+    }
+
+    var selectedGroupID: Int?
+
+    func resolvedGroupID(for form: UserSpaceAddFriendForm) -> Int {
+        selectedGroupID ?? form.options.first?.id ?? 1
+    }
+
+    func resetGroupSelection(for form: UserSpaceAddFriendForm?) {
+        selectedGroupID = form?.options.first?.id
+    }
+}
+
 struct UserSpaceAddFriendSheet: View {
     let targetName: String?
     let form: UserSpaceAddFriendForm?
@@ -11,8 +35,7 @@ struct UserSpaceAddFriendSheet: View {
     let submit: (String, Int) -> Void
     let dismiss: () -> Void
 
-    @State private var note = ""
-    @State private var selectedGroupID: Int?
+    @State private var model = UserSpaceAddFriendSheetModel()
 
     var body: some View {
         NavigationStack {
@@ -26,17 +49,14 @@ struct UserSpaceAddFriendSheet: View {
                         targetName: form.name ?? targetName,
                         avatarURL: form.avatarURL,
                         options: form.options,
-                        note: Binding(
-                            get: { note },
-                            set: { note = String($0.prefix(10)) }
-                        ),
+                        note: $model.note,
                         selectedGroupID: Binding(
-                            get: { selectedGroupID ?? form.options.first?.id ?? 1 },
-                            set: { selectedGroupID = $0 }
+                            get: { model.resolvedGroupID(for: form) },
+                            set: { model.selectedGroupID = $0 }
                         ),
                         isSubmitting: isSubmitting,
                         submit: {
-                            submit(note, selectedGroupID ?? form.options.first?.id ?? 1)
+                            submit(model.note, model.resolvedGroupID(for: form))
                         }
                     )
                 } else {
@@ -52,7 +72,7 @@ struct UserSpaceAddFriendSheet: View {
                 }
             }
             .task(id: form?.formHash) {
-                selectedGroupID = form?.options.first?.id
+                model.resetGroupSelection(for: form)
             }
         }
     }

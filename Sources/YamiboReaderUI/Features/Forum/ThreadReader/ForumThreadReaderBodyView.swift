@@ -17,12 +17,13 @@ struct ForumThreadReaderBodyView: View {
     let retry: () -> Void
     let goToPage: (Int) -> Void
     let toggleFavorite: () -> Void
-    let loadRatingResults: (String, String) async throws -> ForumThreadRatingResultsPage
-    let loadRateOptions: (String, String) async throws -> ForumThreadRateOptionsPage
-    let loadPollVoters: (String, String?, Int) async throws -> ForumThreadPollVotersPage
-    let votePoll: (String, String, [String], String) async throws -> String
-    let ratePost: (String, String, Int, String, String, Bool) async throws -> String
-    let commentPost: (String, String, String, String, Int) async throws -> String
+    let makeImageBrowserRequest: (String, URL, String?, URL) -> ForumThreadImageBrowserRequest?
+    let loadRatingResults: (String) async throws -> ForumThreadRatingResultsPage
+    let loadRateOptions: (String) async throws -> ForumThreadRateOptionsPage
+    let loadPollVoters: (String?, Int) async throws -> ForumThreadPollVotersPage
+    let votePoll: ([String]) async throws -> String
+    let ratePost: (String, Int, String, Bool) async throws -> String
+    let commentPost: (String, String) async throws -> String
     let onUserTap: (String, String?) -> Void
     let onURLTap: (URL) -> Void
 
@@ -79,8 +80,6 @@ struct ForumThreadReaderBodyView: View {
                                 ).url,
                                 threadID: page.thread.tid,
                                 currentPage: currentPage,
-                                forumID: page.forumID,
-                                formHash: page.formHash,
                                 onUserTap: onUserTap,
                                 onImageTap: openImageBrowser,
                                 onShowRatingResults: showRatingResults,
@@ -94,15 +93,15 @@ struct ForumThreadReaderBodyView: View {
                             .id(post.postID)
                         }
 
-                        ForumThreadReaderPageNavigationView(
+                        ForumPageNavigationBar(
                             navigation: pageNavigation,
                             currentPage: currentPage,
                             goToPage: goToPage
                         )
                     } else if isLoading {
-                        ForumThreadReaderLoadingView()
+                        ForumContentLoadingView()
                     } else if let errorMessage {
-                        ForumThreadReaderErrorView(message: errorMessage, retry: retry)
+                        ForumContentErrorView(message: errorMessage, retry: retry)
                     }
                 }
                 .padding(.horizontal, 16)
@@ -123,6 +122,10 @@ struct ForumThreadReaderBodyView: View {
                       page?.posts.contains(where: { $0.postID == targetPostID }) == true else {
                     return
                 }
+                // SwiftUI offers no layout-completion callback for freshly loaded
+                // LazyVStack content; scrolling immediately targets estimated row
+                // positions and lands off-target. The 150ms settle delay is an
+                // empirical workaround, not a synchronization mechanism.
                 try? await Task.sleep(nanoseconds: 150_000_000)
                 withAnimation(.snappy) {
                     proxy.scrollTo(targetPostID, anchor: .center)
@@ -153,49 +156,18 @@ struct ForumThreadReaderBodyView: View {
     }
 
     private func openImageBrowser(_ imageID: String, _ url: URL, _ title: String?, _ refererURL: URL) {
-        guard let page else {
+        if let request = makeImageBrowserRequest(imageID, url, title, refererURL) {
+            imageBrowserRequest = request
+        } else {
             onURLTap(url)
-            return
         }
-        let gallery = ForumThreadImageBrowserGallery(
-            page: page,
-            refererURL: refererURL,
-            selectedBlockID: imageID,
-            defaultTitle: L10n.string("forum.thread.image")
-        )
-        let fallbackItem = ImageBrowserItem(
-            id: imageID,
-            source: YamiboImageSource(url: url, refererPageURL: refererURL),
-            title: imageBrowserTitle(from: title),
-        )
-        imageBrowserRequest = ForumThreadImageBrowserRequest(
-            items: gallery.items.isEmpty ? [fallbackItem] : gallery.items,
-            initialItemID: gallery.initialItemID ?? fallbackItem.id
-        )
     }
 
-    private func imageBrowserTitle(from title: String?) -> String {
-        let trimmed = title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        return trimmed.isEmpty ? L10n.string("forum.thread.image") : trimmed
+    private func showRatingResults(postID: String) {
+        ratingResultsRequest = ForumThreadRatingResultsRequest(postID: postID)
     }
 
-    private func showRatingResults(threadID: String, postID: String) {
-        ratingResultsRequest = ForumThreadRatingResultsRequest(threadID: threadID, postID: postID)
-    }
-
-    private func showPollVoters(threadID: String, optionID: String?) {
-        pollVotersRequest = ForumThreadPollVotersRequest(threadID: threadID, optionID: optionID)
-    }
-}
-
-private struct ForumThreadImageBrowserRequest: Identifiable, Equatable {
-    var items: [ImageBrowserItem]
-    var initialItemID: String
-
-    var id: String {
-        [
-            initialItemID,
-            items.map(\.id).joined(separator: "\u{1E}")
-        ].joined(separator: "\u{1F}")
+    private func showPollVoters(optionID: String?) {
+        pollVotersRequest = ForumThreadPollVotersRequest(optionID: optionID)
     }
 }

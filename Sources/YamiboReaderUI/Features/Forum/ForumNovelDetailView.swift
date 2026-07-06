@@ -163,9 +163,9 @@ private struct ForumNovelDetailBodyView: View {
                         )
                     }
                 } else if isLoading {
-                    ForumThreadReaderLoadingView()
+                    ForumContentLoadingView()
                 } else if let errorMessage {
-                    ForumThreadReaderErrorView(message: errorMessage) {
+                    ForumContentErrorView(message: errorMessage) {
                         Task {
                             await refresh()
                         }
@@ -275,7 +275,7 @@ private struct ForumNovelChapterSectionView: View {
                     }
                     .frame(height: 56)
                 } else if let errorMessage = section.errorMessage {
-                    ForumThreadReaderErrorView(message: errorMessage, retry: onRetry)
+                    ForumContentErrorView(message: errorMessage, retry: onRetry)
                 } else {
                     ForEach(section.chapters) { chapter in
                         ForumNovelChapterRow(chapter: chapter) {

@@ -29,7 +29,7 @@ struct UserSpaceContentView: View {
                             onAuthorTap: onUserTap
                         )
                     }
-                    UserSpacePageNavigationView(navigation: pageNavigation, currentPage: currentPage, goToPage: goToPage)
+                    ForumPageNavigationBar(navigation: pageNavigation, currentPage: currentPage, goToPage: goToPage)
                 }
             }
         case .replies:
@@ -42,7 +42,7 @@ struct UserSpaceContentView: View {
                             onThreadTap(reply.threadURL, reply.threadTitle)
                         }
                     }
-                    UserSpacePageNavigationView(navigation: pageNavigation, currentPage: currentPage, goToPage: goToPage)
+                    ForumPageNavigationBar(navigation: pageNavigation, currentPage: currentPage, goToPage: goToPage)
                 }
             }
         case .myBlogs, .friendBlogs, .viewAllBlogs:
@@ -55,7 +55,7 @@ struct UserSpaceContentView: View {
                             onBlogTap(blog)
                         }
                     }
-                    UserSpacePageNavigationView(navigation: pageNavigation, currentPage: currentPage, goToPage: goToPage)
+                    ForumPageNavigationBar(navigation: pageNavigation, currentPage: currentPage, goToPage: goToPage)
                 }
             }
         case .friends, .online, .visitors, .traces:
@@ -72,7 +72,7 @@ struct UserSpaceContentView: View {
                             onUserTap(friend.uid, friend.name)
                         }
                     }
-                    UserSpacePageNavigationView(navigation: pageNavigation, currentPage: currentPage, goToPage: goToPage)
+                    ForumPageNavigationBar(navigation: pageNavigation, currentPage: currentPage, goToPage: goToPage)
                 }
             }
         }

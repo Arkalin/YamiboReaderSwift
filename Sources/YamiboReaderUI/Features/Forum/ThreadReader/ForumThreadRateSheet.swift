@@ -1,56 +1,114 @@
 import SwiftUI
 import YamiboReaderCore
 
+@MainActor
+@Observable
+final class ForumThreadRateSheetModel {
+    var scoreText = ""
+    var reason = ""
+    var noticeAuthor = false
+    private(set) var options: ForumThreadRateOptionsPage?
+    private(set) var isLoadingOptions = false
+    private(set) var isSubmitting = false
+    private(set) var hintMessage: String?
+    private(set) var errorMessage: String?
+
+    @ObservationIgnored private let postID: String
+    @ObservationIgnored private let loadOptions: (String) async throws -> ForumThreadRateOptionsPage
+    @ObservationIgnored private let submit: (String, Int, String, Bool) async throws -> String
+
+    init(
+        postID: String,
+        loadOptions: @escaping (String) async throws -> ForumThreadRateOptionsPage,
+        submit: @escaping (String, Int, String, Bool) async throws -> String
+    ) {
+        self.postID = postID
+        self.loadOptions = loadOptions
+        self.submit = submit
+    }
+
+    var canSubmit: Bool {
+        !isSubmitting && !scoreText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    func loadRateOptions() async {
+        isLoadingOptions = true
+        hintMessage = L10n.string("forum.thread.rate_loading_options")
+        defer { isLoadingOptions = false }
+
+        do {
+            options = try await loadOptions(postID)
+            hintMessage = nil
+        } catch {
+            hintMessage = L10n.string("forum.thread.rate_options_failed")
+        }
+    }
+
+    /// Returns true when the rating was submitted and the sheet should dismiss.
+    func submitRate() async -> Bool {
+        guard let score = Int(scoreText.trimmingCharacters(in: .whitespacesAndNewlines)) else {
+            errorMessage = L10n.string("forum.thread.rate_score_invalid")
+            return false
+        }
+        isSubmitting = true
+        errorMessage = nil
+        defer { isSubmitting = false }
+
+        do {
+            _ = try await submit(postID, score, reason, noticeAuthor)
+            return true
+        } catch {
+            errorMessage = error.localizedDescription
+            return false
+        }
+    }
+}
+
 struct ForumThreadRateSheet: View {
     @Environment(\.dismiss) private var dismiss
-    @State private var options: ForumThreadRateOptionsPage?
-    @State private var scoreText = ""
-    @State private var reason = ""
-    @State private var noticeAuthor = false
-    @State private var isLoadingOptions = false
-    @State private var isSubmitting = false
-    @State private var hintMessage: String?
-    @State private var errorMessage: String?
+    @State private var model: ForumThreadRateSheetModel
 
-    let threadID: String
-    let postID: String
-    let formHash: String?
-    let loadOptions: (String, String) async throws -> ForumThreadRateOptionsPage
-    let submit: (String, String, Int, String, String, Bool) async throws -> String
+    init(
+        postID: String,
+        loadOptions: @escaping (String) async throws -> ForumThreadRateOptionsPage,
+        submit: @escaping (String, Int, String, Bool) async throws -> String
+    ) {
+        _model = State(wrappedValue: ForumThreadRateSheetModel(postID: postID, loadOptions: loadOptions, submit: submit))
+    }
 
     var body: some View {
         NavigationStack {
             Form {
                 Section {
-                    TextField(L10n.string("forum.thread.rate_score"), text: $scoreText)
+                    TextField(L10n.string("forum.thread.rate_score"), text: $model.scoreText)
 
-                    if let options, !options.availableScores.isEmpty {
+                    if let options = model.options, !options.availableScores.isEmpty {
                         Menu(L10n.string("forum.thread.rate_score_options")) {
                             ForEach(options.availableScores, id: \.self) { score in
                                 Button(String(score)) {
-                                    scoreText = String(score)
+                                    model.scoreText = String(score)
                                 }
                             }
                         }
                     }
 
-                    TextField(L10n.string("forum.thread.rate_reason"), text: $reason, axis: .vertical)
+                    TextField(L10n.string("forum.thread.rate_reason"), text: $model.reason, axis: .vertical)
                         .lineLimit(3 ... 5)
 
-                    if let options, !options.defaultReasons.isEmpty {
+                    if let options = model.options, !options.defaultReasons.isEmpty {
                         Menu(L10n.string("forum.thread.rate_reason_options")) {
                             ForEach(options.defaultReasons, id: \.self) { value in
                                 Button(value) {
-                                    reason = value
+                                    model.reason = value
                                 }
                             }
                         }
                     }
 
-                    Toggle(L10n.string("forum.thread.rate_notice_author"), isOn: $noticeAuthor)
+                    Toggle(L10n.string("forum.thread.rate_notice_author"), isOn: $model.noticeAuthor)
                 }
 
-                if let hintMessage {
+                if let hintMessage = model.hintMessage {
                     Section {
                         Text(hintMessage)
                             .font(.caption)
@@ -58,7 +116,7 @@ struct ForumThreadRateSheet: View {
                     }
                 }
 
-                if let errorMessage {
+                if let errorMessage = model.errorMessage {
                     Section {
                         Text(errorMessage)
                             .font(.caption)
@@ -75,55 +133,24 @@ struct ForumThreadRateSheet: View {
                     }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button(isSubmitting ? L10n.string("forum.thread.submitting") : L10n.string("forum.thread.submit")) {
-                        submitRate()
+                    Button(model.isSubmitting ? L10n.string("forum.thread.submitting") : L10n.string("forum.thread.submit")) {
+                        Task {
+                            if await model.submitRate() {
+                                dismiss()
+                            }
+                        }
                     }
-                    .disabled(isSubmitting || scoreText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .disabled(!model.canSubmit)
                 }
             }
             .overlay {
-                if isLoadingOptions || isSubmitting {
+                if model.isLoadingOptions || model.isSubmitting {
                     ProgressView()
                 }
             }
         }
-        .task(id: "\(threadID)-\(postID)") {
-            await loadRateOptions()
-        }
-    }
-
-    private func loadRateOptions() async {
-        isLoadingOptions = true
-        hintMessage = L10n.string("forum.thread.rate_loading_options")
-        defer { isLoadingOptions = false }
-
-        do {
-            options = try await loadOptions(threadID, postID)
-            hintMessage = nil
-        } catch {
-            hintMessage = L10n.string("forum.thread.rate_options_failed")
-        }
-    }
-
-    private func submitRate() {
-        guard let score = Int(scoreText.trimmingCharacters(in: .whitespacesAndNewlines)) else {
-            errorMessage = L10n.string("forum.thread.rate_score_invalid")
-            return
-        }
-        guard let formHash else {
-            errorMessage = L10n.string("forum.thread.login_info_failed")
-            return
-        }
-        isSubmitting = true
-        errorMessage = nil
-        Task {
-            do {
-                _ = try await submit(threadID, postID, score, reason, formHash, noticeAuthor)
-                dismiss()
-            } catch {
-                errorMessage = error.localizedDescription
-            }
-            isSubmitting = false
+        .task {
+            await model.loadRateOptions()
         }
     }
 }

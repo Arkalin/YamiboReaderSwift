@@ -30,6 +30,7 @@ struct ForumThreadReaderView: View {
             retry: model.retry,
             goToPage: goToPage,
             toggleFavorite: toggleFavorite,
+            makeImageBrowserRequest: model.imageBrowserRequest,
             loadRatingResults: model.loadRatingResults,
             loadRateOptions: model.loadRateOptions,
             loadPollVoters: model.loadPollVoters,

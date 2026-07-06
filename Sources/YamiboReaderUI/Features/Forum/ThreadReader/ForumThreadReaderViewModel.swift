@@ -161,22 +161,25 @@ final class ForumThreadReaderViewModel {
         }
     }
 
-    func loadRatingResults(threadID: String, postID: String) async throws -> ForumThreadRatingResultsPage {
+    func loadRatingResults(postID: String) async throws -> ForumThreadRatingResultsPage {
         let repository = await repositoryProvider()
         return try await repository.fetchRatingResults(threadID: threadID, postID: postID)
     }
 
-    func loadRateOptions(threadID: String, postID: String) async throws -> ForumThreadRateOptionsPage {
+    func loadRateOptions(postID: String) async throws -> ForumThreadRateOptionsPage {
         let repository = await repositoryProvider()
         return try await repository.fetchRateOptions(threadID: threadID, postID: postID)
     }
 
-    func loadPollVoters(threadID: String, optionID: String?, page: Int) async throws -> ForumThreadPollVotersPage {
+    func loadPollVoters(optionID: String?, page: Int) async throws -> ForumThreadPollVotersPage {
         let repository = await repositoryProvider()
         return try await repository.fetchPollVoters(threadID: threadID, optionID: optionID, page: page)
     }
 
-    func votePoll(forumID: String, threadID: String, optionIDs: [String], formHash: String) async throws -> String {
+    func votePoll(optionIDs: [String]) async throws -> String {
+        guard let forumID = normalizedForumID, let formHash = normalizedFormHash else {
+            throw YamiboError.underlying(L10n.string("forum.thread.login_info_failed"))
+        }
         let repository = await repositoryProvider()
         let message = try await repository.votePoll(
             forumID: forumID,
@@ -189,13 +192,14 @@ final class ForumThreadReaderViewModel {
     }
 
     func ratePost(
-        threadID: String,
         postID: String,
         score: Int,
         reason: String,
-        formHash: String,
         noticeAuthor: Bool
     ) async throws -> String {
+        guard let formHash = normalizedFormHash else {
+            throw YamiboError.underlying(L10n.string("forum.thread.login_info_failed"))
+        }
         let repository = await repositoryProvider()
         let message = try await repository.ratePost(
             threadID: threadID,
@@ -209,23 +213,63 @@ final class ForumThreadReaderViewModel {
         return message
     }
 
-    func commentPost(
-        threadID: String,
-        postID: String,
-        message: String,
-        formHash: String,
-        page: Int
-    ) async throws -> String {
+    func commentPost(postID: String, message: String) async throws -> String {
+        guard let formHash = normalizedFormHash else {
+            throw YamiboError.underlying(L10n.string("forum.thread.login_info_failed"))
+        }
         let repository = await repositoryProvider()
         let result = try await repository.commentPost(
             threadID: threadID,
             postID: postID,
             message: message,
             formHash: formHash,
-            page: page
+            page: currentPage
         )
         await refresh()
         return result
+    }
+
+    func imageBrowserRequest(
+        imageID: String,
+        url: URL,
+        title: String?,
+        refererURL: URL
+    ) -> ForumThreadImageBrowserRequest? {
+        guard let page else { return nil }
+        let defaultTitle = L10n.string("forum.thread.image")
+        let gallery = ForumThreadImageBrowserGallery(
+            page: page,
+            refererURL: refererURL,
+            selectedBlockID: imageID,
+            defaultTitle: defaultTitle
+        )
+        let trimmedTitle = title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let fallbackItem = ImageBrowserItem(
+            id: imageID,
+            source: YamiboImageSource(url: url, refererPageURL: refererURL),
+            title: trimmedTitle.isEmpty ? defaultTitle : trimmedTitle
+        )
+        return ForumThreadImageBrowserRequest(
+            items: gallery.items.isEmpty ? [fallbackItem] : gallery.items,
+            initialItemID: gallery.initialItemID ?? fallbackItem.id
+        )
+    }
+
+    private var threadID: String {
+        page?.thread.tid ?? context.thread.tid
+    }
+
+    private var normalizedForumID: String? {
+        normalized(page?.forumID)
+    }
+
+    private var normalizedFormHash: String? {
+        normalized(page?.formHash)
+    }
+
+    private func normalized(_ value: String?) -> String? {
+        let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? nil : trimmed
     }
 
     private func loadPage(
