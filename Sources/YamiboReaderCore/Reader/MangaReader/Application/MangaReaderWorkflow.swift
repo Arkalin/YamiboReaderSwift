@@ -27,7 +27,9 @@ public struct MangaAdjacentChapterPrefetchPolicy: Hashable, Sendable {
     }
 }
 
-@MainActor
+/// Caller-isolated (non-`Sendable`): the workflow runs entirely in whatever
+/// isolation domain owns it, so its synchronous page-turn API stays synchronous
+/// and its `async` methods (`nonisolated(nonsending)`) never hop executors.
 public final class MangaReaderWorkflow {
     public private(set) var presentation: MangaReaderPresentation
     public private(set) var shouldAutoUpdateDirectoryAfterPrepare = false
@@ -72,7 +74,7 @@ public final class MangaReaderWorkflow {
     }
 
     @discardableResult
-    public func prepare() async -> MangaReaderPresentation {
+    public nonisolated(nonsending) func prepare() async -> MangaReaderPresentation {
         window = nil
         shouldAutoUpdateDirectoryAfterPrepare = false
         directoryPanelCommandState = MangaDirectoryPanelCommandState()
@@ -133,7 +135,7 @@ public final class MangaReaderWorkflow {
         return presentation
     }
 
-    private func offlineReadableCurrentChapterDirectory(for document: MangaReaderProjection) async -> MangaDirectory? {
+    private nonisolated(nonsending) func offlineReadableCurrentChapterDirectory(for document: MangaReaderProjection) async -> MangaDirectory? {
         guard let offlineCacheStore,
               let ownerName = context.directoryName?.mangaReaderTrimmedNonEmpty,
               let membership = await offlineCacheStore.mangaOfflineCacheMembership(ownerName: ownerName, tid: document.tid),
@@ -191,7 +193,7 @@ public final class MangaReaderWorkflow {
     }
 
     @discardableResult
-    public func prefetchAdjacentChaptersIfNeeded(around globalIndex: Int) async -> MangaReaderPresentation? {
+    public nonisolated(nonsending) func prefetchAdjacentChaptersIfNeeded(around globalIndex: Int) async -> MangaReaderPresentation? {
         guard var window else { return nil }
 
         let pages = MangaReaderPageProjection.projections(from: window)
@@ -259,7 +261,7 @@ public final class MangaReaderWorkflow {
     }
 
     @discardableResult
-    public func updateDirectory(isForcedSearch: Bool = false) async throws -> MangaDirectoryUpdateResult {
+    public nonisolated(nonsending) func updateDirectory(isForcedSearch: Bool = false) async throws -> MangaDirectoryUpdateResult {
         try Task.checkCancellation()
 
         guard var window else {
@@ -280,7 +282,7 @@ public final class MangaReaderWorkflow {
     }
 
     @discardableResult
-    public func renameDirectory(
+    public nonisolated(nonsending) func renameDirectory(
         cleanBookName: String,
         searchKeyword: String
     ) async throws -> MangaDirectory {
@@ -300,7 +302,7 @@ public final class MangaReaderWorkflow {
     }
 
     @discardableResult
-    public func deleteDirectoryChapters(tids: Set<String>) async throws -> MangaReaderPresentation {
+    public nonisolated(nonsending) func deleteDirectoryChapters(tids: Set<String>) async throws -> MangaReaderPresentation {
         try Task.checkCancellation()
 
         guard var window else {
@@ -327,7 +329,7 @@ public final class MangaReaderWorkflow {
     }
 
     @discardableResult
-    public func jumpToChapter(_ chapter: MangaChapter) async throws -> MangaReaderPresentation {
+    public nonisolated(nonsending) func jumpToChapter(_ chapter: MangaChapter) async throws -> MangaReaderPresentation {
         try Task.checkCancellation()
 
         guard var window else {
@@ -365,7 +367,7 @@ public final class MangaReaderWorkflow {
     }
 
     @discardableResult
-    public func jumpToPosition(_ position: MangaReadingPosition) async throws -> MangaReaderPresentation {
+    public nonisolated(nonsending) func jumpToPosition(_ position: MangaReadingPosition) async throws -> MangaReaderPresentation {
         try Task.checkCancellation()
 
         guard var window else {
@@ -420,7 +422,7 @@ public final class MangaReaderWorkflow {
     }
 
     @discardableResult
-    public func jumpToAdjacentChapter(
+    public nonisolated(nonsending) func jumpToAdjacentChapter(
         from position: MangaReadingPosition?,
         delta: Int,
         animated: Bool = false
@@ -481,7 +483,7 @@ public final class MangaReaderWorkflow {
         return presentation
     }
 
-    public func currentDirectorySearchCooldownExpiresAt() async -> Date? {
+    public nonisolated(nonsending) func currentDirectorySearchCooldownExpiresAt() async -> Date? {
         await directoryWorkflow.cooldownExpiresAt()
     }
 

@@ -109,6 +109,11 @@ private struct NovelReadingPreparedTransaction {
     let currentDocumentSurfaceCount: Int
 }
 
+/// `@MainActor` is load-bearing here, not caller convenience: the workflow owns
+/// and synchronously drives `NovelTextViewportRuntimeOwner`, a main-actor-bound
+/// TextKit graph, through per-frame paths (viewport samples, display-reference
+/// lookups). Once the TextKit adapter moves to the UI layer (P5e) this type can
+/// become caller-isolated like `MangaReaderWorkflow`.
 @MainActor
 public final class NovelReadingWorkflow {
     public private(set) var state: NovelReadingWorkflowState?

@@ -16,14 +16,26 @@ public struct ReaderChapterCommentsUnavailableError: LocalizedError, Sendable {
     }
 }
 
+public struct ReaderChapterCommentsSnapshot: Equatable, Sendable {
+    public var state: ReaderChapterCommentsState
+    public var isLoadingMore: Bool
+    public var loadMoreError: String?
+    public var refreshError: String?
+}
+
+/// Caller-isolated (non-`Sendable`): state mutations happen in the isolation
+/// domain of whoever drives the module, and `onChange` fires there with a
+/// `Sendable` snapshot. The module makes no threading assumption; a UI owner is
+/// responsible for hopping back to its own isolation (it drives the module
+/// exclusively from there, so the callback provably arrives on it).
 public final class ReaderChapterCommentsModule {
-    public struct Adapter {
-        public var loadInitial: @MainActor (ReaderChapterCommentTarget) async throws -> ChapterCommentsPage
-        public var loadMore: @MainActor (ReaderChapterCommentTarget, Int) async throws -> ChapterCommentsPage
+    public struct Adapter: Sendable {
+        public var loadInitial: @Sendable (ReaderChapterCommentTarget) async throws -> ChapterCommentsPage
+        public var loadMore: @Sendable (ReaderChapterCommentTarget, Int) async throws -> ChapterCommentsPage
 
         public init(
-            loadInitial: @escaping @MainActor (ReaderChapterCommentTarget) async throws -> ChapterCommentsPage,
-            loadMore: @escaping @MainActor (ReaderChapterCommentTarget, Int) async throws -> ChapterCommentsPage
+            loadInitial: @escaping @Sendable (ReaderChapterCommentTarget) async throws -> ChapterCommentsPage,
+            loadMore: @escaping @Sendable (ReaderChapterCommentTarget, Int) async throws -> ChapterCommentsPage
         ) {
             self.loadInitial = loadInitial
             self.loadMore = loadMore
@@ -37,18 +49,17 @@ public final class ReaderChapterCommentsModule {
 
     private let adapter: Adapter
     private var cache: [ReaderChapterCommentTarget: ChapterCommentsPage] = [:]
-    private var onChange: (@MainActor (ReaderChapterCommentsModule) -> Void)?
+    private let onChange: (@Sendable (ReaderChapterCommentsSnapshot) -> Void)?
 
     public init(
         adapter: Adapter,
-        onChange: (@MainActor (ReaderChapterCommentsModule) -> Void)?
+        onChange: (@Sendable (ReaderChapterCommentsSnapshot) -> Void)?
     ) {
         self.adapter = adapter
         self.onChange = onChange
     }
 
-    @MainActor
-    public func load(_ target: ReaderChapterCommentTarget?) async {
+    public nonisolated(nonsending) func load(_ target: ReaderChapterCommentTarget?) async {
         guard let target else {
             state = .unsupported
             notifyChange()
@@ -63,8 +74,7 @@ public final class ReaderChapterCommentsModule {
         await refresh(target)
     }
 
-    @MainActor
-    public func refresh(_ target: ReaderChapterCommentTarget?) async {
+    public nonisolated(nonsending) func refresh(_ target: ReaderChapterCommentTarget?) async {
         guard let target else {
             state = .unsupported
             notifyChange()
@@ -89,8 +99,7 @@ public final class ReaderChapterCommentsModule {
         notifyChange()
     }
 
-    @MainActor
-    public func loadNextPage() async {
+    public nonisolated(nonsending) func loadNextPage() async {
         guard case let .loaded(target, currentPage) = state,
               let nextView = currentPage.nextView,
               !isLoadingMore else {
@@ -118,8 +127,14 @@ public final class ReaderChapterCommentsModule {
         notifyChange()
     }
 
-    @MainActor
     private func notifyChange() {
-        onChange?(self)
+        onChange?(
+            ReaderChapterCommentsSnapshot(
+                state: state,
+                isLoadingMore: isLoadingMore,
+                loadMoreError: loadMoreError,
+                refreshError: refreshError
+            )
+        )
     }
 }

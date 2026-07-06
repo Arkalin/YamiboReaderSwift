@@ -98,8 +98,12 @@ public final class MangaReaderViewModel: ObservableObject {
                 return try await repository.loadMoreChapterComments(for: target, view: view)
             }
         ),
-        onChange: { [weak self] module in
-            self?.syncChapterComments(from: module)
+        onChange: { [weak self] snapshot in
+            // The module is driven exclusively from this main-actor view model,
+            // so its caller-isolated onChange provably fires on the main actor.
+            MainActor.assumeIsolated {
+                self?.syncChapterComments(snapshot)
+            }
         }
     )
 
@@ -1030,11 +1034,11 @@ public final class MangaReaderViewModel: ObservableObject {
         return chapterCommentsRepository
     }
 
-    private func syncChapterComments(from module: ReaderChapterCommentsModule) {
-        chapterCommentsState = module.state
-        isLoadingMoreChapterComments = module.isLoadingMore
-        chapterCommentsLoadMoreError = module.loadMoreError
-        chapterCommentsRefreshError = module.refreshError
+    private func syncChapterComments(_ snapshot: ReaderChapterCommentsSnapshot) {
+        chapterCommentsState = snapshot.state
+        isLoadingMoreChapterComments = snapshot.isLoadingMore
+        chapterCommentsLoadMoreError = snapshot.loadMoreError
+        chapterCommentsRefreshError = snapshot.refreshError
     }
 
     private static func normalizedSettings(_ settings: MangaReaderSettings) -> MangaReaderSettings {
