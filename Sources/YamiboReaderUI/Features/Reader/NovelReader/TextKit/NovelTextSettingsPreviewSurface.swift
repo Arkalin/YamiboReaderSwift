@@ -1,13 +1,15 @@
 import CoreGraphics
 import Foundation
-
-#if canImport(UIKit)
 import UIKit
+import YamiboReaderCore
 
-package final class NovelTextSettingsPreviewSurface {
+/// Short-lived preview surface for the reader settings sheet. Reuses the
+/// attributed-document styling but never builds a viewport index or touches
+/// the active reading workflow.
+final class NovelTextSettingsPreviewSurface {
     private let attributedText: NSAttributedString
 
-    package init(
+    init(
         text: String,
         settings: NovelReaderAppearanceSettings,
         baseFontSize: Double = NovelAttributedTextFactory.defaultBaseFontSize,
@@ -23,7 +25,7 @@ package final class NovelTextSettingsPreviewSurface {
         )
     }
 
-    package func diagnosticParagraphStyle(at location: Int) -> NSParagraphStyle? {
+    func diagnosticParagraphStyle(at location: Int) -> NSParagraphStyle? {
         guard location >= 0, location < attributedText.length else { return nil }
         return attributedText.attribute(
             .paragraphStyle,
@@ -32,7 +34,7 @@ package final class NovelTextSettingsPreviewSurface {
         ) as? NSParagraphStyle
     }
 
-    package func draw(in context: CGContext, bounds: CGRect) {
+    func draw(in context: CGContext, bounds: CGRect) {
         guard bounds.width > 0, bounds.height > 0, attributedText.length > 0 else {
             return
         }
@@ -47,4 +49,3 @@ package final class NovelTextSettingsPreviewSurface {
         context.restoreGState()
     }
 }
-#endif

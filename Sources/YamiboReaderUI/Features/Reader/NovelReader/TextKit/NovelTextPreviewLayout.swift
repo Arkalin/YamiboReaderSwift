@@ -1,8 +1,7 @@
 import CoreGraphics
 import Foundation
-
-#if canImport(UIKit)
 import UIKit
+import YamiboReaderCore
 
 enum NovelTextPreviewLayout {
     static func textFits(
@@ -79,4 +78,32 @@ enum NovelTextPreviewLayout {
         return CGFloat(fontSize * max(settings.lineHeightScale, 1.35) * 2)
     }
 }
-#endif
+
+extension NovelTextLayout {
+    /// Standalone one-shot layout through the production TextKit adapter.
+    /// Test-facing convenience; production reading always goes through
+    /// `NovelReadingWorkflow`'s runtime transactions.
+    package static func layout(
+        document: NovelReaderProjection,
+        settings: NovelReaderAppearanceSettings,
+        layout: NovelReaderLayout
+    ) throws -> NovelTextLayoutResult {
+        let operation: () throws -> NovelTextLayoutResult = {
+            let runtime = NovelTextViewportRuntimeOwner(
+                adapter: DefaultNovelTextLayoutRuntimeAdapter()
+            )
+            let transaction = try runtime.prepareTransaction(
+                preparedInput: try NovelTextLayout.prepareInput(
+                    document: document,
+                    settings: settings,
+                    layout: layout
+                )
+            )
+            return transaction.result
+        }
+        if Thread.isMainThread {
+            return try operation()
+        }
+        return try DispatchQueue.main.sync(execute: operation)
+    }
+}

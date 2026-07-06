@@ -1422,11 +1422,11 @@ final class NovelReaderViewModelTests: XCTestCase {
         await model.previewChapterDirectoryWebView(2)
 
         await MainActor.run {
-            XCTAssertNil(model.chapterDirectoryError)
+            XCTAssertNil(model.chapterDirectory.error)
             XCTAssertEqual(model.visibleChapterDirectoryView, 2)
             XCTAssertEqual(model.visibleChapterDirectoryChapters.map(\.title), ["第二章"])
-            XCTAssertEqual(model.chapterDirectoryPageCount, 0)
-            XCTAssertFalse(model.isLoadingChapterDirectory)
+            XCTAssertEqual(model.chapterDirectory.pageCount, 0)
+            XCTAssertFalse(model.chapterDirectory.isLoading)
         }
     }
 
@@ -1484,7 +1484,7 @@ final class NovelReaderViewModelTests: XCTestCase {
         await model.previewChapterDirectoryWebView(2)
 
         await MainActor.run {
-            XCTAssertNil(model.chapterDirectoryError)
+            XCTAssertNil(model.chapterDirectory.error)
             XCTAssertEqual(model.visibleChapterDirectoryView, 2)
             XCTAssertEqual(model.visibleChapterDirectoryChapters.map(\.title), ["第二章", "第三章"])
         }
@@ -2571,7 +2571,7 @@ final class NovelReaderViewModelTests: XCTestCase {
             offlineCacheStore: unfilteredOfflineStore
         )
         await MainActor.run {
-            XCTAssertEqual(unfilteredModel.cachedViews, [1])
+            XCTAssertEqual(unfilteredModel.cacheState.views.cachedViews, [1])
         }
 
         let filteredOfflineStore = try makeReaderModelOfflineCacheStore()
@@ -2587,7 +2587,7 @@ final class NovelReaderViewModelTests: XCTestCase {
             offlineCacheStore: filteredOfflineStore
         )
         await MainActor.run {
-            XCTAssertEqual(filteredModel.cachedViews, [1])
+            XCTAssertEqual(filteredModel.cacheState.views.cachedViews, [1])
         }
     }
 
@@ -2699,7 +2699,7 @@ final class NovelReaderViewModelTests: XCTestCase {
         )
         await model.refreshCurrentCache()
         try await waitFor {
-            await MainActor.run { model.cachingViews == [1] }
+            await MainActor.run { model.cacheState.views.cachingViews == [1] }
         }
 
         let preservedAuthorFiltered = await cacheStore.loadProjection(
@@ -2718,8 +2718,8 @@ final class NovelReaderViewModelTests: XCTestCase {
             preservedUnfiltered?.segments.contains(.text(String(repeating: "全部回复旧缓存 内容。", count: 80), chapterTitle: "全部回复旧缓存")) == true
         )
         await MainActor.run {
-            XCTAssertEqual(model.cachedViews, [1])
-            XCTAssertEqual(model.offlineCacheQueueEntryCount, 1)
+            XCTAssertEqual(model.cacheState.views.cachedViews, [1])
+            XCTAssertEqual(model.cacheState.queueEntryCount, 1)
         }
     }
 
@@ -2747,7 +2747,7 @@ final class NovelReaderViewModelTests: XCTestCase {
         await model.loadChapterComments(for: target)
 
         await MainActor.run {
-            guard case let .loaded(_, page) = model.chapterCommentsState else {
+            guard case let .loaded(_, page) = model.chapterComments.state else {
                 XCTFail("Expected loaded chapter comments")
                 return
             }
@@ -2758,7 +2758,7 @@ final class NovelReaderViewModelTests: XCTestCase {
         await model.refreshChapterComments(for: target)
 
         await MainActor.run {
-            guard case let .loaded(_, page) = model.chapterCommentsState else {
+            guard case let .loaded(_, page) = model.chapterComments.state else {
                 XCTFail("Expected refreshed chapter comments")
                 return
             }
@@ -2796,12 +2796,12 @@ final class NovelReaderViewModelTests: XCTestCase {
         await model.refreshChapterComments(for: target)
 
         await MainActor.run {
-            guard case let .loaded(_, page) = model.chapterCommentsState else {
+            guard case let .loaded(_, page) = model.chapterComments.state else {
                 XCTFail("Expected cached comments to remain visible")
                 return
             }
             XCTAssertEqual(page.comments.map(\.body), ["旧评论"])
-            XCTAssertNotNil(model.chapterCommentsRefreshError)
+            XCTAssertNotNil(model.chapterComments.refreshError)
         }
     }
 
@@ -2825,13 +2825,13 @@ final class NovelReaderViewModelTests: XCTestCase {
         await model.loadChapterComments(for: target)
 
         await MainActor.run {
-            guard case let .failed(failedTarget, message) = model.chapterCommentsState else {
+            guard case let .failed(failedTarget, message) = model.chapterComments.state else {
                 XCTFail("Expected failed chapter comments state")
                 return
             }
             XCTAssertEqual(failedTarget, target)
             XCTAssertFalse(message.isEmpty)
-            XCTAssertNil(model.chapterCommentsRefreshError)
+            XCTAssertNil(model.chapterComments.refreshError)
         }
     }
 
@@ -2864,7 +2864,7 @@ final class NovelReaderViewModelTests: XCTestCase {
         await model.loadChapterComments(for: target)
 
         await MainActor.run {
-            guard case let .loaded(_, page) = model.chapterCommentsState else {
+            guard case let .loaded(_, page) = model.chapterComments.state else {
                 XCTFail("Expected cached chapter comments")
                 return
             }
@@ -2986,14 +2986,14 @@ final class NovelReaderViewModelTests: XCTestCase {
         }
 
         try await waitFor {
-            await MainActor.run { model.cachingViews == [2, 3] }
+            await MainActor.run { model.cacheState.views.cachingViews == [2, 3] }
         }
 
         await MainActor.run {
-            XCTAssertEqual(model.cachedViews, [])
-            XCTAssertEqual(model.offlineCacheQueueEntryCount, 2)
-            XCTAssertEqual(model.cacheOperationState.status, .completed)
-            XCTAssertEqual(model.cacheOperationState.completedViews, [2, 3])
+            XCTAssertEqual(model.cacheState.views.cachedViews, [])
+            XCTAssertEqual(model.cacheState.queueEntryCount, 2)
+            XCTAssertEqual(model.cacheState.operation.status, .completed)
+            XCTAssertEqual(model.cacheState.operation.completedViews, [2, 3])
         }
     }
 
@@ -3041,7 +3041,7 @@ final class NovelReaderViewModelTests: XCTestCase {
 
         await MainActor.run {
             XCTAssertEqual(model.cacheStatus(for: 2), .uncached)
-            XCTAssertEqual(model.offlineCacheQueueEntryCount, 0)
+            XCTAssertEqual(model.cacheState.queueEntryCount, 0)
         }
 
         let request = NovelOfflineCacheWorkRequest(
@@ -3057,7 +3057,7 @@ final class NovelReaderViewModelTests: XCTestCase {
         try await waitFor {
             await MainActor.run {
                 model.cacheStatus(for: 2) == .caching
-                    && model.offlineCacheQueueEntryCount == 1
+                    && model.cacheState.queueEntryCount == 1
             }
         }
 
@@ -3087,7 +3087,7 @@ final class NovelReaderViewModelTests: XCTestCase {
         try await waitFor {
             await MainActor.run {
                 model.cacheStatus(for: 2) == .cached
-                    && model.offlineCacheQueueEntryCount == 0
+                    && model.cacheState.queueEntryCount == 0
                     && model.cacheUpdateTime(for: 2) == completedAt
             }
         }
@@ -3115,10 +3115,10 @@ final class NovelReaderViewModelTests: XCTestCase {
         }
 
         await MainActor.run {
-            XCTAssertEqual(model.cachedViews, [1])
-            XCTAssertEqual(model.cachingViews, [1])
+            XCTAssertEqual(model.cacheState.views.cachedViews, [1])
+            XCTAssertEqual(model.cacheState.views.cachingViews, [1])
             XCTAssertEqual(model.cacheUpdateTime(for: 1), updatedAt)
-            XCTAssertEqual(model.offlineCacheQueueEntryCount, 1)
+            XCTAssertEqual(model.cacheState.queueEntryCount, 1)
         }
     }
 
@@ -3145,11 +3145,11 @@ final class NovelReaderViewModelTests: XCTestCase {
         )
 
         await MainActor.run {
-            XCTAssertEqual(model.cachedViews, [1])
+            XCTAssertEqual(model.cacheState.views.cachedViews, [1])
         }
         await model.deleteCachedViews([1])
         try await waitFor {
-            await MainActor.run { model.cachedViews.isEmpty }
+            await MainActor.run { model.cacheState.views.cachedViews.isEmpty }
         }
 
         let thread = makeThreadIdentity(from: threadID)
@@ -3835,7 +3835,6 @@ private func novelReaderViewModelMergedTextPagination(
     )
 }
 
-@MainActor
 private final class NovelReaderViewModelFixtureRuntimeAdapter: NovelTextLayoutRuntimeAdapter {
     private let fixture: NovelTextLayoutFixture
 

@@ -87,7 +87,7 @@ struct NovelReaderCachePanel: View {
 
                 ToolbarItem(placement: .topBarTrailing) {
                     NovelReaderCacheQueueToolbarButton(
-                        entryCount: model.offlineCacheQueueEntryCount,
+                        entryCount: model.cacheState.queueEntryCount,
                         action: showQueue
                     )
                 }
@@ -221,7 +221,7 @@ struct NovelReaderCacheProgressSheet: View {
                         .multilineTextAlignment(.center)
                         .foregroundStyle(.secondary)
 
-                    if let summary = model.cacheOperationState.summaryMessage, model.cacheOperationState.isFinished {
+                    if let summary = model.cacheState.operation.summaryMessage, model.cacheState.operation.isFinished {
                         Text(summary)
                             .font(.footnote)
                             .multilineTextAlignment(.center)
@@ -237,7 +237,7 @@ struct NovelReaderCacheProgressSheet: View {
             .toolbar {
                 ToolbarItem(placement: .bottomBar) {
                     HStack {
-                        if model.cacheOperationState.isFinished {
+                        if model.cacheState.operation.isFinished {
                             Button(L10n.string("common.done")) {
                                 model.dismissCacheProgress()
                                 onClose()
@@ -264,12 +264,12 @@ struct NovelReaderCacheProgressSheet: View {
     }
 
     private var progressValue: Double {
-        guard model.cacheOperationState.totalCount > 0 else { return 0 }
-        return Double(model.cacheOperationState.completedCount) / Double(model.cacheOperationState.totalCount)
+        guard model.cacheState.operation.totalCount > 0 else { return 0 }
+        return Double(model.cacheState.operation.completedCount) / Double(model.cacheState.operation.totalCount)
     }
 
     private var titleText: String {
-        switch model.cacheOperationState.status {
+        switch model.cacheState.operation.status {
         case .idle:
             return L10n.string("reader.cache_status.ready")
         case .running:
@@ -282,12 +282,12 @@ struct NovelReaderCacheProgressSheet: View {
     }
 
     private var detailText: String {
-        if model.cacheOperationState.isFinished {
-            return L10n.string("reader.cache_detail.completed", model.cacheOperationState.completedCount, max(model.cacheOperationState.totalCount, 1))
+        if model.cacheState.operation.isFinished {
+            return L10n.string("reader.cache_detail.completed", model.cacheState.operation.completedCount, max(model.cacheState.operation.totalCount, 1))
         }
 
-        if let currentView = model.cacheOperationState.currentView {
-            return L10n.string("reader.cache_detail.running", currentView, model.cacheOperationState.completedCount, max(model.cacheOperationState.totalCount, 1))
+        if let currentView = model.cacheState.operation.currentView {
+            return L10n.string("reader.cache_detail.running", currentView, model.cacheState.operation.completedCount, max(model.cacheState.operation.totalCount, 1))
         }
 
         return L10n.string("reader.cache_detail.ready")

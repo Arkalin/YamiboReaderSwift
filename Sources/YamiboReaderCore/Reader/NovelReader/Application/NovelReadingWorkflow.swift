@@ -93,7 +93,6 @@ public typealias NovelReadingWorkflowRuntimeUpdatePreparation = @Sendable (
     _ update: NovelReadingWorkflowRuntimeUpdate
 ) async throws -> NovelReadingWorkflowRuntimeUpdate
 
-@MainActor
 private struct NovelReadingPreparedTransaction {
     let runtime: NovelTextViewportRuntimeTransaction
     let session: NovelReadingSession
@@ -109,12 +108,11 @@ private struct NovelReadingPreparedTransaction {
     let currentDocumentSurfaceCount: Int
 }
 
-/// `@MainActor` is load-bearing here, not caller convenience: the workflow owns
-/// and synchronously drives `NovelTextViewportRuntimeOwner`, a main-actor-bound
-/// TextKit graph, through per-frame paths (viewport samples, display-reference
-/// lookups). Once the TextKit adapter moves to the UI layer (P5e) this type can
-/// become caller-isolated like `MangaReaderWorkflow`.
-@MainActor
+/// Caller-isolated (non-`Sendable`): the workflow runs entirely in whatever
+/// isolation domain owns it, so its synchronous per-frame paths (viewport
+/// samples, display-reference lookups) stay synchronous and its `async`
+/// methods (`nonisolated(nonsending)`) never hop executors. The live TextKit
+/// graph is provided by the UI layer through `NovelTextLayoutRuntimeAdapter`.
 public final class NovelReadingWorkflow {
     public private(set) var state: NovelReadingWorkflowState?
     public private(set) var runtimeUpdateRequestSequence: UInt64 = 0
@@ -132,7 +130,7 @@ public final class NovelReadingWorkflow {
     private var currentDocumentSurfaceCount = 0
     private var usesPadPresentation: Bool
     private let viewportRuntime: NovelTextViewportRuntimeOwner
-    private var pendingRuntimeUpdateTask: Task<NovelReadingWorkflowState?, Error>?
+    private var pendingRuntimeUpdateTask: Task<(NovelReadingWorkflowRuntimeUpdate, NovelTextLayoutPreparedInput)?, Error>?
 
     package var runtimeDiagnostics: NovelTextViewportRuntimeDiagnostics {
         viewportRuntime.diagnostics
@@ -151,21 +149,12 @@ public final class NovelReadingWorkflow {
         )
     }
 
-    public init(
-        context: NovelLaunchContext,
-        settings: NovelReaderAppearanceSettings,
-        layout: NovelReaderLayout,
-        repository: any NovelReadingPageRepository,
-        usesPadPresentation: Bool = false
-    ) {
-        self.context = context
-        self.settings = settings
-        self.layout = layout
-        self.repository = repository
-        self.usesPadPresentation = usesPadPresentation
-        viewportRuntime = NovelTextViewportRuntimeOwner()
+    package var runtime: NovelTextViewportRuntimeOwner {
+        viewportRuntime
     }
 
+    /// `package`: the workflow is assembled inside this package (UI layer or
+    /// tests) because the runtime adapter seam is a package-internal contract.
     package init(
         context: NovelLaunchContext,
         settings: NovelReaderAppearanceSettings,
@@ -183,7 +172,7 @@ public final class NovelReadingWorkflow {
     }
 
     @discardableResult
-    public func start(initial: NovelReadingInitialPosition) async throws -> NovelReadingWorkflowState {
+    public nonisolated(nonsending) func start(initial: NovelReadingInitialPosition) async throws -> NovelReadingWorkflowState {
         let resumePoint = initial.resumePoint
         let initialView = resumePoint?.view ?? context.initialView ?? 1
         currentAuthorID = resumePoint?.authorID ?? initial.favoriteAuthorID ?? context.authorID
@@ -196,7 +185,7 @@ public final class NovelReadingWorkflow {
     }
 
     @discardableResult
-    public func loadCurrent(
+    public nonisolated(nonsending) func loadCurrent(
         preferredSurfaceOrdinal: Int,
         preferredResumePoint: NovelResumePoint?,
         forceRefresh: Bool
@@ -211,7 +200,7 @@ public final class NovelReadingWorkflow {
     }
 
     @discardableResult
-    public func loadView(
+    public nonisolated(nonsending) func loadView(
         _ view: Int,
         preferredSurfaceOrdinal: Int,
         preferredResumePoint: NovelResumePoint?,
@@ -246,7 +235,7 @@ public final class NovelReadingWorkflow {
         prefetchedDocument?.view == max(1, view)
     }
 
-    package func previewChapterDirectory(view: Int) async throws -> [NovelChapterDirectoryEntry] {
+    package nonisolated(nonsending) func previewChapterDirectory(view: Int) async throws -> [NovelChapterDirectoryEntry] {
         let request = NovelPageRequest(
             threadID: context.threadID,
             view: view,
@@ -256,7 +245,7 @@ public final class NovelReadingWorkflow {
         return NovelChapterDirectoryExtractor.entries(from: document, settings: settings)
     }
 
-    package func loadChapter(_ anchor: NovelChapterAnchor) async throws -> NovelReadingWorkflowState {
+    package nonisolated(nonsending) func loadChapter(_ anchor: NovelChapterAnchor) async throws -> NovelReadingWorkflowState {
         try await load(
             view: anchor.resumePoint.view,
             preferredSurfaceOrdinal: 0,
@@ -297,7 +286,7 @@ public final class NovelReadingWorkflow {
     }
 
     @discardableResult
-    public func requestRuntimeUpdate(
+    public nonisolated(nonsending) func requestRuntimeUpdate(
         _ update: NovelReadingWorkflowRuntimeUpdate,
         preparation: @escaping NovelReadingWorkflowRuntimeUpdatePreparation = { $0 }
     ) async throws -> NovelReadingWorkflowState? {
@@ -305,38 +294,36 @@ public final class NovelReadingWorkflow {
         pendingRuntimeUpdateTask?.cancel()
         pendingRuntimeUpdateTask = nil
         let requestSequence = runtimeUpdateRequestSequence
-        let task = Task { [weak self] () throws -> NovelReadingWorkflowState? in
+        let document = currentDocument
+        let task = Task.detached(priority: .userInitiated) {
+            () async throws -> (NovelReadingWorkflowRuntimeUpdate, NovelTextLayoutPreparedInput)? in
             let preparedUpdate = try await preparation(update)
             try Task.checkCancellation()
-            guard let self,
-                  let document = self.currentDocument else {
-                return nil
-            }
+            guard let document else { return nil }
             let paginationLayout = preparedUpdate.layout.novelTextBoxLayout(
                 settings: preparedUpdate.settings,
                 usesPadPresentation: preparedUpdate.usesPadPresentation
             )
-            let semanticInput = try await Task.detached(priority: .userInitiated) {
-                try NovelTextLayout.prepareInput(
-                    document: document,
-                    settings: preparedUpdate.settings,
-                    layout: paginationLayout
-                )
-            }.value
+            let semanticInput = try NovelTextLayout.prepareInput(
+                document: document,
+                settings: preparedUpdate.settings,
+                layout: paginationLayout
+            )
             try Task.checkCancellation()
-            return try self.commitRuntimeUpdateRequest(
+            return (preparedUpdate, semanticInput)
+        }
+        pendingRuntimeUpdateTask = task
+        do {
+            let prepared = try await task.value
+            if runtimeUpdateRequestSequence == requestSequence {
+                pendingRuntimeUpdateTask = nil
+            }
+            guard let (preparedUpdate, semanticInput) = prepared else { return nil }
+            return try commitRuntimeUpdateRequest(
                 preparedUpdate,
                 semanticInput: semanticInput,
                 requestSequence: requestSequence
             )
-        }
-        pendingRuntimeUpdateTask = task
-        do {
-            let result = try await task.value
-            if runtimeUpdateRequestSequence == requestSequence {
-                pendingRuntimeUpdateTask = nil
-            }
-            return result
         } catch {
             if runtimeUpdateRequestSequence == requestSequence {
                 pendingRuntimeUpdateTask = nil
@@ -604,10 +591,6 @@ public final class NovelReadingWorkflow {
         session?.currentPreviewSourceText() ?? ""
     }
 
-    public func displayReference(for surfaceIdentity: NovelReaderSurfaceIdentity) -> NovelTextViewportDisplayReference? {
-        viewportRuntime.displayReference(for: surfaceIdentity)
-    }
-
     public func updateVisibleSurfaceIdentities(_ surfaceIdentities: [NovelReaderSurfaceIdentity]) {
         viewportRuntime.updateVisibleSurfaceIdentities(surfaceIdentities)
     }
@@ -665,7 +648,7 @@ public final class NovelReadingWorkflow {
     }
 
     @discardableResult
-    public func prefetchIfNeeded(near surfaceIdentity: NovelReaderSurfaceIdentity) async -> NovelReadingWorkflowState? {
+    public nonisolated(nonsending) func prefetchIfNeeded(near surfaceIdentity: NovelReaderSurfaceIdentity) async -> NovelReadingWorkflowState? {
         guard let currentDocument else { return nil }
         guard surfaceIdentity.generation == viewportRuntime.currentGeneration,
               viewportRuntime.currentResult?.viewportIndex.surfaces.contains(where: {
@@ -697,7 +680,7 @@ public final class NovelReadingWorkflow {
     }
 
     @discardableResult
-    public func promotePrefetchedDocument(
+    public nonisolated(nonsending) func promotePrefetchedDocument(
         preferredSurfaceOrdinal: Int,
         resumePoint: NovelResumePoint?
     ) async throws -> NovelReadingWorkflowState? {
@@ -741,7 +724,7 @@ public final class NovelReadingWorkflow {
         return commit(preparedTransaction)
     }
 
-    private func load(
+    private nonisolated(nonsending) func load(
         view: Int,
         preferredSurfaceOrdinal: Int,
         preferredResumePoint: NovelResumePoint?,
@@ -813,7 +796,7 @@ public final class NovelReadingWorkflow {
         return nextState
     }
 
-    private func updateStateFromSession(refreshCachedViews: Bool) async throws -> NovelReadingWorkflowState {
+    private nonisolated(nonsending) func updateStateFromSession(refreshCachedViews: Bool) async throws -> NovelReadingWorkflowState {
         guard let snapshot = session?.snapshot,
               currentDocument != nil else {
             preconditionFailure("Novel reading workflow has no active session")

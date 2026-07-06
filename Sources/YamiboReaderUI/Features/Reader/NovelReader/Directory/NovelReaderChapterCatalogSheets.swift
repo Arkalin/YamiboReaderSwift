@@ -28,7 +28,7 @@ struct NovelReaderChapterSheet: View {
         NavigationStack {
             ScrollViewReader { scrollProxy in
                 ZStack {
-                    if model.isLoadingChapterDirectory {
+                    if model.chapterDirectory.isLoading {
                         Text(L10n.string("common.loading"))
                             .font(.body)
                             .foregroundStyle(.secondary)
@@ -36,7 +36,7 @@ struct NovelReaderChapterSheet: View {
                     } else {
                         List {
                             Section {
-                                if let error = model.chapterDirectoryError {
+                                if let error = model.chapterDirectory.error {
                                     Label(error, systemImage: "exclamationmark.triangle")
                                         .font(.footnote)
                                         .foregroundStyle(.secondary)

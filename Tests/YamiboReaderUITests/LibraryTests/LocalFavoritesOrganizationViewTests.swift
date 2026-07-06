@@ -1,10 +1,29 @@
 import SwiftUI
 import Testing
 @testable import YamiboReaderCore
+import YamiboReaderTestSupport
 @testable import YamiboReaderUI
 
 @MainActor
-@Test func localFavoritesOrganizationViewIsConstructibleWithNativeOrganizationData() throws {
+@Test func localFavoritesOrganizationViewIsConstructibleWithNativeOrganizationData() async throws {
+    let suiteName = YamiboTestDefaults.suiteName(prefix: "local-favorites-organization-view")
+    let defaults = try YamiboTestDefaults.make(suiteName: suiteName)
+    let libraryStore = FavoriteLibraryStore(defaults: defaults, key: "local-favorites")
+    let readingProgressStore = ReadingProgressStore(defaults: defaults, key: "reading-progress")
+    let settingsStore = SettingsStore(defaults: defaults, key: "settings")
+    let contentCoverStore = ContentCoverStore(defaults: defaults, key: "content-covers")
+    let favoriteUpdateStore = FavoriteUpdateStore(defaults: defaults, key: "favorite-updates")
+    let sessionStore = SessionStore(defaults: defaults, key: "session")
+    let urlSession = YamiboNetworkConfiguration.makeSession()
+    let forumCacheStore = ForumCacheStore(
+        baseDirectory: FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    )
+    @Sendable func makeClient() async -> YamiboClient {
+        let sessionState = await sessionStore.load()
+        return YamiboClient(session: urlSession, cookie: sessionState.cookie, userAgent: sessionState.userAgent)
+    }
+
     var document = FavoriteLibraryDocument()
     let category = document.createCategory(name: "分类")
     let collection = document.createCollection(categoryID: category.id, name: "合集", color: .blue)
@@ -16,18 +35,39 @@ import Testing
         locations: [.category(category.id), .collection(categoryID: category.id, collectionID: collection.id)]
     )
     document.addItem(item)
-    let cards = LocalFavoriteLibraryProjection.cards(
-        in: document,
-        query: LocalFavoriteLibraryQuery(categoryID: category.id)
+    try await libraryStore.save(document)
+
+    let organizer = FavoriteLibraryOrganizer(
+        libraryStore: libraryStore,
+        readingProgressStore: readingProgressStore,
+        settingsStore: settingsStore,
+        contentCoverStore: contentCoverStore,
+        makeFavoriteRepository: { FavoriteRepository(client: await makeClient()) }
+    )
+    let remoteSync = FavoriteRemoteSyncSession(
+        libraryStore: libraryStore,
+        settingsStore: settingsStore,
+        makeFavoriteRepository: { FavoriteRepository(client: await makeClient()) },
+        makeForumThreadReaderRepository: { ForumThreadReaderRepository(client: await makeClient(), cacheStore: forumCacheStore) },
+        makeThreadRouteResolver: { YamiboThreadRouteResolver(client: await makeClient()) }
+    )
+    let updateMonitor = FavoriteUpdateMonitor(
+        updateStore: favoriteUpdateStore,
+        libraryStore: libraryStore,
+        makeForumThreadReaderRepository: { ForumThreadReaderRepository(client: await makeClient(), cacheStore: forumCacheStore) }
     )
 
     let view = LocalFavoritesOrganizationView(
-        categories: document.categories,
-        collections: document.collections,
-        cards: cards,
-        selectedCategoryID: .constant(category.id)
+        organizer: organizer,
+        remoteSync: remoteSync,
+        updateMonitor: updateMonitor,
+        onOpen: { _, _ in }
     )
-
     _ = view
-    #expect(cards.map(\.id) == [item.id])
+
+    await organizer.load()
+    organizer.selectedCategoryID = category.id
+
+    #expect(organizer.derived.cards.map(\.id) == [item.id])
+    #expect(organizer.derived.visibleCollections.map(\.id) == [collection.id])
 }

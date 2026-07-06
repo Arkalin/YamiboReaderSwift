@@ -78,7 +78,7 @@ package struct NovelTextViewportFrozenGeometry: Hashable, Sendable {
         max(0, documentClipMaxY - documentClipMinY)
     }
 
-    static func surfaceContentHeight(forDocumentClipRect clipRect: CGRect) -> CGFloat {
+    package static func surfaceContentHeight(forDocumentClipRect clipRect: CGRect) -> CGFloat {
         max(0, clipRect.height.isFinite ? clipRect.height : 0)
     }
 }

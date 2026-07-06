@@ -21,6 +21,18 @@ public struct ReaderChapterCommentsSnapshot: Equatable, Sendable {
     public var isLoadingMore: Bool
     public var loadMoreError: String?
     public var refreshError: String?
+
+    public init(
+        state: ReaderChapterCommentsState = .idle,
+        isLoadingMore: Bool = false,
+        loadMoreError: String? = nil,
+        refreshError: String? = nil
+    ) {
+        self.state = state
+        self.isLoadingMore = isLoadingMore
+        self.loadMoreError = loadMoreError
+        self.refreshError = refreshError
+    }
 }
 
 /// Caller-isolated (non-`Sendable`): state mutations happen in the isolation

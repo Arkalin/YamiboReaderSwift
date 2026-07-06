@@ -4,7 +4,7 @@ import YamiboReaderTestSupport
 @testable import YamiboReaderUI
 
 @MainActor
-final class LocalFavoritesViewModelTests: XCTestCase {
+final class FavoriteLibraryOrganizerTests: XCTestCase {
     func testSourceGroupFilterCountsRespectSearchAndTags() async throws {
         let suiteName = YamiboTestDefaults.suiteName(prefix: "local-favorites-source-filter")
         _ = try YamiboTestDefaults.make(suiteName: suiteName)
@@ -12,9 +12,8 @@ final class LocalFavoritesViewModelTests: XCTestCase {
             defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
             key: "local-favorites"
         )
-        let dependencies = try makeLibraryDependencies(localFavoriteLibraryStore: localFavoriteLibraryStore)
-        let viewModel = LocalFavoritesViewModel(dependencies: dependencies)
-        await viewModel.load()
+        let organizer = try makeOrganizer(libraryStore: localFavoriteLibraryStore)
+        await organizer.load()
 
         let boardA = FavoriteSourceGroup.forumBoard(id: "10", label: "版区A")
         let boardALegacy = FavoriteSourceGroup.forumBoard(id: "10", label: "旧版区A")
@@ -52,25 +51,25 @@ final class LocalFavoritesViewModelTests: XCTestCase {
             locations: [.category(document.defaultCategory.id)]
         ))
         try await localFavoriteLibraryStore.save(document)
-        await viewModel.reload()
+        await organizer.reload()
 
-        XCTAssertEqual(viewModel.sourceGroupEntryCounts[boardA], 3)
-        XCTAssertEqual(viewModel.sourceGroupEntryCounts[boardALegacy], 3)
-        XCTAssertEqual(viewModel.sourceGroupEntryCounts[boardB], 1)
+        XCTAssertEqual(organizer.derived.sourceGroupEntryCounts[boardA], 3)
+        XCTAssertEqual(organizer.derived.sourceGroupEntryCounts[boardALegacy], 3)
+        XCTAssertEqual(organizer.derived.sourceGroupEntryCounts[boardB], 1)
 
-        viewModel.searchText = "同名"
-        XCTAssertEqual(viewModel.sourceGroupEntryCounts[boardA], 2)
-        XCTAssertEqual(viewModel.sourceGroupEntryCounts[boardB], 1)
+        organizer.filter.searchText = "同名"
+        XCTAssertEqual(organizer.derived.sourceGroupEntryCounts[boardA], 2)
+        XCTAssertEqual(organizer.derived.sourceGroupEntryCounts[boardB], 1)
 
-        viewModel.sourceGroupFilter = .group(boardA)
-        XCTAssertEqual(Set(viewModel.cards.map(\.item.target)), [firstTarget, fourthTarget])
+        organizer.filter.sourceGroupFilter = .group(boardA)
+        XCTAssertEqual(Set(organizer.derived.cards.map(\.item.target)), [firstTarget, fourthTarget])
 
-        viewModel.sourceGroupFilter = .group(boardB)
-        XCTAssertEqual(viewModel.cards.map(\.item.target), [secondTarget])
+        organizer.filter.sourceGroupFilter = .group(boardB)
+        XCTAssertEqual(organizer.derived.cards.map(\.item.target), [secondTarget])
 
-        viewModel.selectedTagIDs = [tag.id]
-        XCTAssertEqual(viewModel.sourceGroupEntryCounts[boardA], 1)
-        XCTAssertEqual(viewModel.sourceGroupEntryCounts[boardB], 1)
+        organizer.filter.selectedTagIDs = [tag.id]
+        XCTAssertEqual(organizer.derived.sourceGroupEntryCounts[boardA], 1)
+        XCTAssertEqual(organizer.derived.sourceGroupEntryCounts[boardB], 1)
     }
 
     func testLocalFirstTagsFilterDisplayAndBatchAssignment() async throws {
@@ -80,9 +79,8 @@ final class LocalFavoritesViewModelTests: XCTestCase {
             defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
             key: "local-favorites"
         )
-        let dependencies = try makeLibraryDependencies(localFavoriteLibraryStore: localFavoriteLibraryStore)
-        let viewModel = LocalFavoritesViewModel(dependencies: dependencies)
-        await viewModel.load()
+        let organizer = try makeOrganizer(libraryStore: localFavoriteLibraryStore)
+        await organizer.load()
 
         let firstTarget = FavoriteContentTarget(kind: .normalThread, threadID: "930")
         let secondTarget = FavoriteContentTarget(kind: .normalThread, threadID: "931")
@@ -98,32 +96,32 @@ final class LocalFavoritesViewModelTests: XCTestCase {
             locations: [.category(document.defaultCategory.id)]
         ))
         try await localFavoriteLibraryStore.save(document)
-        await viewModel.reload()
+        await organizer.reload()
 
-        let createdTag = await viewModel.createTag(name: "待读", color: .green)
+        let createdTag = await organizer.createTag(name: "待读", color: .green)
         let tag = try XCTUnwrap(createdTag)
-        await viewModel.updateTags(for: firstTarget.id, tagIDs: [tag.id])
+        await organizer.updateTags(for: firstTarget.id, tagIDs: [tag.id])
 
-        XCTAssertEqual(viewModel.cards.first { $0.id == firstTarget.id }?.tags.map(\.name), ["待读"])
+        XCTAssertEqual(organizer.derived.cards.first { $0.id == firstTarget.id }?.tags.map(\.name), ["待读"])
 
-        viewModel.selectedTagIDs = [tag.id]
-        XCTAssertEqual(viewModel.cards.map(\.item.target), [firstTarget])
+        organizer.filter.selectedTagIDs = [tag.id]
+        XCTAssertEqual(organizer.derived.cards.map(\.item.target), [firstTarget])
 
-        viewModel.selectedTagIDs = []
-        viewModel.searchText = "待读"
-        XCTAssertEqual(viewModel.cards.map(\.item.target), [firstTarget])
+        organizer.filter.selectedTagIDs = []
+        organizer.filter.searchText = "待读"
+        XCTAssertEqual(organizer.derived.cards.map(\.item.target), [firstTarget])
 
-        await viewModel.updateTag(id: tag.id, name: "已读", color: .purple)
-        XCTAssertTrue(viewModel.tags.contains { $0.id == tag.id && $0.name == "已读" && $0.color == .purple })
+        await organizer.updateTag(id: tag.id, name: "已读", color: .purple)
+        XCTAssertTrue(organizer.tags.contains { $0.id == tag.id && $0.name == "已读" && $0.color == .purple })
 
-        viewModel.searchText = ""
-        viewModel.toggleFavoriteSelection(id: secondTarget.id)
-        await viewModel.updateTagsForSelection([tag.id])
-        XCTAssertFalse(viewModel.isSelectionMode)
-        XCTAssertEqual(viewModel.cards.first { $0.id == secondTarget.id }?.tags.map(\.name), ["已读"])
+        organizer.filter.searchText = ""
+        organizer.selection.toggleFavoriteSelection(id: secondTarget.id)
+        await organizer.updateTagsForSelection([tag.id])
+        XCTAssertFalse(organizer.selection.isSelectionMode)
+        XCTAssertEqual(organizer.derived.cards.first { $0.id == secondTarget.id }?.tags.map(\.name), ["已读"])
 
-        await viewModel.deleteTag(id: tag.id)
-        XCTAssertTrue(viewModel.tags.isEmpty)
+        await organizer.deleteTag(id: tag.id)
+        XCTAssertTrue(organizer.tags.isEmpty)
         let storedItems = await localFavoriteLibraryStore.load().items
         XCTAssertTrue(storedItems.allSatisfy(\.tagIDs.isEmpty))
     }
@@ -135,15 +133,14 @@ final class LocalFavoritesViewModelTests: XCTestCase {
             defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
             key: "local-favorites"
         )
-        let dependencies = try makeLibraryDependencies(localFavoriteLibraryStore: localFavoriteLibraryStore)
-        let viewModel = LocalFavoritesViewModel(dependencies: dependencies)
-        await viewModel.load()
+        let organizer = try makeOrganizer(libraryStore: localFavoriteLibraryStore)
+        await organizer.load()
 
-        let createdCategory = await viewModel.createCategory(name: "分类A")
+        let createdCategory = await organizer.createCategory(name: "分类A")
         let category = try XCTUnwrap(createdCategory)
-        let createdExistingCollection = await viewModel.createCollection(name: "旧合集", color: .gray)
+        let createdExistingCollection = await organizer.createCollection(name: "旧合集", color: .gray)
         let existingCollection = try XCTUnwrap(createdExistingCollection)
-        viewModel.closeCollection()
+        organizer.closeCollection()
 
         let firstTarget = FavoriteContentTarget(kind: .normalThread, threadID: "920")
         let secondTarget = FavoriteContentTarget(kind: .normalThread, threadID: "921")
@@ -159,36 +156,36 @@ final class LocalFavoritesViewModelTests: XCTestCase {
             locations: [.category(category.id)]
         ))
         try await localFavoriteLibraryStore.save(document)
-        await viewModel.reload()
+        await organizer.reload()
 
-        viewModel.toggleFavoriteSelection(id: firstTarget.id)
-        let createdMergedCollection = await viewModel.createCollectionFromSelection(name: "合成合集", color: .green)
+        organizer.selection.toggleFavoriteSelection(id: firstTarget.id)
+        let createdMergedCollection = await organizer.createCollectionFromSelection(name: "合成合集", color: .green)
         let mergedCollection = try XCTUnwrap(createdMergedCollection)
-        XCTAssertFalse(viewModel.isSelectionMode)
+        XCTAssertFalse(organizer.selection.isSelectionMode)
         let mergedItem = await localFavoriteLibraryStore.load().items.first { $0.target == firstTarget }
         XCTAssertTrue(mergedItem?.locations.contains(.collection(categoryID: category.id, collectionID: mergedCollection.id)) == true)
 
-        viewModel.closeCollection()
-        let createdSecondCategory = await viewModel.createCategory(name: "分类B")
+        organizer.closeCollection()
+        let createdSecondCategory = await organizer.createCategory(name: "分类B")
         let secondCategory = try XCTUnwrap(createdSecondCategory)
-        viewModel.selectedCategoryID = category.id
-        viewModel.toggleFavoriteSelection(id: secondTarget.id)
-        viewModel.toggleCollectionSelection(id: existingCollection.id)
-        await viewModel.moveSelectionToCategory(id: secondCategory.id)
+        organizer.selectedCategoryID = category.id
+        organizer.selection.toggleFavoriteSelection(id: secondTarget.id)
+        organizer.toggleCollectionSelection(id: existingCollection.id)
+        await organizer.moveSelectionToCategory(id: secondCategory.id)
 
-        XCTAssertFalse(viewModel.isSelectionMode)
-        XCTAssertEqual(viewModel.selectedCategoryID, secondCategory.id)
-        XCTAssertTrue(viewModel.collections.contains { $0.id == existingCollection.id && $0.categoryID == secondCategory.id })
+        XCTAssertFalse(organizer.selection.isSelectionMode)
+        XCTAssertEqual(organizer.selectedCategoryID, secondCategory.id)
+        XCTAssertTrue(organizer.collections.contains { $0.id == existingCollection.id && $0.categoryID == secondCategory.id })
         let movedItem = await localFavoriteLibraryStore.load().items.first { $0.target == secondTarget }
         XCTAssertTrue(movedItem?.locations.contains(.category(secondCategory.id)) == true)
         XCTAssertFalse(movedItem?.locations.contains(.category(category.id)) == true)
 
-        viewModel.toggleCollectionSelection(id: existingCollection.id)
-        await viewModel.dissolveSelectedCollections()
-        XCTAssertFalse(viewModel.collections.contains { $0.id == existingCollection.id })
+        organizer.toggleCollectionSelection(id: existingCollection.id)
+        await organizer.dissolveSelectedCollections()
+        XCTAssertFalse(organizer.collections.contains { $0.id == existingCollection.id })
 
-        viewModel.toggleFavoriteSelection(id: secondTarget.id)
-        await viewModel.deleteSelection()
+        organizer.selection.toggleFavoriteSelection(id: secondTarget.id)
+        await organizer.deleteSelection()
         let deletedItem = await localFavoriteLibraryStore.load().items.first { $0.target == secondTarget }
         XCTAssertNil(deletedItem)
     }
@@ -200,19 +197,18 @@ final class LocalFavoritesViewModelTests: XCTestCase {
             defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
             key: "local-favorites"
         )
-        let dependencies = try makeLibraryDependencies(localFavoriteLibraryStore: localFavoriteLibraryStore)
-        let viewModel = LocalFavoritesViewModel(dependencies: dependencies)
-        await viewModel.load()
+        let organizer = try makeOrganizer(libraryStore: localFavoriteLibraryStore)
+        await organizer.load()
 
-        let createdSourceCategory = await viewModel.createCategory(name: "分类A")
+        let createdSourceCategory = await organizer.createCategory(name: "分类A")
         let sourceCategory = try XCTUnwrap(createdSourceCategory)
-        let createdDestinationCategory = await viewModel.createCategory(name: "分类B")
+        let createdDestinationCategory = await organizer.createCategory(name: "分类B")
         let destinationCategory = try XCTUnwrap(createdDestinationCategory)
-        viewModel.selectedCategoryID = destinationCategory.id
-        let createdCollection = await viewModel.createCollection(name: "合集B", color: .blue)
+        organizer.selectedCategoryID = destinationCategory.id
+        let createdCollection = await organizer.createCollection(name: "合集B", color: .blue)
         let collection = try XCTUnwrap(createdCollection)
-        viewModel.selectedCategoryID = sourceCategory.id
-        viewModel.closeCollection()
+        organizer.selectedCategoryID = sourceCategory.id
+        organizer.closeCollection()
 
         let target = FavoriteContentTarget(kind: .normalThread, threadID: "940")
         var document = await localFavoriteLibraryStore.load()
@@ -222,28 +218,28 @@ final class LocalFavoritesViewModelTests: XCTestCase {
             locations: [.category(sourceCategory.id)]
         ))
         try await localFavoriteLibraryStore.save(document)
-        await viewModel.reload()
+        await organizer.reload()
 
-        viewModel.toggleFavoriteSelection(id: target.id)
-        await viewModel.addSelectionToCategory(id: destinationCategory.id)
+        organizer.selection.toggleFavoriteSelection(id: target.id)
+        await organizer.addSelectionToCategory(id: destinationCategory.id)
 
         var loadedDocument = await localFavoriteLibraryStore.load()
         var storedItem = try XCTUnwrap(loadedDocument.items.first { $0.target == target })
         XCTAssertTrue(storedItem.locations.contains(.category(sourceCategory.id)))
         XCTAssertTrue(storedItem.locations.contains(.category(destinationCategory.id)))
 
-        viewModel.selectedCategoryID = sourceCategory.id
-        viewModel.toggleFavoriteSelection(id: target.id)
-        await viewModel.removeSelectionFromCurrentLocation()
+        organizer.selectedCategoryID = sourceCategory.id
+        organizer.selection.toggleFavoriteSelection(id: target.id)
+        await organizer.removeSelectionFromCurrentLocation()
 
         loadedDocument = await localFavoriteLibraryStore.load()
         storedItem = try XCTUnwrap(loadedDocument.items.first { $0.target == target })
         XCTAssertFalse(storedItem.locations.contains(.category(sourceCategory.id)))
         XCTAssertTrue(storedItem.locations.contains(.category(destinationCategory.id)))
 
-        viewModel.selectedCategoryID = destinationCategory.id
-        viewModel.toggleFavoriteSelection(id: target.id)
-        await viewModel.addSelectionToCollection(id: collection.id)
+        organizer.selectedCategoryID = destinationCategory.id
+        organizer.selection.toggleFavoriteSelection(id: target.id)
+        await organizer.addSelectionToCollection(id: collection.id)
 
         loadedDocument = await localFavoriteLibraryStore.load()
         storedItem = try XCTUnwrap(loadedDocument.items.first { $0.target == target })
@@ -259,18 +255,17 @@ final class LocalFavoritesViewModelTests: XCTestCase {
             key: "local-favorites"
         )
         let recorder = FavoriteDeleteTestRecorder()
-        let dependencies = try makeLibraryDependencies(localFavoriteLibraryStore: localFavoriteLibraryStore)
-        let viewModel = LocalFavoritesViewModel(
-            dependencies: dependencies,
+        let organizer = try makeOrganizer(
+            libraryStore: localFavoriteLibraryStore,
             remoteFavoriteDeleteHandler: { items in
                 try await recorder.record(items)
             }
         )
-        await viewModel.load()
+        await organizer.load()
 
-        let createdSourceCategory = await viewModel.createCategory(name: "分类A")
+        let createdSourceCategory = await organizer.createCategory(name: "分类A")
         let sourceCategory = try XCTUnwrap(createdSourceCategory)
-        let createdDestinationCategory = await viewModel.createCategory(name: "分类B")
+        let createdDestinationCategory = await organizer.createCategory(name: "分类B")
         let destinationCategory = try XCTUnwrap(createdDestinationCategory)
         let target = FavoriteContentTarget(kind: .normalThread, threadID: "952")
         var document = await localFavoriteLibraryStore.load()
@@ -281,11 +276,11 @@ final class LocalFavoritesViewModelTests: XCTestCase {
             locations: [.category(sourceCategory.id), .category(destinationCategory.id)]
         ))
         try await localFavoriteLibraryStore.save(document)
-        viewModel.selectedCategoryID = sourceCategory.id
-        await viewModel.reload()
+        organizer.selectedCategoryID = sourceCategory.id
+        await organizer.reload()
 
-        viewModel.toggleFavoriteSelection(id: target.id)
-        await viewModel.deleteSelection(scope: .currentLocation)
+        organizer.selection.toggleFavoriteSelection(id: target.id)
+        await organizer.deleteSelection(scope: .currentLocation)
 
         let loadedDocument = await localFavoriteLibraryStore.load()
         let storedItem = try XCTUnwrap(loadedDocument.items.first { $0.target == target })
@@ -302,15 +297,14 @@ final class LocalFavoritesViewModelTests: XCTestCase {
             defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
             key: "local-favorites"
         )
-        let dependencies = try makeLibraryDependencies(localFavoriteLibraryStore: localFavoriteLibraryStore)
-        let viewModel = LocalFavoritesViewModel(dependencies: dependencies)
-        await viewModel.load()
+        let organizer = try makeOrganizer(libraryStore: localFavoriteLibraryStore)
+        await organizer.load()
 
-        let createdCategory = await viewModel.createCategory(name: "分类A")
+        let createdCategory = await organizer.createCategory(name: "分类A")
         let category = try XCTUnwrap(createdCategory)
-        let createdCollection = await viewModel.createCollection(name: "合集A", color: .blue)
+        let createdCollection = await organizer.createCollection(name: "合集A", color: .blue)
         let collection = try XCTUnwrap(createdCollection)
-        viewModel.closeCollection()
+        organizer.closeCollection()
         let target = FavoriteContentTarget(kind: .normalThread, threadID: "956")
         var document = await localFavoriteLibraryStore.load()
         document.addItem(try FavoriteItem(
@@ -322,12 +316,12 @@ final class LocalFavoritesViewModelTests: XCTestCase {
             ]
         ))
         try await localFavoriteLibraryStore.save(document)
-        viewModel.selectedCategoryID = category.id
-        await viewModel.reload()
+        organizer.selectedCategoryID = category.id
+        await organizer.reload()
 
-        viewModel.toggleFavoriteSelection(id: target.id)
-        viewModel.toggleCollectionSelection(id: collection.id)
-        await viewModel.deleteSelection(scope: .currentLocation)
+        organizer.selection.toggleFavoriteSelection(id: target.id)
+        organizer.toggleCollectionSelection(id: collection.id)
+        await organizer.deleteSelection(scope: .currentLocation)
 
         let loadedDocument = await localFavoriteLibraryStore.load()
         XCTAssertTrue(loadedDocument.collections.contains { $0.id == collection.id })
@@ -344,14 +338,13 @@ final class LocalFavoritesViewModelTests: XCTestCase {
             key: "local-favorites"
         )
         let recorder = FavoriteDeleteTestRecorder(error: YamiboError.favoriteDeleteFailed)
-        let dependencies = try makeLibraryDependencies(localFavoriteLibraryStore: localFavoriteLibraryStore)
-        let viewModel = LocalFavoritesViewModel(
-            dependencies: dependencies,
+        let organizer = try makeOrganizer(
+            libraryStore: localFavoriteLibraryStore,
             remoteFavoriteDeleteHandler: { items in
                 try await recorder.record(items)
             }
         )
-        await viewModel.load()
+        await organizer.load()
 
         let target = FavoriteContentTarget(kind: .normalThread, threadID: "953")
         var document = await localFavoriteLibraryStore.load()
@@ -362,16 +355,16 @@ final class LocalFavoritesViewModelTests: XCTestCase {
             locations: [.category(document.defaultCategory.id)]
         ))
         try await localFavoriteLibraryStore.save(document)
-        await viewModel.reload()
+        await organizer.reload()
 
-        viewModel.toggleFavoriteSelection(id: target.id)
-        await viewModel.deleteSelection(scope: .everywhere)
+        organizer.selection.toggleFavoriteSelection(id: target.id)
+        await organizer.deleteSelection(scope: .everywhere)
 
         let storedItem = await localFavoriteLibraryStore.load().items.first { $0.target == target }
         let recordedTargetIDs = await recorder.recordedTargetIDs()
         XCTAssertNotNil(storedItem)
         XCTAssertEqual(recordedTargetIDs, [target.id])
-        XCTAssertNotNil(viewModel.errorMessage)
+        XCTAssertNotNil(organizer.errorMessage)
     }
 
     func testEverywhereDeleteFallsBackToRemoteFavoriteLookupWhenMappingIDIsMissing() async throws {
@@ -383,12 +376,11 @@ final class LocalFavoritesViewModelTests: XCTestCase {
             defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
             key: "local-favorites"
         )
-        let dependencies = try makeLibraryDependencies(
-            localFavoriteLibraryStore: localFavoriteLibraryStore,
+        let organizer = try makeOrganizer(
+            libraryStore: localFavoriteLibraryStore,
             session: makeLocalFavoriteDeleteTestSession()
         )
-        let viewModel = LocalFavoritesViewModel(dependencies: dependencies)
-        await viewModel.load()
+        await organizer.load()
 
         let target = FavoriteContentTarget(kind: .normalThread, threadID: "955")
         var document = await localFavoriteLibraryStore.load()
@@ -400,13 +392,13 @@ final class LocalFavoritesViewModelTests: XCTestCase {
         )
         document.addItem(item)
         try await localFavoriteLibraryStore.save(document)
-        await viewModel.reload()
+        await organizer.reload()
 
-        await viewModel.deleteItem(item, scope: .everywhere)
+        await organizer.deleteItem(item, scope: .everywhere)
 
         let storedItem = await localFavoriteLibraryStore.load().items.first { $0.target == target }
         XCTAssertNil(storedItem)
-        XCTAssertNil(viewModel.errorMessage)
+        XCTAssertNil(organizer.errorMessage)
         XCTAssertEqual(LocalFavoriteDeleteTestURLProtocol.deletedFavoriteIDs, ["997"])
     }
 
@@ -417,9 +409,8 @@ final class LocalFavoritesViewModelTests: XCTestCase {
             defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
             key: "local-favorites"
         )
-        let dependencies = try makeLibraryDependencies(localFavoriteLibraryStore: localFavoriteLibraryStore)
-        let viewModel = LocalFavoritesViewModel(dependencies: dependencies)
-        await viewModel.load()
+        let organizer = try makeOrganizer(libraryStore: localFavoriteLibraryStore)
+        await organizer.load()
 
         let target = FavoriteContentTarget(kind: .normalThread, threadID: "954")
         var document = await localFavoriteLibraryStore.load()
@@ -430,13 +421,13 @@ final class LocalFavoritesViewModelTests: XCTestCase {
         )
         document.addItem(item)
         try await localFavoriteLibraryStore.save(document)
-        await viewModel.reload()
+        await organizer.reload()
 
-        await viewModel.deleteItem(item, scope: .everywhere)
+        await organizer.deleteItem(item, scope: .everywhere)
 
         let storedItem = await localFavoriteLibraryStore.load().items.first { $0.target == target }
         XCTAssertNil(storedItem)
-        XCTAssertNil(viewModel.errorMessage)
+        XCTAssertNil(organizer.errorMessage)
     }
 
     func testCollectionManagementFiltersMovesAndDissolvesFavorites() async throws {
@@ -446,15 +437,14 @@ final class LocalFavoritesViewModelTests: XCTestCase {
             defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
             key: "local-favorites"
         )
-        let dependencies = try makeLibraryDependencies(localFavoriteLibraryStore: localFavoriteLibraryStore)
-        let viewModel = LocalFavoritesViewModel(dependencies: dependencies)
-        await viewModel.load()
+        let organizer = try makeOrganizer(libraryStore: localFavoriteLibraryStore)
+        await organizer.load()
 
-        let createdCategory = await viewModel.createCategory(name: "分类A")
+        let createdCategory = await organizer.createCategory(name: "分类A")
         let category = try XCTUnwrap(createdCategory)
-        let createdFirstCollection = await viewModel.createCollection(name: "合集A", color: .blue)
+        let createdFirstCollection = await organizer.createCollection(name: "合集A", color: .blue)
         let firstCollection = try XCTUnwrap(createdFirstCollection)
-        let createdSecondCollection = await viewModel.createCollection(name: "合集B", color: .gray)
+        let createdSecondCollection = await organizer.createCollection(name: "合集B", color: .gray)
         let secondCollection = try XCTUnwrap(createdSecondCollection)
 
         let firstTarget = FavoriteContentTarget(kind: .normalThread, threadID: "910")
@@ -474,34 +464,34 @@ final class LocalFavoritesViewModelTests: XCTestCase {
             locations: [.category(category.id)]
         ))
         try await localFavoriteLibraryStore.save(document)
-        await viewModel.reload()
+        await organizer.reload()
 
-        XCTAssertEqual(viewModel.collectionEntryCounts[firstCollection.id], 1)
-        viewModel.openCollection(id: firstCollection.id)
-        XCTAssertEqual(viewModel.selectedCollection?.id, firstCollection.id)
-        XCTAssertEqual(viewModel.cards.map(\.item.target), [firstTarget])
+        XCTAssertEqual(organizer.derived.collectionEntryCounts[firstCollection.id], 1)
+        organizer.openCollection(id: firstCollection.id)
+        XCTAssertEqual(organizer.selectedCollection?.id, firstCollection.id)
+        XCTAssertEqual(organizer.derived.cards.map(\.item.target), [firstTarget])
 
-        await viewModel.updateCollection(id: firstCollection.id, name: "合集A+", color: .purple)
-        XCTAssertTrue(viewModel.collections.contains { $0.id == firstCollection.id && $0.name == "合集A+" && $0.color == .purple })
+        await organizer.updateCollection(id: firstCollection.id, name: "合集A+", color: .purple)
+        XCTAssertTrue(organizer.collections.contains { $0.id == firstCollection.id && $0.name == "合集A+" && $0.color == .purple })
 
-        await viewModel.moveCollection(id: secondCollection.id, direction: .up)
-        let sameCategoryCollections = viewModel.collections
+        await organizer.moveCollection(id: secondCollection.id, direction: .up)
+        let sameCategoryCollections = organizer.collections
             .filter { $0.categoryID == category.id }
             .sorted { $0.manualOrder == $1.manualOrder ? $0.id < $1.id : $0.manualOrder < $1.manualOrder }
         XCTAssertEqual(sameCategoryCollections.first?.id, secondCollection.id)
 
-        let createdSecondCategory = await viewModel.createCategory(name: "分类B")
+        let createdSecondCategory = await organizer.createCategory(name: "分类B")
         let secondCategory = try XCTUnwrap(createdSecondCategory)
-        await viewModel.moveCollection(id: firstCollection.id, toCategoryID: secondCategory.id)
-        viewModel.openCollection(id: firstCollection.id)
-        XCTAssertEqual(viewModel.selectedCategoryID, secondCategory.id)
-        XCTAssertEqual(viewModel.cards.map(\.item.target), [firstTarget])
+        await organizer.moveCollection(id: firstCollection.id, toCategoryID: secondCategory.id)
+        organizer.openCollection(id: firstCollection.id)
+        XCTAssertEqual(organizer.selectedCategoryID, secondCategory.id)
+        XCTAssertEqual(organizer.derived.cards.map(\.item.target), [firstTarget])
         let movedItem = await localFavoriteLibraryStore.load().items.first { $0.target == firstTarget }
         XCTAssertTrue(movedItem?.locations.contains(.collection(categoryID: secondCategory.id, collectionID: firstCollection.id)) == true)
 
-        await viewModel.dissolveCollection(id: firstCollection.id)
-        XCTAssertNil(viewModel.selectedCollection)
-        XCTAssertFalse(viewModel.collections.contains { $0.id == firstCollection.id })
+        await organizer.dissolveCollection(id: firstCollection.id)
+        XCTAssertNil(organizer.selectedCollection)
+        XCTAssertFalse(organizer.collections.contains { $0.id == firstCollection.id })
         let dissolvedItem = await localFavoriteLibraryStore.load().items.first { $0.target == firstTarget }
         XCTAssertTrue(dissolvedItem?.locations.contains(.category(secondCategory.id)) == true)
         XCTAssertFalse(dissolvedItem?.locations.contains { $0.collectionID == firstCollection.id } == true)
@@ -518,16 +508,15 @@ final class LocalFavoritesViewModelTests: XCTestCase {
             defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
             key: "local-favorites"
         )
-        let dependencies = try makeLibraryDependencies(
-            localFavoriteLibraryStore: localFavoriteLibraryStore,
+        let organizer = try makeOrganizer(
+            libraryStore: localFavoriteLibraryStore,
             settingsStore: settingsStore
         )
-        let viewModel = LocalFavoritesViewModel(dependencies: dependencies)
-        await viewModel.load()
+        await organizer.load()
 
-        let createdCategory = await viewModel.createCategory(name: "待读")
+        let createdCategory = await organizer.createCategory(name: "待读")
         let category = try XCTUnwrap(createdCategory)
-        XCTAssertEqual(viewModel.selectedCategoryID, category.id)
+        XCTAssertEqual(organizer.selectedCategoryID, category.id)
 
         var document = await localFavoriteLibraryStore.load()
         let item = try FavoriteItem(
@@ -537,24 +526,24 @@ final class LocalFavoritesViewModelTests: XCTestCase {
         )
         document.addItem(item)
         try await localFavoriteLibraryStore.save(document)
-        await viewModel.reload()
-        XCTAssertEqual(viewModel.categoryEntryCounts[category.id], 1)
+        await organizer.reload()
+        XCTAssertEqual(organizer.derived.categoryEntryCounts[category.id], 1)
 
-        await viewModel.renameCategory(id: category.id, name: "已读")
-        XCTAssertTrue(viewModel.categories.contains { $0.id == category.id && $0.name == "已读" })
+        await organizer.renameCategory(id: category.id, name: "已读")
+        XCTAssertTrue(organizer.categories.contains { $0.id == category.id && $0.name == "已读" })
 
-        let createdSecondCategory = await viewModel.createCategory(name: "同步")
+        let createdSecondCategory = await organizer.createCategory(name: "同步")
         let second = try XCTUnwrap(createdSecondCategory)
-        await viewModel.moveCategory(id: second.id, direction: .up)
-        let nonDefault = viewModel.categories.filter { !$0.isDefault }.sorted { $0.manualOrder < $1.manualOrder }
+        await organizer.moveCategory(id: second.id, direction: .up)
+        let nonDefault = organizer.categories.filter { !$0.isDefault }.sorted { $0.manualOrder < $1.manualOrder }
         XCTAssertEqual(nonDefault.first?.id, second.id)
 
-        await viewModel.deleteCategory(id: second.id)
-        XCTAssertFalse(viewModel.categories.contains { $0.id == second.id })
+        await organizer.deleteCategory(id: second.id)
+        XCTAssertFalse(organizer.categories.contains { $0.id == second.id })
 
         try await Task.sleep(nanoseconds: 50_000_000)
         let settings = await settingsStore.load()
-        XCTAssertEqual(settings.favorites.selectedCategoryID, viewModel.selectedCategoryID)
+        XCTAssertEqual(settings.favorites.selectedCategoryID, organizer.selectedCategoryID)
     }
 
     func testOpenCollectionStateLoadsAndPersistsThroughSettingsStore() async throws {
@@ -576,24 +565,23 @@ final class LocalFavoritesViewModelTests: XCTestCase {
             selectedCategoryID: FavoriteCategory.defaultID,
             selectedCollectionID: collection.id
         )))
-        let dependencies = try makeLibraryDependencies(
-            localFavoriteLibraryStore: localFavoriteLibraryStore,
+
+        let organizer = try makeOrganizer(
+            libraryStore: localFavoriteLibraryStore,
             settingsStore: settingsStore
         )
+        await organizer.load()
 
-        let viewModel = LocalFavoritesViewModel(dependencies: dependencies)
-        await viewModel.load()
+        XCTAssertEqual(organizer.selectedCategoryID, category.id)
+        XCTAssertEqual(organizer.selectedCollection?.id, collection.id)
 
-        XCTAssertEqual(viewModel.selectedCategoryID, category.id)
-        XCTAssertEqual(viewModel.selectedCollection?.id, collection.id)
-
-        viewModel.closeCollection()
+        organizer.closeCollection()
         try await Task.sleep(nanoseconds: 50_000_000)
         var saved = await settingsStore.load()
         XCTAssertEqual(saved.favorites.selectedCategoryID, category.id)
         XCTAssertNil(saved.favorites.selectedCollectionID)
 
-        viewModel.openCollection(id: collection.id)
+        organizer.openCollection(id: collection.id)
         try await Task.sleep(nanoseconds: 50_000_000)
         saved = await settingsStore.load()
         XCTAssertEqual(saved.favorites.selectedCategoryID, category.id)
@@ -611,8 +599,8 @@ final class LocalFavoritesViewModelTests: XCTestCase {
             defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
             key: "local-favorites"
         )
-        let dependencies = try makeLibraryDependencies(
-            localFavoriteLibraryStore: localFavoriteLibraryStore,
+        let organizer = try makeOrganizer(
+            libraryStore: localFavoriteLibraryStore,
             settingsStore: settingsStore
         )
         try await settingsStore.save(AppSettings(favorites: FavoriteLibrarySettings(
@@ -622,17 +610,16 @@ final class LocalFavoritesViewModelTests: XCTestCase {
             showsCategoryCounts: false
         )))
 
-        let viewModel = LocalFavoritesViewModel(dependencies: dependencies)
-        await viewModel.load()
-        XCTAssertEqual(viewModel.layoutMode, .staggered)
-        XCTAssertEqual(viewModel.sortOrder, .displayTitle)
-        XCTAssertTrue(viewModel.sortDescending)
-        XCTAssertFalse(viewModel.showsCategoryCounts)
+        await organizer.load()
+        XCTAssertEqual(organizer.display.layoutMode, .staggered)
+        XCTAssertEqual(organizer.filter.sortOrder, .displayTitle)
+        XCTAssertTrue(organizer.filter.sortDescending)
+        XCTAssertFalse(organizer.display.showsCategoryCounts)
 
-        viewModel.updateLayoutMode(.fixedGrid)
-        viewModel.updateSortOrder(.lastReadAt)
-        viewModel.updateSortDescending(false)
-        viewModel.updateShowsCategoryCounts(true)
+        organizer.updateLayoutMode(.fixedGrid)
+        organizer.updateSortOrder(.lastReadAt)
+        organizer.updateSortDescending(false)
+        organizer.updateShowsCategoryCounts(true)
         try await Task.sleep(nanoseconds: 50_000_000)
 
         let saved = await settingsStore.load()
@@ -640,212 +627,6 @@ final class LocalFavoritesViewModelTests: XCTestCase {
         XCTAssertEqual(saved.favorites.sortOrder, .lastReadAt)
         XCTAssertFalse(saved.favorites.sortDescending)
         XCTAssertTrue(saved.favorites.showsCategoryCounts)
-    }
-
-    func testRemoteSyncSnapshotLoadsInterruptsRunningTaskAndPersistsHiddenCard() async throws {
-        let suiteName = YamiboTestDefaults.suiteName(prefix: "local-favorites-sync-snapshot")
-        _ = try YamiboTestDefaults.make(suiteName: suiteName)
-        let settingsStore = SettingsStore(
-            defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
-            key: "settings"
-        )
-        let localFavoriteLibraryStore = FavoriteLibraryStore(
-            defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
-            key: "local-favorites"
-        )
-        let runningSnapshot = FavoriteRemoteSyncSnapshot(
-            runID: "sync-run",
-            status: .running,
-            targetCategoryID: FavoriteCategory.defaultID,
-            targetCategoryName: "默认",
-            phase: "导入",
-            startedAt: Date(timeIntervalSince1970: 1_000),
-            updatedAt: Date(timeIntervalSince1970: 1_100),
-            scannedCount: 2,
-            importedCount: 1
-        )
-        try await settingsStore.save(AppSettings(favorites: FavoriteLibrarySettings(remoteSyncSnapshot: runningSnapshot)))
-        let dependencies = try makeLibraryDependencies(
-            localFavoriteLibraryStore: localFavoriteLibraryStore,
-            settingsStore: settingsStore
-        )
-
-        let viewModel = LocalFavoritesViewModel(dependencies: dependencies)
-        await viewModel.load()
-
-        XCTAssertEqual(viewModel.remoteSyncSnapshot?.runID, "sync-run")
-        XCTAssertEqual(viewModel.remoteSyncSnapshot?.status, .interrupted)
-        XCTAssertTrue(viewModel.remoteSyncSnapshot?.warningMessages.isEmpty == false)
-        let interruptedSettings = await settingsStore.load()
-        XCTAssertEqual(interruptedSettings.favorites.remoteSyncSnapshot?.status, .interrupted)
-
-        await viewModel.hideRemoteFavoriteSyncCard()
-        let hiddenSettings = await settingsStore.load()
-        XCTAssertTrue(hiddenSettings.favorites.remoteSyncSnapshot?.isHiddenFromFavoritePage == true)
-    }
-
-    func testRemoteSyncStartCompletesAndResumeUsesPersistedTargetCategory() async throws {
-        let suiteName = YamiboTestDefaults.suiteName(prefix: "local-favorites-sync-complete")
-        _ = try YamiboTestDefaults.make(suiteName: suiteName)
-        let settingsStore = SettingsStore(
-            defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
-            key: "settings"
-        )
-        let localFavoriteLibraryStore = FavoriteLibraryStore(
-            defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
-            key: "local-favorites"
-        )
-        let recorder = FavoriteRemoteSyncTestRecorder()
-        let dependencies = try makeLibraryDependencies(
-            localFavoriteLibraryStore: localFavoriteLibraryStore,
-            settingsStore: settingsStore
-        )
-        let viewModel = LocalFavoritesViewModel(
-            dependencies: dependencies,
-            remoteFavoriteSyncExecutor: { _, categoryID in
-                await recorder.record(categoryID)
-                return YamiboFavoriteSyncReport(
-                    importedTargetIDs: ["imported-a", "imported-b"],
-                    failedRemoteFavoriteIDs: ["remote-failed"],
-                    markedMissingTargetIDs: ["missing-a"],
-                    uploadTargetIDs: ["upload-a"]
-                )
-            }
-        )
-        await viewModel.load()
-
-        let firstRunID = await viewModel.startRemoteFavoriteSync(targetCategoryID: FavoriteCategory.defaultID)
-        try await waitForRemoteSyncStatus(.completed, in: viewModel)
-        XCTAssertEqual(viewModel.remoteSyncSnapshot?.runID, firstRunID)
-        XCTAssertEqual(viewModel.remoteSyncSnapshot?.importedCount, 2)
-        XCTAssertEqual(viewModel.remoteSyncSnapshot?.failedCount, 1)
-        XCTAssertEqual(viewModel.remoteSyncSnapshot?.markedMissingCount, 1)
-        XCTAssertEqual(viewModel.remoteSyncSnapshot?.uploadTargetCount, 1)
-        XCTAssertTrue(viewModel.remoteSyncSnapshot?.warningMessages.isEmpty == false)
-
-        let secondRunID = await viewModel.resumeRemoteFavoriteSync()
-        try await waitForRemoteSyncStatus(.completed, in: viewModel)
-        XCTAssertNotEqual(secondRunID, firstRunID)
-        let recordedCategoryIDs = await recorder.recordedCategoryIDs()
-        XCTAssertEqual(recordedCategoryIDs, [FavoriteCategory.defaultID, FavoriteCategory.defaultID])
-        let savedStatus = await settingsStore.load().favorites.remoteSyncSnapshot?.status
-        XCTAssertEqual(savedStatus, .completed)
-    }
-
-    func testRemoteSyncInterruptCancelsRunningTaskAndPersistsInterruptedStatus() async throws {
-        let suiteName = YamiboTestDefaults.suiteName(prefix: "local-favorites-sync-interrupt")
-        _ = try YamiboTestDefaults.make(suiteName: suiteName)
-        let settingsStore = SettingsStore(
-            defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
-            key: "settings"
-        )
-        let dependencies = try makeLibraryDependencies(settingsStore: settingsStore)
-        let viewModel = LocalFavoritesViewModel(
-            dependencies: dependencies,
-            remoteFavoriteSyncExecutor: { _, _ in
-                try await Task.sleep(nanoseconds: 2_000_000_000)
-                return YamiboFavoriteSyncReport(importedTargetIDs: ["late"])
-            }
-        )
-        await viewModel.load()
-
-        _ = await viewModel.startRemoteFavoriteSync(targetCategoryID: FavoriteCategory.defaultID)
-        XCTAssertEqual(viewModel.remoteSyncSnapshot?.status, .running)
-        await viewModel.interruptRemoteFavoriteSync()
-        try await waitForRemoteSyncStatus(.interrupted, in: viewModel)
-
-        let saved = await settingsStore.load()
-        XCTAssertEqual(saved.favorites.remoteSyncSnapshot?.status, .interrupted)
-        XCTAssertTrue(saved.favorites.remoteSyncSnapshot?.warningMessages.isEmpty == false)
-    }
-
-    func testFavoriteUpdateCheckBuildsBaselineDetectsEventsAndHonorsFidFilter() async throws {
-        let suiteName = YamiboTestDefaults.suiteName(prefix: "local-favorites-updates")
-        _ = try YamiboTestDefaults.make(suiteName: suiteName)
-        let localFavoriteLibraryStore = FavoriteLibraryStore(
-            defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
-            key: "local-favorites"
-        )
-        let favoriteUpdateStore = FavoriteUpdateStore(
-            defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
-            key: "favorite-updates"
-        )
-        let dependencies = try makeLibraryDependencies(
-            localFavoriteLibraryStore: localFavoriteLibraryStore,
-            favoriteUpdateStore: favoriteUpdateStore
-        )
-        let target = FavoriteContentTarget(kind: .normalThread, threadID: "960")
-        var document = FavoriteLibraryDocument()
-        let category = document.createCategory(name: "更新检测")
-        document.addItem(try FavoriteItem(
-            target: target,
-            title: "更新主题",
-            sourceGroup: .forumBoard(id: "50", label: "测试板块"),
-            locations: [.category(category.id)]
-        ))
-        try await localFavoriteLibraryStore.save(document)
-
-        var pagesByThreadID = [
-            "960": [
-                try makeFavoriteUpdateThreadPage(
-                    threadID: "960",
-                    postID: "p1",
-                    title: "更新主题",
-                    replyCount: 1,
-                    pageCount: 1
-                ),
-                try makeFavoriteUpdateThreadPage(
-                    threadID: "960",
-                    postID: "p2",
-                    title: "更新主题",
-                    replyCount: 3,
-                    pageCount: 2
-                ),
-                try makeFavoriteUpdateThreadPage(
-                    threadID: "960",
-                    postID: "p3",
-                    title: "更新主题",
-                    replyCount: 4,
-                    pageCount: 2
-                )
-            ]
-        ]
-        var fetchedThreadIDs: [String] = []
-        let viewModel = LocalFavoritesViewModel(
-            dependencies: dependencies,
-            favoriteUpdatePageFetcher: { item in
-                let threadID = try XCTUnwrap(item.target.threadID)
-                fetchedThreadIDs.append(threadID)
-                var pages = pagesByThreadID[threadID] ?? []
-                let page = try XCTUnwrap(pages.first)
-                if pages.count > 1 {
-                    pages.removeFirst()
-                    pagesByThreadID[threadID] = pages
-                }
-                return page
-            }
-        )
-        await viewModel.load()
-
-        _ = await viewModel.startFavoriteUpdateCheck()
-        try await waitForFavoriteUpdateStatus(.completed, in: viewModel)
-        XCTAssertEqual(viewModel.favoriteUpdateEvents.count, 0)
-        XCTAssertEqual(viewModel.favoriteUpdateFidFilters.map(\.fid), ["50"])
-        XCTAssertEqual(viewModel.favoriteUpdateCategoryFilters.map(\.categoryID), [category.id])
-
-        _ = await viewModel.startFavoriteUpdateCheck()
-        try await waitForFavoriteUpdateStatus(.completed, in: viewModel)
-        XCTAssertEqual(viewModel.favoriteUpdateEvents.count, 1)
-        XCTAssertEqual(viewModel.favoriteUpdateEvents.first?.title, "更新主题")
-        XCTAssertEqual(viewModel.favoriteUpdateEvents.first?.fid, "50")
-        XCTAssertTrue(viewModel.favoriteUpdateEvents.first?.summary.contains("2") == true)
-
-        await viewModel.setFavoriteUpdateFidFilter("50", enabled: false)
-        let fetchCountBeforeDisabledRun = fetchedThreadIDs.count
-        _ = await viewModel.startFavoriteUpdateCheck()
-        try await waitForFavoriteUpdateStatus(.completed, in: viewModel)
-        XCTAssertEqual(fetchedThreadIDs.count, fetchCountBeforeDisabledRun)
-        XCTAssertEqual(viewModel.favoriteUpdateSnapshot?.totalCount, 0)
     }
 
     func testAddFavoritePersistsCoverURLInLocalFirstLibrary() async throws {
@@ -916,18 +697,9 @@ final class LocalFavoritesViewModelTests: XCTestCase {
             defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
             key: "local-favorites"
         )
-        let readingProgressStore = ReadingProgressStore(
-            defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
-            key: "reading-progress"
-        )
         let contentCoverStore = ContentCoverStore(
             defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
             key: "content-covers"
-        )
-        let dependencies = try makeLibraryDependencies(
-            localFavoriteLibraryStore: localFavoriteLibraryStore,
-            readingProgressStore: readingProgressStore,
-            contentCoverStore: contentCoverStore
         )
         let target = FavoriteContentTarget(kind: .normalThread, threadID: "903")
         let coverURL = try XCTUnwrap(URL(string: "https://img.example.com/store-cover.jpg"))
@@ -944,10 +716,13 @@ final class LocalFavoritesViewModelTests: XCTestCase {
             for: ContentCoverKey(targetType: .threadNormal, targetID: "903")
         )
 
-        let viewModel = LocalFavoritesViewModel(dependencies: dependencies)
-        await viewModel.load()
+        let organizer = try makeOrganizer(
+            libraryStore: localFavoriteLibraryStore,
+            contentCoverStore: contentCoverStore
+        )
+        await organizer.load()
 
-        XCTAssertEqual(viewModel.cards.first?.coverURL, coverURL)
+        XCTAssertEqual(organizer.derived.cards.first?.coverURL, coverURL)
     }
 
     func testLoadPrefersContentCoverStoreURLOverPersistedNormalThreadCoverURL() async throws {
@@ -957,18 +732,9 @@ final class LocalFavoritesViewModelTests: XCTestCase {
             defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
             key: "local-favorites"
         )
-        let readingProgressStore = ReadingProgressStore(
-            defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
-            key: "reading-progress"
-        )
         let contentCoverStore = ContentCoverStore(
             defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
             key: "content-covers"
-        )
-        let dependencies = try makeLibraryDependencies(
-            localFavoriteLibraryStore: localFavoriteLibraryStore,
-            readingProgressStore: readingProgressStore,
-            contentCoverStore: contentCoverStore
         )
         let target = FavoriteContentTarget(kind: .normalThread, threadID: "904")
         let persistedCoverURL = try XCTUnwrap(URL(string: "https://img.example.com/old-normal-cover.jpg"))
@@ -986,10 +752,13 @@ final class LocalFavoritesViewModelTests: XCTestCase {
             for: ContentCoverKey(targetType: .threadNormal, targetID: "904")
         )
 
-        let viewModel = LocalFavoritesViewModel(dependencies: dependencies)
-        await viewModel.load()
+        let organizer = try makeOrganizer(
+            libraryStore: localFavoriteLibraryStore,
+            contentCoverStore: contentCoverStore
+        )
+        await organizer.load()
 
-        XCTAssertEqual(viewModel.cards.first?.coverURL, resolvedCoverURL)
+        XCTAssertEqual(organizer.derived.cards.first?.coverURL, resolvedCoverURL)
         let persistedDocument = await localFavoriteLibraryStore.load()
         XCTAssertEqual(persistedDocument.items.first?.coverURL, persistedCoverURL)
     }
@@ -1001,18 +770,9 @@ final class LocalFavoritesViewModelTests: XCTestCase {
             defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
             key: "local-favorites"
         )
-        let readingProgressStore = ReadingProgressStore(
-            defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
-            key: "reading-progress"
-        )
         let contentCoverStore = ContentCoverStore(
             defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
             key: "content-covers"
-        )
-        let dependencies = try makeLibraryDependencies(
-            localFavoriteLibraryStore: localFavoriteLibraryStore,
-            readingProgressStore: readingProgressStore,
-            contentCoverStore: contentCoverStore
         )
         let target = FavoriteContentTarget(kind: .novelThread, threadID: "905")
         let persistedCoverURL = try XCTUnwrap(URL(string: "https://img.example.com/old-novel-cover.jpg"))
@@ -1030,51 +790,15 @@ final class LocalFavoritesViewModelTests: XCTestCase {
             for: ContentCoverKey(targetType: .threadNovel, targetID: "905")
         )
 
-        let viewModel = LocalFavoritesViewModel(dependencies: dependencies)
-        await viewModel.load()
+        let organizer = try makeOrganizer(
+            libraryStore: localFavoriteLibraryStore,
+            contentCoverStore: contentCoverStore
+        )
+        await organizer.load()
 
-        XCTAssertEqual(viewModel.cards.first?.coverURL, resolvedCoverURL)
+        XCTAssertEqual(organizer.derived.cards.first?.coverURL, resolvedCoverURL)
         let persistedDocument = await localFavoriteLibraryStore.load()
         XCTAssertEqual(persistedDocument.items.first?.coverURL, persistedCoverURL)
-    }
-
-    func testNormalThreadOpenTargetUsesNativeReaderWithoutMutatingFavoriteUpdatedAt() async throws {
-        let suiteName = YamiboTestDefaults.suiteName(prefix: "local-favorites-view-model")
-        _ = try YamiboTestDefaults.make(suiteName: suiteName)
-        let localFavoriteLibraryStore = FavoriteLibraryStore(
-            defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
-            key: "local-favorites"
-        )
-        let readingProgressStore = ReadingProgressStore(
-            defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
-            key: "reading-progress"
-        )
-        let dependencies = try makeLibraryDependencies(
-            localFavoriteLibraryStore: localFavoriteLibraryStore,
-            readingProgressStore: readingProgressStore
-        )
-        let originalUpdatedAt = Date(timeIntervalSince1970: 1_000)
-        var document = FavoriteLibraryDocument()
-        let item = try FavoriteItem(
-            target: FavoriteContentTarget(kind: .normalThread, threadID: "901"),
-            title: "普通主题",
-            locations: [.category(document.defaultCategory.id)],
-            updatedAt: originalUpdatedAt
-        )
-        document.addItem(item)
-        try await localFavoriteLibraryStore.save(document)
-
-        let viewModel = LocalFavoritesViewModel(dependencies: dependencies)
-        await viewModel.load()
-        let opened = await viewModel.openTarget(for: item)
-
-        guard case let .nativeThread(openedURL, title)? = opened else {
-            return XCTFail("Expected a native thread open target")
-        }
-        XCTAssertEqual(openedURL, YamiboRoute.threadByID(tid: "901", page: 1, authorID: nil, reverse: false).url)
-        XCTAssertEqual(title, "普通主题")
-        let storedItem = await localFavoriteLibraryStore.load().items.first { $0.id == item.id }
-        XCTAssertEqual(storedItem?.updatedAt, originalUpdatedAt)
     }
 
     func testSearchModeSubmitsCountsAndExitClearsSelection() async throws {
@@ -1084,7 +808,6 @@ final class LocalFavoritesViewModelTests: XCTestCase {
             defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
             key: "local-favorites"
         )
-        let dependencies = try makeLibraryDependencies(localFavoriteLibraryStore: localFavoriteLibraryStore)
         var document = FavoriteLibraryDocument()
         let secondCategory = document.createCategory(name: "分类B")
         let matchingCollection = document.createCollection(categoryID: document.defaultCategory.id, name: "命中合集")
@@ -1112,97 +835,34 @@ final class LocalFavoritesViewModelTests: XCTestCase {
         ))
         try await localFavoriteLibraryStore.save(document)
 
-        let viewModel = LocalFavoritesViewModel(dependencies: dependencies)
-        await viewModel.load()
+        let organizer = try makeOrganizer(libraryStore: localFavoriteLibraryStore)
+        await organizer.load()
 
-        XCTAssertEqual(viewModel.cards.map(\.item.target), [firstTarget, secondTarget])
-        viewModel.toggleFavoriteSelection(id: firstTarget.id)
-        XCTAssertTrue(viewModel.isSelectionMode)
-        viewModel.enterSearchMode()
-        XCTAssertTrue(viewModel.isSearchMode)
-        XCTAssertFalse(viewModel.isSelectionMode)
-        viewModel.searchDraftText = " 命中 "
-        XCTAssertEqual(viewModel.cards.map(\.item.target), [firstTarget, secondTarget])
+        XCTAssertEqual(organizer.derived.cards.map(\.item.target), [firstTarget, secondTarget])
+        organizer.selection.toggleFavoriteSelection(id: firstTarget.id)
+        XCTAssertTrue(organizer.selection.isSelectionMode)
+        organizer.enterSearchMode()
+        XCTAssertTrue(organizer.selection.isSearchMode)
+        XCTAssertFalse(organizer.selection.isSelectionMode)
+        organizer.selection.searchDraftText = " 命中 "
+        XCTAssertEqual(organizer.derived.cards.map(\.item.target), [firstTarget, secondTarget])
 
-        viewModel.submitSearch()
-        XCTAssertEqual(viewModel.searchText, "命中")
-        XCTAssertEqual(viewModel.cards.map(\.item.target), [firstTarget])
-        XCTAssertEqual(viewModel.categoryEntryCounts[document.defaultCategory.id], 2)
-        XCTAssertEqual(viewModel.categoryEntryCounts[secondCategory.id], 1)
+        organizer.submitSearch()
+        XCTAssertEqual(organizer.filter.searchText, "命中")
+        XCTAssertEqual(organizer.derived.cards.map(\.item.target), [firstTarget])
+        XCTAssertEqual(organizer.derived.categoryEntryCounts[document.defaultCategory.id], 2)
+        XCTAssertEqual(organizer.derived.categoryEntryCounts[secondCategory.id], 1)
 
-        viewModel.toggleFavoriteSelection(id: firstTarget.id)
-        XCTAssertFalse(viewModel.isSearchMode)
-        XCTAssertTrue(viewModel.isSelectionMode)
-        viewModel.exitSearchMode()
-        XCTAssertFalse(viewModel.isSearchMode)
-        XCTAssertEqual(viewModel.searchDraftText, "")
-        XCTAssertEqual(viewModel.searchText, "")
-        XCTAssertFalse(viewModel.isSelectionMode)
-        XCTAssertEqual(viewModel.selectedEntryCount, 0)
-        XCTAssertEqual(viewModel.cards.map(\.item.target), [firstTarget, secondTarget])
-    }
-
-    private func waitForRemoteSyncStatus(
-        _ status: FavoriteRemoteSyncTaskStatus,
-        in viewModel: LocalFavoritesViewModel
-    ) async throws {
-        for _ in 0..<100 {
-            if viewModel.remoteSyncSnapshot?.status == status {
-                return
-            }
-            try await Task.sleep(nanoseconds: 10_000_000)
-        }
-        XCTFail("Timed out waiting for remote sync status \(status)")
-    }
-
-    private func waitForFavoriteUpdateStatus(
-        _ status: FavoriteUpdateRunStatus,
-        in viewModel: LocalFavoritesViewModel
-    ) async throws {
-        for _ in 0..<100 {
-            if viewModel.favoriteUpdateSnapshot?.status == status {
-                return
-            }
-            try await Task.sleep(nanoseconds: 10_000_000)
-        }
-        XCTFail("Timed out waiting for favorite update status \(status)")
-    }
-
-    private func makeFavoriteUpdateThreadPage(
-        threadID: String,
-        postID: String,
-        title: String,
-        replyCount: Int,
-        pageCount: Int
-    ) throws -> ForumThreadPage {
-        return ForumThreadPage(
-            thread: ThreadIdentity(tid: threadID, fid: "50"),
-            title: title,
-            posts: [
-                ForumThreadPost(
-                    postID: postID,
-                    author: BlogReaderUser(uid: "u1", name: "作者"),
-                    contentHTML: "<p>正文</p>",
-                    contentText: "正文"
-                )
-            ],
-            pageNavigation: ForumPageNavigation(currentPage: 1, totalPages: pageCount),
-            totalReplies: replyCount,
-            forumID: "50",
-            forumName: "测试板块"
-        )
-    }
-}
-
-private actor FavoriteRemoteSyncTestRecorder {
-    private var categoryIDs: [String] = []
-
-    func record(_ categoryID: String) {
-        categoryIDs.append(categoryID)
-    }
-
-    func recordedCategoryIDs() -> [String] {
-        categoryIDs
+        organizer.selection.toggleFavoriteSelection(id: firstTarget.id)
+        XCTAssertFalse(organizer.selection.isSearchMode)
+        XCTAssertTrue(organizer.selection.isSelectionMode)
+        organizer.exitSearchMode()
+        XCTAssertFalse(organizer.selection.isSearchMode)
+        XCTAssertEqual(organizer.selection.searchDraftText, "")
+        XCTAssertEqual(organizer.filter.searchText, "")
+        XCTAssertFalse(organizer.selection.isSelectionMode)
+        XCTAssertEqual(organizer.selection.selectedEntryCount, 0)
+        XCTAssertEqual(organizer.derived.cards.map(\.item.target), [firstTarget, secondTarget])
     }
 }
 
@@ -1315,41 +975,34 @@ private func makeLocalFavoriteDeleteTestSession() -> URLSession {
     return URLSession(configuration: configuration)
 }
 
-/// Builds a `LibraryDependencies` package backed by isolated per-test stores,
+/// Builds a `FavoriteLibraryOrganizer` backed by isolated per-test stores,
 /// mirroring the composition root's repository wiring for the given session.
-private func makeLibraryDependencies(
-    localFavoriteLibraryStore: FavoriteLibraryStore? = nil,
-    favoriteUpdateStore: FavoriteUpdateStore? = nil,
+@MainActor
+private func makeOrganizer(
+    libraryStore: FavoriteLibraryStore? = nil,
     readingProgressStore: ReadingProgressStore? = nil,
     settingsStore: SettingsStore? = nil,
     contentCoverStore: ContentCoverStore? = nil,
-    session: URLSession? = nil
-) throws -> LibraryDependencies {
-    let suiteName = YamiboTestDefaults.suiteName(prefix: "local-favorites-deps")
+    session: URLSession? = nil,
+    remoteFavoriteDeleteHandler: (([FavoriteItem]) async throws -> Void)? = nil
+) throws -> FavoriteLibraryOrganizer {
+    let suiteName = YamiboTestDefaults.suiteName(prefix: "favorite-organizer-deps")
     let defaults = try YamiboTestDefaults.make(suiteName: suiteName)
     let sessionStore = SessionStore(defaults: defaults, key: "session")
     let resolvedSession = session ?? YamiboNetworkConfiguration.makeSession()
-    @Sendable func makeClient() async -> YamiboClient {
-        let sessionState = await sessionStore.load()
-        return YamiboClient(
-            session: resolvedSession,
-            cookie: sessionState.cookie,
-            userAgent: sessionState.userAgent
-        )
-    }
-    let forumCacheStore = ForumCacheStore(
-        baseDirectory: FileManager.default.temporaryDirectory
-            .appendingPathComponent(UUID().uuidString, isDirectory: true)
-    )
-    return LibraryDependencies(
-        sessionStore: sessionStore,
-        localFavoriteLibraryStore: localFavoriteLibraryStore ?? FavoriteLibraryStore(defaults: defaults, key: "local-favorites"),
-        favoriteUpdateStore: favoriteUpdateStore ?? FavoriteUpdateStore(defaults: defaults, key: "favorite-updates"),
+    return FavoriteLibraryOrganizer(
+        libraryStore: libraryStore ?? FavoriteLibraryStore(defaults: defaults, key: "local-favorites"),
         readingProgressStore: readingProgressStore ?? ReadingProgressStore(defaults: defaults, key: "reading-progress"),
         settingsStore: settingsStore ?? SettingsStore(defaults: defaults, key: "settings"),
         contentCoverStore: contentCoverStore ?? ContentCoverStore(defaults: defaults, key: "content-covers"),
-        makeFavoriteRepository: { FavoriteRepository(client: await makeClient()) },
-        makeForumThreadReaderRepository: { ForumThreadReaderRepository(client: await makeClient(), cacheStore: forumCacheStore) },
-        makeThreadRouteResolver: { YamiboThreadRouteResolver(client: await makeClient()) }
+        makeFavoriteRepository: {
+            let sessionState = await sessionStore.load()
+            return FavoriteRepository(client: YamiboClient(
+                session: resolvedSession,
+                cookie: sessionState.cookie,
+                userAgent: sessionState.userAgent
+            ))
+        },
+        remoteFavoriteDeleteHandler: remoteFavoriteDeleteHandler
     )
 }

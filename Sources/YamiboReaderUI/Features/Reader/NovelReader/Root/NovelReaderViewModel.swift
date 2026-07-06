@@ -6,39 +6,42 @@ private struct NovelReaderLinearReadingPageKey: Equatable, Sendable {
     var surfaceIndex: Int
 }
 
+/// Aggregated offline-cache presentation state for the novel reader.
+struct NovelReaderCacheState: Equatable {
+    var views = NovelOfflineCacheViewsSnapshot()
+    var queueEntryCount = 0
+    var operation = NovelReaderCacheOperationState()
+}
+
+/// Aggregated non-current-view chapter directory browsing state.
+struct NovelReaderChapterDirectoryState: Equatable {
+    var view: Int? = nil
+    var chapters: [NovelReaderChapter] = []
+    var pageCount = 0
+    var isLoading = false
+    var error: String? = nil
+}
+
 @MainActor
 public final class NovelReaderViewModel: ObservableObject {
     @Published public private(set) var isLoading = false
-    @Published public private(set) var isNavigatingNovelReaderProjection = false
-    @Published public private(set) var isApplyingAppearanceSettings = false
     @Published public private(set) var errorMessage: String?
-    @Published public private(set) var cachedViews: Set<Int> = []
-    @Published public private(set) var cachingViews: Set<Int> = []
-    @Published public private(set) var cachedViewUpdateTimes: [Int: Date] = [:]
-    @Published public private(set) var offlineCacheQueueEntryCount = 0
-    @Published private var bootstrapSettings = NovelReaderAppearanceSettings()
-    @Published public var applePencilPageTurnSettings = ApplePencilPageTurnSettings()
-    @Published public private(set) var sessionState = SessionState()
-    @Published public private(set) var cacheOperationState = NovelReaderCacheOperationState()
-    @Published public private(set) var chapterCommentsState: ReaderChapterCommentsState = .idle
-    @Published public private(set) var isLoadingMoreChapterComments = false
-    @Published public private(set) var chapterCommentsLoadMoreError: String?
-    @Published public private(set) var chapterCommentsRefreshError: String?
-    @Published public private(set) var chapterDirectoryView: Int?
-    @Published public private(set) var chapterDirectoryChapters: [NovelReaderChapter] = []
-    @Published public private(set) var chapterDirectoryPageCount = 0
-    @Published public private(set) var isLoadingChapterDirectory = false
-    @Published public private(set) var chapterDirectoryError: String?
     @Published public private(set) var novelReaderPresentation: NovelReaderPresentation?
+    @Published public private(set) var chapterComments = ReaderChapterCommentsSnapshot()
+    @Published public var applePencilPageTurnSettings = ApplePencilPageTurnSettings()
+    @Published private(set) var isNavigatingNovelReaderProjection = false
+    @Published private(set) var isApplyingAppearanceSettings = false
+    @Published private(set) var cacheState = NovelReaderCacheState()
+    @Published private(set) var chapterDirectory = NovelReaderChapterDirectoryState()
+    @Published private var bootstrapSettings = NovelReaderAppearanceSettings()
     @Published private var navigationHistory = ReaderNavigationHistory<NovelResumePoint>()
     private var linearReadingHistoryExpiration = ReaderNavigationLinearReadingExpiration<NovelReaderLinearReadingPageKey>()
-    public private(set) var chromeProgressSnapshot = NovelReaderChromeProgressSnapshot.empty
+    private(set) var chromeProgressSnapshot = NovelReaderChromeProgressSnapshot.empty
 
     public let context: NovelLaunchContext
 
     private let dependencies: NovelReaderDependencies
     private var repository: NovelReaderRepository?
-    private var chapterCommentsRepository: ReaderChapterCommentsRepository?
     private var readingWorkflow: NovelReadingWorkflow?
     private var appearanceSettingsApplicationSequence: UInt64 = 0
     private var layout: NovelReaderLayout = .zero
@@ -58,86 +61,74 @@ public final class NovelReaderViewModel: ObservableObject {
     }
     package var novelReaderPageDocumentNavigationStateDidChange: (@MainActor (Bool) -> Void)?
     private let progressSync: ProgressSyncModule
-    private lazy var chapterCommentsModule = ReaderChapterCommentsModule(
-        adapter: ReaderChapterCommentsModule.Adapter(
-            loadInitial: { [weak self] target in
-                guard let self else {
-                    throw ReaderChapterCommentsUnavailableError()
-                }
-                let repository = await self.ensureChapterCommentsRepository()
-                return try await repository.loadChapterComments(for: target)
-            },
-            loadMore: { [weak self] target, view in
-                guard let self else {
-                    throw ReaderChapterCommentsUnavailableError()
-                }
-                let repository = await self.ensureChapterCommentsRepository()
-                return try await repository.loadMoreChapterComments(for: target, view: view)
-            }
-        ),
-        onChange: { [weak self] snapshot in
-            // The module is driven exclusively from this main-actor view model,
-            // so its caller-isolated onChange provably fires on the main actor.
-            MainActor.assumeIsolated {
-                self?.syncChapterComments(snapshot)
-            }
+    // The chapter-comments module is built by the composition root
+    // (`NovelReaderDependencies`); the view model only sinks its snapshots.
+    // It is driven exclusively from this main-actor view model, so its
+    // caller-isolated onChange provably fires on the main actor.
+    private lazy var chapterCommentsModule = dependencies.makeChapterCommentsModule { [weak self] snapshot in
+        MainActor.assumeIsolated {
+            self?.chapterComments = snapshot
         }
-    )
-    private let cacheOperationModule = NovelReaderCacheOperationModule()
+    }
+    private let cacheOperationModule: NovelReaderCacheOperationModule
+    private let cacheOperationRepository: any NovelReaderCacheOperationRepository
 
-    public init(
+    public convenience init(
         context: NovelLaunchContext,
         dependencies: NovelReaderDependencies,
         initialSettings: NovelReaderAppearanceSettings? = nil,
         onReaderResumeRouteChange: @escaping ReaderResumeRouteChangeHandler = { _ in }
     ) {
-        self.context = context
-        self.dependencies = dependencies
-        self.onReaderResumeRouteChange = onReaderResumeRouteChange
-        if let initialSettings {
-            bootstrapSettings = initialSettings
-        }
-        runtimeAdapter = nil
-        progressSync = ProgressSyncModule(
-            adapter: FavoriteLibraryProgressSyncAdapter(
-                readingProgressStore: dependencies.readingProgressStore
-            )
+        self.init(
+            context: context,
+            dependencies: dependencies,
+            initialSettings: initialSettings,
+            runtimeAdapter: nil,
+            onReaderResumeRouteChange: onReaderResumeRouteChange
         )
-        cacheOperationModule.onChange = { [weak self] snapshot, state in
-            self?.cachedViews = snapshot.cachedViews
-            self?.cachingViews = snapshot.cachingViews
-            self?.cachedViewUpdateTimes = snapshot.updateTimesByView
-            self?.cacheOperationState = state
-            Task { [weak self] in
-                await self?.refreshOfflineCacheQueueCount()
-            }
-        }
     }
 
-    package init(
+    package convenience init(
         context: NovelLaunchContext,
         dependencies: NovelReaderDependencies,
         initialSettings: NovelReaderAppearanceSettings? = nil,
         runtimeAdapter: any NovelTextLayoutRuntimeAdapter,
         onReaderResumeRouteChange: @escaping ReaderResumeRouteChangeHandler = { _ in }
     ) {
+        self.init(
+            context: context,
+            dependencies: dependencies,
+            initialSettings: initialSettings,
+            runtimeAdapter: runtimeAdapter as (any NovelTextLayoutRuntimeAdapter)?,
+            onReaderResumeRouteChange: onReaderResumeRouteChange
+        )
+    }
+
+    private init(
+        context: NovelLaunchContext,
+        dependencies: NovelReaderDependencies,
+        initialSettings: NovelReaderAppearanceSettings?,
+        runtimeAdapter: (any NovelTextLayoutRuntimeAdapter)?,
+        onReaderResumeRouteChange: @escaping ReaderResumeRouteChangeHandler
+    ) {
         self.context = context
         self.dependencies = dependencies
         self.onReaderResumeRouteChange = onReaderResumeRouteChange
-        if let initialSettings {
-            bootstrapSettings = initialSettings
-        }
         self.runtimeAdapter = runtimeAdapter
         progressSync = ProgressSyncModule(
             adapter: FavoriteLibraryProgressSyncAdapter(
                 readingProgressStore: dependencies.readingProgressStore
             )
         )
+        cacheOperationModule = dependencies.makeCacheOperationModule()
+        cacheOperationRepository = dependencies.makeCacheOperationRepository()
+        if let initialSettings {
+            bootstrapSettings = initialSettings
+        }
         cacheOperationModule.onChange = { [weak self] snapshot, state in
-            self?.cachedViews = snapshot.cachedViews
-            self?.cachingViews = snapshot.cachingViews
-            self?.cachedViewUpdateTimes = snapshot.updateTimesByView
-            self?.cacheOperationState = state
+            guard let self else { return }
+            cacheState.views = snapshot
+            cacheState.operation = state
             Task { [weak self] in
                 await self?.refreshOfflineCacheQueueCount()
             }
@@ -156,30 +147,30 @@ public final class NovelReaderViewModel: ObservableObject {
         novelReaderPresentation?.committedSettings ?? bootstrapSettings
     }
 
-    public var isTwoPageSpreadActive: Bool {
+    var isTwoPageSpreadActive: Bool {
         settings.readingMode == .paged &&
             settings.showsTwoPagesInLandscapeOnPad &&
             usesPadPresentation &&
             layout.width > layout.height
     }
 
-    public var novelReaderSurfaces: [NovelReaderSurface] {
+    var novelReaderSurfaces: [NovelReaderSurface] {
         novelReaderPresentation?.surfaces ?? []
     }
 
-    public var chapters: [NovelReaderChapter] {
+    var chapters: [NovelReaderChapter] {
         novelReaderPresentation?.chapters ?? []
     }
 
-    public var currentView: Int {
+    var currentView: Int {
         novelReaderPresentation?.readingState.currentView ?? 1
     }
 
-    public var maxView: Int {
+    var maxView: Int {
         novelReaderPresentation?.readingState.maxView ?? 1
     }
 
-    public var currentChapterTitle: String? {
+    var currentChapterTitle: String? {
         novelReaderPresentation?.readingState.currentChapterTitle
     }
 
@@ -187,23 +178,23 @@ public final class NovelReaderViewModel: ObservableObject {
         novelReaderPresentation?.readingState.authorID
     }
 
-    public var currentContentSource: ReaderProjectionContentSource {
+    var currentContentSource: ReaderProjectionContentSource {
         novelReaderPresentation?.currentContentSource ?? .allPostsPage
     }
 
-    public var retainedChapterCount: Int {
+    var retainedChapterCount: Int {
         novelReaderPresentation?.retainedChapterCount ?? 0
     }
 
-    public var filteredChapterCandidateCount: Int {
+    var filteredChapterCandidateCount: Int {
         novelReaderPresentation?.filteredChapterCandidateCount ?? 0
     }
 
-    public var selectedSurfaceIndex: Int {
+    var selectedSurfaceIndex: Int {
         normalizedPagedSurfaceIndex(novelReaderPresentation?.selectedSurfaceIndex ?? 0)
     }
 
-    public var currentSurfaceIntraProgress: Double {
+    var currentSurfaceIntraProgress: Double {
         novelReaderPresentation?.readingState.currentSurfaceIntraProgress ?? 0
     }
 
@@ -215,11 +206,11 @@ public final class NovelReaderViewModel: ObservableObject {
         readingWorkflow?.debugState
     }
 
-    public var progressText: String {
+    var progressText: String {
         chromeProgressSnapshot.progressText
     }
 
-    public func previewText(
+    func previewText(
         translationMode: ReaderTranslationMode,
         characterCount: Int,
         fallback: String
@@ -230,31 +221,31 @@ public final class NovelReaderViewModel: ObservableObject {
         return String(transformed.prefix(max(characterCount, 0)))
     }
 
-    public var surfaceCount: Int {
+    var surfaceCount: Int {
         chromeProgressSnapshot.surfaceCount
     }
 
-    public var currentSurfaceNumber: Int {
+    var currentSurfaceNumber: Int {
         chromeProgressSnapshot.currentSurfaceNumber
     }
 
-    public var currentProgressFraction: Double {
+    var currentProgressFraction: Double {
         chromeProgressSnapshot.currentProgressFraction
     }
 
-    public var currentProgressPercent: Int {
+    var currentProgressPercent: Int {
         chromeProgressSnapshot.currentProgressPercent
     }
 
-    public var currentProgressPercentText: String {
+    var currentProgressPercentText: String {
         chromeProgressSnapshot.currentProgressPercentText
     }
 
-    public var progressChapterTicks: [NovelReaderProgressChapterTick] {
+    var progressChapterTicks: [NovelReaderProgressChapterTick] {
         chromeProgressSnapshot.progressChapterTicks
     }
 
-    public func progressSliderLabelText(
+    func progressSliderLabelText(
         isEditing: Bool,
         sliderValue: Double,
         targetSurfaceIndex: Int
@@ -270,55 +261,55 @@ public final class NovelReaderViewModel: ObservableObject {
         selectedSurface?.chapterCommentTarget
     }
 
-    public var currentWebViewText: String {
+    var currentWebViewText: String {
         L10n.string("reader.web_view_progress", displayedView, max(maxView, 1))
     }
 
-    public var directoryWebTitle: String {
+    var directoryWebTitle: String {
         L10n.string("reader.web_view_chapters", currentWebViewText)
     }
 
-    public var visibleChapterDirectoryView: Int {
-        chapterDirectoryView ?? visibleView
+    var visibleChapterDirectoryView: Int {
+        chapterDirectory.view ?? visibleView
     }
 
-    public var visibleChapterDirectoryChapters: [NovelReaderChapter] {
-        chapterDirectoryView == nil ? chapters : chapterDirectoryChapters
+    var visibleChapterDirectoryChapters: [NovelReaderChapter] {
+        chapterDirectory.view == nil ? chapters : chapterDirectory.chapters
     }
 
-    public var visibleChapterDirectoryPageCount: Int {
-        chapterDirectoryView == nil ? surfaceCount : max(chapterDirectoryPageCount, 1)
+    var visibleChapterDirectoryPageCount: Int {
+        chapterDirectory.view == nil ? surfaceCount : max(chapterDirectory.pageCount, 1)
     }
 
-    public var previousChapterDirectoryWebView: Int? {
+    var previousChapterDirectoryWebView: Int? {
         let target = visibleChapterDirectoryView - 1
         return target >= 1 ? target : nil
     }
 
-    public var nextChapterDirectoryWebView: Int? {
+    var nextChapterDirectoryWebView: Int? {
         let target = visibleChapterDirectoryView + 1
         return target <= maxView ? target : nil
     }
 
-    public var chapterDirectoryWebTitle: String {
+    var chapterDirectoryWebTitle: String {
         L10n.string(
             "reader.web_view_chapters",
             L10n.string("reader.web_view_progress", visibleChapterDirectoryView, max(maxView, 1))
         )
     }
 
-    public var currentChapterDirectoryIndex: Int? {
-        guard chapterDirectoryView == nil || visibleChapterDirectoryView == visibleView else { return nil }
+    var currentChapterDirectoryIndex: Int? {
+        guard chapterDirectory.view == nil || visibleChapterDirectoryView == visibleView else { return nil }
         return currentChapterIndex
     }
 
-    public func isCurrentChapterDirectoryChapter(_ chapter: NovelReaderChapter) -> Bool {
+    func isCurrentChapterDirectoryChapter(_ chapter: NovelReaderChapter) -> Bool {
         guard visibleChapterDirectoryView == visibleView,
               let currentChapterDirectoryIndex else { return false }
         return chapter.ordinal == currentChapterDirectoryIndex
     }
 
-    public var pagedViewportSelectionIndex: Int {
+    var pagedViewportSelectionIndex: Int {
         guard isTwoPageSpreadActive else { return selectedSurfaceIndex }
         return spreadIndex(forSurfaceIndex: selectedSurfaceIndex)
     }
@@ -345,61 +336,61 @@ public final class NovelReaderViewModel: ObservableObject {
         }
     }
 
-    public func selectPagedViewportIndex(_ selectionIndex: Int) {
+    func selectPagedViewportIndex(_ selectionIndex: Int) {
         let targetSurfaceIndex = isTwoPageSpreadActive
             ? progressSurfaceIndex(forSpreadIndex: selectionIndex)
             : selectionIndex
         selectSurface(targetSurfaceIndex)
     }
 
-    public func novelTextViewportDisplayReference(
+    func novelTextViewportDisplayReference(
         for surfaceIdentity: NovelReaderSurfaceIdentity
     ) -> NovelTextViewportDisplayReference? {
         readingWorkflow?.displayReference(for: surfaceIdentity)
     }
 
-    public func updateNovelTextViewportVisibleSurfaceIdentities(_ surfaceIdentities: [NovelReaderSurfaceIdentity]) {
+    func updateNovelTextViewportVisibleSurfaceIdentities(_ surfaceIdentities: [NovelReaderSurfaceIdentity]) {
         readingWorkflow?.updateVisibleSurfaceIdentities(surfaceIdentities)
     }
 
-    public func chapterTitle(forSurfaceIndex surfaceIndex: Int) -> String? {
+    func chapterTitle(forSurfaceIndex surfaceIndex: Int) -> String? {
         chromeProgressSnapshot.chapterTitle(forSurfaceIndex: surfaceIndex)
     }
 
-    public func progressChapterTickStartIndex(forSurfaceIndex surfaceIndex: Int) -> Int? {
+    func progressChapterTickStartIndex(forSurfaceIndex surfaceIndex: Int) -> Int? {
         chromeProgressSnapshot.progressChapterTickStartIndex(forSurfaceIndex: surfaceIndex)
     }
 
-    public var verticalProgressScrubContext: ReaderProgressScrubContext {
+    var verticalProgressScrubContext: ReaderProgressScrubContext {
         chromeProgressSnapshot.progressScrubContext
     }
 
-    public func targetSurfaceIndex(forProgressValue value: Double) -> Int {
+    func targetSurfaceIndex(forProgressValue value: Double) -> Int {
         chromeProgressSnapshot.targetSurfaceIndex(forProgressValue: value)
     }
 
-    public var cacheScopeTitle: String {
+    var cacheScopeTitle: String {
         L10n.string("reader.cache_scope.author")
     }
 
-    public var cacheScopeDescription: String {
+    var cacheScopeDescription: String {
         L10n.string("reader.cache_scope.description")
     }
 
-    public var allCacheableViews: [Int] {
+    var allCacheableViews: [Int] {
         guard maxView > 0 else { return [] }
         return Array(1 ... maxView)
     }
 
-    public var hasCacheOperationSession: Bool {
-        cacheOperationState.hasSession
+    var hasCacheOperationSession: Bool {
+        cacheState.operation.hasSession
     }
 
-    public var visibleView: Int {
+    var visibleView: Int {
         displayedView
     }
 
-    public var currentNovelResumePoint: NovelResumePoint? {
+    var currentNovelResumePoint: NovelResumePoint? {
         readingWorkflow?.captureNovelReadingPosition()
     }
 
@@ -428,21 +419,21 @@ public final class NovelReaderViewModel: ObservableObject {
         novelReaderPresentation = nil
     }
 
-    public var currentChapterIndex: Int? {
+    var currentChapterIndex: Int? {
         chapters.lastIndex(where: { $0.startIndex <= selectedSurfaceIndex })
     }
 
-    public var hasPreviousChapter: Bool {
+    var hasPreviousChapter: Bool {
         guard let currentChapterIndex else { return false }
         return currentChapterIndex > 0
     }
 
-    public var hasNextChapter: Bool {
+    var hasNextChapter: Bool {
         guard let currentChapterIndex else { return false }
         return currentChapterIndex < chapters.count - 1
     }
 
-    public var sourceStatusText: String? {
+    var sourceStatusText: String? {
         guard let pageLoadSource = novelReaderPresentation?.pageLoadSource,
               case let .offlineFallback(updatedAt) = pageLoadSource else {
             return nil
@@ -456,15 +447,15 @@ public final class NovelReaderViewModel: ObservableObject {
         )
     }
 
-    public var chapterSummaryText: String {
+    var chapterSummaryText: String {
         L10n.string("reader.chapter_summary", retainedChapterCount, filteredChapterCandidateCount)
     }
 
-    public var inlineImageOfflineScope: YamiboImageOfflineScope? {
+    var inlineImageOfflineScope: YamiboImageOfflineScope? {
         YamiboImageOfflineScope(tid: context.threadID)
     }
 
-    public var forumURL: URL {
+    var forumURL: URL {
         YamiboRoute.threadByID(
             tid: context.threadID,
             page: displayedView,
@@ -473,7 +464,7 @@ public final class NovelReaderViewModel: ObservableObject {
         ).url
     }
 
-    public var currentForumTargetURL: URL {
+    var currentForumTargetURL: URL {
         guard let target = currentChapterCommentTarget else { return forumURL }
         return YamiboRoute.findPostURL(threadID: target.threadID, postID: target.ownerPostID) ?? forumURL
     }
@@ -487,7 +478,6 @@ public final class NovelReaderViewModel: ObservableObject {
             let appSettings = await dependencies.settingsStore.load()
             bootstrapSettings = appSettings.novelReader
             applePencilPageTurnSettings = appSettings.system.applePencilPageTurn
-            sessionState = await dependencies.sessionStore.load()
             if let repository {
                 readingWorkflow = makeReadingWorkflow(repository: repository)
             }
@@ -580,14 +570,11 @@ public final class NovelReaderViewModel: ObservableObject {
         )
     }
 
-    public func commitNovelTextAppearance(_ newSettings: NovelReaderAppearanceSettings) async {
-        await commitNovelTextAppearance(newSettings, applePencilPageTurnSettings: applePencilPageTurnSettings)
-    }
-
     public func commitNovelTextAppearance(
         _ newSettings: NovelReaderAppearanceSettings,
-        applePencilPageTurnSettings newApplePencilPageTurnSettings: ApplePencilPageTurnSettings
+        applePencilPageTurnSettings requestedApplePencilPageTurnSettings: ApplePencilPageTurnSettings? = nil
     ) async {
+        let newApplePencilPageTurnSettings = requestedApplePencilPageTurnSettings ?? applePencilPageTurnSettings
         let oldSettings = settings
         let oldApplePencilPageTurnSettings = applePencilPageTurnSettings
         let novelReaderSettingsChanged = oldSettings != newSettings
@@ -817,11 +804,7 @@ public final class NovelReaderViewModel: ObservableObject {
         jumpToSurface(chapters[targetIndex].startIndex)
     }
 
-    public func jumpToWebView(_ view: Int) async {
-        await jumpToWebView(view, preferredSurfaceOrdinal: 0)
-    }
-
-    public func jumpToWebView(_ view: Int, preferredSurfaceOrdinal: Int) async {
+    public func jumpToWebView(_ view: Int, preferredSurfaceOrdinal: Int = 0) async {
         let navigationSequence = beginNavigationRequest()
         let sourceResumePoint = currentStableResumePoint
         let clampedView = max(1, min(maxView, view))
@@ -855,47 +838,38 @@ public final class NovelReaderViewModel: ObservableObject {
         }
     }
 
-    public func resetChapterDirectoryBrowsing() {
-        chapterDirectoryView = nil
-        chapterDirectoryChapters = []
-        chapterDirectoryPageCount = 0
+    func resetChapterDirectoryBrowsing() {
+        chapterDirectory = NovelReaderChapterDirectoryState()
         chapterDirectoryAnchors = [:]
-        isLoadingChapterDirectory = false
-        chapterDirectoryError = nil
     }
 
-    public func previewChapterDirectoryWebView(_ view: Int) async {
+    func previewChapterDirectoryWebView(_ view: Int) async {
         let clampedView = max(1, min(maxView, view))
         if clampedView == visibleView {
             resetChapterDirectoryBrowsing()
             return
         }
 
-        chapterDirectoryView = clampedView
-        chapterDirectoryChapters = []
-        chapterDirectoryPageCount = 0
-        isLoadingChapterDirectory = true
-        chapterDirectoryError = nil
+        chapterDirectory = NovelReaderChapterDirectoryState(view: clampedView, isLoading: true)
         do {
             guard let workflow = await ensureReadingWorkflow() else {
                 throw ReaderChapterCommentsUnavailableError()
             }
             let entries = try await workflow.previewChapterDirectory(view: clampedView)
-            chapterDirectoryChapters = entries.map(\.chapter)
+            chapterDirectory.chapters = entries.map(\.chapter)
             chapterDirectoryAnchors = Dictionary(
                 uniqueKeysWithValues: entries.compactMap { entry in
                     entry.anchor.map { (entry.chapter.ordinal, $0) }
                 }
             )
-            chapterDirectoryPageCount = 0
-            isLoadingChapterDirectory = false
+            chapterDirectory.isLoading = false
         } catch {
-            chapterDirectoryError = error.localizedDescription
-            isLoadingChapterDirectory = false
+            chapterDirectory.error = error.localizedDescription
+            chapterDirectory.isLoading = false
         }
     }
 
-    public func jumpToChapterDirectoryChapter(_ chapter: NovelReaderChapter) async {
+    func jumpToChapterDirectoryChapter(_ chapter: NovelReaderChapter) async {
         let navigationSequence = beginNavigationRequest()
         let sourceResumePoint = currentStableResumePoint
         let targetView = visibleChapterDirectoryView
@@ -937,12 +911,8 @@ public final class NovelReaderViewModel: ObservableObject {
         }
     }
 
-    public func refreshCachedState() async {
+    func refreshCachedState() async {
         startObservingOfflineCacheUpdates()
-        guard let cacheOperationRepository else {
-            syncCacheState(NovelOfflineCacheViewsSnapshot())
-            return
-        }
         syncCacheState(await cacheOperationRepository.cacheState(for: cacheOperationSnapshot.context))
         await refreshOfflineCacheQueueCount()
     }
@@ -958,24 +928,19 @@ public final class NovelReaderViewModel: ObservableObject {
         }
     }
 
-    public func cacheSelectionState(for selectedViews: Set<Int>) -> NovelReaderCacheSelectionState {
+    func cacheSelectionState(for selectedViews: Set<Int>) -> NovelReaderCacheSelectionState {
         cacheOperationModule.selectionState(for: selectedViews, snapshot: cacheOperationSnapshot)
     }
 
-    public func cacheStatus(for view: Int) -> NovelOfflineCacheViewStatus {
-        NovelOfflineCacheViewsSnapshot(
-            cachedViews: cachedViews,
-            cachingViews: cachingViews,
-            updateTimesByView: cachedViewUpdateTimes
-        ).state(for: view).status
+    func cacheStatus(for view: Int) -> NovelOfflineCacheViewStatus {
+        cacheState.views.state(for: view).status
     }
 
-    public func cacheUpdateTime(for view: Int) -> Date? {
-        cachedViewUpdateTimes[max(1, view)]
+    func cacheUpdateTime(for view: Int) -> Date? {
+        cacheState.views.updateTimesByView[max(1, view)]
     }
 
-    public func startCaching(views: Set<Int>) {
-        guard let cacheOperationRepository else { return }
+    func startCaching(views: Set<Int>) {
         cacheOperationModule.startCaching(
             views: views,
             snapshot: cacheOperationSnapshot,
@@ -984,8 +949,7 @@ public final class NovelReaderViewModel: ObservableObject {
         )
     }
 
-    public func updateCachedViews(_ views: Set<Int>) {
-        guard let cacheOperationRepository else { return }
+    func updateCachedViews(_ views: Set<Int>) {
         cacheOperationModule.updateCachedViews(
             views,
             snapshot: cacheOperationSnapshot,
@@ -997,8 +961,7 @@ public final class NovelReaderViewModel: ObservableObject {
         )
     }
 
-    public func deleteCachedViews(_ views: Set<Int>) async {
-        guard let cacheOperationRepository else { return }
+    func deleteCachedViews(_ views: Set<Int>) async {
         do {
             try await cacheOperationModule.deleteCachedViews(
                 views,
@@ -1010,11 +973,11 @@ public final class NovelReaderViewModel: ObservableObject {
         }
     }
 
-    public func showCacheProgressIfRunning() {
+    func showCacheProgressIfRunning() {
         cacheOperationModule.showProgressIfRunning()
     }
 
-    public func hideCacheProgress() {
+    func hideCacheProgress() {
         cacheOperationModule.hideProgress()
     }
 
@@ -1030,17 +993,17 @@ public final class NovelReaderViewModel: ObservableObject {
         await chapterCommentsModule.loadNextPage()
     }
 
-    public func dismissCacheProgress() {
+    func dismissCacheProgress() {
         cacheOperationModule.dismissProgress()
     }
 
-    public func stopCaching() {
+    func stopCaching() {
         cacheOperationModule.stopCaching()
     }
 
-    public func deleteCurrentCache() async {
+    func deleteCurrentCache() async {
         do {
-            try await cacheOperationRepository?.deleteCachedViews(
+            try await cacheOperationRepository.deleteCachedViews(
                 [displayedView],
                 for: cacheOperationSnapshot.context
             )
@@ -1050,8 +1013,7 @@ public final class NovelReaderViewModel: ObservableObject {
         }
     }
 
-    public func refreshCurrentCache() async {
-        guard let cacheOperationRepository else { return }
+    func refreshCurrentCache() async {
         let result = await cacheOperationRepository.updateCachedViews(
             [displayedView],
             for: cacheOperationSnapshot.context,
@@ -1068,9 +1030,9 @@ public final class NovelReaderViewModel: ObservableObject {
         MineHomeViewModel(dependencies: dependencies.account)
     }
 
-    public func refreshOfflineCacheQueueCount() async {
+    func refreshOfflineCacheQueueCount() async {
         let store = dependencies.offlineCacheStore
-        offlineCacheQueueEntryCount = await store.offlineCacheQueueWorks().count
+        cacheState.queueEntryCount = await store.offlineCacheQueueWorks().count
     }
 
     @discardableResult
@@ -1151,16 +1113,6 @@ public final class NovelReaderViewModel: ObservableObject {
         return repository
     }
 
-    private func ensureChapterCommentsRepository() async -> ReaderChapterCommentsRepository {
-        if chapterCommentsRepository == nil {
-            chapterCommentsRepository = await dependencies.makeChapterCommentsRepository()
-        }
-        guard let chapterCommentsRepository else {
-            preconditionFailure("Reader chapter comments repository should be initialized")
-        }
-        return chapterCommentsRepository
-    }
-
     private func ensureReadingWorkflow() async -> NovelReadingWorkflow? {
         let repository = await ensureNovelReaderRepository()
         if readingWorkflow == nil {
@@ -1170,22 +1122,13 @@ public final class NovelReaderViewModel: ObservableObject {
     }
 
     private func makeReadingWorkflow(repository: NovelReaderRepository) -> NovelReadingWorkflow {
-        if let runtimeAdapter {
-            return NovelReadingWorkflow(
-                context: context,
-                settings: settings,
-                layout: layout,
-                repository: repository,
-                usesPadPresentation: usesPadPresentation,
-                runtimeAdapter: runtimeAdapter
-            )
-        }
-        return NovelReadingWorkflow(
+        NovelReadingWorkflow(
             context: context,
             settings: settings,
             layout: layout,
             repository: repository,
-            usesPadPresentation: usesPadPresentation
+            usesPadPresentation: usesPadPresentation,
+            runtimeAdapter: runtimeAdapter ?? DefaultNovelTextLayoutRuntimeAdapter()
         )
     }
 
@@ -1211,13 +1154,6 @@ public final class NovelReaderViewModel: ObservableObject {
 
     private func isCurrentNavigationRequest(_ sequence: UInt64) -> Bool {
         navigationRequestSequence == sequence
-    }
-
-    private func syncChapterComments(_ snapshot: ReaderChapterCommentsSnapshot) {
-        chapterCommentsState = snapshot.state
-        isLoadingMoreChapterComments = snapshot.isLoadingMore
-        chapterCommentsLoadMoreError = snapshot.loadMoreError
-        chapterCommentsRefreshError = snapshot.refreshError
     }
 
     private func syncFromWorkflowState(_ state: NovelReadingWorkflowState) {
@@ -1534,27 +1470,15 @@ public final class NovelReaderViewModel: ObservableObject {
         let context = cacheContext(forView: displayedView)
         return NovelReaderCacheOperationSnapshot(
             cacheableViews: Set(allCacheableViews),
-            cachedViews: cachedViews,
-            cachingViews: cachingViews,
-            updateTimesByView: cachedViewUpdateTimes,
+            cachedViews: cacheState.views.cachedViews,
+            cachingViews: cacheState.views.cachingViews,
+            updateTimesByView: cacheState.views.updateTimesByView,
             context: NovelReaderCacheOperationContext(
                 ownerTitle: title,
                 threadID: self.context.threadID,
                 authorID: context.authorID,
                 contentSource: context.contentSource
             )
-        )
-    }
-
-    private var cacheOperationRepository: NovelReaderCacheOperationRepository? {
-        NovelOfflineStoreReaderCacheOperationAdapter(
-            store: dependencies.offlineCacheStore,
-            novelOfflineCacheSettings: { [settingsStore = dependencies.settingsStore] in
-                await settingsStore.load().novelOfflineCache
-            },
-            continueOfflineCacheQueue: { [makeOfflineCacheQueueExecutor = dependencies.makeOfflineCacheQueueExecutor] in
-                try await makeOfflineCacheQueueExecutor().continueQueue()
-            }
         )
     }
 

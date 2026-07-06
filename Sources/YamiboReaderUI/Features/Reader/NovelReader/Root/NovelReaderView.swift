@@ -1326,10 +1326,10 @@ private struct NovelReaderPresentationModifier: ViewModifier {
             .sheet(isPresented: $showingChapterComments) {
                 ReaderChapterCommentsSheet(
                     target: chapterCommentsTarget,
-                    state: model.chapterCommentsState,
-                    isLoadingMore: model.isLoadingMoreChapterComments,
-                    loadMoreError: model.chapterCommentsLoadMoreError,
-                    refreshError: model.chapterCommentsRefreshError,
+                    state: model.chapterComments.state,
+                    isLoadingMore: model.chapterComments.isLoadingMore,
+                    loadMoreError: model.chapterComments.loadMoreError,
+                    refreshError: model.chapterComments.refreshError,
                     loadInitial: model.loadChapterComments(for:),
                     refresh: model.refreshChapterComments(for:),
                     loadNext: model.loadNextChapterCommentsPage,

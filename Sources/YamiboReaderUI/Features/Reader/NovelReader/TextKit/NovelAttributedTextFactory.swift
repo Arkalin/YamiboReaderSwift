@@ -1,78 +1,11 @@
 import Foundation
-
-public enum NovelChapterTextComponents {
-    public static func split(text: String, chapterTitle: String?) -> (title: String?, body: String?) {
-        guard let chapterTitle else {
-            return (nil, nil)
-        }
-
-        let trimmedTitle = chapterTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedTitle.isEmpty else {
-            return (nil, nil)
-        }
-
-        if text == trimmedTitle {
-            return (trimmedTitle, nil)
-        }
-
-        let lineBreakCandidates = ["\r\n", "\n", "\r"]
-        for separator in lineBreakCandidates {
-            let prefixedTitle = trimmedTitle + separator
-            if text.hasPrefix(prefixedTitle) {
-                let body = String(text.dropFirst(prefixedTitle.count))
-                return (trimmedTitle, separator + body)
-            }
-        }
-
-        return (nil, nil)
-    }
-}
-
-struct NovelParagraphIndentPlanner {
-    static func indentedParagraphRangesAfterFirst(in text: String) -> [Range<String.Index>] {
-        guard !text.isEmpty else { return [] }
-
-        var ranges: [Range<String.Index>] = []
-        var index = text.startIndex
-        var isFirstParagraph = true
-
-        while index < text.endIndex {
-            let paragraphStart = index
-            while index < text.endIndex, text[index].isReaderParagraphSeparator {
-                index = text.index(after: index)
-            }
-
-            var paragraphEnd = index
-            while paragraphEnd < text.endIndex, !text[paragraphEnd].isReaderParagraphSeparator {
-                paragraphEnd = text.index(after: paragraphEnd)
-            }
-
-            let styleRange = paragraphStart ..< paragraphEnd
-            if !isFirstParagraph, !styleRange.isEmpty {
-                ranges.append(styleRange)
-            }
-
-            isFirstParagraph = false
-            index = paragraphEnd
-        }
-
-        return ranges
-    }
-}
-
-private extension Character {
-    var isReaderParagraphSeparator: Bool {
-        self == "\n" || self == "\r"
-    }
-}
-
-#if canImport(UIKit)
 import UIKit
+import YamiboReaderCore
 
-public typealias ReaderPlatformColor = UIColor
+typealias ReaderPlatformColor = UIColor
 typealias ReaderPlatformFont = UIFont
 typealias ReaderPlatformFontDescriptor = UIFontDescriptor
-public typealias ReaderPlatformFontWeight = UIFont.Weight
+typealias ReaderPlatformFontWeight = UIFont.Weight
 
 private extension ReaderPlatformColor {
     static func readerText(settings: NovelReaderAppearanceSettings) -> ReaderPlatformColor {
@@ -96,13 +29,12 @@ private extension ReaderPlatformColor {
         }
     }
 }
-#endif
 
-#if canImport(UIKit)
-
-@_spi(NovelTextAttributedDocument)
-public enum NovelAttributedTextFactory {
-    public static let defaultBaseFontSize: Double = 22
+/// Owns the Novel Text Attributed Document semantics for TextKit measurement
+/// and drawing: chapter title styling, paragraph indentation, font family,
+/// kerning, line height, and justification.
+enum NovelAttributedTextFactory {
+    static let defaultBaseFontSize: Double = 22
     private static let bodyFontWeight: ReaderPlatformFontWeight = .light
 
     static func makeAttributedDocument(
@@ -146,20 +78,15 @@ public enum NovelAttributedTextFactory {
             size: baseFontSize * settings.fontScale,
             weight: bodyFontWeight
         )
-        #if canImport(UIKit)
-        let familyName = font.familyName
-        #else
-        let familyName = font.familyName ?? ""
-        #endif
         return [
             font.fontName,
-            familyName,
+            font.familyName,
             String(describing: font.pointSize),
             String(describing: font.fontDescriptor.fontAttributes),
         ].joined(separator: "|")
     }
 
-    public static func makeAttributedText(
+    static func makeAttributedText(
         text: String,
         chapterTitle: String?,
         startsAtParagraphBoundary: Bool = true,
@@ -286,7 +213,7 @@ public enum NovelAttributedTextFactory {
         return rendered
     }
 
-    public static func makeParagraphStyle(settings: NovelReaderAppearanceSettings) -> NSMutableParagraphStyle {
+    static func makeParagraphStyle(settings: NovelReaderAppearanceSettings) -> NSMutableParagraphStyle {
         makeParagraphStyle(settings: settings, pointSize: defaultBaseFontSize, appliesFirstLineIndent: true)
     }
 
@@ -380,22 +307,20 @@ extension ReaderFontFamily {
         switch self {
         case .systemSans:
             return preferredFamilyFont(familyName: "PingFang SC", size: pointSize, weight: weight)
-                ?? systemFont(ofSize: pointSize, weight: weight)
+                ?? .systemFont(ofSize: pointSize, weight: weight)
         case .systemSerif:
             return preferredFamilyFont(familyName: "Songti SC", size: pointSize, weight: weight)
                 ?? systemFont(size: pointSize, weight: weight, design: .serif)
-                ?? systemFont(ofSize: pointSize, weight: weight)
+                ?? .systemFont(ofSize: pointSize, weight: weight)
         case .rounded:
             return systemFont(size: pointSize, weight: weight, design: .rounded)
-                ?? systemFont(ofSize: pointSize, weight: weight)
+                ?? .systemFont(ofSize: pointSize, weight: weight)
         }
     }
 
-    #if canImport(UIKit)
     func uiFont(size: Double, weight: UIFont.Weight) -> UIFont {
         platformFont(size: size, weight: weight)
     }
-    #endif
 
     func kerning(size: Double, scale: Double) -> CGFloat {
         CGFloat(size * scale * 0.55)
@@ -412,15 +337,8 @@ extension ReaderFontFamily {
                 .traits: [ReaderPlatformFontDescriptor.TraitKey.weight: weight],
             ]
         )
-        #if canImport(UIKit)
         let font = ReaderPlatformFont(descriptor: descriptor, size: size)
         return font.familyName == familyName ? font : nil
-        #else
-        guard let font = ReaderPlatformFont(descriptor: descriptor, size: size) else {
-            return nil
-        }
-        return font.fontName.contains(familyName) || font.familyName == familyName ? font : nil
-        #endif
     }
 
     private func systemFont(
@@ -428,20 +346,11 @@ extension ReaderFontFamily {
         weight: ReaderPlatformFontWeight,
         design: ReaderPlatformFontDescriptor.SystemDesign
     ) -> ReaderPlatformFont? {
-        let baseDescriptor = systemFont(ofSize: size, weight: weight).fontDescriptor
+        let baseDescriptor = ReaderPlatformFont.systemFont(ofSize: size, weight: weight).fontDescriptor
         guard let designedDescriptor = baseDescriptor.withDesign(design) else {
             return nil
         }
 
         return ReaderPlatformFont(descriptor: designedDescriptor, size: size)
     }
-
-    private func systemFont(ofSize size: CGFloat, weight: ReaderPlatformFontWeight) -> ReaderPlatformFont {
-        #if canImport(UIKit)
-        return .systemFont(ofSize: size, weight: weight)
-        #else
-        return .systemFont(ofSize: size, weight: weight)
-        #endif
-    }
 }
-#endif

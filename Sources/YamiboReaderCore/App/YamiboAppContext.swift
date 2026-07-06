@@ -143,7 +143,6 @@ public final class YamiboAppContext: Sendable {
 
     public var libraryDependencies: LibraryDependencies {
         LibraryDependencies(
-            sessionStore: sessionStore,
             localFavoriteLibraryStore: localFavoriteLibraryStore,
             favoriteUpdateStore: favoriteUpdateStore,
             readingProgressStore: readingProgressStore,

@@ -1,5 +1,4 @@
 import CoreGraphics
-import Dispatch
 import Foundation
 
 typealias NovelTextViewportSurfaceLayout = @Sendable (
@@ -8,12 +7,12 @@ typealias NovelTextViewportSurfaceLayout = @Sendable (
     _ layout: NovelReaderLayout
 ) -> [NovelTextViewportDocumentSurfaceRange]
 
-struct NovelTextLayoutPreparedInput: Sendable {
-    let document: NovelReaderProjection
-    let settings: NovelReaderAppearanceSettings
-    let layout: NovelReaderLayout
-    let annotatedSegments: [NovelAnnotatedSegment]
-    let viewportContextSeed: NovelTextViewportContext
+package struct NovelTextLayoutPreparedInput: Sendable {
+    package let document: NovelReaderProjection
+    package let settings: NovelReaderAppearanceSettings
+    package let layout: NovelReaderLayout
+    package let annotatedSegments: [NovelAnnotatedSegment]
+    package let viewportContextSeed: NovelTextViewportContext
 }
 
 public enum NovelTextLayoutFailureStage: String, Equatable, Sendable {
@@ -63,7 +62,7 @@ public enum NovelTextLayoutFailure: LocalizedError, Equatable, Sendable {
 }
 
 public enum NovelTextLayout {
-    static func prepareInput(
+    package static func prepareInput(
         document: NovelReaderProjection,
         settings: NovelReaderAppearanceSettings,
         layout: NovelReaderLayout
@@ -98,7 +97,7 @@ public enum NovelTextLayout {
         )
     }
 
-    static func result(
+    package static func result(
         from preparedInput: NovelTextLayoutPreparedInput,
         surfaceRanges: [NovelTextViewportDocumentSurfaceRange]
     ) throws -> NovelTextLayoutResult {
@@ -119,38 +118,6 @@ public enum NovelTextLayout {
             throw NovelTextLayoutFailure.textKitIndexing
         }
         return result
-    }
-
-    package static func layout(
-        document: NovelReaderProjection,
-        settings: NovelReaderAppearanceSettings,
-        layout: NovelReaderLayout
-    ) throws -> NovelTextLayoutResult {
-        try standaloneRuntimeLayout(document: document, settings: settings, layout: layout)
-    }
-
-    private static func standaloneRuntimeLayout(
-        document: NovelReaderProjection,
-        settings: NovelReaderAppearanceSettings,
-        layout: NovelReaderLayout
-    ) throws -> NovelTextLayoutResult {
-        let operation: () throws -> NovelTextLayoutResult = {
-            try MainActor.assumeIsolated {
-                let runtime = NovelTextViewportRuntimeOwner()
-                let transaction = try runtime.prepareTransaction(
-                    preparedInput: try prepareInput(
-                        document: document,
-                        settings: settings,
-                        layout: layout
-                    )
-                )
-                return transaction.result
-            }
-        }
-        if Thread.isMainThread {
-            return try operation()
-        }
-        return try DispatchQueue.main.sync(execute: operation)
     }
 
     static func viewportSample(
@@ -928,36 +895,18 @@ public enum NovelTextLayout {
         )
     }
 
-    static func textFits(
-        _ text: String,
-        chapterTitle: String?,
-        settings: NovelReaderAppearanceSettings,
-        layout: NovelReaderLayout
-    ) -> Bool {
-#if canImport(UIKit)
-        NovelTextPreviewLayout.textFits(
-            text,
-            chapterTitle: chapterTitle,
-            settings: settings,
-            layout: layout
-        )
-#else
-        false
-#endif
-    }
-
 }
 
 package struct NovelTextViewportDocumentSurfaceRange: Hashable, Sendable {
-    let startOffset: Int
-    let endOffset: Int
-    let frozenGeometry: NovelTextViewportFrozenGeometry?
+    package let startOffset: Int
+    package let endOffset: Int
+    package let frozenGeometry: NovelTextViewportFrozenGeometry?
 
-    var isEmpty: Bool {
+    package var isEmpty: Bool {
         endOffset <= startOffset
     }
 
-    init(
+    package init(
         startOffset: Int,
         endOffset: Int,
         frozenGeometry: NovelTextViewportFrozenGeometry? = nil
@@ -968,15 +917,15 @@ package struct NovelTextViewportDocumentSurfaceRange: Hashable, Sendable {
     }
 }
 
-struct NovelAnnotatedSegment: Sendable {
-    let index: Int
-    let segment: NovelReaderSegment
-    let semantics: NovelReaderSegmentSemantics?
-    let source: NovelReaderSegmentSource?
-    let chapterOrdinal: Int?
-    let chapterTitle: String?
+package struct NovelAnnotatedSegment: Sendable {
+    package let index: Int
+    package let segment: NovelReaderSegment
+    package let semantics: NovelReaderSegmentSemantics?
+    package let source: NovelReaderSegmentSource?
+    package let chapterOrdinal: Int?
+    package let chapterTitle: String?
 
-    var textContent: String {
+    package var textContent: String {
         guard case let .text(text, _) = segment else { return "" }
         return text
     }

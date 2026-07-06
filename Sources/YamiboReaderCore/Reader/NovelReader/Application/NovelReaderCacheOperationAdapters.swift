@@ -1,5 +1,4 @@
 import Foundation
-import YamiboReaderCore
 
 public struct NovelReaderRepositoryCacheOperationAdapter: NovelReaderCacheOperationRepository {
     private let repository: NovelReaderRepository

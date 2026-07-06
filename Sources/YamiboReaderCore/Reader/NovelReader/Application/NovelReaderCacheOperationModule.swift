@@ -1,5 +1,4 @@
 import Foundation
-import YamiboReaderCore
 
 public struct NovelReaderCacheOperationContext: Equatable, Sendable {
     public var ownerTitle: String

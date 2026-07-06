@@ -2,6 +2,7 @@ import Foundation
 import CoreGraphics
 import XCTest
 @testable import YamiboReaderCore
+@testable import YamiboReaderUI
 
 #if canImport(UIKit)
 private typealias NovelTextLayoutFixture = (
@@ -2500,7 +2501,6 @@ private actor RuntimeUpdatePreparationGate {
     }
 }
 
-@MainActor
 private final class TestNovelTextLayoutRuntimeAdapter: NovelTextLayoutRuntimeAdapter {
     private var nextFailure: Error?
     private(set) var preparedCandidateCount = 0
@@ -2522,7 +2522,6 @@ private final class TestNovelTextLayoutRuntimeAdapter: NovelTextLayoutRuntimeAda
     }
 }
 
-@MainActor
 private final class FixtureNovelTextLayoutRuntimeAdapter: NovelTextLayoutRuntimeAdapter {
     private let fixture: NovelTextLayoutFixture
 
@@ -2552,6 +2551,23 @@ private final class FixtureNovelTextLayoutRuntimeAdapter: NovelTextLayoutRuntime
 
 @MainActor
 private extension NovelReadingWorkflow {
+    convenience init(
+        context: NovelLaunchContext,
+        settings: NovelReaderAppearanceSettings,
+        layout: NovelReaderLayout,
+        repository: any NovelReadingPageRepository,
+        usesPadPresentation: Bool = false
+    ) {
+        self.init(
+            context: context,
+            settings: settings,
+            layout: layout,
+            repository: repository,
+            usesPadPresentation: usesPadPresentation,
+            runtimeAdapter: DefaultNovelTextLayoutRuntimeAdapter()
+        )
+    }
+
     convenience init(
         context: NovelLaunchContext,
         settings: NovelReaderAppearanceSettings,

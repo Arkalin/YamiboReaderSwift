@@ -10,7 +10,7 @@ public struct SystemSettingsView: View {
     private let onApplicationReset: @MainActor () async -> Void
 
     @StateObject private var viewModel: SystemSettingsViewModel
-    @StateObject private var favoriteSyncViewModel: LocalFavoritesViewModel
+    @StateObject private var favoriteRemoteSync: FavoriteRemoteSyncSession
     @State private var showingWebDAVSettings = false
     @State private var showingFavoriteRemoteSyncProgress = false
     @State private var showingPeripheralSettings = false
@@ -28,7 +28,13 @@ public struct SystemSettingsView: View {
         onApplicationReset: @escaping @MainActor () async -> Void
     ) {
         _viewModel = StateObject(wrappedValue: SystemSettingsViewModel(dependencies: dependencies))
-        _favoriteSyncViewModel = StateObject(wrappedValue: LocalFavoritesViewModel(dependencies: dependencies.library))
+        _favoriteRemoteSync = StateObject(wrappedValue: FavoriteRemoteSyncSession(
+            libraryStore: dependencies.library.localFavoriteLibraryStore,
+            settingsStore: dependencies.library.settingsStore,
+            makeFavoriteRepository: dependencies.library.makeFavoriteRepository,
+            makeForumThreadReaderRepository: dependencies.library.makeForumThreadReaderRepository,
+            makeThreadRouteResolver: dependencies.library.makeThreadRouteResolver
+        ))
         self.dependencies = dependencies
         self.onApplicationReset = onApplicationReset
     }
@@ -63,7 +69,7 @@ public struct SystemSettingsView: View {
                     }
                     .disabled(viewModel.isBusy)
 
-                    if favoriteSyncViewModel.remoteSyncSnapshot != nil {
+                    if favoriteRemoteSync.snapshot != nil {
                         Button {
                             showingFavoriteRemoteSyncProgress = true
                         } label: {
@@ -227,7 +233,7 @@ public struct SystemSettingsView: View {
             .overlay(content: loadingOverlay)
             .task {
                 await viewModel.load()
-                await favoriteSyncViewModel.load()
+                await favoriteRemoteSync.load()
             }
             .sheet(isPresented: $showingWebDAVSettings) {
                 WebDAVSyncSettingsView(dependencies: dependencies.webDAVSync)
@@ -235,15 +241,15 @@ public struct SystemSettingsView: View {
             .sheet(isPresented: $showingFavoriteRemoteSyncProgress) {
                 NavigationStack {
                     FavoriteRemoteSyncProgressSheet(
-                        snapshot: favoriteSyncViewModel.remoteSyncSnapshot,
+                        snapshot: favoriteRemoteSync.snapshot,
                         onResume: {
-                            await favoriteSyncViewModel.resumeRemoteFavoriteSync()
+                            await favoriteRemoteSync.resume()
                         },
                         onInterrupt: {
-                            await favoriteSyncViewModel.interruptRemoteFavoriteSync()
+                            await favoriteRemoteSync.interrupt()
                         },
                         onHide: {
-                            await favoriteSyncViewModel.hideRemoteFavoriteSyncCard()
+                            await favoriteRemoteSync.hideCard()
                         }
                     )
                 }
@@ -357,7 +363,7 @@ public struct SystemSettingsView: View {
     }
 
     private var favoriteRemoteSyncStatusLabel: String {
-        guard let snapshot = favoriteSyncViewModel.remoteSyncSnapshot else {
+        guard let snapshot = favoriteRemoteSync.snapshot else {
             return L10n.string("favorites.sync.status.none")
         }
         switch snapshot.status {
