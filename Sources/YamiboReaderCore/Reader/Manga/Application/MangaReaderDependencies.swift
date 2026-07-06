@@ -9,6 +9,7 @@ public struct MangaReaderDependencies: Sendable {
     public let mangaDirectoryStore: any MangaDirectoryPersisting
     public let mangaDirectorySearchCooldownState: MangaDirectorySearchCooldownState
     public let offlineCacheStore: any OfflineCacheStoring
+    public let contentCoverStore: ContentCoverStore
     public let makeProjectionLoader: @Sendable () async -> any MangaReaderProjectionSnapshotLoading
     public let makeDirectoryRepository: @Sendable () async -> any MangaDirectoryRepository
     public let makeChapterCommentsRepository: @Sendable () async -> ReaderChapterCommentsRepository
@@ -23,6 +24,7 @@ public struct MangaReaderDependencies: Sendable {
         mangaDirectoryStore: any MangaDirectoryPersisting,
         mangaDirectorySearchCooldownState: MangaDirectorySearchCooldownState,
         offlineCacheStore: any OfflineCacheStoring,
+        contentCoverStore: ContentCoverStore,
         makeProjectionLoader: @escaping @Sendable () async -> any MangaReaderProjectionSnapshotLoading,
         makeDirectoryRepository: @escaping @Sendable () async -> any MangaDirectoryRepository,
         makeChapterCommentsRepository: @escaping @Sendable () async -> ReaderChapterCommentsRepository,
@@ -35,6 +37,7 @@ public struct MangaReaderDependencies: Sendable {
         self.mangaDirectoryStore = mangaDirectoryStore
         self.mangaDirectorySearchCooldownState = mangaDirectorySearchCooldownState
         self.offlineCacheStore = offlineCacheStore
+        self.contentCoverStore = contentCoverStore
         self.makeProjectionLoader = makeProjectionLoader
         self.makeDirectoryRepository = makeDirectoryRepository
         self.makeChapterCommentsRepository = makeChapterCommentsRepository

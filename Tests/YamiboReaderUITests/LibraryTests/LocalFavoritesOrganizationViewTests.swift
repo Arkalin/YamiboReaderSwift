@@ -47,6 +47,7 @@ import YamiboReaderTestSupport
     let remoteSync = FavoriteRemoteSyncSession(
         libraryStore: libraryStore,
         settingsStore: settingsStore,
+        contentCoverStore: contentCoverStore,
         makeFavoriteRepository: { FavoriteRepository(client: await makeClient()) },
         makeForumThreadReaderRepository: { ForumThreadReaderRepository(client: await makeClient(), cacheStore: forumCacheStore) },
         makeThreadRouteResolver: { YamiboThreadRouteResolver(client: await makeClient()) }

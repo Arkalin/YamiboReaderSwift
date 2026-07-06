@@ -91,7 +91,6 @@ public struct FavoriteUpdateTrackedTarget: Codable, Hashable, Identifiable, Send
     public var categoryIDs: Set<String>
     public var fid: String?
     public var forumName: String?
-    public var coverURL: URL?
     public var knownLatestPostID: String?
     public var knownReplyCount: Int?
     public var knownPageCount: Int?
@@ -110,7 +109,6 @@ public struct FavoriteUpdateTrackedTarget: Codable, Hashable, Identifiable, Send
         categoryIDs: Set<String> = [],
         fid: String? = nil,
         forumName: String? = nil,
-        coverURL: URL? = nil,
         knownLatestPostID: String? = nil,
         knownReplyCount: Int? = nil,
         knownPageCount: Int? = nil,
@@ -126,7 +124,6 @@ public struct FavoriteUpdateTrackedTarget: Codable, Hashable, Identifiable, Send
         self.categoryIDs = categoryIDs
         self.fid = fid?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
         self.forumName = forumName?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
-        self.coverURL = coverURL
         self.knownLatestPostID = knownLatestPostID?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
         self.knownReplyCount = knownReplyCount
         self.knownPageCount = knownPageCount
@@ -154,7 +151,6 @@ public struct FavoriteUpdateEvent: Codable, Hashable, Identifiable, Sendable {
     public var forumName: String?
     public var summary: FavoriteUpdateSummary
     public var detailIDs: [String]
-    public var coverURL: URL?
     public var detectedAt: Date
     public var readAt: Date?
     public var dismissedAt: Date?
@@ -169,7 +165,6 @@ public struct FavoriteUpdateEvent: Codable, Hashable, Identifiable, Sendable {
         forumName: String? = nil,
         summary: FavoriteUpdateSummary,
         detailIDs: [String] = [],
-        coverURL: URL? = nil,
         detectedAt: Date = .now,
         readAt: Date? = nil,
         dismissedAt: Date? = nil,
@@ -183,7 +178,6 @@ public struct FavoriteUpdateEvent: Codable, Hashable, Identifiable, Sendable {
         self.forumName = forumName
         self.summary = summary
         self.detailIDs = detailIDs
-        self.coverURL = coverURL
         self.detectedAt = detectedAt
         self.readAt = readAt
         self.dismissedAt = dismissedAt

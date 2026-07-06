@@ -17,7 +17,6 @@ enum ForumThreadFavoriteSync {
         authorID: String?,
         forumID: String? = nil,
         forumName: String? = nil,
-        coverURL: URL? = nil,
         contentUpdatedAt: Date? = nil,
         formHash: String?,
         localFavoriteLibraryStore: FavoriteLibraryStore,
@@ -35,7 +34,6 @@ enum ForumThreadFavoriteSync {
             favorite,
             forumID: forumID,
             forumName: forumName,
-            coverURL: coverURL,
             contentUpdatedAt: contentUpdatedAt,
             localFavoriteLibraryStore: localFavoriteLibraryStore
         )
@@ -78,7 +76,6 @@ enum ForumThreadFavoriteSync {
         _ favorite: Favorite,
         forumID: String?,
         forumName: String?,
-        coverURL: URL?,
         contentUpdatedAt: Date?,
         localFavoriteLibraryStore: FavoriteLibraryStore?
     ) async throws -> FavoriteItem {
@@ -93,7 +90,6 @@ enum ForumThreadFavoriteSync {
             displayName: favorite.displayName,
             forumID: forumID,
             forumName: forumName,
-            coverURL: coverURL,
             contentUpdatedAt: contentUpdatedAt,
             remoteMapping: favorite.remoteFavoriteID.map {
                 FavoriteRemoteMapping(yamiboFavoriteID: $0, lastSeenAt: .now)

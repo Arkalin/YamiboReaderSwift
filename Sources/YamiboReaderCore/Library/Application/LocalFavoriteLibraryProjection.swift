@@ -142,7 +142,9 @@ public enum LocalFavoriteLibraryProjection {
             lastUpdatedAt: item.contentUpdatedAt,
             progressPercent: progressPercent(from: progress),
             chapterPageProgress: chapterPageProgress(from: progress),
-            coverURL: item.coverURL
+            // Filled from ContentCoverStore by the library derivation; items
+            // deliberately carry no cover of their own.
+            coverURL: nil
         )
     }
 

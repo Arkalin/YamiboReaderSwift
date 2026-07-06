@@ -56,18 +56,24 @@ final class FavoriteLibraryOrganizer: ObservableObject {
     private let readingProgressStore: ReadingProgressStore
     private let settingsStore: SettingsStore
     private let contentCoverStore: ContentCoverStore
+    private let mangaDirectoryStore: MangaDirectoryStore?
+    private let makeForumThreadReaderRepository: (@Sendable () async -> ForumThreadReaderRepository)?
     private let remoteDeleter: YamiboRemoteFavoriteDeleter
 
     private var readingProgress: [ReadingProgressRecord] = []
     private var contentCoverURLsByTargetID: [String: URL] = [:]
     private var libraryUpdatesTask: Task<Void, Never>?
     private var progressUpdatesTask: Task<Void, Never>?
+    private var mangaCoverBackfillTask: Task<Void, Never>?
+    private var attemptedMangaCoverTargetIDs: Set<String> = []
 
     init(
         libraryStore: FavoriteLibraryStore,
         readingProgressStore: ReadingProgressStore,
         settingsStore: SettingsStore,
         contentCoverStore: ContentCoverStore,
+        mangaDirectoryStore: MangaDirectoryStore? = nil,
+        makeForumThreadReaderRepository: (@Sendable () async -> ForumThreadReaderRepository)? = nil,
         makeFavoriteRepository: @escaping @Sendable () async -> FavoriteRepository,
         remoteFavoriteDeleteHandler: (([FavoriteItem]) async throws -> Void)? = nil
     ) {
@@ -75,6 +81,8 @@ final class FavoriteLibraryOrganizer: ObservableObject {
         self.readingProgressStore = readingProgressStore
         self.settingsStore = settingsStore
         self.contentCoverStore = contentCoverStore
+        self.mangaDirectoryStore = mangaDirectoryStore
+        self.makeForumThreadReaderRepository = makeForumThreadReaderRepository
         remoteDeleter = YamiboRemoteFavoriteDeleter(
             makeFavoriteRepository: makeFavoriteRepository,
             overrideHandler: remoteFavoriteDeleteHandler
@@ -106,6 +114,7 @@ final class FavoriteLibraryOrganizer: ObservableObject {
     deinit {
         libraryUpdatesTask?.cancel()
         progressUpdatesTask?.cancel()
+        mangaCoverBackfillTask?.cancel()
     }
 
     // MARK: - Document access
@@ -202,6 +211,7 @@ final class FavoriteLibraryOrganizer: ObservableObject {
         } else {
             selectedCollectionID = nil
         }
+        scheduleMangaCoverBackfill(for: loadedDocument.items)
     }
 
     func reload() async {
@@ -215,6 +225,7 @@ final class FavoriteLibraryOrganizer: ObservableObject {
            !loadedDocument.collections.contains(where: { $0.id == selectedCollectionID && $0.categoryID == selectedCategoryID }) {
             self.selectedCollectionID = nil
         }
+        scheduleMangaCoverBackfill(for: loadedDocument.items)
     }
 
     private func reloadReadingProgress() async {
@@ -704,7 +715,7 @@ final class FavoriteLibraryOrganizer: ObservableObject {
     private func contentCoverURLs(for items: [FavoriteItem]) async -> [String: URL] {
         var urlsByTargetID: [String: URL] = [:]
         for item in items {
-            guard let key = Self.contentCoverKey(for: item.target),
+            guard let key = ContentCoverKey(target: item.target),
                   let cover = await contentCoverStore.cover(for: key),
                   let resolvedURL = cover.resolvedURL else {
                 continue
@@ -714,15 +725,77 @@ final class FavoriteLibraryOrganizer: ObservableObject {
         return urlsByTargetID
     }
 
-    private static func contentCoverKey(for target: FavoriteContentTarget) -> ContentCoverKey? {
-        guard let threadID = target.threadID else { return nil }
-        switch target.kind {
-        case .normalThread:
-            return ContentCoverKey(targetType: .threadNormal, targetID: threadID)
-        case .novelThread:
-            return ContentCoverKey(targetType: .threadNovel, targetID: threadID)
-        case .mangaTitle:
-            return nil
+    /// Resolves missing manga covers from each title's first chapter (owner's
+    /// first image), once per target per organizer lifetime.
+    private func scheduleMangaCoverBackfill(for items: [FavoriteItem]) {
+        guard let mangaDirectoryStore, let makeForumThreadReaderRepository, mangaCoverBackfillTask == nil else {
+            return
         }
+        let missing = items.filter { item in
+            item.target.kind == .mangaTitle
+                && item.target.mangaCleanBookName != nil
+                && contentCoverURLsByTargetID[item.target.id] == nil
+                && !attemptedMangaCoverTargetIDs.contains(item.target.id)
+        }
+        guard !missing.isEmpty else { return }
+        attemptedMangaCoverTargetIDs.formUnion(missing.map(\.target.id))
+        mangaCoverBackfillTask = Task { [weak self, contentCoverStore] in
+            let repository = await makeForumThreadReaderRepository()
+            let resolver = ThreadCoverResolver()
+            var resolvedAny = false
+            for item in missing {
+                if Task.isCancelled { return }
+                guard let cleanBookName = item.target.mangaCleanBookName else { continue }
+                let key = ContentCoverKey.mangaTitle(cleanBookName: cleanBookName)
+                if let existing = await contentCoverStore.cover(for: key), existing.resolvedURL != nil {
+                    resolvedAny = true
+                    continue
+                }
+                guard let tid = await Self.firstChapterTID(for: item, mangaDirectoryStore: mangaDirectoryStore),
+                      let coverURL = await resolver.resolve(
+                          thread: ThreadIdentity(tid: tid),
+                          title: item.title,
+                          repository: repository
+                      ) else {
+                    continue
+                }
+                if (try? await contentCoverStore.setAutomaticCover(coverURL, for: key)) == true {
+                    resolvedAny = true
+                }
+            }
+            guard let self, !Task.isCancelled else { return }
+            self.mangaCoverBackfillTask = nil
+            if resolvedAny {
+                self.contentCoverURLsByTargetID = await self.contentCoverURLs(for: self.document.items)
+                self.refreshDerivedState()
+            }
+        }
+    }
+
+    private static func firstChapterTID(
+        for item: FavoriteItem,
+        mangaDirectoryStore: MangaDirectoryStore
+    ) async -> String? {
+        if let cleanBookName = item.target.mangaCleanBookName,
+           let directory = try? await mangaDirectoryStore.directory(named: cleanBookName),
+           let tid = directory.chapters.first?.tid.trimmedNonEmptyOrNil {
+            return tid
+        }
+        // Remote-synced and chapter-seeded favorites carry a tid in their identity.
+        if let mangaID = item.target.mangaID {
+            for prefix in ["thread:", "chapter:"] where mangaID.hasPrefix(prefix) {
+                if let tid = String(mangaID.dropFirst(prefix.count)).trimmedNonEmptyOrNil {
+                    return tid
+                }
+            }
+        }
+        return nil
+    }
+}
+
+private extension String {
+    var trimmedNonEmptyOrNil: String? {
+        let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 }

@@ -16,6 +16,7 @@ final class FavoriteRemoteSyncSession: ObservableObject {
 
     private let libraryStore: FavoriteLibraryStore
     private let settingsStore: SettingsStore
+    private let contentCoverStore: ContentCoverStore
     private let makeFavoriteRepository: @Sendable () async -> FavoriteRepository
     private let makeForumThreadReaderRepository: @Sendable () async -> ForumThreadReaderRepository
     private let makeThreadRouteResolver: @Sendable () async -> YamiboThreadRouteResolver
@@ -35,6 +36,7 @@ final class FavoriteRemoteSyncSession: ObservableObject {
     init(
         libraryStore: FavoriteLibraryStore,
         settingsStore: SettingsStore,
+        contentCoverStore: ContentCoverStore,
         makeFavoriteRepository: @escaping @Sendable () async -> FavoriteRepository,
         makeForumThreadReaderRepository: @escaping @Sendable () async -> ForumThreadReaderRepository,
         makeThreadRouteResolver: @escaping @Sendable () async -> YamiboThreadRouteResolver,
@@ -42,6 +44,7 @@ final class FavoriteRemoteSyncSession: ObservableObject {
     ) {
         self.libraryStore = libraryStore
         self.settingsStore = settingsStore
+        self.contentCoverStore = contentCoverStore
         self.makeFavoriteRepository = makeFavoriteRepository
         self.makeForumThreadReaderRepository = makeForumThreadReaderRepository
         self.makeThreadRouteResolver = makeThreadRouteResolver
@@ -162,14 +165,18 @@ final class FavoriteRemoteSyncSession: ObservableObject {
                 into: targetCategoryID,
                 remoteEntries: entries,
                 date: .now,
-                probe: { threadID in
+                probe: { [contentCoverStore] threadID in
                     let title = remoteFavorites.first { $0.threadID == threadID }?.title
-                    return try await Self.probeResult(
+                    let result = try await Self.probeResult(
                         forThreadID: threadID,
                         title: title,
                         resolver: resolver,
                         coverRepository: coverRepository
                     )
+                    if let coverURL = result.coverURL, let key = ContentCoverKey(target: result.target) {
+                        _ = try? await contentCoverStore.setAutomaticCover(coverURL, for: key)
+                    }
+                    return result
                 }
             )
             try Task.checkCancellation()

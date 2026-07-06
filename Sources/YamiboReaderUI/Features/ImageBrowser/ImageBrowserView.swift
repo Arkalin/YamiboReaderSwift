@@ -18,6 +18,7 @@ enum ImageBrowserMode: Equatable {
 struct ImageBrowserView: View {
     let items: [ImageBrowserItem]
     let mode: ImageBrowserMode
+    let coverActionsProvider: ImageBrowserCoverActionsProvider?
     let onDismiss: () -> Void
 
     @State private var selectedItemID: String
@@ -26,15 +27,18 @@ struct ImageBrowserView: View {
     @State private var feedback: ImageBrowserFeedback?
     @State private var shareItem: ImageBrowserShareItem?
     @State private var isPreparingAction = false
+    @State private var coverActions: [ImageBrowserCoverAction] = []
 
     init(
         items: [ImageBrowserItem],
         initialItemID: String?,
         mode: ImageBrowserMode,
+        coverActionsProvider: ImageBrowserCoverActionsProvider? = nil,
         onDismiss: @escaping () -> Void
     ) {
         self.items = items
         self.mode = mode
+        self.coverActionsProvider = coverActionsProvider
         self.onDismiss = onDismiss
         _selectedItemID = State(initialValue: Self.initialSelection(in: items, initialItemID: initialItemID))
     }
@@ -78,10 +82,19 @@ struct ImageBrowserView: View {
                         await saveImage()
                     }
                 },
+                coverActions: coverActions,
+                performCoverAction: { action in
+                    Task {
+                        await performCoverAction(action)
+                    }
+                },
                 onDismiss: onDismiss
             )
         }
         .background(Color.clear)
+        .task {
+            await reloadCoverActions()
+        }
         .alert(item: $feedback) { feedback in
             Alert(
                 title: Text(feedback.title),
@@ -148,6 +161,24 @@ struct ImageBrowserView: View {
                 message: L10n.string("image.save_success_message")
             )
         }
+    }
+
+    private func reloadCoverActions() async {
+        guard let coverActionsProvider else { return }
+        coverActions = await coverActionsProvider()
+    }
+
+    private func performCoverAction(_ coverAction: ImageBrowserCoverAction) async {
+        await performImageAction { item in
+            guard let message = try await coverAction.perform(item.source) else {
+                throw ImageBrowserActionError.invalidImageData
+            }
+            feedback = .success(
+                title: L10n.string("cover.action_success_title"),
+                message: message
+            )
+        }
+        await reloadCoverActions()
     }
 
     private func performImageAction(_ action: @escaping (ImageBrowserItem) async throws -> Void) async {
@@ -296,6 +327,8 @@ private struct ImageBrowserToolbar: View {
     let copyImage: () -> Void
     let prepareShare: () -> Void
     let saveImage: () -> Void
+    let coverActions: [ImageBrowserCoverAction]
+    let performCoverAction: (ImageBrowserCoverAction) -> Void
     let onDismiss: () -> Void
 
     var body: some View {
@@ -320,6 +353,17 @@ private struct ImageBrowserToolbar: View {
 
                     Button(action: saveImage) {
                         Label(L10n.string("image.save_to_photos"), systemImage: "square.and.arrow.down")
+                    }
+
+                    if !coverActions.isEmpty {
+                        Divider()
+                        ForEach(coverActions) { action in
+                            Button {
+                                performCoverAction(action)
+                            } label: {
+                                Label(action.title, systemImage: action.systemImage)
+                            }
+                        }
                     }
                 } label: {
                     Image(systemName: isPreparingAction ? "hourglass" : "ellipsis")

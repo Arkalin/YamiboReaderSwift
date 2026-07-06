@@ -59,7 +59,6 @@ import Testing
         displayName: "本地名",
         forumID: "10",
         forumName: "本地版块",
-        coverURL: URL(string: "https://example.com/local.jpg"),
         contentUpdatedAt: Date(timeIntervalSince1970: 100),
         remoteMapping: FavoriteRemoteMapping(yamiboFavoriteID: "local"),
         locations: [.category(FavoriteCategory.defaultID)]
@@ -68,7 +67,6 @@ import Testing
     remoteItem.displayName = "远端名"
     remoteItem.forumID = "10"
     remoteItem.forumName = "远端版块"
-    remoteItem.coverURL = URL(string: "https://example.com/remote.jpg")
     remoteItem.contentUpdatedAt = Date(timeIntervalSince1970: 200)
     remoteItem.remoteMapping = FavoriteRemoteMapping(yamiboFavoriteID: "remote")
 
@@ -78,7 +76,6 @@ import Testing
             library: FavoriteLibraryDocument(items: [localItem]),
             clocks: FavoriteLibraryWebDAVClocks(
                 displayNameUpdatedAtByTargetID: [target.id: remoteClock],
-                coverUpdatedAtByTargetID: [target.id: localClock],
                 remoteMappingUpdatedAtByTargetID: [target.id: localClock]
             )
         ),
@@ -87,7 +84,6 @@ import Testing
             library: FavoriteLibraryDocument(items: [remoteItem]),
             clocks: FavoriteLibraryWebDAVClocks(
                 displayNameUpdatedAtByTargetID: [target.id: localClock],
-                coverUpdatedAtByTargetID: [target.id: remoteClock],
                 remoteMappingUpdatedAtByTargetID: [target.id: remoteClock]
             )
         ),
@@ -98,7 +94,6 @@ import Testing
     #expect(item.displayName == "本地名")
     #expect(item.forumID == "10")
     #expect(item.forumName == "本地版块")
-    #expect(item.coverURL?.absoluteString == "https://example.com/remote.jpg")
     #expect(item.contentUpdatedAt == Date(timeIntervalSince1970: 200))
     #expect(item.remoteMapping?.yamiboFavoriteID == "remote")
 }

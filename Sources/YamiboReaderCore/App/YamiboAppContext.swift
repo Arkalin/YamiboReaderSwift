@@ -57,7 +57,7 @@ public final class YamiboAppContext: Sendable {
         localFavoriteLibraryStore: FavoriteLibraryStore? = nil,
         favoriteUpdateStore: FavoriteUpdateStore = FavoriteUpdateStore(),
         readingProgressStore: ReadingProgressStore? = nil,
-        contentCoverStore: ContentCoverStore = ContentCoverStore(),
+        contentCoverStore: ContentCoverStore? = nil,
         novelReaderCacheStore: NovelReaderProjectionStore? = nil,
         favoriteBackgroundImageStore: FavoriteBackgroundImageStore? = nil,
         mangaDirectoryStore: MangaDirectoryStore? = nil,
@@ -96,7 +96,7 @@ public final class YamiboAppContext: Sendable {
         self.localFavoriteLibraryStore = localFavoriteLibraryStore ?? FavoriteLibraryStore(databasePool: resolvedGRDBDatabasePool)
         self.favoriteUpdateStore = favoriteUpdateStore
         self.readingProgressStore = readingProgressStore ?? ReadingProgressStore(databasePool: resolvedGRDBDatabasePool)
-        self.contentCoverStore = contentCoverStore
+        self.contentCoverStore = contentCoverStore ?? ContentCoverStore(databasePool: resolvedGRDBDatabasePool)
         self.novelReaderCacheStore = novelReaderCacheStore ?? NovelReaderProjectionStore(
             diskCacheStore: diskCacheStore
         )
@@ -148,6 +148,7 @@ public final class YamiboAppContext: Sendable {
             readingProgressStore: readingProgressStore,
             settingsStore: settingsStore,
             contentCoverStore: contentCoverStore,
+            mangaDirectoryStore: mangaDirectoryStore,
             makeFavoriteRepository: { [self] in await makeFavoriteRepository() },
             makeForumThreadReaderRepository: { [self] in await makeForumThreadReaderRepository() },
             makeThreadRouteResolver: { [self] in await makeThreadRouteResolver() }
@@ -162,6 +163,7 @@ public final class YamiboAppContext: Sendable {
             mangaDirectoryStore: mangaDirectoryStore,
             mangaDirectorySearchCooldownState: mangaDirectorySearchCooldownState,
             offlineCacheStore: offlineCacheStore,
+            contentCoverStore: contentCoverStore,
             makeProjectionLoader: { [self] in await makeMangaReaderProjectionLoader() },
             makeDirectoryRepository: { [self] in await makeMangaDirectoryRepository() },
             makeChapterCommentsRepository: { [self] in await makeReaderChapterCommentsRepository() },
@@ -176,6 +178,7 @@ public final class YamiboAppContext: Sendable {
             settingsStore: settingsStore,
             readingProgressStore: readingProgressStore,
             offlineCacheStore: offlineCacheStore,
+            contentCoverStore: contentCoverStore,
             makeNovelReaderRepository: { [self] in await makeNovelReaderRepository() },
             makeChapterCommentsRepository: { [self] in await makeReaderChapterCommentsRepository() },
             makeOfflineCacheQueueExecutor: { [self] in await makeOfflineCacheQueueExecutor() },

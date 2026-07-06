@@ -9,6 +9,7 @@ struct MangaReaderViewModelDependencies {
     var makeOfflineCacheStore: @Sendable () -> (any MangaOfflineCacheStoring & OfflineCacheQueueStoring)?
     var makeDirectorySearchCooldownState: @Sendable () -> MangaDirectorySearchCooldownState
     var makeChapterCommentsRepository: (@Sendable () async -> ReaderChapterCommentsRepository)?
+    var makeContentCoverStore: @Sendable () -> ContentCoverStore?
     var directoryWorkflowConfiguration: MangaDirectoryWorkflowConfiguration
     var progressSync: ProgressSyncModule
 
@@ -22,6 +23,7 @@ struct MangaReaderViewModelDependencies {
             MangaDirectorySearchCooldownState()
         },
         makeChapterCommentsRepository: (@Sendable () async -> ReaderChapterCommentsRepository)? = nil,
+        makeContentCoverStore: @escaping @Sendable () -> ContentCoverStore? = { nil },
         directoryWorkflowConfiguration: MangaDirectoryWorkflowConfiguration = MangaDirectoryWorkflowConfiguration(),
         progressSync: ProgressSyncModule
     ) {
@@ -32,6 +34,7 @@ struct MangaReaderViewModelDependencies {
         self.makeOfflineCacheStore = makeOfflineCacheStore
         self.makeDirectorySearchCooldownState = makeDirectorySearchCooldownState
         self.makeChapterCommentsRepository = makeChapterCommentsRepository
+        self.makeContentCoverStore = makeContentCoverStore
         self.directoryWorkflowConfiguration = directoryWorkflowConfiguration
         self.progressSync = progressSync
     }
@@ -45,6 +48,7 @@ struct MangaReaderViewModelDependencies {
             makeOfflineCacheStore: { dependencies.offlineCacheStore },
             makeDirectorySearchCooldownState: { dependencies.mangaDirectorySearchCooldownState },
             makeChapterCommentsRepository: { await dependencies.makeChapterCommentsRepository() },
+            makeContentCoverStore: { dependencies.contentCoverStore },
             progressSync: ProgressSyncModule(
                 adapter: FavoriteLibraryProgressSyncAdapter(
                     readingProgressStore: dependencies.readingProgressStore
@@ -339,6 +343,36 @@ public final class MangaReaderViewModel: ObservableObject {
             YamiboImageOfflineScope(tid: page.tid, ownerName: ownerName)
         }
         return page.mangaReaderImageSource(offlineScope: scope)
+    }
+
+    // MARK: - Manga cover
+
+    private var mangaCoverKey: ContentCoverKey? {
+        guard let cleanBookName = workflow?.currentDirectoryCleanBookName()?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+            !cleanBookName.isEmpty else {
+            return nil
+        }
+        return .mangaTitle(cleanBookName: cleanBookName)
+    }
+
+    var canSetMangaCover: Bool {
+        mangaCoverKey != nil && dependencies.makeContentCoverStore() != nil
+    }
+
+    func hasManualMangaCover() async -> Bool {
+        guard let key = mangaCoverKey, let store = dependencies.makeContentCoverStore() else { return false }
+        return await store.cover(for: key)?.manualCoverURL != nil
+    }
+
+    func setMangaCover(page: MangaReaderPageProjection) async -> Bool {
+        guard let key = mangaCoverKey, let store = dependencies.makeContentCoverStore() else { return false }
+        return (try? await store.setManualCover(imageSource(for: page).url, for: key)) ?? false
+    }
+
+    func restoreAutomaticMangaCover() async -> Bool {
+        guard let key = mangaCoverKey, let store = dependencies.makeContentCoverStore() else { return false }
+        return (try? await store.clearManualCover(for: key)) ?? false
     }
 
     public func loadChapterComments(for target: ReaderChapterCommentTarget?) async {

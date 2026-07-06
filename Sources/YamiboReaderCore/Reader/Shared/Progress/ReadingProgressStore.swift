@@ -13,7 +13,6 @@ public struct NovelReadingProgressRecord: Codable, Hashable, Sendable {
     public var novelResumePoint: NovelResumePoint?
     public var novelMaxView: Int?
     public var novelDocumentSurfaceProgressPercent: Int?
-    public var threadCoverURL: URL?
 
     public init(
         lastView: Int = 1,
@@ -21,8 +20,7 @@ public struct NovelReadingProgressRecord: Codable, Hashable, Sendable {
         authorID: String? = nil,
         novelResumePoint: NovelResumePoint? = nil,
         novelMaxView: Int? = nil,
-        novelDocumentSurfaceProgressPercent: Int? = nil,
-        threadCoverURL: URL? = nil
+        novelDocumentSurfaceProgressPercent: Int? = nil
     ) {
         let resolvedView = max(1, novelResumePoint?.view ?? lastView)
         self.lastView = resolvedView
@@ -31,7 +29,6 @@ public struct NovelReadingProgressRecord: Codable, Hashable, Sendable {
         self.novelResumePoint = novelResumePoint
         self.novelMaxView = novelMaxView.map { max(resolvedView, $0) }
         self.novelDocumentSurfaceProgressPercent = novelDocumentSurfaceProgressPercent.map { min(max($0, 0), 100) }
-        self.threadCoverURL = threadCoverURL
     }
 }
 
@@ -248,8 +245,7 @@ public actor ReadingProgressStore {
                 authorID: position.authorID,
                 novelResumePoint: position.resumePoint,
                 novelMaxView: position.maxView,
-                novelDocumentSurfaceProgressPercent: position.documentSurfaceProgressPercent,
-                threadCoverURL: position.threadCoverURL
+                novelDocumentSurfaceProgressPercent: position.documentSurfaceProgressPercent
             ),
             manga: nil
         )
@@ -447,15 +443,13 @@ public actor ReadingProgressStore {
         } else {
             resumePoint = nil
         }
-        let coverURL = (row["novel_thread_cover_url"] as String?).flatMap(URL.init(string:))
         return NovelReadingProgressRecord(
             lastView: row["novel_last_view"],
             lastChapter: row["novel_last_chapter"] as String?,
             authorID: row["novel_author_id"] as String?,
             novelResumePoint: resumePoint,
             novelMaxView: row["novel_max_view"] as Int?,
-            novelDocumentSurfaceProgressPercent: row["novel_document_surface_progress_percent"] as Int?,
-            threadCoverURL: coverURL
+            novelDocumentSurfaceProgressPercent: row["novel_document_surface_progress_percent"] as Int?
         )
     }
 
@@ -489,10 +483,10 @@ public actor ReadingProgressStore {
             (
                 id, target_kind, thread_id, manga_id, clean_book_name, kind, updated_at, last_read_at,
                 novel_last_view, novel_last_chapter, novel_author_id, novel_resume_point_json,
-                novel_max_view, novel_document_surface_progress_percent, novel_thread_cover_url,
+                novel_max_view, novel_document_surface_progress_percent,
                 manga_chapter_thread_id, manga_chapter_view, manga_last_chapter, manga_page_index, manga_page_count
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             arguments: [
                 record.id,
@@ -509,7 +503,6 @@ public actor ReadingProgressStore {
                 novelResumePointJSON,
                 record.novel?.novelMaxView,
                 record.novel?.novelDocumentSurfaceProgressPercent,
-                record.novel?.threadCoverURL?.absoluteString,
                 record.manga?.chapterThreadID,
                 record.manga?.chapterView,
                 record.manga?.lastChapter,

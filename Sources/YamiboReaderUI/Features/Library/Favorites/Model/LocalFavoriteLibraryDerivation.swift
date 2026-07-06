@@ -88,7 +88,7 @@ enum LocalFavoriteLibraryDerivation {
         )
         .map { card in
             var card = card
-            card.coverURL = inputs.contentCoverURLsByTargetID[card.item.target.id] ?? card.coverURL
+            card.coverURL = inputs.contentCoverURLsByTargetID[card.item.target.id]
             return card
         }
     }

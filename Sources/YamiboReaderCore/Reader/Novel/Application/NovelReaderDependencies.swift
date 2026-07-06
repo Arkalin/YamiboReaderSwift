@@ -7,6 +7,7 @@ public struct NovelReaderDependencies: Sendable {
     public let settingsStore: SettingsStore
     public let readingProgressStore: ReadingProgressStore
     public let offlineCacheStore: any OfflineCacheStoring
+    public let contentCoverStore: ContentCoverStore
     public let makeNovelReaderRepository: @Sendable () async -> NovelReaderRepository
     public let makeOfflineCacheQueueExecutor: @Sendable () async -> OfflineCacheQueueExecutor
     /// The cache panel embeds the account feature's offline queue view model.
@@ -17,6 +18,7 @@ public struct NovelReaderDependencies: Sendable {
         settingsStore: SettingsStore,
         readingProgressStore: ReadingProgressStore,
         offlineCacheStore: any OfflineCacheStoring,
+        contentCoverStore: ContentCoverStore,
         makeNovelReaderRepository: @escaping @Sendable () async -> NovelReaderRepository,
         makeChapterCommentsRepository: @escaping @Sendable () async -> ReaderChapterCommentsRepository,
         makeOfflineCacheQueueExecutor: @escaping @Sendable () async -> OfflineCacheQueueExecutor,
@@ -26,6 +28,7 @@ public struct NovelReaderDependencies: Sendable {
         self.settingsStore = settingsStore
         self.readingProgressStore = readingProgressStore
         self.offlineCacheStore = offlineCacheStore
+        self.contentCoverStore = contentCoverStore
         self.makeNovelReaderRepository = makeNovelReaderRepository
         self.makeOfflineCacheQueueExecutor = makeOfflineCacheQueueExecutor
         self.account = account

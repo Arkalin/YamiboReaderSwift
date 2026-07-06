@@ -224,7 +224,7 @@ import YamiboReaderTestSupport
         defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
         key: "content-covers"
     )
-    let key = ContentCoverKey(targetType: .threadNovel, targetID: "900")
+    let key = ContentCoverKey(targetType: .thread, targetID: "900")
     let persisted = try #require(URL(string: "https://img.example.com/persisted.jpg"))
     let pageCandidate = try #require(URL(string: "https://img.example.com/page.jpg"))
     try await coverStore.setAutomaticCover(persisted, for: key)
@@ -297,7 +297,7 @@ import YamiboReaderTestSupport
 
     await model.reload()
 
-    let key = ContentCoverKey(targetType: .threadNovel, targetID: "900")
+    let key = ContentCoverKey(targetType: .thread, targetID: "900")
     let cover = await coverStore.cover(for: key)
     #expect(cover?.resolvedURL == initialImage)
     #expect(model.headerSummary.coverURL == initialImage)
@@ -427,7 +427,7 @@ import YamiboReaderTestSupport
     )
     let dependencies = try makeForumDetailDependencies(contentCoverStore: coverStore)
     let model = try makeForumNovelDetailViewModel(dependencies: dependencies)
-    let key = ContentCoverKey(targetType: .threadNovel, targetID: "900")
+    let key = ContentCoverKey(targetType: .thread, targetID: "900")
     let replyImage = try #require(URL(string: "https://img.example.com/reply.jpg"))
     let ownerImage = try #require(URL(string: "https://img.example.com/owner.jpg"))
     let page = ForumThreadPage(
@@ -496,7 +496,7 @@ import YamiboReaderTestSupport
     )
     let dependencies = try makeForumDetailDependencies(contentCoverStore: coverStore)
     let model = try makeForumNovelDetailViewModel(dependencies: dependencies)
-    let key = ContentCoverKey(targetType: .threadNovel, targetID: "900")
+    let key = ContentCoverKey(targetType: .thread, targetID: "900")
     let page = ForumThreadPage(
         thread: model.context.thread,
         title: "小说标题",
@@ -526,65 +526,6 @@ import YamiboReaderTestSupport
 
     #expect(await coverStore.cover(for: key) == nil)
     #expect(model.contentCover == nil)
-}
-
-@MainActor
-@Test func forumNovelDetailReloadBackfillsCoverFromReadingProgress() async throws {
-    let suiteName = YamiboTestDefaults.suiteName(prefix: "novel-detail-history-cover")
-    _ = try YamiboTestDefaults.make(suiteName: suiteName)
-    let readingProgressStore = ReadingProgressStore(
-        defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
-        key: "reading-progress"
-    )
-    let coverStore = ContentCoverStore(
-        defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
-        key: "content-covers"
-    )
-    let dependencies = try makeForumDetailDependencies(
-        contentCoverStore: coverStore,
-        readingProgressStore: readingProgressStore
-    )
-    let historyCover = try #require(URL(string: "https://img.example.com/history-cover.jpg"))
-    try await readingProgressStore.saveNovel(
-        NovelReadingPosition(
-            threadID: "900",
-            view: 3,
-            chapterTitle: "第三章",
-            threadCoverURL: historyCover
-        )
-    )
-    let threadPageLoader = FakeForumNovelThreadPageLoader(pages: [
-        1: ForumThreadPage(
-            thread: ThreadIdentity(tid: "900", fid: "49"),
-            title: "小说标题",
-            posts: [
-                ForumThreadPost(
-                    postID: "1001",
-                    floorText: "楼主",
-                    author: BlogReaderUser(uid: "42", name: "楼主名", avatarURL: nil),
-                    contentHTML: "",
-                    contentText: "首楼无图",
-                    contentBlocks: []
-                )
-            ],
-            pageNavigation: ForumPageNavigation(currentPage: 1, totalPages: 1)
-        )
-    ])
-    let model = try makeForumNovelDetailViewModel(
-        dependencies: dependencies,
-        documentLoader: FakeForumNovelDocumentLoader(),
-        threadPageLoader: threadPageLoader
-    )
-
-    await model.reload()
-
-    let key = ContentCoverKey(targetType: .threadNovel, targetID: "900")
-    let cover = try #require(await coverStore.cover(for: key))
-    #expect(cover.automaticCoverURL == historyCover)
-    #expect(model.headerSummary.coverURL == historyCover)
-    #expect(model.continueLaunchContext().threadCoverURL == historyCover)
-    #expect(threadPageLoader.threadFetchCalls().isEmpty)
-    #expect(threadPageLoader.novelFetchCalls() == [1])
 }
 
 @MainActor
@@ -664,7 +605,7 @@ import YamiboReaderTestSupport
 
     await model.reload()
 
-    let key = ContentCoverKey(targetType: .threadNovel, targetID: "900")
+    let key = ContentCoverKey(targetType: .thread, targetID: "900")
     let cover = await coverStore.cover(for: key)
     #expect(cover == nil)
     #expect(model.headerSummary.coverURL == nil)

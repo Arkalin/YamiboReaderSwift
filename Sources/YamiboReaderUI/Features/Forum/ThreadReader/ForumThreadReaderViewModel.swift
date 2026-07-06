@@ -39,6 +39,8 @@ final class ForumThreadReaderViewModel {
     @ObservationIgnored private let localFavoriteLibraryStoreProvider: @Sendable () async -> FavoriteLibraryStore?
     @ObservationIgnored private let readingProgressStoreProvider: @Sendable () async -> ReadingProgressStore?
     @ObservationIgnored private let favoriteRepositoryProvider: @Sendable () async -> (any ForumThreadFavoriteRemoteOperating)?
+    @ObservationIgnored private let contentCoverStoreProvider: @Sendable () async -> ContentCoverStore?
+    @ObservationIgnored private let mangaDirectoryStoreProvider: @Sendable () async -> (any MangaDirectoryPersisting)?
 
     init(context: ThreadNovelLaunchContext, dependencies: ForumDependencies) {
         self.context = context
@@ -54,6 +56,12 @@ final class ForumThreadReaderViewModel {
         favoriteRepositoryProvider = {
             await dependencies.makeFavoriteRepository()
         }
+        contentCoverStoreProvider = {
+            dependencies.contentCoverStore
+        }
+        mangaDirectoryStoreProvider = {
+            dependencies.mangaDirectoryStore
+        }
     }
 
     init(
@@ -61,7 +69,9 @@ final class ForumThreadReaderViewModel {
         repository: any ForumThreadPageLoading,
         localFavoriteLibraryStore: FavoriteLibraryStore? = nil,
         readingProgressStore: ReadingProgressStore? = nil,
-        favoriteRepository: (any ForumThreadFavoriteRemoteOperating)? = nil
+        favoriteRepository: (any ForumThreadFavoriteRemoteOperating)? = nil,
+        contentCoverStore: ContentCoverStore? = nil,
+        mangaDirectoryStore: (any MangaDirectoryPersisting)? = nil
     ) {
         self.context = context
         repositoryProvider = {
@@ -76,10 +86,26 @@ final class ForumThreadReaderViewModel {
         favoriteRepositoryProvider = {
             favoriteRepository
         }
+        contentCoverStoreProvider = {
+            contentCoverStore
+        }
+        mangaDirectoryStoreProvider = {
+            mangaDirectoryStore
+        }
     }
 
     var navigationTitle: String {
         page?.title ?? context.title
+    }
+
+    /// Cover menu entries for images opened from this thread: thread cover
+    /// always, manga cover when the thread is a chapter of a local directory.
+    var imageBrowserCoverActionsProvider: ImageBrowserCoverActionsProvider {
+        ImageBrowserThreadCoverActions.provider(
+            tid: context.thread.tid,
+            contentCoverStore: contentCoverStoreProvider,
+            mangaDirectoryStore: mangaDirectoryStoreProvider
+        )
     }
 
     var pageNavigation: ForumPageNavigation? {
@@ -148,12 +174,15 @@ final class ForumThreadReaderViewModel {
                 authorID: nil,
                 forumID: page?.forumID ?? page?.thread.fid ?? context.thread.fid,
                 forumName: page?.forumName,
-                coverURL: ThreadCoverResolver.findThreadCoverCandidate(in: page),
                 contentUpdatedAt: Self.contentUpdatedAt(from: page),
                 formHash: page?.formHash,
                 localFavoriteLibraryStore: localFavoriteLibraryStore,
                 remoteRepository: await favoriteRepositoryProvider()
             )
+            if let coverCandidate = ThreadCoverResolver.findThreadCoverCandidate(in: page),
+               let coverStore = await contentCoverStoreProvider() {
+                _ = try? await coverStore.setAutomaticCover(coverCandidate, for: .thread(tid: context.thread.tid))
+            }
             isFavorited = true
         } catch {
             favoriteErrorMessage = error.localizedDescription

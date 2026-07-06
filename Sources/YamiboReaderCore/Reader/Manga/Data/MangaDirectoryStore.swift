@@ -211,6 +211,7 @@ public actor MangaDirectoryStore: MangaDirectoryPersisting, MangaDirectoryRenami
         guard oldName != newName else { return }
         try renameFavoriteMangaTargets(from: oldName, to: newName, in: db)
         try renameReadingProgressMangaTargets(from: oldName, to: newName, in: db)
+        try ContentCoverStore.renameMangaTitleCover(from: oldName, to: newName, in: db)
     }
 
     private static func renameFavoriteMangaTargets(from oldName: String, to newName: String, in db: Database) throws {

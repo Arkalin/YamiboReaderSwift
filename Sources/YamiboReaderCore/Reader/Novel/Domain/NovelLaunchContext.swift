@@ -13,7 +13,6 @@ public struct NovelLaunchContext: Codable, Hashable, Identifiable, Sendable {
     public var initialView: Int?
     public var authorID: String?
     public var initialResumePoint: NovelResumePoint?
-    public var threadCoverURL: URL?
 
     public var id: String { threadID }
 
@@ -23,8 +22,7 @@ public struct NovelLaunchContext: Codable, Hashable, Identifiable, Sendable {
         source: NovelLaunchSource,
         initialView: Int? = nil,
         authorID: String? = nil,
-        initialResumePoint: NovelResumePoint? = nil,
-        threadCoverURL: URL? = nil
+        initialResumePoint: NovelResumePoint? = nil
     ) {
         self.threadID = Self.normalizedThreadID(threadID)
         self.threadTitle = threadTitle
@@ -32,7 +30,6 @@ public struct NovelLaunchContext: Codable, Hashable, Identifiable, Sendable {
         self.initialView = initialView
         self.authorID = authorID
         self.initialResumePoint = initialResumePoint
-        self.threadCoverURL = threadCoverURL
     }
 
     private static func normalizedThreadID(_ value: String) -> String {

@@ -322,7 +322,6 @@ final class FavoriteUpdateMonitor: ObservableObject {
                 existing.fid = id
                 existing.forumName = label
             }
-            existing.coverURL = item.coverURL
             return existing
         }
         try await updateStore.replaceTrackedTargets(targets)
@@ -374,7 +373,6 @@ final class FavoriteUpdateMonitor: ObservableObject {
                 forumName: target.forumName,
                 summary: summary,
                 detailIDs: fingerprint.latestPostID.map { [$0] } ?? [],
-                coverURL: item.coverURL,
                 detectedAt: .now,
                 ambiguous: fingerprint.latestPostID == nil
             )

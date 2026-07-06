@@ -629,14 +629,13 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
         XCTAssertTrue(saved.favorites.showsCategoryCounts)
     }
 
-    func testAddFavoritePersistsCoverURLInLocalFirstLibrary() async throws {
+    func testAddFavoritePersistsForumMetadataForNormalThread() async throws {
         let suiteName = YamiboTestDefaults.suiteName(prefix: "local-favorites-add-cover")
         _ = try YamiboTestDefaults.make(suiteName: suiteName)
         let localFavoriteLibraryStore = FavoriteLibraryStore(
             defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
             key: "local-favorites"
         )
-        let coverURL = try XCTUnwrap(URL(string: "https://img.example.com/cover.jpg"))
 
         _ = try await ForumThreadFavoriteSync.addFavorite(
             threadID: "902",
@@ -645,7 +644,6 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
             authorID: nil,
             forumID: "60",
             forumName: "图文区",
-            coverURL: coverURL,
             contentUpdatedAt: Date(timeIntervalSince1970: 600),
             formHash: nil,
             localFavoriteLibraryStore: localFavoriteLibraryStore,
@@ -654,7 +652,6 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
 
         let target = FavoriteContentTarget(kind: .normalThread, threadID: "902")
         let storedItem = await localFavoriteLibraryStore.load().items.first { $0.target == target }
-        XCTAssertEqual(storedItem?.coverURL, coverURL)
         XCTAssertEqual(storedItem?.forumID, "60")
         XCTAssertEqual(storedItem?.forumName, "图文区")
         XCTAssertEqual(storedItem?.sourceGroup, .forumBoard(id: "60", label: "图文区"))
@@ -713,7 +710,7 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
         try await localFavoriteLibraryStore.save(document)
         try await contentCoverStore.setAutomaticCover(
             coverURL,
-            for: ContentCoverKey(targetType: .threadNormal, targetID: "903")
+            for: ContentCoverKey(targetType: .thread, targetID: "903")
         )
 
         let organizer = try makeOrganizer(
@@ -725,45 +722,7 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
         XCTAssertEqual(organizer.derived.cards.first?.coverURL, coverURL)
     }
 
-    func testLoadPrefersContentCoverStoreURLOverPersistedNormalThreadCoverURL() async throws {
-        let suiteName = YamiboTestDefaults.suiteName(prefix: "local-favorites-content-cover-normal-priority")
-        _ = try YamiboTestDefaults.make(suiteName: suiteName)
-        let localFavoriteLibraryStore = FavoriteLibraryStore(
-            defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
-            key: "local-favorites"
-        )
-        let contentCoverStore = ContentCoverStore(
-            defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
-            key: "content-covers"
-        )
-        let target = FavoriteContentTarget(kind: .normalThread, threadID: "904")
-        let persistedCoverURL = try XCTUnwrap(URL(string: "https://img.example.com/old-normal-cover.jpg"))
-        let resolvedCoverURL = try XCTUnwrap(URL(string: "https://img.example.com/resolved-normal-cover.jpg"))
-        var document = FavoriteLibraryDocument()
-        document.addItem(try FavoriteItem(
-            target: target,
-            title: "普通主题",
-            coverURL: persistedCoverURL,
-            locations: [.category(document.defaultCategory.id)]
-        ))
-        try await localFavoriteLibraryStore.save(document)
-        try await contentCoverStore.setAutomaticCover(
-            resolvedCoverURL,
-            for: ContentCoverKey(targetType: .threadNormal, targetID: "904")
-        )
-
-        let organizer = try makeOrganizer(
-            libraryStore: localFavoriteLibraryStore,
-            contentCoverStore: contentCoverStore
-        )
-        await organizer.load()
-
-        XCTAssertEqual(organizer.derived.cards.first?.coverURL, resolvedCoverURL)
-        let persistedDocument = await localFavoriteLibraryStore.load()
-        XCTAssertEqual(persistedDocument.items.first?.coverURL, persistedCoverURL)
-    }
-
-    func testLoadPrefersContentCoverStoreURLOverPersistedNovelThreadCoverURL() async throws {
+    func testLoadProjectsNovelThreadCoverFromSharedThreadKey() async throws {
         let suiteName = YamiboTestDefaults.suiteName(prefix: "local-favorites-content-cover-novel-priority")
         _ = try YamiboTestDefaults.make(suiteName: suiteName)
         let localFavoriteLibraryStore = FavoriteLibraryStore(
@@ -775,19 +734,18 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
             key: "content-covers"
         )
         let target = FavoriteContentTarget(kind: .novelThread, threadID: "905")
-        let persistedCoverURL = try XCTUnwrap(URL(string: "https://img.example.com/old-novel-cover.jpg"))
         let resolvedCoverURL = try XCTUnwrap(URL(string: "https://img.example.com/resolved-novel-cover.jpg"))
         var document = FavoriteLibraryDocument()
         document.addItem(try FavoriteItem(
             target: target,
             title: "小说主题",
-            coverURL: persistedCoverURL,
             locations: [.category(document.defaultCategory.id)]
         ))
         try await localFavoriteLibraryStore.save(document)
+        // Novel and normal threads share the `.thread` cover key.
         try await contentCoverStore.setAutomaticCover(
             resolvedCoverURL,
-            for: ContentCoverKey(targetType: .threadNovel, targetID: "905")
+            for: ContentCoverKey(targetType: .thread, targetID: "905")
         )
 
         let organizer = try makeOrganizer(
@@ -797,8 +755,6 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
         await organizer.load()
 
         XCTAssertEqual(organizer.derived.cards.first?.coverURL, resolvedCoverURL)
-        let persistedDocument = await localFavoriteLibraryStore.load()
-        XCTAssertEqual(persistedDocument.items.first?.coverURL, persistedCoverURL)
     }
 
     func testSearchModeSubmitsCountsAndExitClearsSelection() async throws {

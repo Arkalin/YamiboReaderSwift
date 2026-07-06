@@ -21,7 +21,6 @@ enum ReaderDatabaseSchema: DatabaseSchemaModule {
                 table.column("novel_resume_point_json", .text)
                 table.column("novel_max_view", .integer)
                 table.column("novel_document_surface_progress_percent", .integer)
-                table.column("novel_thread_cover_url", .text)
                 table.column("manga_chapter_thread_id", .text)
                 table.column("manga_chapter_view", .integer)
                 table.column("manga_last_chapter", .text)

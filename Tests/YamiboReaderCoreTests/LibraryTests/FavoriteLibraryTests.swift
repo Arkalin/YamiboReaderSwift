@@ -70,7 +70,6 @@ import Testing
     let suite = try #require(UserDefaults(suiteName: suiteName))
     let store = FavoriteLibraryStore(defaults: suite, key: "library")
     let target = FavoriteContentTarget(kind: .normalThread, threadID: "321")
-    let coverURL = try #require(URL(string: "https://img.example.test/cover.jpg"))
     var document = FavoriteLibraryDocument()
     let category = document.defaultCategory
     let tag = document.createTag(name: "本地标签", color: .blue)
@@ -79,7 +78,6 @@ import Testing
         title: "远端标题",
         displayName: " 本地名 ",
         sourceGroup: .forumBoard(id: "fid-1", label: "版块"),
-        coverURL: coverURL,
         remoteMapping: FavoriteRemoteMapping(yamiboFavoriteID: "remote-321", yamiboRemoteOrder: 7),
         locations: [.category(category.id)],
         tagIDs: [tag.id, tag.id]
@@ -93,7 +91,6 @@ import Testing
     #expect(loaded.defaultCategory.id == FavoriteCategory.defaultID)
     #expect(loadedItem.id == target.id)
     #expect(loadedItem.resolvedDisplayTitle == "本地名")
-    #expect(loadedItem.coverURL == coverURL)
     #expect(loadedItem.remoteMapping?.yamiboFavoriteID == "remote-321")
     #expect(loadedItem.locations == [.category(category.id)])
     #expect(loadedItem.tagIDs == [tag.id])

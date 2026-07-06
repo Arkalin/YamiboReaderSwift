@@ -38,6 +38,9 @@ struct FavoriteLibraryWebDAVParticipant: WebDAVSyncParticipant {
 }
 
 struct FavoriteLibraryWebDAVPayload: Codable, Equatable, Sendable {
+    // Still v2 after FavoriteItem dropped coverURL (covers moved to the
+    // content_cover table): decoding tolerates the removed keys and the app
+    // is pre-release, so no format break is needed.
     static let currentVersion = 2
 
     var version: Int
@@ -104,16 +107,13 @@ struct FavoriteLibraryWebDAVTombstones: Codable, Equatable, Sendable {
 
 struct FavoriteLibraryWebDAVClocks: Codable, Equatable, Sendable {
     var displayNameUpdatedAtByTargetID: [String: Date]
-    var coverUpdatedAtByTargetID: [String: Date]
     var remoteMappingUpdatedAtByTargetID: [String: Date]
 
     init(
         displayNameUpdatedAtByTargetID: [String: Date] = [:],
-        coverUpdatedAtByTargetID: [String: Date] = [:],
         remoteMappingUpdatedAtByTargetID: [String: Date] = [:]
     ) {
         self.displayNameUpdatedAtByTargetID = displayNameUpdatedAtByTargetID
-        self.coverUpdatedAtByTargetID = coverUpdatedAtByTargetID
         self.remoteMappingUpdatedAtByTargetID = remoteMappingUpdatedAtByTargetID
     }
 }
@@ -139,7 +139,6 @@ struct FavoriteLibraryWebDAVMerger: Sendable {
         )
         let clocks = FavoriteLibraryWebDAVClocks(
             displayNameUpdatedAtByTargetID: maxDateDictionary(local.clocks.displayNameUpdatedAtByTargetID, remote.clocks.displayNameUpdatedAtByTargetID),
-            coverUpdatedAtByTargetID: maxDateDictionary(local.clocks.coverUpdatedAtByTargetID, remote.clocks.coverUpdatedAtByTargetID),
             remoteMappingUpdatedAtByTargetID: maxDateDictionary(local.clocks.remoteMappingUpdatedAtByTargetID, remote.clocks.remoteMappingUpdatedAtByTargetID)
         )
         let mergedItems = mergeItems(local: local, remote: remote, tombstones: tombstones, clocks: clocks)
@@ -188,12 +187,6 @@ struct FavoriteLibraryWebDAVMerger: Sendable {
                     remote: remoteItem.displayName,
                     localDate: local.clocks.displayNameUpdatedAtByTargetID[targetID],
                     remoteDate: remote.clocks.displayNameUpdatedAtByTargetID[targetID]
-                )
-                item.coverURL = choose(
-                    local: localItem.coverURL,
-                    remote: remoteItem.coverURL,
-                    localDate: local.clocks.coverUpdatedAtByTargetID[targetID],
-                    remoteDate: remote.clocks.coverUpdatedAtByTargetID[targetID]
                 )
                 item.contentUpdatedAt = maxDate(localItem.contentUpdatedAt, remoteItem.contentUpdatedAt)
                 item.forumID = localItem.forumID ?? remoteItem.forumID

@@ -18,6 +18,7 @@ struct ForumThreadReaderBodyView: View {
     let goToPage: (Int) -> Void
     let toggleFavorite: () -> Void
     let makeImageBrowserRequest: (String, URL, String?, URL) -> ForumThreadImageBrowserRequest?
+    let imageBrowserCoverActionsProvider: ImageBrowserCoverActionsProvider
     let loadRatingResults: (String) async throws -> ForumThreadRatingResultsPage
     let loadRateOptions: (String) async throws -> ForumThreadRateOptionsPage
     let loadPollVoters: (String?, Int) async throws -> ForumThreadPollVotersPage
@@ -34,6 +35,7 @@ struct ForumThreadReaderBodyView: View {
                     items: request.items,
                     initialItemID: request.initialItemID,
                     mode: .multiple,
+                    coverActionsProvider: imageBrowserCoverActionsProvider,
                     onDismiss: {
                         imageBrowserRequest = nil
                     }

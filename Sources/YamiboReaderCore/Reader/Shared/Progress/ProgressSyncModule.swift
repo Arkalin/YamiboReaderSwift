@@ -8,7 +8,6 @@ public struct NovelReadingPosition: Hashable, Sendable {
     public var authorID: String?
     public var resumePoint: NovelResumePoint?
     public var documentSurfaceProgressPercent: Int?
-    public var threadCoverURL: URL?
 
     public init(
         threadID: String,
@@ -17,8 +16,7 @@ public struct NovelReadingPosition: Hashable, Sendable {
         chapterTitle: String? = nil,
         authorID: String? = nil,
         resumePoint: NovelResumePoint? = nil,
-        documentSurfaceProgressPercent: Int? = nil,
-        threadCoverURL: URL? = nil
+        documentSurfaceProgressPercent: Int? = nil
     ) {
         let normalizedThreadID = threadID.trimmingCharacters(in: .whitespacesAndNewlines)
         precondition(!normalizedThreadID.isEmpty, "NovelReadingPosition requires a Yamibo thread tid")
@@ -29,7 +27,6 @@ public struct NovelReadingPosition: Hashable, Sendable {
         self.authorID = resumePoint?.authorID ?? authorID
         self.resumePoint = resumePoint
         self.documentSurfaceProgressPercent = documentSurfaceProgressPercent.map { min(max($0, 0), 100) }
-        self.threadCoverURL = threadCoverURL
     }
 }
 

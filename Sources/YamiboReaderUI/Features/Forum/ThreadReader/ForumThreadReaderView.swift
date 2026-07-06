@@ -31,6 +31,7 @@ struct ForumThreadReaderView: View {
             goToPage: goToPage,
             toggleFavorite: toggleFavorite,
             makeImageBrowserRequest: model.imageBrowserRequest,
+            imageBrowserCoverActionsProvider: model.imageBrowserCoverActionsProvider,
             loadRatingResults: model.loadRatingResults,
             loadRateOptions: model.loadRateOptions,
             loadPollVoters: model.loadPollVoters,

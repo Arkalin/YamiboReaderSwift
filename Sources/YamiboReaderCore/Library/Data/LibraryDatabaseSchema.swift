@@ -73,14 +73,31 @@ enum LibraryDatabaseSchema: DatabaseSchemaModule {
                 table.column("is_marked_remote_missing", .boolean).notNull()
             }
         }
+
+        migrator.registerMigration("library.v2.content-cover") { db in
+            // Covers are content metadata, deliberately not referencing
+            // favorite_items: they outlive un-favoriting and directory deletion.
+            try db.create(table: "content_cover") { table in
+                table.column("target_type", .text).notNull()
+                table.column("target_id", .text).notNull()
+                table.column("automatic_url", .text)
+                table.column("manual_url", .text)
+                table.column("dynamic_enabled", .boolean).notNull()
+                table.column("updated_at", .double).notNull()
+                table.primaryKey(["target_type", "target_id"], onConflict: .replace)
+            }
+        }
     }
 
     static func erase(in db: Database) throws {
         try deleteAllRows(in: db)
+        try db.execute(sql: "DELETE FROM content_cover")
         try insertDefaultFavoriteCategory(in: db)
     }
 
-    /// Deletes every library row, including the default category.
+    /// Deletes every favorite-library row, including the default category.
+    /// Covers are intentionally excluded: document saves call this to replace
+    /// all favorite rows, and covers must survive those rewrites.
     static func deleteAllRows(in db: Database) throws {
         try db.execute(sql: "DELETE FROM favorite_remote_mappings")
         try db.execute(sql: "DELETE FROM favorite_item_tags")

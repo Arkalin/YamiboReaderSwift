@@ -13,6 +13,7 @@ struct MangaImageActionTarget: Identifiable {
 struct MangaImageSaveFeedback: Identifiable {
     enum Kind {
         case success
+        case custom(title: String, message: String)
         case failure(String)
     }
 
@@ -20,6 +21,10 @@ struct MangaImageSaveFeedback: Identifiable {
     let kind: Kind
 
     static let success = MangaImageSaveFeedback(kind: .success)
+
+    static func custom(title: String, message: String) -> MangaImageSaveFeedback {
+        MangaImageSaveFeedback(kind: .custom(title: title, message: message))
+    }
 
     static func failure(message: String) -> MangaImageSaveFeedback {
         MangaImageSaveFeedback(kind: .failure(message))
@@ -29,6 +34,8 @@ struct MangaImageSaveFeedback: Identifiable {
         switch kind {
         case .success:
             L10n.string("image.save_success_title")
+        case let .custom(title, _):
+            title
         case .failure:
             L10n.string("common.operation_failed")
         }
@@ -38,6 +45,8 @@ struct MangaImageSaveFeedback: Identifiable {
         switch kind {
         case .success:
             L10n.string("image.save_success_message")
+        case let .custom(_, message):
+            message
         case let .failure(message):
             message
         }

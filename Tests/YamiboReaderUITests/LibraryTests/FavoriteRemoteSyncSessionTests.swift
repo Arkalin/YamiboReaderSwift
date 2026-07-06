@@ -163,6 +163,7 @@ private func makeSyncSession(
     return FavoriteRemoteSyncSession(
         libraryStore: libraryStore ?? FavoriteLibraryStore(defaults: defaults, key: "local-favorites"),
         settingsStore: settingsStore ?? SettingsStore(defaults: defaults, key: "settings"),
+        contentCoverStore: ContentCoverStore(defaults: defaults, key: "content-covers"),
         makeFavoriteRepository: { FavoriteRepository(client: await makeClient()) },
         makeForumThreadReaderRepository: { ForumThreadReaderRepository(client: await makeClient(), cacheStore: forumCacheStore) },
         makeThreadRouteResolver: { YamiboThreadRouteResolver(client: await makeClient()) },

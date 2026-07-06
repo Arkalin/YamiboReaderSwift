@@ -18,11 +18,14 @@ struct LocalFavoritesRootView: View {
             readingProgressStore: dependencies.readingProgressStore,
             settingsStore: dependencies.settingsStore,
             contentCoverStore: dependencies.contentCoverStore,
+            mangaDirectoryStore: dependencies.mangaDirectoryStore,
+            makeForumThreadReaderRepository: dependencies.makeForumThreadReaderRepository,
             makeFavoriteRepository: dependencies.makeFavoriteRepository
         ))
         _remoteSync = StateObject(wrappedValue: FavoriteRemoteSyncSession(
             libraryStore: dependencies.localFavoriteLibraryStore,
             settingsStore: dependencies.settingsStore,
+            contentCoverStore: dependencies.contentCoverStore,
             makeFavoriteRepository: dependencies.makeFavoriteRepository,
             makeForumThreadReaderRepository: dependencies.makeForumThreadReaderRepository,
             makeThreadRouteResolver: dependencies.makeThreadRouteResolver

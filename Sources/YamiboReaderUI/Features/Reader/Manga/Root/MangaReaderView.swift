@@ -16,6 +16,7 @@ public struct MangaReaderView: View {
     @State private var isSettingsPresented = false
     @State private var isCachePresented = false
     @State private var imageSavePresentation = MangaImageSavePresentationState()
+    @State private var canRestoreMangaCover = false
     @State private var isSavingImage = false
 
     public init(context: MangaLaunchContext, dependencies: MangaReaderDependencies, appModel: YamiboAppModel) {
@@ -61,7 +62,10 @@ public struct MangaReaderView: View {
                 },
                 onPageLongPress: { page in
                     guard !isSavingImage else { return }
-                    imageSavePresentation.presentActions(for: page)
+                    Task {
+                        canRestoreMangaCover = await model.hasManualMangaCover()
+                        imageSavePresentation.presentActions(for: page)
+                    }
                 },
                 onTap: {
                     toggleChrome()
@@ -196,6 +200,21 @@ public struct MangaReaderView: View {
                     }
                 }
                 .disabled(isSavingImage)
+
+                if model.canSetMangaCover {
+                    Button(L10n.string("cover.set_as_cover")) {
+                        Task {
+                            await setMangaCover(target.page)
+                        }
+                    }
+                    if canRestoreMangaCover {
+                        Button(L10n.string("cover.restore_auto_cover")) {
+                            Task {
+                                await restoreMangaCover()
+                            }
+                        }
+                    }
+                }
             }
 
             Button(L10n.string("common.cancel"), role: .cancel) {
@@ -297,6 +316,30 @@ public struct MangaReaderView: View {
         } catch {
             imageSavePresentation.finishSave(with: .failure(message: L10n.string("image.save_failed")))
         }
+    }
+
+    @MainActor
+    private func setMangaCover(_ page: MangaReaderPageProjection) async {
+        imageSavePresentation.clearActionTarget()
+        let succeeded = await model.setMangaCover(page: page)
+        imageSavePresentation.finishSave(with: succeeded
+            ? .custom(
+                title: L10n.string("cover.action_success_title"),
+                message: L10n.string("cover.set_success_message")
+            )
+            : .failure(message: L10n.string("image.action_failed")))
+    }
+
+    @MainActor
+    private func restoreMangaCover() async {
+        imageSavePresentation.clearActionTarget()
+        let succeeded = await model.restoreAutomaticMangaCover()
+        imageSavePresentation.finishSave(with: succeeded
+            ? .custom(
+                title: L10n.string("cover.action_success_title"),
+                message: L10n.string("cover.restore_success_message")
+            )
+            : .failure(message: L10n.string("image.action_failed")))
     }
 
     private var windowSafeAreaInsets: UIEdgeInsets {

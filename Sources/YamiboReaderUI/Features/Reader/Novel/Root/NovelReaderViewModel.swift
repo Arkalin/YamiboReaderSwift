@@ -166,6 +166,14 @@ public final class NovelReaderViewModel: ObservableObject {
         context.threadTitle.isEmpty ? L10n.string("reader.title") : context.threadTitle
     }
 
+    /// Cover menu entries for images opened from this novel's thread.
+    var imageBrowserCoverActionsProvider: ImageBrowserCoverActionsProvider {
+        ImageBrowserThreadCoverActions.provider(
+            tid: context.threadID,
+            contentCoverStore: { [dependencies] in dependencies.contentCoverStore }
+        )
+    }
+
     public var settings: NovelReaderAppearanceSettings {
         novelReaderPresentation?.committedSettings ?? bootstrapSettings
     }
@@ -1030,8 +1038,7 @@ public final class NovelReaderViewModel: ObservableObject {
             maxView: maxView,
             chapterTitle: currentChapterTitle,
             authorID: currentAuthorID ?? context.authorID,
-            documentSurfaceProgressPercent: currentDocumentSurfaceProgressPercent,
-            threadCoverURL: context.threadCoverURL
+            documentSurfaceProgressPercent: currentDocumentSurfaceProgressPercent
         )
     }
 

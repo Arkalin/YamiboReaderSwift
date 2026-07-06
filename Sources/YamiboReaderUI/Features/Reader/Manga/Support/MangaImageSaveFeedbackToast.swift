@@ -26,7 +26,7 @@ struct MangaImageSaveFeedbackToast: View {
 
     private var systemImageName: String {
         switch feedback.kind {
-        case .success:
+        case .success, .custom:
             "checkmark.circle.fill"
         case .failure:
             "exclamationmark.triangle.fill"

@@ -150,7 +150,9 @@ import Testing
     #expect(mangaCard.progressPercent == 50)
     #expect(mangaCard.chapterPageProgress == L10n.string("favorites.progress.manga_page_total", "第3话", 5, 10))
     #expect(mangaCard.chapterPageProgress != nil)
-    #expect(mangaCard.coverURL == items.manga.coverURL)
+    // Items carry no cover of their own; the library derivation fills card
+    // covers from ContentCoverStore.
+    #expect(mangaCard.coverURL == nil)
     #expect(document.items.first { $0.id == items.manga.id }?.mangaChapterMetadata == items.manga.mangaChapterMetadata)
 }
 
@@ -158,7 +160,6 @@ private func makeProjectionDocument() throws -> (FavoriteLibraryDocument, Projec
     var document = FavoriteLibraryDocument()
     let categoryID = document.defaultCategory.id
     let collection = document.createCollection(categoryID: categoryID, name: "合集A")
-    let coverURL = try #require(URL(string: "https://img.example.test/manga.jpg"))
     let normal = try FavoriteItem(
         target: FavoriteContentTarget(kind: .normalThread, threadID: "701"),
         title: "普通主题",
@@ -182,7 +183,6 @@ private func makeProjectionDocument() throws -> (FavoriteLibraryDocument, Projec
         target: FavoriteContentTarget(mangaCleanBookName: "漫画A"),
         title: "漫画A",
         sourceGroup: .mangaTitle(cleanBookName: "漫画A"),
-        coverURL: coverURL,
         contentUpdatedAt: Date(timeIntervalSince1970: 300),
         mangaChapterMetadata: FavoriteMangaChapterMetadata(
             chapterTID: "703",

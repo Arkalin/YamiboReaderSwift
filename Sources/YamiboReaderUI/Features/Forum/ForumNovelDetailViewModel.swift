@@ -170,7 +170,6 @@ final class ForumNovelDetailViewModel {
 
     private var resolvedHeaderCoverURL: URL? {
         contentCover?.resolvedURL
-            ?? readingProgress?.novel?.threadCoverURL
             ?? threadPage.flatMap(ThreadCoverResolver.findThreadCoverCandidate(in:))
     }
 
@@ -306,8 +305,7 @@ final class ForumNovelDetailViewModel {
             source: .forum,
             initialView: chapter?.view ?? 1,
             authorID: chapter?.resumePoint?.authorID ?? resolvedAuthorID ?? context.authorID,
-            initialResumePoint: chapter?.resumePoint,
-            threadCoverURL: resolvedHeaderCoverURL
+            initialResumePoint: chapter?.resumePoint
         )
     }
 
@@ -321,8 +319,7 @@ final class ForumNovelDetailViewModel {
             source: hasProgress ? .resume : .forum,
             initialView: resumePoint?.view ?? novelProgress?.lastView ?? 1,
             authorID: resumePoint?.authorID ?? novelProgress?.authorID ?? resolvedAuthorID ?? context.authorID,
-            initialResumePoint: resumePoint,
-            threadCoverURL: resolvedHeaderCoverURL
+            initialResumePoint: resumePoint
         )
     }
 
@@ -396,7 +393,6 @@ final class ForumNovelDetailViewModel {
                 authorID: resolvedAuthorID ?? context.authorID,
                 forumID: threadPage?.forumID ?? threadPage?.thread.fid ?? context.thread.fid,
                 forumName: threadPage?.forumName ?? forumName,
-                coverURL: resolvedHeaderCoverURL,
                 contentUpdatedAt: Self.contentUpdatedAt(from: threadPage),
                 formHash: threadPage?.formHash,
                 localFavoriteLibraryStore: dependencies.localFavoriteLibraryStore,
@@ -488,13 +484,6 @@ final class ForumNovelDetailViewModel {
         if let candidate = ThreadCoverResolver.findThreadCoverCandidate(in: page) {
             do {
                 _ = try await dependencies.contentCoverStore.setAutomaticCover(candidate, for: key)
-            } catch {
-                return
-            }
-        }
-        if let historyCover = readingProgress?.novel?.threadCoverURL {
-            do {
-                _ = try await dependencies.contentCoverStore.setAutomaticCover(historyCover, for: key)
             } catch {
                 return
             }
@@ -696,7 +685,7 @@ final class ForumNovelDetailViewModel {
     private var contentCoverKey: ContentCoverKey? {
         let tid = context.thread.tid.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !tid.isEmpty else { return nil }
-        return ContentCoverKey(targetType: .threadNovel, targetID: tid)
+        return .thread(tid: tid)
     }
 
     private func loadContentCover() async -> ContentCover? {

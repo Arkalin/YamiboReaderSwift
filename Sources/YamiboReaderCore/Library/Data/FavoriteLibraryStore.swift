@@ -77,7 +77,10 @@ public actor FavoriteLibraryStore {
 
     public func clearAll() async throws {
         try await database.write { db in
-            try LibraryDatabaseSchema.erase(in: db)
+            // Favorites-scoped wipe: covers are content metadata and survive
+            // clearing the library (only the app-level reset erases them).
+            try LibraryDatabaseSchema.deleteAllRows(in: db)
+            try LibraryDatabaseSchema.insertDefaultFavoriteCategory(in: db)
         }
         postChangeNotification()
     }

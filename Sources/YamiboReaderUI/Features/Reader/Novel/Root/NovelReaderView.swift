@@ -1358,7 +1358,8 @@ private struct NovelReaderPresentationModifier: ViewModifier {
                 ImageBrowserView(
                     items: [item],
                     initialItemID: item.id,
-                    mode: .single
+                    mode: .single,
+                    coverActionsProvider: model.imageBrowserCoverActionsProvider
                 ) {
                     imageBrowserItem = nil
                 }

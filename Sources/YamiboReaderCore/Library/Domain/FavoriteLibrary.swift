@@ -504,7 +504,6 @@ public struct FavoriteItem: Codable, Hashable, Identifiable, Sendable {
     public var sourceGroup: FavoriteSourceGroup
     public var forumID: String?
     public var forumName: String?
-    public var coverURL: URL?
     public var contentUpdatedAt: Date?
     public var remoteMapping: FavoriteRemoteMapping?
     public var mangaChapterMetadata: FavoriteMangaChapterMetadata?
@@ -522,7 +521,6 @@ public struct FavoriteItem: Codable, Hashable, Identifiable, Sendable {
         sourceGroup: FavoriteSourceGroup = .unknown,
         forumID: String? = nil,
         forumName: String? = nil,
-        coverURL: URL? = nil,
         contentUpdatedAt: Date? = nil,
         remoteMapping: FavoriteRemoteMapping? = nil,
         mangaChapterMetadata: FavoriteMangaChapterMetadata? = nil,
@@ -542,7 +540,6 @@ public struct FavoriteItem: Codable, Hashable, Identifiable, Sendable {
         self.sourceGroup = forumMetadata.sourceGroup
         self.forumID = forumMetadata.forumID
         self.forumName = forumMetadata.forumName
-        self.coverURL = coverURL
         self.contentUpdatedAt = contentUpdatedAt
         self.remoteMapping = remoteMapping
         self.mangaChapterMetadata = mangaChapterMetadata
@@ -647,7 +644,6 @@ public struct FavoriteLibraryDocument: Codable, Equatable, Sendable {
                 items[index].forumID = probeResult.forumID
                 items[index].forumName = probeResult.forumName
             }
-            items[index].coverURL = probeResult.coverURL ?? items[index].coverURL
             items[index].contentUpdatedAt = probeResult.contentUpdatedAt ?? items[index].contentUpdatedAt
             items[index].remoteMapping = remoteMapping ?? items[index].remoteMapping
             items[index].displayName = displayName?.nilIfEmpty ?? items[index].displayName
@@ -664,7 +660,6 @@ public struct FavoriteLibraryDocument: Codable, Equatable, Sendable {
             sourceGroup: probeResult.sourceGroup,
             forumID: probeResult.forumID,
             forumName: probeResult.forumName,
-            coverURL: probeResult.coverURL,
             contentUpdatedAt: probeResult.contentUpdatedAt,
             remoteMapping: remoteMapping,
             locations: [resolvedLocation],

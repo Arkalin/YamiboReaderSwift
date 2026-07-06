@@ -471,7 +471,6 @@ private func persistedResumeRoute(_ route: ReaderResumeRoute) throws -> ReaderRe
         key: "reading-progress",
         databasePool: database
     )
-    let threadCoverURL = try #require(URL(string: "https://img.example.com/thread-cover.jpg"))
     let resumePoint = NovelResumePoint(
         view: 3,
         displayedTextOffset: 128,
@@ -489,8 +488,7 @@ private func persistedResumeRoute(_ route: ReaderResumeRoute) throws -> ReaderRe
         chapterTitle: "旧章",
         authorID: "1",
         resumePoint: resumePoint,
-        documentSurfaceProgressPercent: 37,
-        threadCoverURL: threadCoverURL
+        documentSurfaceProgressPercent: 37
     ))
 
     let novel = await store.load(threadID: "12345")
@@ -501,7 +499,6 @@ private func persistedResumeRoute(_ route: ReaderResumeRoute) throws -> ReaderRe
     #expect(novel?.novel?.authorID == "42")
     #expect(novel?.novel?.novelMaxView == 8)
     #expect(novel?.novel?.novelDocumentSurfaceProgressPercent == 37)
-    #expect(novel?.novel?.threadCoverURL == threadCoverURL)
     #expect(novel?.novel?.novelResumePoint == resumePoint)
 
     try await store.saveManga(MangaProgressReadingPosition(
@@ -802,7 +799,7 @@ private func persistedResumeRoute(_ route: ReaderResumeRoute) throws -> ReaderRe
         )
     )
     try await offlineCacheStore.setOfflineCacheQueueRunState(.running)
-    let coverKey = ContentCoverKey(targetType: .threadNovel, targetID: "700")
+    let coverKey = ContentCoverKey(targetType: .thread, targetID: "700")
     try await contentCoverStore.setAutomaticCover(
         try #require(URL(string: "https://img.example.com/reset-cover.jpg")),
         for: coverKey
@@ -847,7 +844,7 @@ private func persistedResumeRoute(_ route: ReaderResumeRoute) throws -> ReaderRe
 @Test func contentCoverStoreNormalizesAndFiltersAutomaticCoverURLs() async throws {
     let defaults = try makeIsolatedDefaults(prefix: "content-cover-normalize")
     let store = ContentCoverStore(defaults: defaults, key: "content-covers")
-    let key = ContentCoverKey(targetType: .threadNovel, targetID: "900")
+    let key = ContentCoverKey(targetType: .thread, targetID: "900")
 
     let ignored = try #require(URL(string: "https://bbs.yamibo.com/static/image/smiley/default/none.gif"))
     let relative = try #require(URL(string: "data/attachment/forum/cover.jpg"))
@@ -864,7 +861,7 @@ private func persistedResumeRoute(_ route: ReaderResumeRoute) throws -> ReaderRe
 @Test func contentCoverStoreResolvesManualCoverWhenDynamicDisabled() async throws {
     let defaults = try makeIsolatedDefaults(prefix: "content-cover-manual")
     let store = ContentCoverStore(defaults: defaults, key: "content-covers")
-    let key = ContentCoverKey(targetType: .threadNovel, targetID: "901")
+    let key = ContentCoverKey(targetType: .thread, targetID: "901")
     let automatic = try #require(URL(string: "https://img.example.com/auto.jpg"))
     let manual = try #require(URL(string: "https://img.example.com/manual.jpg"))
 
@@ -878,6 +875,84 @@ private func persistedResumeRoute(_ route: ReaderResumeRoute) throws -> ReaderRe
     try await store.setDynamicEnabled(true, for: key)
     cover = try #require(await store.cover(for: key))
     #expect(cover.resolvedURL == automatic)
+}
+
+@Test func contentCoverStoreClearManualCoverRestoresAutomaticMode() async throws {
+    let defaults = try makeIsolatedDefaults(prefix: "content-cover-clear-manual")
+    let store = ContentCoverStore(defaults: defaults, key: "content-covers")
+    let key = ContentCoverKey.mangaTitle(cleanBookName: "测试漫画")
+    let automatic = try #require(URL(string: "https://img.example.com/auto.jpg"))
+    let manual = try #require(URL(string: "https://img.example.com/manual.jpg"))
+
+    #expect(try await store.clearManualCover(for: key) == false)
+
+    try await store.setAutomaticCover(automatic, for: key)
+    try await store.setManualCover(manual, for: key)
+    #expect(try await store.clearManualCover(for: key) == true)
+
+    let cover = try #require(await store.cover(for: key))
+    #expect(cover.manualCoverURL == nil)
+    #expect(cover.dynamicEnabled == true)
+    #expect(cover.resolvedURL == automatic)
+}
+
+@Test func contentCoverKeyMergesThreadKindsAndUsesMangaCleanBookName() throws {
+    let normal = ContentCoverKey(target: FavoriteContentTarget(kind: .normalThread, threadID: "77"))
+    let novel = ContentCoverKey(target: FavoriteContentTarget(kind: .novelThread, threadID: "77"))
+    let manga = ContentCoverKey(target: FavoriteContentTarget(mangaID: "tag:9", mangaCleanBookName: "清理书名"))
+
+    #expect(normal == ContentCoverKey.thread(tid: "77"))
+    #expect(novel == normal)
+    #expect(manga == ContentCoverKey.mangaTitle(cleanBookName: "清理书名"))
+}
+
+@Test func mangaDirectoryRenameMovesContentCoverRow() async throws {
+    let root = makeTemporaryDirectory(prefix: "content-cover-rename")
+    let pool = try YamiboDatabase.openPool(rootDirectory: root)
+    let directoryStore = MangaDirectoryStore(databasePool: pool)
+    let coverStore = ContentCoverStore(databasePool: pool)
+    let manual = try #require(URL(string: "https://img.example.com/manual.jpg"))
+    let directory = MangaDirectory(
+        cleanBookName: "旧书名",
+        strategy: .links,
+        sourceKey: "chapter:900",
+        chapters: [MangaChapter(tid: "900", rawTitle: "第1话", chapterNumber: 1)]
+    )
+    try await directoryStore.saveDirectory(directory)
+    try await coverStore.setManualCover(manual, for: .mangaTitle(cleanBookName: "旧书名"))
+
+    var renamed = directory
+    renamed.cleanBookName = "新书名"
+    try await directoryStore.renameDirectory(from: "旧书名", to: renamed)
+
+    #expect(await coverStore.cover(for: .mangaTitle(cleanBookName: "旧书名")) == nil)
+    let moved = try #require(await coverStore.cover(for: .mangaTitle(cleanBookName: "新书名")))
+    #expect(moved.manualCoverURL == manual)
+    #expect(moved.dynamicEnabled == false)
+}
+
+@Test func contentCoversSurviveFavoriteDocumentSavesAndLibraryClearAll() async throws {
+    let root = makeTemporaryDirectory(prefix: "content-cover-survival")
+    let pool = try YamiboDatabase.openPool(rootDirectory: root)
+    let libraryStore = FavoriteLibraryStore(databasePool: pool)
+    let coverStore = ContentCoverStore(databasePool: pool)
+    let key = ContentCoverKey.thread(tid: "555")
+    let manual = try #require(URL(string: "https://img.example.com/manual.jpg"))
+    try await coverStore.setManualCover(manual, for: key)
+
+    // Document saves fully rewrite the favorite rows; covers must survive.
+    var document = FavoriteLibraryDocument()
+    document.addItem(try FavoriteItem(
+        target: FavoriteContentTarget(kind: .normalThread, threadID: "555"),
+        title: "主题",
+        locations: [.category(document.defaultCategory.id)]
+    ))
+    try await libraryStore.save(document)
+    #expect(await coverStore.cover(for: key)?.manualCoverURL == manual)
+
+    // Clearing the favorite library is favorites-scoped and keeps covers.
+    try await libraryStore.clearAll()
+    #expect(await coverStore.cover(for: key)?.manualCoverURL == manual)
 }
 
 private func makeMangaOfflineMembership(

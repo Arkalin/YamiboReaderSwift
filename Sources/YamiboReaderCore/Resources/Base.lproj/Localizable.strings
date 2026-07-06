@@ -500,6 +500,13 @@
 "forum.history" = "浏览历史";
 "forum.open_native_failed" = "无法原生打开";
 "forum.unsupported_native_thread" = "当前帖子不适合原生阅读。";
+"cover.set_as_cover" = "设为封面";
+"cover.set_as_manga_cover" = "设为漫画封面：《%@》";
+"cover.restore_auto_cover" = "恢复自动封面";
+"cover.restore_auto_manga_cover" = "恢复漫画自动封面：《%@》";
+"cover.action_success_title" = "封面已更新";
+"cover.set_success_message" = "已将这张图片设为封面。";
+"cover.restore_success_message" = "已恢复为自动封面。";
 "image.actions.title" = "图片操作";
 "image.load_failed" = "图片加载失败";
 "image.loading" = "加载图片中…";

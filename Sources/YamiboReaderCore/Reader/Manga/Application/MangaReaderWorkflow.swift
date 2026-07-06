@@ -491,6 +491,10 @@ public final class MangaReaderWorkflow {
         window?.directory.favoriteIdentity
     }
 
+    public func currentDirectoryCleanBookName() -> String? {
+        window?.directory.cleanBookName
+    }
+
     private func loadedPresentation(
         from window: MangaChapterWindow,
         placementPageIndex: Int? = nil,

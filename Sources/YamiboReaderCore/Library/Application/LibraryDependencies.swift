@@ -12,6 +12,7 @@ public struct LibraryDependencies: Sendable {
     public let readingProgressStore: ReadingProgressStore
     public let settingsStore: SettingsStore
     public let contentCoverStore: ContentCoverStore
+    public let mangaDirectoryStore: MangaDirectoryStore
     public let makeFavoriteRepository: @Sendable () async -> FavoriteRepository
     public let makeForumThreadReaderRepository: @Sendable () async -> ForumThreadReaderRepository
     public let makeThreadRouteResolver: @Sendable () async -> YamiboThreadRouteResolver
@@ -22,6 +23,7 @@ public struct LibraryDependencies: Sendable {
         readingProgressStore: ReadingProgressStore,
         settingsStore: SettingsStore,
         contentCoverStore: ContentCoverStore,
+        mangaDirectoryStore: MangaDirectoryStore,
         makeFavoriteRepository: @escaping @Sendable () async -> FavoriteRepository,
         makeForumThreadReaderRepository: @escaping @Sendable () async -> ForumThreadReaderRepository,
         makeThreadRouteResolver: @escaping @Sendable () async -> YamiboThreadRouteResolver
@@ -31,6 +33,7 @@ public struct LibraryDependencies: Sendable {
         self.readingProgressStore = readingProgressStore
         self.settingsStore = settingsStore
         self.contentCoverStore = contentCoverStore
+        self.mangaDirectoryStore = mangaDirectoryStore
         self.makeFavoriteRepository = makeFavoriteRepository
         self.makeForumThreadReaderRepository = makeForumThreadReaderRepository
         self.makeThreadRouteResolver = makeThreadRouteResolver
