@@ -65,15 +65,15 @@ final class SystemSettingsViewModel: ObservableObject {
         defer { activeAction = nil }
 
         let settings = await appContext.settingsStore.load()
-        homePage = settings.homePage
-        favoriteAppearance = settings.favoriteAppearance
-        favoriteBackground = settings.favoriteBackground
-        favoriteLayoutMode = settings.favoriteLayoutMode
-        favoriteSortOrder = settings.favoriteSortOrder
-        favoriteSortDescending = settings.favoriteSortDescending
-        favoriteShowsCategoryCounts = settings.favoriteShowsCategoryCounts
+        homePage = settings.system.homePage
+        favoriteAppearance = settings.favorites.appearance
+        favoriteBackground = settings.favorites.background
+        favoriteLayoutMode = settings.favorites.layoutMode
+        favoriteSortOrder = settings.favorites.sortOrder
+        favoriteSortDescending = settings.favorites.sortDescending
+        favoriteShowsCategoryCounts = settings.favorites.showsCategoryCounts
         novelOfflineCache = settings.novelOfflineCache
-        applePencilPageTurn = settings.applePencilPageTurn
+        applePencilPageTurn = settings.system.applePencilPageTurn
         await refreshStorageUsage()
     }
 
@@ -83,7 +83,7 @@ final class SystemSettingsViewModel: ObservableObject {
 
         Task {
             var settings = await appContext.settingsStore.load()
-            settings.homePage = value
+            settings.system.homePage = value
 
             do {
                 try await appContext.settingsStore.save(settings)
@@ -104,7 +104,7 @@ final class SystemSettingsViewModel: ObservableObject {
 
         Task {
             var settings = await appContext.settingsStore.load()
-            settings.favoriteAppearance = updated
+            settings.favorites.appearance = updated
 
             do {
                 try await appContext.settingsStore.save(settings)
@@ -146,7 +146,7 @@ final class SystemSettingsViewModel: ObservableObject {
             try await appContext.favoriteBackgroundImageStore.save(imageData, imageID: imageID)
 
             var settings = await appContext.settingsStore.load()
-            settings.favoriteBackground = updatedBackground
+            settings.favorites.background = updatedBackground
             try await appContext.settingsStore.save(settings)
 
             favoriteBackground = updatedBackground
@@ -162,7 +162,7 @@ final class SystemSettingsViewModel: ObservableObject {
     func restoreDefaultFavoriteBackground() async -> Bool {
         do {
             var settings = await appContext.settingsStore.load()
-            settings.favoriteBackground = FavoriteBackgroundSettings()
+            settings.favorites.background = FavoriteBackgroundSettings()
             try await appContext.settingsStore.save(settings)
 
             favoriteBackground = FavoriteBackgroundSettings()
@@ -259,10 +259,10 @@ final class SystemSettingsViewModel: ObservableObject {
     }
 
     private func applyFavoriteLibraryDisplaySettings(to settings: inout AppSettings) {
-        settings.favoriteLayoutMode = favoriteLayoutMode
-        settings.favoriteSortOrder = favoriteSortOrder
-        settings.favoriteSortDescending = favoriteSortDescending
-        settings.favoriteShowsCategoryCounts = favoriteShowsCategoryCounts
+        settings.favorites.layoutMode = favoriteLayoutMode
+        settings.favorites.sortOrder = favoriteSortOrder
+        settings.favorites.sortDescending = favoriteSortDescending
+        settings.favorites.showsCategoryCounts = favoriteShowsCategoryCounts
     }
 
     func updateApplePencilPageTurnEnabled(_ isEnabled: Bool) {
@@ -534,7 +534,7 @@ final class SystemSettingsViewModel: ObservableObject {
 
         Task {
             var settings = await appContext.settingsStore.load()
-            settings.applePencilPageTurn = updated
+            settings.system.applePencilPageTurn = updated
 
             do {
                 try await appContext.settingsStore.save(settings)

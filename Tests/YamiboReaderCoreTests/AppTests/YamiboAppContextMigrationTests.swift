@@ -51,7 +51,7 @@ import YamiboReaderTestSupport
         thread: ThreadIdentity(tid: "8001")
     )
 
-    let database = try YamiboDatabase.openSharedPool(rootDirectory: rootDirectory)
+    let database = appContext.databasePool
     let counts = try await database.read { db in
         [
             "favorite_items": try tableCount("favorite_items", in: db),
@@ -150,7 +150,7 @@ import YamiboReaderTestSupport
 
     try await appContext.resetApplicationData()
 
-    let database = try YamiboDatabase.openSharedPool(rootDirectory: rootDirectory)
+    let database = appContext.databasePool
     let counts = try await database.read { db in
         [
             "favorite_categories": try tableCount("favorite_categories", in: db),
@@ -212,7 +212,7 @@ import YamiboReaderTestSupport
     let suiteName = YamiboTestDefaults.suiteName(prefix: "app-context-offline-cache-dir")
     _ = try YamiboTestDefaults.make(suiteName: suiteName)
     let rootDirectory = makeTemporaryAppRoot()
-    let database = try YamiboDatabase.openSharedPool(rootDirectory: rootDirectory)
+    let database = try YamiboDatabase.openPool(rootDirectory: rootDirectory)
     let legacyStore = OfflineCacheStore(
         databasePool: database,
         baseDirectory: legacyOfflineCacheDirectory(rootDirectory: rootDirectory)
@@ -259,7 +259,7 @@ import YamiboReaderTestSupport
     #expect(FileManager.default.fileExists(atPath: legacyOfflineCacheDirectory(rootDirectory: rootDirectory).path))
     #expect(!FileManager.default.fileExists(atPath: offlineCacheDirectory(rootDirectory: rootDirectory).path))
 
-    let appContext = try makeIsolatedAppContext(suiteName: suiteName, rootDirectory: rootDirectory)
+    let appContext = try makeIsolatedAppContext(suiteName: suiteName, rootDirectory: rootDirectory, databasePool: database)
 
     #expect(FileManager.default.fileExists(atPath: legacyOfflineCacheDirectory(rootDirectory: rootDirectory).path))
     #expect(!FileManager.default.fileExists(atPath: offlineCacheDirectory(rootDirectory: rootDirectory).path))
@@ -290,8 +290,12 @@ private func legacyOfflineCacheDirectory(rootDirectory: URL) -> URL {
         .appendingPathComponent("offline-cache", isDirectory: true)
 }
 
-private func makeIsolatedAppContext(suiteName: String, rootDirectory: URL) throws -> YamiboAppContext {
-    let database = try YamiboDatabase.openSharedPool(rootDirectory: rootDirectory)
+private func makeIsolatedAppContext(
+    suiteName: String,
+    rootDirectory: URL,
+    databasePool: DatabasePool? = nil
+) throws -> YamiboAppContext {
+    let database = try databasePool ?? YamiboDatabase.openPool(rootDirectory: rootDirectory)
     return YamiboAppContext(
         sessionStore: SessionStore(defaults: try YamiboTestDefaults.defaults(suiteName: suiteName), key: "session"),
         profileStore: YamiboProfileStore(defaults: try YamiboTestDefaults.defaults(suiteName: suiteName), key: "profile"),
@@ -303,6 +307,7 @@ private func makeIsolatedAppContext(suiteName: String, rootDirectory: URL) throw
         favoriteUpdateStore: FavoriteUpdateStore(defaults: try YamiboTestDefaults.defaults(suiteName: suiteName), key: "favorite-updates"),
         readingProgressStore: ReadingProgressStore(defaults: try YamiboTestDefaults.defaults(suiteName: suiteName), databasePool: database),
         contentCoverStore: ContentCoverStore(defaults: try YamiboTestDefaults.defaults(suiteName: suiteName), key: "content-covers"),
+        databasePool: database,
         grdbRootDirectory: rootDirectory,
         uiDefaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
         clearsWebDataOnReset: false

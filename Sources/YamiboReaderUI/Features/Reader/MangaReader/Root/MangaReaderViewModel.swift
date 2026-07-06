@@ -150,7 +150,7 @@ public final class MangaReaderViewModel: ObservableObject {
 
         let appSettings = await appContext.settingsStore.load()
         committedSettings = Self.normalizedSettings(appSettings.manga)
-        applePencilPageTurnSettings = appSettings.applePencilPageTurn
+        applePencilPageTurnSettings = appSettings.system.applePencilPageTurn
         presentation = presentationWithCommittedSettings(presentation)
         let imageLoader = MangaReaderPageImageLoader(
             imageSource: { [weak self] page in

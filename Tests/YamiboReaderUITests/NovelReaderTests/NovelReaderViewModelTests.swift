@@ -1379,7 +1379,7 @@ final class NovelReaderViewModelTests: XCTestCase {
         try await waitFor {
             let loaded = await settingsStore.load()
             return loaded.novelReader == updatedNovelReaderSettings &&
-                loaded.applePencilPageTurn == updatedApplePencilSettings
+                loaded.system.applePencilPageTurn == updatedApplePencilSettings
         }
 
         let loaded = await settingsStore.load()
@@ -3193,7 +3193,7 @@ private func makeModel(
         resolvedOfflineCacheStore = offlineCacheStore
     } else {
         resolvedOfflineCacheStore = try OfflineCacheStore(
-            databasePool: try YamiboDatabase.openSharedPool(rootDirectory: grdbRootDirectory),
+            databasePool: try YamiboDatabase.openPool(rootDirectory: grdbRootDirectory),
             baseDirectory: cacheDirectory.appendingPathComponent("offline", isDirectory: true)
         )
     }
@@ -3310,7 +3310,7 @@ private func makeReaderModelOfflineCacheStore(
     rootDirectory: URL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
 ) throws -> OfflineCacheStore {
     OfflineCacheStore(
-        databasePool: try YamiboDatabase.openSharedPool(rootDirectory: rootDirectory.appendingPathComponent("grdb", isDirectory: true)),
+        databasePool: try YamiboDatabase.openPool(rootDirectory: rootDirectory.appendingPathComponent("grdb", isDirectory: true)),
         baseDirectory: rootDirectory.appendingPathComponent("offline", isDirectory: true)
     )
 }

@@ -554,7 +554,7 @@ final class LocalFavoritesViewModelTests: XCTestCase {
 
         try await Task.sleep(nanoseconds: 50_000_000)
         let settings = await settingsStore.load()
-        XCTAssertEqual(settings.favoriteSelectedCategoryID, viewModel.selectedCategoryID)
+        XCTAssertEqual(settings.favorites.selectedCategoryID, viewModel.selectedCategoryID)
     }
 
     func testOpenCollectionStateLoadsAndPersistsThroughSettingsStore() async throws {
@@ -572,10 +572,10 @@ final class LocalFavoritesViewModelTests: XCTestCase {
         let category = document.createCategory(name: "分类")
         let collection = document.createCollection(categoryID: category.id, name: "合集", color: .blue)
         try await localFavoriteLibraryStore.save(document)
-        try await settingsStore.save(AppSettings(
-            favoriteSelectedCategoryID: FavoriteCategory.defaultID,
-            favoriteSelectedCollectionID: collection.id
-        ))
+        try await settingsStore.save(AppSettings(favorites: FavoriteLibrarySettings(
+            selectedCategoryID: FavoriteCategory.defaultID,
+            selectedCollectionID: collection.id
+        )))
         let appContext = YamiboAppContext(
             settingsStore: settingsStore,
             localFavoriteLibraryStore: localFavoriteLibraryStore
@@ -590,14 +590,14 @@ final class LocalFavoritesViewModelTests: XCTestCase {
         viewModel.closeCollection()
         try await Task.sleep(nanoseconds: 50_000_000)
         var saved = await settingsStore.load()
-        XCTAssertEqual(saved.favoriteSelectedCategoryID, category.id)
-        XCTAssertNil(saved.favoriteSelectedCollectionID)
+        XCTAssertEqual(saved.favorites.selectedCategoryID, category.id)
+        XCTAssertNil(saved.favorites.selectedCollectionID)
 
         viewModel.openCollection(id: collection.id)
         try await Task.sleep(nanoseconds: 50_000_000)
         saved = await settingsStore.load()
-        XCTAssertEqual(saved.favoriteSelectedCategoryID, category.id)
-        XCTAssertEqual(saved.favoriteSelectedCollectionID, collection.id)
+        XCTAssertEqual(saved.favorites.selectedCategoryID, category.id)
+        XCTAssertEqual(saved.favorites.selectedCollectionID, collection.id)
     }
 
     func testLayoutModeLoadsAndPersistsThroughSettingsStore() async throws {
@@ -615,12 +615,12 @@ final class LocalFavoritesViewModelTests: XCTestCase {
             settingsStore: settingsStore,
             localFavoriteLibraryStore: localFavoriteLibraryStore
         )
-        try await settingsStore.save(AppSettings(
-            favoriteLayoutMode: .staggered,
-            favoriteSortOrder: .displayTitle,
-            favoriteSortDescending: true,
-            favoriteShowsCategoryCounts: false
-        ))
+        try await settingsStore.save(AppSettings(favorites: FavoriteLibrarySettings(
+            layoutMode: .staggered,
+            sortOrder: .displayTitle,
+            sortDescending: true,
+            showsCategoryCounts: false
+        )))
 
         let viewModel = LocalFavoritesViewModel(appContext: appContext)
         await viewModel.load()
@@ -636,10 +636,10 @@ final class LocalFavoritesViewModelTests: XCTestCase {
         try await Task.sleep(nanoseconds: 50_000_000)
 
         let saved = await settingsStore.load()
-        XCTAssertEqual(saved.favoriteLayoutMode, .fixedGrid)
-        XCTAssertEqual(saved.favoriteSortOrder, .lastReadAt)
-        XCTAssertFalse(saved.favoriteSortDescending)
-        XCTAssertTrue(saved.favoriteShowsCategoryCounts)
+        XCTAssertEqual(saved.favorites.layoutMode, .fixedGrid)
+        XCTAssertEqual(saved.favorites.sortOrder, .lastReadAt)
+        XCTAssertFalse(saved.favorites.sortDescending)
+        XCTAssertTrue(saved.favorites.showsCategoryCounts)
     }
 
     func testRemoteSyncSnapshotLoadsInterruptsRunningTaskAndPersistsHiddenCard() async throws {
@@ -664,7 +664,7 @@ final class LocalFavoritesViewModelTests: XCTestCase {
             scannedCount: 2,
             importedCount: 1
         )
-        try await settingsStore.save(AppSettings(favoriteRemoteSyncSnapshot: runningSnapshot))
+        try await settingsStore.save(AppSettings(favorites: FavoriteLibrarySettings(remoteSyncSnapshot: runningSnapshot)))
         let appContext = YamiboAppContext(
             settingsStore: settingsStore,
             localFavoriteLibraryStore: localFavoriteLibraryStore
@@ -677,11 +677,11 @@ final class LocalFavoritesViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.remoteSyncSnapshot?.status, .interrupted)
         XCTAssertTrue(viewModel.remoteSyncSnapshot?.warningMessages.isEmpty == false)
         let interruptedSettings = await settingsStore.load()
-        XCTAssertEqual(interruptedSettings.favoriteRemoteSyncSnapshot?.status, .interrupted)
+        XCTAssertEqual(interruptedSettings.favorites.remoteSyncSnapshot?.status, .interrupted)
 
         await viewModel.hideRemoteFavoriteSyncCard()
         let hiddenSettings = await settingsStore.load()
-        XCTAssertTrue(hiddenSettings.favoriteRemoteSyncSnapshot?.isHiddenFromFavoritePage == true)
+        XCTAssertTrue(hiddenSettings.favorites.remoteSyncSnapshot?.isHiddenFromFavoritePage == true)
     }
 
     func testRemoteSyncStartCompletesAndResumeUsesPersistedTargetCategory() async throws {
@@ -728,7 +728,7 @@ final class LocalFavoritesViewModelTests: XCTestCase {
         XCTAssertNotEqual(secondRunID, firstRunID)
         let recordedCategoryIDs = await recorder.recordedCategoryIDs()
         XCTAssertEqual(recordedCategoryIDs, [FavoriteCategory.defaultID, FavoriteCategory.defaultID])
-        let savedStatus = await settingsStore.load().favoriteRemoteSyncSnapshot?.status
+        let savedStatus = await settingsStore.load().favorites.remoteSyncSnapshot?.status
         XCTAssertEqual(savedStatus, .completed)
     }
 
@@ -755,8 +755,8 @@ final class LocalFavoritesViewModelTests: XCTestCase {
         try await waitForRemoteSyncStatus(.interrupted, in: viewModel)
 
         let saved = await settingsStore.load()
-        XCTAssertEqual(saved.favoriteRemoteSyncSnapshot?.status, .interrupted)
-        XCTAssertTrue(saved.favoriteRemoteSyncSnapshot?.warningMessages.isEmpty == false)
+        XCTAssertEqual(saved.favorites.remoteSyncSnapshot?.status, .interrupted)
+        XCTAssertTrue(saved.favorites.remoteSyncSnapshot?.warningMessages.isEmpty == false)
     }
 
     func testFavoriteUpdateCheckBuildsBaselineDetectsEventsAndHonorsFidFilter() async throws {

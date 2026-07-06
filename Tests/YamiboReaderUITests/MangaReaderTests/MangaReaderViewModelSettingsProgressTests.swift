@@ -41,7 +41,7 @@ final class MangaReaderViewModelSettingsProgressTests: XCTestCase {
             behavior: .doubleTapNextSqueezePrevious
         )
         let fixture = try await makeFixture(
-            appSettings: AppSettings(applePencilPageTurn: applePencilSettings)
+            appSettings: AppSettings(system: SystemSettings(applePencilPageTurn: applePencilSettings))
         )
 
         await fixture.model.prepare()
@@ -150,8 +150,10 @@ final class MangaReaderViewModelSettingsProgressTests: XCTestCase {
             appSettings: AppSettings(
                 novelReader: initialNovelReaderSettings,
                 manga: MangaReaderSettings(brightness: 0.8),
-                applePencilPageTurn: initialApplePencilSettings,
-                usesDataSaverMode: true
+                system: SystemSettings(
+                    usesDataSaverMode: true,
+                    applePencilPageTurn: initialApplePencilSettings
+                )
             )
         )
 
@@ -186,8 +188,8 @@ final class MangaReaderViewModelSettingsProgressTests: XCTestCase {
 
         let loaded = await fixture.settingsStore.load()
         XCTAssertEqual(loaded.novelReader, initialNovelReaderSettings)
-        XCTAssertEqual(loaded.applePencilPageTurn, initialApplePencilSettings)
-        XCTAssertTrue(loaded.usesDataSaverMode)
+        XCTAssertEqual(loaded.system.applePencilPageTurn, initialApplePencilSettings)
+        XCTAssertTrue(loaded.system.usesDataSaverMode)
     }
 
     func testInitialSamePageViewportReportQueuesMangaProgressAndSavesResumeRoute() async throws {

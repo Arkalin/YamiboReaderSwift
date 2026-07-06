@@ -77,8 +77,7 @@ public actor FavoriteLibraryStore {
 
     public func clearAll() async throws {
         try await database.write { db in
-            try Self.deleteLibraryRows(in: db)
-            try Self.insertDefaultFavoriteCategory(in: db)
+            try LibraryDatabaseSchema.erase(in: db)
         }
         postChangeNotification()
     }
@@ -257,7 +256,7 @@ public actor FavoriteLibraryStore {
 
     private static func save(_ document: FavoriteLibraryDocument, in db: Database) throws {
         let encoder = JSONEncoder()
-        try deleteLibraryRows(in: db)
+        try LibraryDatabaseSchema.deleteAllRows(in: db)
         for category in document.categories {
             try db.execute(
                 sql: """
@@ -268,7 +267,7 @@ public actor FavoriteLibraryStore {
             )
         }
         if !document.categories.contains(where: { $0.id == FavoriteCategory.defaultID }) {
-            try insertDefaultFavoriteCategory(in: db)
+            try LibraryDatabaseSchema.insertDefaultFavoriteCategory(in: db)
         }
 
         for collection in document.collections {
@@ -347,27 +346,6 @@ public actor FavoriteLibraryStore {
                 )
             }
         }
-    }
-
-    private static func deleteLibraryRows(in db: Database) throws {
-        try db.execute(sql: "DELETE FROM favorite_remote_mappings")
-        try db.execute(sql: "DELETE FROM favorite_item_tags")
-        try db.execute(sql: "DELETE FROM favorite_locations")
-        try db.execute(sql: "DELETE FROM favorite_items")
-        try db.execute(sql: "DELETE FROM favorite_tags")
-        try db.execute(sql: "DELETE FROM favorite_collections")
-        try db.execute(sql: "DELETE FROM favorite_categories")
-    }
-
-    private static func insertDefaultFavoriteCategory(in db: Database) throws {
-        let category = FavoriteCategory.defaultCategory
-        try db.execute(
-            sql: """
-            INSERT OR IGNORE INTO favorite_categories (id, name, manual_order, is_default)
-            VALUES (?, ?, ?, ?)
-            """,
-            arguments: [category.id, category.name, category.manualOrder, category.isDefault]
-        )
     }
 
     private static func targetColumns(for target: FavoriteContentTarget) -> (threadID: String?, mangaID: String?, cleanBookName: String?) {

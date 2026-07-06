@@ -482,7 +482,7 @@ public final class NovelReaderViewModel: ObservableObject {
             repository = await appContext.makeNovelReaderRepository()
             let appSettings = await appContext.settingsStore.load()
             bootstrapSettings = appSettings.novelReader
-            applePencilPageTurnSettings = appSettings.applePencilPageTurn
+            applePencilPageTurnSettings = appSettings.system.applePencilPageTurn
             sessionState = await appContext.sessionStore.load()
             if let repository {
                 readingWorkflow = makeReadingWorkflow(repository: repository)
@@ -1619,7 +1619,7 @@ public final class NovelReaderViewModel: ObservableObject {
                 appSettings.novelReader = novelReaderSettings
             }
             if let applePencilPageTurnSettings {
-                appSettings.applePencilPageTurn = applePencilPageTurnSettings
+                appSettings.system.applePencilPageTurn = applePencilPageTurnSettings
             }
             do {
                 try await appContext.settingsStore.save(appSettings)

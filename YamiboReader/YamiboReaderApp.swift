@@ -48,7 +48,7 @@ struct YamiboReaderApp: App {
 
     private static func resolveInitialTab() -> AppTab {
         let settings = SettingsStore.loadSync()
-        return AppTabLaunchResolver.resolveInitialTab(homePage: settings.homePage)
+        return AppTabLaunchResolver.resolveInitialTab(homePage: settings.system.homePage)
     }
 
     private static func registerMangaOfflineCacheBackgroundTasks(appContext: YamiboAppContext) {

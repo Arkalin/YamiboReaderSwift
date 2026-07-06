@@ -877,7 +877,7 @@ public actor OfflineCacheStore {
 
     private static func openDatabase() -> DatabasePool {
         do {
-            return try YamiboDatabase.openSharedPool()
+            return try YamiboDatabase.openPool()
         } catch {
             fatalError("Failed to open OfflineCacheStore database: \(error)")
         }

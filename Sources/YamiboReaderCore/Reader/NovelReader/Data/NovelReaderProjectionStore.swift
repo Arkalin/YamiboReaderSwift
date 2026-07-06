@@ -176,7 +176,7 @@ public actor NovelReaderProjectionStore {
         fileManager: FileManager
     ) -> DatabasePool {
         do {
-            return try YamiboDatabase.openSharedPool(rootDirectory: rootDirectory, fileManager: fileManager)
+            return try YamiboDatabase.openPool(rootDirectory: rootDirectory, fileManager: fileManager)
         } catch {
             fatalError("Failed to open NovelReaderProjectionStore database: \(error)")
         }

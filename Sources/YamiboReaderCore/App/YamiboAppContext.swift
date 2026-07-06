@@ -32,6 +32,8 @@ public final class YamiboAppContext: Sendable {
     public let ordinaryImageCache: any YamiboOrdinaryImageCacheClearing
     public let offlineCacheBackgroundDownloadTransport: OfflineCacheBackgroundDownloadTransport
     public let offlineCacheContinuedProcessingCoordinator: OfflineCacheContinuedProcessingCoordinator
+    /// The single pool for `yamibo.sqlite`; every GRDB-backed store receives this instance.
+    let databasePool: DatabasePool
     let session: URLSession
     private let offlineCacheQueueExecutorBox = OfflineCacheQueueExecutorBox()
     private nonisolated(unsafe) let uiDefaults: UserDefaults
@@ -58,13 +60,15 @@ public final class YamiboAppContext: Sendable {
         ordinaryImageCache: any YamiboOrdinaryImageCacheClearing = YamiboImageDataPipeline.shared,
         offlineCacheBackgroundDownloadTransport: OfflineCacheBackgroundDownloadTransport = OfflineCacheBackgroundDownloadTransport(),
         offlineCacheContinuedProcessingCoordinator: OfflineCacheContinuedProcessingCoordinator = OfflineCacheContinuedProcessingCoordinator(),
+        databasePool: DatabasePool? = nil,
         grdbRootDirectory: URL? = nil,
         uiDefaults: UserDefaults = .standard,
         clearsWebDataOnReset: Bool = true,
         session: URLSession = YamiboNetworkConfiguration.makeSession()
     ) {
         let resolvedGRDBRootDirectory = grdbRootDirectory ?? YamiboDatabase.defaultRootDirectory()
-        let resolvedGRDBDatabasePool = Self.openGRDBDatabase(rootDirectory: resolvedGRDBRootDirectory)
+        let resolvedGRDBDatabasePool = databasePool ?? Self.openGRDBDatabase(rootDirectory: resolvedGRDBRootDirectory)
+        self.databasePool = resolvedGRDBDatabasePool
         let diskCacheStore = DiskCacheStore(
             writer: resolvedGRDBDatabasePool,
             rootDirectory: resolvedGRDBRootDirectory
@@ -321,7 +325,7 @@ public final class YamiboAppContext: Sendable {
 
     private static func openGRDBDatabase(rootDirectory: URL) -> DatabasePool {
         do {
-            return try YamiboDatabase.openSharedPool(rootDirectory: rootDirectory)
+            return try YamiboDatabase.openPool(rootDirectory: rootDirectory)
         } catch {
             fatalError("Failed to open Yamibo app database: \(error)")
         }

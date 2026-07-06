@@ -196,18 +196,18 @@ final class LocalFavoritesViewModel: ObservableObject {
         readingProgress = await appContext.readingProgressStore.loadAll()
         contentCoverURLsByTargetID = await contentCoverURLs(for: document.items)
         let settings = await appContext.settingsStore.load()
-        layoutMode = settings.favoriteLayoutMode
-        sortOrder = settings.favoriteSortOrder
-        sortDescending = settings.favoriteSortDescending
-        showsCategoryCounts = settings.favoriteShowsCategoryCounts
-        remoteSyncSnapshot = await interruptedSnapshotIfNeeded(settings.favoriteRemoteSyncSnapshot)
+        layoutMode = settings.favorites.layoutMode
+        sortOrder = settings.favorites.sortOrder
+        sortDescending = settings.favorites.sortDescending
+        showsCategoryCounts = settings.favorites.showsCategoryCounts
+        remoteSyncSnapshot = await interruptedSnapshotIfNeeded(settings.favorites.remoteSyncSnapshot)
         await reloadFavoriteUpdateState()
-        let savedCollection = settings.favoriteSelectedCollectionID.flatMap { savedID in
+        let savedCollection = settings.favorites.selectedCollectionID.flatMap { savedID in
             document.collections.first { $0.id == savedID }
         }
         if let savedCollection {
             selectedCategoryID = savedCollection.categoryID
-        } else if let savedCategoryID = settings.favoriteSelectedCategoryID,
+        } else if let savedCategoryID = settings.favorites.selectedCategoryID,
                   document.categories.contains(where: { $0.id == savedCategoryID }) {
             selectedCategoryID = savedCategoryID
         }
@@ -312,10 +312,10 @@ final class LocalFavoritesViewModel: ObservableObject {
 
         Task {
             var settings = await appContext.settingsStore.load()
-            settings.favoriteLayoutMode = value
-            settings.favoriteShowsCategoryCounts = showsCategoryCounts
-            settings.favoriteSortOrder = sortOrder
-            settings.favoriteSortDescending = sortDescending
+            settings.favorites.layoutMode = value
+            settings.favorites.showsCategoryCounts = showsCategoryCounts
+            settings.favorites.sortOrder = sortOrder
+            settings.favorites.sortDescending = sortDescending
             do {
                 try await appContext.settingsStore.save(settings)
             } catch {
@@ -336,10 +336,10 @@ final class LocalFavoritesViewModel: ObservableObject {
 
         Task {
             var settings = await appContext.settingsStore.load()
-            settings.favoriteShowsCategoryCounts = value
-            settings.favoriteLayoutMode = layoutMode
-            settings.favoriteSortOrder = sortOrder
-            settings.favoriteSortDescending = sortDescending
+            settings.favorites.showsCategoryCounts = value
+            settings.favorites.layoutMode = layoutMode
+            settings.favorites.sortOrder = sortOrder
+            settings.favorites.sortDescending = sortDescending
             do {
                 try await appContext.settingsStore.save(settings)
             } catch {
@@ -360,10 +360,10 @@ final class LocalFavoritesViewModel: ObservableObject {
 
         Task {
             var settings = await appContext.settingsStore.load()
-            settings.favoriteSortOrder = value
-            settings.favoriteSortDescending = sortDescending
-            settings.favoriteLayoutMode = layoutMode
-            settings.favoriteShowsCategoryCounts = showsCategoryCounts
+            settings.favorites.sortOrder = value
+            settings.favorites.sortDescending = sortDescending
+            settings.favorites.layoutMode = layoutMode
+            settings.favorites.showsCategoryCounts = showsCategoryCounts
             do {
                 try await appContext.settingsStore.save(settings)
             } catch {
@@ -385,10 +385,10 @@ final class LocalFavoritesViewModel: ObservableObject {
 
         Task {
             var settings = await appContext.settingsStore.load()
-            settings.favoriteSortOrder = sortOrder
-            settings.favoriteSortDescending = value
-            settings.favoriteLayoutMode = layoutMode
-            settings.favoriteShowsCategoryCounts = showsCategoryCounts
+            settings.favorites.sortOrder = sortOrder
+            settings.favorites.sortDescending = value
+            settings.favorites.layoutMode = layoutMode
+            settings.favorites.showsCategoryCounts = showsCategoryCounts
             do {
                 try await appContext.settingsStore.save(settings)
             } catch {
@@ -1407,7 +1407,7 @@ final class LocalFavoritesViewModel: ObservableObject {
 
     private func persistRemoteSyncSnapshot(_ snapshot: FavoriteRemoteSyncSnapshot) async {
         var settings = await appContext.settingsStore.load()
-        settings.favoriteRemoteSyncSnapshot = snapshot
+        settings.favorites.remoteSyncSnapshot = snapshot
         do {
             try await appContext.settingsStore.save(settings)
         } catch {
@@ -1876,10 +1876,10 @@ final class LocalFavoritesViewModel: ObservableObject {
         }
         Task {
             var settings = await appContext.settingsStore.load()
-            guard settings.favoriteSelectedCategoryID != categoryID
-                    || settings.favoriteSelectedCollectionID != validCollectionID else { return }
-            settings.favoriteSelectedCategoryID = categoryID
-            settings.favoriteSelectedCollectionID = validCollectionID
+            guard settings.favorites.selectedCategoryID != categoryID
+                    || settings.favorites.selectedCollectionID != validCollectionID else { return }
+            settings.favorites.selectedCategoryID = categoryID
+            settings.favorites.selectedCollectionID = validCollectionID
             try? await appContext.settingsStore.save(settings)
         }
     }

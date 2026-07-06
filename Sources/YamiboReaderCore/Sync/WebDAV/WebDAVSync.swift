@@ -123,17 +123,17 @@ public struct WebDAVSyncedAppSettings: Codable, Equatable, Sendable {
 
     public init(settings: AppSettings) {
         self.init(
-            homePage: settings.homePage,
+            homePage: settings.system.homePage,
             webBrowser: settings.webBrowser,
-            favoriteAppearance: settings.favoriteAppearance
+            favoriteAppearance: settings.favorites.appearance
         )
     }
 
     public func applying(to settings: AppSettings) -> AppSettings {
         var updated = settings
-        updated.homePage = homePage
+        updated.system.homePage = homePage
         updated.webBrowser = webBrowser
-        updated.favoriteAppearance = favoriteAppearance
+        updated.favorites.appearance = favoriteAppearance
         return updated
     }
 }

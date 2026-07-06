@@ -316,7 +316,7 @@ public actor MangaDirectoryStore: MangaDirectoryPersisting, MangaDirectoryRenami
 
     private static func openDatabase() -> DatabasePool {
         do {
-            return try YamiboDatabase.openSharedPool()
+            return try YamiboDatabase.openPool()
         } catch {
             fatalError("Failed to open MangaDirectoryStore database: \(error)")
         }

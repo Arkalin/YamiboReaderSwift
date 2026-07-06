@@ -485,7 +485,7 @@ private struct ProjectionLoaderFixtures {
 
     init() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
-        let database = try YamiboDatabase.openSharedPool(rootDirectory: root.appendingPathComponent("grdb", isDirectory: true))
+        let database = try YamiboDatabase.openPool(rootDirectory: root.appendingPathComponent("grdb", isDirectory: true))
         projectionStore = MangaReaderProjectionStore(databasePool: database, rootDirectory: root)
         forumCacheStore = ForumCacheStore(databasePool: database, rootDirectory: root)
         offlineCacheStore = OfflineCacheStore(
