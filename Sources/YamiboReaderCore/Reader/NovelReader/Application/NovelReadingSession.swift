@@ -591,41 +591,6 @@ package struct NovelReadingSession: Sendable {
             return target
         }
 
-        if let legacySegmentIndex = resumePoint.legacySegmentIndex,
-           let legacySegmentOffset = resumePoint.legacySegmentOffset {
-            let candidateSurfaces = surfacesInView.filter { $0.containsLegacyTextSegment(index: legacySegmentIndex) }
-            let containingSurface = candidateSurfaces.first {
-                $0.containsLegacyTextSegment(index: legacySegmentIndex, offset: legacySegmentOffset)
-            }
-
-            if let containingSurface {
-                return NovelReaderResolvedSurfaceTarget(
-                    surfaceOrdinal: containingSurface.surfaceOrdinal,
-                    intraSurfaceProgress: containingSurface.legacyIntraSurfaceProgress(
-                        segmentIndex: legacySegmentIndex,
-                        segmentOffset: legacySegmentOffset,
-                        fallbackProgress: resumePoint.segmentProgress,
-                    ),
-                    documentView: containingSurface.documentView
-                )
-            }
-
-            if let nearestSurface = candidateSurfaces.min(by: {
-                $0.distanceFromLegacyTextSegmentOffset(legacySegmentOffset, index: legacySegmentIndex)
-                    < $1.distanceFromLegacyTextSegmentOffset(legacySegmentOffset, index: legacySegmentIndex)
-            }) {
-                return NovelReaderResolvedSurfaceTarget(
-                    surfaceOrdinal: nearestSurface.surfaceOrdinal,
-                    intraSurfaceProgress: nearestSurface.legacyIntraSurfaceProgress(
-                        segmentIndex: legacySegmentIndex,
-                        segmentOffset: legacySegmentOffset,
-                        fallbackProgress: resumePoint.segmentProgress,
-                    ),
-                    documentView: nearestSurface.documentView
-                )
-            }
-        }
-
         if let chapterSurface = surfacesInView.first(where: { $0.chapterOrdinal == resumePoint.chapterOrdinal }) {
             return NovelReaderResolvedSurfaceTarget(
                 surfaceOrdinal: chapterSurface.surfaceOrdinal,

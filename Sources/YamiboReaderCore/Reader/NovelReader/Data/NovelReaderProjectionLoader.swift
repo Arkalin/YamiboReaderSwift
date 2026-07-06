@@ -146,8 +146,7 @@ private struct NovelProjectionAdapter: ReaderThreadPageProjectionAdapter {
         projection.contentSource == .authorFilteredPage &&
             projection.projectionSchemaVersion == Self.projectionSchemaVersion &&
             projection.projectionSourceFingerprint == fingerprint &&
-            !Self.isLegacyCachedProjectionMissingChapterCommentSources(projection) &&
-            !Self.isCachedProjectionMissingAuthorReplyMetadata(projection)
+            !Self.isLegacyCachedProjectionMissingChapterCommentSources(projection)
     }
 
     func buildProjection(
@@ -175,9 +174,5 @@ private struct NovelProjectionAdapter: ReaderThreadPageProjectionAdapter {
         return !projection.segmentSources.contains { source in
             source?.ownerPostID?.isEmpty == false
         }
-    }
-
-    private static func isCachedProjectionMissingAuthorReplyMetadata(_ projection: NovelReaderProjection) -> Bool {
-        (projection.decodedSchemaVersion ?? 0) < NovelReaderProjection.schemaVersion
     }
 }
