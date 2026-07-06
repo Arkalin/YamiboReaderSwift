@@ -23,6 +23,14 @@ public enum FavoriteUpdateRunPhase: String, Codable, Hashable, Sendable {
     case canceled
 }
 
+/// Transient progress detail for a running update check, beyond what
+/// `FavoriteUpdateRunPhase` conveys. The presentation layer maps these to
+/// localized text; the model never stores display copy.
+public enum FavoriteUpdateRunProgress: Codable, Hashable, Sendable {
+    case loadedTargets(count: Int)
+    case checking(index: Int, total: Int, title: String)
+}
+
 public struct FavoriteUpdateRunSnapshot: Codable, Hashable, Identifiable, Sendable {
     public var runID: String
     public var status: FavoriteUpdateRunStatus
@@ -35,8 +43,9 @@ public struct FavoriteUpdateRunSnapshot: Codable, Hashable, Identifiable, Sendab
     public var skippedCount: Int
     public var failedCount: Int
     public var detectedCount: Int
-    public var currentItem: String?
-    public var logMessage: String?
+    public var progress: FavoriteUpdateRunProgress?
+    /// Raw error descriptions from failed operations; unlike `progress` these
+    /// carry free-form error text, not display copy.
     public var warningMessage: String?
     public var errorMessage: String?
 
@@ -54,8 +63,7 @@ public struct FavoriteUpdateRunSnapshot: Codable, Hashable, Identifiable, Sendab
         skippedCount: Int = 0,
         failedCount: Int = 0,
         detectedCount: Int = 0,
-        currentItem: String? = nil,
-        logMessage: String? = nil,
+        progress: FavoriteUpdateRunProgress? = nil,
         warningMessage: String? = nil,
         errorMessage: String? = nil
     ) {
@@ -70,8 +78,7 @@ public struct FavoriteUpdateRunSnapshot: Codable, Hashable, Identifiable, Sendab
         self.skippedCount = skippedCount
         self.failedCount = failedCount
         self.detectedCount = detectedCount
-        self.currentItem = currentItem
-        self.logMessage = logMessage
+        self.progress = progress
         self.warningMessage = warningMessage
         self.errorMessage = errorMessage
     }
@@ -131,6 +138,13 @@ public struct FavoriteUpdateTrackedTarget: Codable, Hashable, Identifiable, Send
     }
 }
 
+/// What changed for a tracked favorite between two update checks.
+public enum FavoriteUpdateSummary: Codable, Hashable, Sendable {
+    case newReplies(count: Int)
+    case newPages(count: Int)
+    case changed
+}
+
 public struct FavoriteUpdateEvent: Codable, Hashable, Identifiable, Sendable {
     public var id: String
     public var target: FavoriteContentTarget
@@ -138,7 +152,7 @@ public struct FavoriteUpdateEvent: Codable, Hashable, Identifiable, Sendable {
     public var mode: FavoriteUpdateTargetMode
     public var fid: String?
     public var forumName: String?
-    public var summary: String
+    public var summary: FavoriteUpdateSummary
     public var detailIDs: [String]
     public var coverURL: URL?
     public var detectedAt: Date
@@ -153,7 +167,7 @@ public struct FavoriteUpdateEvent: Codable, Hashable, Identifiable, Sendable {
         mode: FavoriteUpdateTargetMode,
         fid: String? = nil,
         forumName: String? = nil,
-        summary: String,
+        summary: FavoriteUpdateSummary,
         detailIDs: [String] = [],
         coverURL: URL? = nil,
         detectedAt: Date = .now,

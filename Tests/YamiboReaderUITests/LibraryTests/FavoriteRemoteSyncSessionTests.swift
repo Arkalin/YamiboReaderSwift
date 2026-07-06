@@ -17,7 +17,7 @@ final class FavoriteRemoteSyncSessionTests: XCTestCase {
             status: .running,
             targetCategoryID: FavoriteCategory.defaultID,
             targetCategoryName: "默认",
-            phase: "导入",
+            phase: .importing,
             startedAt: Date(timeIntervalSince1970: 1_000),
             updatedAt: Date(timeIntervalSince1970: 1_100),
             scannedCount: 2,
@@ -30,7 +30,7 @@ final class FavoriteRemoteSyncSessionTests: XCTestCase {
 
         XCTAssertEqual(session.snapshot?.runID, "sync-run")
         XCTAssertEqual(session.snapshot?.status, .interrupted)
-        XCTAssertTrue(session.snapshot?.warningMessages.isEmpty == false)
+        XCTAssertEqual(session.snapshot?.warnings, [.taskLost])
         let interruptedSettings = await settingsStore.load()
         XCTAssertEqual(interruptedSettings.favorites.remoteSyncSnapshot?.status, .interrupted)
 
@@ -68,7 +68,13 @@ final class FavoriteRemoteSyncSessionTests: XCTestCase {
         XCTAssertEqual(session.snapshot?.failedCount, 1)
         XCTAssertEqual(session.snapshot?.markedMissingCount, 1)
         XCTAssertEqual(session.snapshot?.uploadTargetCount, 1)
-        XCTAssertTrue(session.snapshot?.warningMessages.isEmpty == false)
+        // `.backgroundUnavailable` is environment-dependent: the test host's
+        // `beginBackgroundTask` may return `.invalid`, in which case the
+        // session appends it. Ignore it and assert the sync-outcome warnings.
+        XCTAssertEqual(
+            session.snapshot?.warnings.filter { $0 != .backgroundUnavailable },
+            [.failedItems(count: 1), .uploadPending(count: 1)]
+        )
 
         let secondRunID = await session.resume()
         try await waitForStatus(.completed, in: session)
@@ -102,7 +108,7 @@ final class FavoriteRemoteSyncSessionTests: XCTestCase {
 
         let saved = await settingsStore.load()
         XCTAssertEqual(saved.favorites.remoteSyncSnapshot?.status, .interrupted)
-        XCTAssertTrue(saved.favorites.remoteSyncSnapshot?.warningMessages.isEmpty == false)
+        XCTAssertEqual(saved.favorites.remoteSyncSnapshot?.warnings.isEmpty, false)
     }
 
     private func waitForStatus(

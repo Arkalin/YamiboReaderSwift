@@ -18,6 +18,14 @@ actor MangaReaderProjectionLoader: MangaReaderProjectionSnapshotLoading {
                     offlineCacheStore: offlineCacheStore
                 )
             ),
+            // Manga chapter requests race within one reader session:
+            // `MangaReaderWorkflow.prefetchAdjacentChaptersIfNeeded` fetches an
+            // adjacent chapter opportunistically while user navigation
+            // (`jumpToAdjacentChapter`/`jumpToPosition`) may request the same
+            // chapter identity concurrently. Coalescing lets navigation await
+            // the in-flight prefetch instead of duplicating the thread-page
+            // fetch and projection build. (The novel loader keeps the default
+            // `false`; see `NovelReaderProjectionLoader`.)
             coalescesInFlightRequests: true
         )
     }

@@ -25,6 +25,13 @@ actor NovelReaderProjectionLoader {
         forumCacheStore: ForumCacheStore = ForumCacheStore(),
         offlineCacheStore: (any NovelOfflineCacheStoring)? = nil
     ) {
+        // Uses the `ReaderProjectionLoader` default of not coalescing
+        // in-flight requests: the novel workflow loads one web-view document
+        // at a time and holds a single prefetched next document that
+        // navigation *promotes* (`promotePrefetchedDocument`) instead of
+        // re-requesting, so identical concurrent requests do not arise the
+        // way they do for manga chapter prefetch vs. user navigation
+        // (see `MangaReaderProjectionLoader`, which opts in).
         loader = ReaderProjectionLoader(
             strategy: ReaderThreadPageProjectionLoadingStrategy(
                 adapter: NovelProjectionAdapter(

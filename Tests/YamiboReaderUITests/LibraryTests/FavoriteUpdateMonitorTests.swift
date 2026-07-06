@@ -63,7 +63,7 @@ final class FavoriteUpdateMonitorTests: XCTestCase {
         XCTAssertEqual(monitor.events.count, 1)
         XCTAssertEqual(monitor.events.first?.title, "更新主题")
         XCTAssertEqual(monitor.events.first?.fid, "50")
-        XCTAssertTrue(monitor.events.first?.summary.contains("2") == true)
+        XCTAssertEqual(monitor.events.first?.summary, .newReplies(count: 2))
 
         await monitor.setFidFilter("50", enabled: false)
         let fetchCountBeforeDisabledRun = fetchedThreadIDs.count

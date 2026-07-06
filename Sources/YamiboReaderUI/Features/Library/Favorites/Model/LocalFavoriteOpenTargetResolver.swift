@@ -7,15 +7,10 @@ enum LocalFavoriteOpenTarget: Sendable {
     case nativeThread(url: URL, title: String)
 }
 
-enum LocalFavoriteOpenError: LocalizedError {
+/// Semantic open failures; the presentation layer supplies the localized
+/// description (see `FavoritePresentation.swift`).
+enum LocalFavoriteOpenError: Error {
     case mangaTitleUnresolved
-
-    var errorDescription: String? {
-        switch self {
-        case .mangaTitleUnresolved:
-            L10n.string("favorite_library.manga_title_resolution_failed")
-        }
-    }
 }
 
 /// Resolves a favorite item into a concrete reader launch target, combining

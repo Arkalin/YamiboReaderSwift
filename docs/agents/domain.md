@@ -24,7 +24,13 @@ This repo uses a multi-context layout:
     |   `-- CONTEXT.md
     |-- novel-reader/
     |   `-- CONTEXT.md
-    `-- library-account/
+    |-- reader-navigation/
+    |   `-- CONTEXT.md
+    |-- reader-comments/
+    |   `-- CONTEXT.md
+    |-- library-account/
+    |   `-- CONTEXT.md
+    `-- forum/
         `-- CONTEXT.md
 ```
 

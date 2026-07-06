@@ -71,8 +71,8 @@ struct FavoriteUpdateStatusCard: View {
     }
 
     private var detailText: String {
-        if let currentItem = snapshot.currentItem, !currentItem.isEmpty {
-            return currentItem
+        if let progress = snapshot.progress {
+            return progress.displayText
         }
         return phaseTitle
     }

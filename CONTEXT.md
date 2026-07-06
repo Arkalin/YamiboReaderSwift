@@ -8,7 +8,10 @@ The current contexts are:
 
 - `docs/contexts/manga-reader/CONTEXT.md`
 - `docs/contexts/novel-reader/CONTEXT.md`
+- `docs/contexts/reader-navigation/CONTEXT.md`
+- `docs/contexts/reader-comments/CONTEXT.md`
 - `docs/contexts/library-account/CONTEXT.md`
+- `docs/contexts/forum/CONTEXT.md`
 
 ## Language
 

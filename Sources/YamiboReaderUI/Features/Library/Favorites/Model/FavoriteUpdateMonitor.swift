@@ -44,7 +44,7 @@ final class FavoriteUpdateMonitor: ObservableObject {
             loaded.phase = .interrupted
             loaded.finishedAt = loaded.finishedAt ?? .now
             loaded.updatedAt = .now
-            loaded.errorMessage = L10n.string("favorites.updates.task_lost")
+            loaded.progress = nil
             try? await updateStore.saveRun(loaded)
             latest = loaded
         }
@@ -83,8 +83,7 @@ final class FavoriteUpdateMonitor: ObservableObject {
             status: .running,
             phase: .preparing,
             startedAt: now,
-            updatedAt: now,
-            currentItem: L10n.string("favorites.updates.preparing")
+            updatedAt: now
         )
         snapshot = startedSnapshot
         do {
@@ -107,8 +106,7 @@ final class FavoriteUpdateMonitor: ObservableObject {
             snapshot.status = .interrupted
             snapshot.phase = .interrupted
             snapshot.finishedAt = .now
-            snapshot.errorMessage = L10n.string("favorites.updates.interrupted")
-            snapshot.currentItem = L10n.string("favorites.updates.interrupted")
+            snapshot.progress = nil
         }
     }
 
@@ -171,14 +169,18 @@ final class FavoriteUpdateMonitor: ObservableObject {
             await updateSnapshot(runID: runID) { snapshot in
                 snapshot.phase = .checking
                 snapshot.totalCount = scopedCandidates.count
-                snapshot.currentItem = L10n.string("favorites.updates.loaded_targets", scopedCandidates.count)
+                snapshot.progress = .loadedTargets(count: scopedCandidates.count)
             }
 
             var detectedCount = 0
             for (index, item) in scopedCandidates.enumerated() {
                 try Task.checkCancellation()
                 await updateSnapshot(runID: runID) { snapshot in
-                    snapshot.currentItem = L10n.string("favorites.updates.checking_item", index + 1, scopedCandidates.count, item.resolvedDisplayTitle)
+                    snapshot.progress = .checking(
+                        index: index + 1,
+                        total: scopedCandidates.count,
+                        title: item.resolvedDisplayTitle
+                    )
                 }
                 let result = await checkUpdate(for: item)
                 switch result {
@@ -205,8 +207,7 @@ final class FavoriteUpdateMonitor: ObservableObject {
                 snapshot.status = .completed
                 snapshot.phase = .completed
                 snapshot.finishedAt = .now
-                snapshot.currentItem = L10n.string("favorites.updates.completed")
-                snapshot.logMessage = L10n.string("favorites.updates.detected_count", detectedCount)
+                snapshot.progress = nil
             }
         } catch {
             if error.isTaskCancellation {
@@ -215,8 +216,7 @@ final class FavoriteUpdateMonitor: ObservableObject {
                     snapshot.status = .interrupted
                     snapshot.phase = .interrupted
                     snapshot.finishedAt = .now
-                    snapshot.currentItem = L10n.string("favorites.updates.interrupted")
-                    snapshot.errorMessage = L10n.string("favorites.updates.interrupted")
+                    snapshot.progress = nil
                 }
                 return
             }
@@ -225,7 +225,7 @@ final class FavoriteUpdateMonitor: ObservableObject {
                 snapshot.status = .failed
                 snapshot.phase = .failed
                 snapshot.finishedAt = .now
-                snapshot.currentItem = L10n.string("favorites.updates.failed")
+                snapshot.progress = nil
                 snapshot.errorMessage = error.localizedDescription
             }
         }
@@ -438,13 +438,13 @@ private struct FavoriteUpdateFingerprint: Sendable {
         return false
     }
 
-    static func summary(from previous: FavoriteUpdateFingerprint, to current: FavoriteUpdateFingerprint) -> String {
+    static func summary(from previous: FavoriteUpdateFingerprint, to current: FavoriteUpdateFingerprint) -> FavoriteUpdateSummary {
         if let replyCount = current.replyCount, let previousReplyCount = previous.replyCount, replyCount > previousReplyCount {
-            return L10n.string("favorites.updates.summary.replies", replyCount - previousReplyCount)
+            return .newReplies(count: replyCount - previousReplyCount)
         }
         if let pageCount = current.pageCount, let previousPageCount = previous.pageCount, pageCount > previousPageCount {
-            return L10n.string("favorites.updates.summary.pages", pageCount - previousPageCount)
+            return .newPages(count: pageCount - previousPageCount)
         }
-        return L10n.string("favorites.updates.summary.changed")
+        return .changed
     }
 }

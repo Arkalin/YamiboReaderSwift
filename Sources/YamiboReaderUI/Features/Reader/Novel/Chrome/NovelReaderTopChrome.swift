@@ -6,6 +6,7 @@ struct NovelReaderTopChrome: View {
     private let pagedChapterTitleTopLift: CGFloat = 12
 
     let model: NovelReaderViewModel
+    @ObservedObject var navigation: NovelReaderNavigationCoordinator
     let topInset: CGFloat
     let onNavigateBack: () -> Void
     let onNavigateForward: () -> Void
@@ -26,9 +27,9 @@ struct NovelReaderTopChrome: View {
                 isGlassBacked: historyButtonsUseGlassBackground
             )
             let buttonSpacing: CGFloat = 8
-            let leadingControlsWidth = model.canNavigateBack ? historyIconSize : 0
+            let leadingControlsWidth = navigation.canNavigateBack ? historyIconSize : 0
             let trailingControlsWidth = chromeButtonSize
-                + (model.canNavigateForward ? historyIconSize + buttonSpacing : 0)
+                + (navigation.canNavigateForward ? historyIconSize + buttonSpacing : 0)
             let titleSidePadding = max(leadingControlsWidth, trailingControlsWidth) + 16
 
             ZStack {
@@ -38,7 +39,7 @@ struct NovelReaderTopChrome: View {
                     .offset(y: shouldLiftPagedChapterTitle ? -pagedChapterTitleTopLift : 0)
 
                 HStack(spacing: buttonSpacing) {
-                    if model.canNavigateBack {
+                    if navigation.canNavigateBack {
                         ReaderChromeHistoryButton(
                             direction: .back,
                             title: L10n.string("common.back"),
@@ -49,7 +50,7 @@ struct NovelReaderTopChrome: View {
 
                     Spacer(minLength: 0)
 
-                    if model.canNavigateForward {
+                    if navigation.canNavigateForward {
                         ReaderChromeHistoryButton(
                             direction: .forward,
                             title: L10n.string("common.forward"),

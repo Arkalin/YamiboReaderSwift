@@ -1,27 +1,6 @@
 import SwiftUI
 import YamiboReaderCore
 
-private struct NovelReaderLinearReadingPageKey: Equatable, Sendable {
-    var view: Int
-    var surfaceIndex: Int
-}
-
-/// Aggregated offline-cache presentation state for the novel reader.
-struct NovelReaderCacheState: Equatable {
-    var views = NovelOfflineCacheViewsSnapshot()
-    var queueEntryCount = 0
-    var operation = NovelReaderCacheOperationState()
-}
-
-/// Aggregated non-current-view chapter directory browsing state.
-struct NovelReaderChapterDirectoryState: Equatable {
-    var view: Int? = nil
-    var chapters: [NovelReaderChapter] = []
-    var pageCount = 0
-    var isLoading = false
-    var error: String? = nil
-}
-
 @MainActor
 public final class NovelReaderViewModel: ObservableObject {
     @Published public private(set) var isLoading = false
@@ -31,11 +10,7 @@ public final class NovelReaderViewModel: ObservableObject {
     @Published public var applePencilPageTurnSettings = ApplePencilPageTurnSettings()
     @Published private(set) var isNavigatingNovelReaderProjection = false
     @Published private(set) var isApplyingAppearanceSettings = false
-    @Published private(set) var cacheState = NovelReaderCacheState()
-    @Published private(set) var chapterDirectory = NovelReaderChapterDirectoryState()
     @Published private var bootstrapSettings = NovelReaderAppearanceSettings()
-    @Published private var navigationHistory = ReaderNavigationHistory<NovelResumePoint>()
-    private var linearReadingHistoryExpiration = ReaderNavigationLinearReadingExpiration<NovelReaderLinearReadingPageKey>()
     private(set) var chromeProgressSnapshot = NovelReaderChromeProgressSnapshot.empty
 
     public let context: NovelLaunchContext
@@ -47,11 +22,8 @@ public final class NovelReaderViewModel: ObservableObject {
     private var layout: NovelReaderLayout = .zero
     private var latestRequestedLayout: NovelReaderLayout = .zero
     private var layoutRequestSequence: UInt64 = 0
-    private var navigationRequestSequence: UInt64 = 0
     private var usesPadPresentation = false
-    private var chapterDirectoryAnchors: [Int: NovelChapterAnchor] = [:]
     private var currentStableResumePoint: NovelResumePoint?
-    private var offlineCacheUpdatesTask: Task<Void, Never>?
     private let runtimeAdapter: (any NovelTextLayoutRuntimeAdapter)?
     private let onReaderResumeRouteChange: ReaderResumeRouteChangeHandler
     package var runtimeUpdatePreparation: NovelReadingWorkflowRuntimeUpdatePreparation = { $0 }
@@ -70,8 +42,73 @@ public final class NovelReaderViewModel: ObservableObject {
             self?.chapterComments = snapshot
         }
     }
-    private let cacheOperationModule: NovelReaderCacheOperationModule
-    private let cacheOperationRepository: any NovelReaderCacheOperationRepository
+
+    /// Offline-cache coordinator: owns cache/queue state and batch
+    /// operations. Cache views bind it directly.
+    private(set) lazy var cache = NovelReaderCacheCoordinator(
+        operationModule: dependencies.makeCacheOperationModule(),
+        repository: dependencies.makeCacheOperationRepository(),
+        offlineCacheStore: dependencies.offlineCacheStore,
+        accountDependencies: dependencies.account,
+        reading: NovelReaderCacheCoordinator.Reading(
+            maxView: { [weak self] in self?.maxView ?? 0 },
+            displayedView: { [weak self] in self?.visibleView ?? 1 },
+            operationContext: { [weak self] in
+                self?.currentCacheOperationContext() ?? NovelReaderCacheOperationContext(
+                    ownerTitle: "",
+                    threadID: "",
+                    authorID: nil,
+                    contentSource: nil
+                )
+            },
+            onError: { [weak self] message in
+                self?.errorMessage = message
+            }
+        )
+    )
+
+    /// Wayfinding coordinator: owns chapter-catalog browsing and the
+    /// nonlinear navigation history. Catalog and chrome views bind it
+    /// directly.
+    private(set) lazy var navigation = NovelReaderNavigationCoordinator(
+        reading: NovelReaderNavigationCoordinator.Reading(
+            maxView: { [weak self] in self?.maxView ?? 1 },
+            visibleView: { [weak self] in self?.visibleView ?? 1 },
+            chapters: { [weak self] in self?.chapters ?? [] },
+            surfaceCount: { [weak self] in self?.surfaceCount ?? 0 },
+            currentChapterIndex: { [weak self] in self?.currentChapterIndex },
+            stableResumePoint: { [weak self] in self?.currentStableResumePoint },
+            currentPageKey: { [weak self] in self?.currentLinearReadingPageKey },
+            previewChapterCatalog: { [weak self] view in
+                guard let self, let workflow = await self.ensureReadingWorkflow() else {
+                    throw ReaderChapterCommentsUnavailableError()
+                }
+                return try await workflow.previewChapterDirectory(view: view)
+            },
+            jumpToChapter: { [weak self] chapter in
+                self?.jumpToChapter(chapter)
+            },
+            openChapterAnchor: { [weak self] anchor in
+                guard let self else { return false }
+                return await self.openChapterAnchor(anchor)
+            },
+            loadWebView: { [weak self] view in
+                await self?.load(
+                    view: view,
+                    preferredSurfaceOrdinal: 0,
+                    preferredResumePoint: nil,
+                    forceRefresh: false,
+                    showsNovelReaderProjectionNavigationOverlay: true
+                ) ?? false
+            },
+            restoreResumePoint: { [weak self] resumePoint in
+                await self?.restoreResumePoint(resumePoint) ?? false
+            },
+            scheduleProgressSync: { [weak self] in
+                self?.scheduleProgressSync()
+            }
+        )
+    )
 
     public convenience init(
         context: NovelLaunchContext,
@@ -120,23 +157,9 @@ public final class NovelReaderViewModel: ObservableObject {
                 readingProgressStore: dependencies.readingProgressStore
             )
         )
-        cacheOperationModule = dependencies.makeCacheOperationModule()
-        cacheOperationRepository = dependencies.makeCacheOperationRepository()
         if let initialSettings {
             bootstrapSettings = initialSettings
         }
-        cacheOperationModule.onChange = { [weak self] snapshot, state in
-            guard let self else { return }
-            cacheState.views = snapshot
-            cacheState.operation = state
-            Task { [weak self] in
-                await self?.refreshOfflineCacheQueueCount()
-            }
-        }
-    }
-
-    deinit {
-        offlineCacheUpdatesTask?.cancel()
     }
 
     public var title: String {
@@ -269,46 +292,6 @@ public final class NovelReaderViewModel: ObservableObject {
         L10n.string("reader.web_view_chapters", currentWebViewText)
     }
 
-    var visibleChapterDirectoryView: Int {
-        chapterDirectory.view ?? visibleView
-    }
-
-    var visibleChapterDirectoryChapters: [NovelReaderChapter] {
-        chapterDirectory.view == nil ? chapters : chapterDirectory.chapters
-    }
-
-    var visibleChapterDirectoryPageCount: Int {
-        chapterDirectory.view == nil ? surfaceCount : max(chapterDirectory.pageCount, 1)
-    }
-
-    var previousChapterDirectoryWebView: Int? {
-        let target = visibleChapterDirectoryView - 1
-        return target >= 1 ? target : nil
-    }
-
-    var nextChapterDirectoryWebView: Int? {
-        let target = visibleChapterDirectoryView + 1
-        return target <= maxView ? target : nil
-    }
-
-    var chapterDirectoryWebTitle: String {
-        L10n.string(
-            "reader.web_view_chapters",
-            L10n.string("reader.web_view_progress", visibleChapterDirectoryView, max(maxView, 1))
-        )
-    }
-
-    var currentChapterDirectoryIndex: Int? {
-        guard chapterDirectory.view == nil || visibleChapterDirectoryView == visibleView else { return nil }
-        return currentChapterIndex
-    }
-
-    func isCurrentChapterDirectoryChapter(_ chapter: NovelReaderChapter) -> Bool {
-        guard visibleChapterDirectoryView == visibleView,
-              let currentChapterDirectoryIndex else { return false }
-        return chapter.ordinal == currentChapterDirectoryIndex
-    }
-
     var pagedViewportSelectionIndex: Int {
         guard isTwoPageSpreadActive else { return selectedSurfaceIndex }
         return spreadIndex(forSurfaceIndex: selectedSurfaceIndex)
@@ -369,37 +352,12 @@ public final class NovelReaderViewModel: ObservableObject {
         chromeProgressSnapshot.targetSurfaceIndex(forProgressValue: value)
     }
 
-    var cacheScopeTitle: String {
-        L10n.string("reader.cache_scope.author")
-    }
-
-    var cacheScopeDescription: String {
-        L10n.string("reader.cache_scope.description")
-    }
-
-    var allCacheableViews: [Int] {
-        guard maxView > 0 else { return [] }
-        return Array(1 ... maxView)
-    }
-
-    var hasCacheOperationSession: Bool {
-        cacheState.operation.hasSession
-    }
-
     var visibleView: Int {
         displayedView
     }
 
     var currentNovelResumePoint: NovelResumePoint? {
         readingWorkflow?.captureNovelReadingPosition()
-    }
-
-    public var canNavigateBack: Bool {
-        currentStableResumePoint != nil && navigationHistory.canGoBack
-    }
-
-    public var canNavigateForward: Bool {
-        currentStableResumePoint != nil && navigationHistory.canGoForward
     }
 
     public func handleMemoryPressure() {
@@ -413,7 +371,7 @@ public final class NovelReaderViewModel: ObservableObject {
         isApplyingAppearanceSettings = false
         readingWorkflow?.close()
         readingWorkflow = nil
-        resetNavigationHistory()
+        navigation.resetHistory()
         currentStableResumePoint = nil
         chromeProgressSnapshot = .empty
         novelReaderPresentation = nil
@@ -497,7 +455,7 @@ public final class NovelReaderViewModel: ObservableObject {
             ) {
                 syncFromWorkflowState(state)
             }
-            await refreshCachedState()
+            await cache.refresh()
         }
     }
 
@@ -543,7 +501,7 @@ public final class NovelReaderViewModel: ObservableObject {
             forceRefresh: forceRefresh
         )
         if didLoad {
-            resetNavigationHistory()
+            navigation.resetHistory()
         }
     }
 
@@ -659,7 +617,7 @@ public final class NovelReaderViewModel: ObservableObject {
         ) {
             syncFromWorkflowState(state)
             if recordsLinearReading {
-                recordLinearReadingForNavigationHistory()
+                navigation.recordLinearReading()
             }
         }
         scheduleProgressSync()
@@ -688,7 +646,7 @@ public final class NovelReaderViewModel: ObservableObject {
         let oldSurfaceIndex = selectedSurfaceIndex
         syncFromWorkflowState(state)
         if oldSurfaceIndex != selectedSurfaceIndex {
-            recordLinearReadingForNavigationHistory()
+            navigation.recordLinearReading()
         }
         scheduleProgressSync()
 
@@ -715,7 +673,7 @@ public final class NovelReaderViewModel: ObservableObject {
         ) {
             syncFromWorkflowState(state)
             if oldSurfaceIndex != selectedSurfaceIndex {
-                recordLinearReadingForNavigationHistory()
+                navigation.recordLinearReading()
             }
             let newResumePoint = currentNovelResumePoint
             let didChangePosition = oldSurfaceIndex != selectedSurfaceIndex ||
@@ -741,20 +699,12 @@ public final class NovelReaderViewModel: ObservableObject {
     }
 
     package func jumpToSurface(_ surfaceIndex: Int) {
-        let navigationSequence = beginNavigationRequest()
+        let navigationSequence = navigation.beginNavigationRequest()
         let sourceResumePoint = currentStableResumePoint
         selectSurface(surfaceIndex, recordsLinearReading: false)
-        if isCurrentNavigationRequest(navigationSequence) {
-            recordSuccessfulNonlinearNavigation(from: sourceResumePoint, to: currentStableResumePoint)
+        if navigation.isCurrentNavigationRequest(navigationSequence) {
+            navigation.recordSuccessfulNonlinearNavigation(from: sourceResumePoint, to: currentStableResumePoint)
         }
-    }
-
-    public func navigateBack() async {
-        await restoreNavigationAnchor(direction: .back)
-    }
-
-    public func navigateForward() async {
-        await restoreNavigationAnchor(direction: .forward)
     }
 
     public func jumpRelativeSurface(_ delta: Int) async {
@@ -769,7 +719,7 @@ public final class NovelReaderViewModel: ObservableObject {
         syncFromWorkflowState(result.state)
         switch result.request {
         case nil:
-            recordLinearReadingForNavigationHistory()
+            navigation.recordLinearReading()
             scheduleProgressSync()
             Task {
                 await prefetchIfNeeded(for: selectedSurfaceIndex)
@@ -783,7 +733,7 @@ public final class NovelReaderViewModel: ObservableObject {
                 showsNovelReaderProjectionNavigationOverlay: true
             )
             if didLoad {
-                recordLinearReadingForNavigationHistory()
+                navigation.recordLinearReading()
             }
         case let .promotePrefetched(preferredSurfaceOrdinal, resumePoint):
             let didPromote = await promotePrefetchedDocument(
@@ -792,7 +742,7 @@ public final class NovelReaderViewModel: ObservableObject {
                 showsNovelReaderProjectionNavigationOverlay: true
             )
             if didPromote {
-                recordLinearReadingForNavigationHistory()
+                navigation.recordLinearReading()
             }
         }
     }
@@ -805,7 +755,7 @@ public final class NovelReaderViewModel: ObservableObject {
     }
 
     public func jumpToWebView(_ view: Int, preferredSurfaceOrdinal: Int = 0) async {
-        let navigationSequence = beginNavigationRequest()
+        let navigationSequence = navigation.beginNavigationRequest()
         let sourceResumePoint = currentStableResumePoint
         let clampedView = max(1, min(maxView, view))
 
@@ -815,8 +765,8 @@ public final class NovelReaderViewModel: ObservableObject {
                 preferredResumePoint: nil,
                 showsNovelReaderProjectionNavigationOverlay: true
             )
-            if didPromote, isCurrentNavigationRequest(navigationSequence) {
-                recordSuccessfulNonlinearNavigation(from: sourceResumePoint, to: currentStableResumePoint)
+            if didPromote, navigation.isCurrentNavigationRequest(navigationSequence) {
+                navigation.recordSuccessfulNonlinearNavigation(from: sourceResumePoint, to: currentStableResumePoint)
             }
             return
         }
@@ -833,152 +783,9 @@ public final class NovelReaderViewModel: ObservableObject {
             forceRefresh: false,
             showsNovelReaderProjectionNavigationOverlay: true
         )
-        if didLoad, isCurrentNavigationRequest(navigationSequence) {
-            recordSuccessfulNonlinearNavigation(from: sourceResumePoint, to: currentStableResumePoint)
+        if didLoad, navigation.isCurrentNavigationRequest(navigationSequence) {
+            navigation.recordSuccessfulNonlinearNavigation(from: sourceResumePoint, to: currentStableResumePoint)
         }
-    }
-
-    func resetChapterDirectoryBrowsing() {
-        chapterDirectory = NovelReaderChapterDirectoryState()
-        chapterDirectoryAnchors = [:]
-    }
-
-    func previewChapterDirectoryWebView(_ view: Int) async {
-        let clampedView = max(1, min(maxView, view))
-        if clampedView == visibleView {
-            resetChapterDirectoryBrowsing()
-            return
-        }
-
-        chapterDirectory = NovelReaderChapterDirectoryState(view: clampedView, isLoading: true)
-        do {
-            guard let workflow = await ensureReadingWorkflow() else {
-                throw ReaderChapterCommentsUnavailableError()
-            }
-            let entries = try await workflow.previewChapterDirectory(view: clampedView)
-            chapterDirectory.chapters = entries.map(\.chapter)
-            chapterDirectoryAnchors = Dictionary(
-                uniqueKeysWithValues: entries.compactMap { entry in
-                    entry.anchor.map { (entry.chapter.ordinal, $0) }
-                }
-            )
-            chapterDirectory.isLoading = false
-        } catch {
-            chapterDirectory.error = error.localizedDescription
-            chapterDirectory.isLoading = false
-        }
-    }
-
-    func jumpToChapterDirectoryChapter(_ chapter: NovelReaderChapter) async {
-        let navigationSequence = beginNavigationRequest()
-        let sourceResumePoint = currentStableResumePoint
-        let targetView = visibleChapterDirectoryView
-        let anchor = chapterDirectoryAnchors[chapter.ordinal]
-        resetChapterDirectoryBrowsing()
-        if targetView == visibleView {
-            jumpToChapter(chapter)
-            return
-        }
-        guard let anchor,
-              let workflow = await ensureReadingWorkflow() else {
-            let didLoad = await load(
-                view: targetView,
-                preferredSurfaceOrdinal: 0,
-                preferredResumePoint: nil,
-                forceRefresh: false,
-                showsNovelReaderProjectionNavigationOverlay: true
-            )
-            if didLoad, isCurrentNavigationRequest(navigationSequence) {
-                recordSuccessfulNonlinearNavigation(from: sourceResumePoint, to: currentStableResumePoint)
-            }
-            return
-        }
-        await beginNovelReaderProjectionNavigation()
-        defer { setNovelReaderProjectionNavigation(false) }
-        isLoading = true
-        errorMessage = nil
-        do {
-            let state = try await workflow.loadChapter(anchor)
-            syncFromWorkflowState(state)
-            isLoading = false
-            scheduleProgressSync()
-            if isCurrentNavigationRequest(navigationSequence) {
-                recordSuccessfulNonlinearNavigation(from: sourceResumePoint, to: currentStableResumePoint)
-            }
-        } catch {
-            errorMessage = error.localizedDescription
-            isLoading = false
-        }
-    }
-
-    func refreshCachedState() async {
-        startObservingOfflineCacheUpdates()
-        syncCacheState(await cacheOperationRepository.cacheState(for: cacheOperationSnapshot.context))
-        await refreshOfflineCacheQueueCount()
-    }
-
-    private func startObservingOfflineCacheUpdates() {
-        guard offlineCacheUpdatesTask == nil else { return }
-        let updates = dependencies.offlineCacheStore.offlineCacheUpdates()
-        offlineCacheUpdatesTask = Task { @MainActor [weak self] in
-            for await _ in updates {
-                guard !Task.isCancelled else { return }
-                await self?.refreshCachedState()
-            }
-        }
-    }
-
-    func cacheSelectionState(for selectedViews: Set<Int>) -> NovelReaderCacheSelectionState {
-        cacheOperationModule.selectionState(for: selectedViews, snapshot: cacheOperationSnapshot)
-    }
-
-    func cacheStatus(for view: Int) -> NovelOfflineCacheViewStatus {
-        cacheState.views.state(for: view).status
-    }
-
-    func cacheUpdateTime(for view: Int) -> Date? {
-        cacheState.views.updateTimesByView[max(1, view)]
-    }
-
-    func startCaching(views: Set<Int>) {
-        cacheOperationModule.startCaching(
-            views: views,
-            snapshot: cacheOperationSnapshot,
-            repository: cacheOperationRepository,
-            summary: cacheOperationSummary
-        )
-    }
-
-    func updateCachedViews(_ views: Set<Int>) {
-        cacheOperationModule.updateCachedViews(
-            views,
-            snapshot: cacheOperationSnapshot,
-            repository: cacheOperationRepository,
-            summary: cacheOperationSummary,
-            onFailure: { [weak self] error in
-                self?.errorMessage = error.localizedDescription
-            }
-        )
-    }
-
-    func deleteCachedViews(_ views: Set<Int>) async {
-        do {
-            try await cacheOperationModule.deleteCachedViews(
-                views,
-                snapshot: cacheOperationSnapshot,
-                repository: cacheOperationRepository
-            )
-        } catch {
-            errorMessage = error.localizedDescription
-        }
-    }
-
-    func showCacheProgressIfRunning() {
-        cacheOperationModule.showProgressIfRunning()
-    }
-
-    func hideCacheProgress() {
-        cacheOperationModule.hideProgress()
     }
 
     public func loadChapterComments(for target: ReaderChapterCommentTarget?) async {
@@ -991,48 +798,6 @@ public final class NovelReaderViewModel: ObservableObject {
 
     public func loadNextChapterCommentsPage() async {
         await chapterCommentsModule.loadNextPage()
-    }
-
-    func dismissCacheProgress() {
-        cacheOperationModule.dismissProgress()
-    }
-
-    func stopCaching() {
-        cacheOperationModule.stopCaching()
-    }
-
-    func deleteCurrentCache() async {
-        do {
-            try await cacheOperationRepository.deleteCachedViews(
-                [displayedView],
-                for: cacheOperationSnapshot.context
-            )
-            await refreshCachedState()
-        } catch {
-            errorMessage = error.localizedDescription
-        }
-    }
-
-    func refreshCurrentCache() async {
-        let result = await cacheOperationRepository.updateCachedViews(
-            [displayedView],
-            for: cacheOperationSnapshot.context,
-            progress: nil
-        )
-        if result.failedViews.isEmpty {
-            await refreshCachedState()
-        } else {
-            errorMessage = L10n.string("common.operation_failed")
-        }
-    }
-
-    func makeOfflineCacheQueueViewModel() -> MineHomeViewModel {
-        MineHomeViewModel(dependencies: dependencies.account)
-    }
-
-    func refreshOfflineCacheQueueCount() async {
-        let store = dependencies.offlineCacheStore
-        cacheState.queueEntryCount = await store.offlineCacheQueueWorks().count
     }
 
     @discardableResult
@@ -1064,7 +829,7 @@ public final class NovelReaderViewModel: ObservableObject {
             )
             syncFromWorkflowState(state)
             isLoading = false
-            await refreshCachedState()
+            await cache.refresh()
 
             Task {
                 await prefetchIfNeeded(for: selectedSurfaceIndex)
@@ -1092,7 +857,7 @@ public final class NovelReaderViewModel: ObservableObject {
             )
             syncFromWorkflowState(state)
             isLoading = false
-            await refreshCachedState()
+            await cache.refresh()
 
             Task {
                 await prefetchIfNeeded(for: selectedSurfaceIndex)
@@ -1147,41 +912,10 @@ public final class NovelReaderViewModel: ObservableObject {
         )
     }
 
-    private func beginNavigationRequest() -> UInt64 {
-        navigationRequestSequence &+= 1
-        return navigationRequestSequence
-    }
-
-    private func isCurrentNavigationRequest(_ sequence: UInt64) -> Bool {
-        navigationRequestSequence == sequence
-    }
-
     private func syncFromWorkflowState(_ state: NovelReadingWorkflowState) {
         chromeProgressSnapshot = state.presentation.map(NovelReaderChromeProgressSnapshot.init) ?? .empty
         novelReaderPresentation = state.presentation
         currentStableResumePoint = readingWorkflow?.captureNovelReadingPosition()
-    }
-
-    private enum NavigationRestoreDirection {
-        case back
-        case forward
-    }
-
-    private func restoreNavigationAnchor(direction: NavigationRestoreDirection) async {
-        guard let sourceResumePoint = currentStableResumePoint else { return }
-        let navigationSequence = beginNavigationRequest()
-
-        while let targetResumePoint = navigationTarget(for: direction) {
-            let didRestore = await restoreResumePoint(targetResumePoint)
-            if didRestore {
-                guard isCurrentNavigationRequest(navigationSequence) else { return }
-                commitNavigationRestore(direction: direction, sourceResumePoint: sourceResumePoint)
-                scheduleProgressSync()
-                return
-            }
-            guard isCurrentNavigationRequest(navigationSequence) else { return }
-            discardNavigationTarget(for: direction)
-        }
     }
 
     private func restoreResumePoint(_ resumePoint: NovelResumePoint) async -> Bool {
@@ -1213,75 +947,25 @@ public final class NovelReaderViewModel: ObservableObject {
         )
     }
 
-    private func navigationTarget(for direction: NavigationRestoreDirection) -> NovelResumePoint? {
-        switch direction {
-        case .back:
-            navigationHistory.peekBack()
-        case .forward:
-            navigationHistory.peekForward()
+    /// Opens a chapter anchor discovered while browsing another web view's
+    /// catalog; returns nil when the reading workflow is unavailable so the
+    /// navigation coordinator can fall back to a plain view load.
+    private func openChapterAnchor(_ anchor: NovelChapterAnchor) async -> Bool? {
+        guard let workflow = await ensureReadingWorkflow() else { return nil }
+        await beginNovelReaderProjectionNavigation()
+        defer { setNovelReaderProjectionNavigation(false) }
+        isLoading = true
+        errorMessage = nil
+        do {
+            let state = try await workflow.loadChapter(anchor)
+            syncFromWorkflowState(state)
+            isLoading = false
+            return true
+        } catch {
+            errorMessage = error.localizedDescription
+            isLoading = false
+            return false
         }
-    }
-
-    private func commitNavigationRestore(
-        direction: NavigationRestoreDirection,
-        sourceResumePoint: NovelResumePoint
-    ) {
-        switch direction {
-        case .back:
-            navigationHistory.commitBack(from: sourceResumePoint)
-        case .forward:
-            navigationHistory.commitForward(from: sourceResumePoint)
-        }
-        armLinearReadingHistoryExpirationIfNeeded()
-    }
-
-    private func discardNavigationTarget(for direction: NavigationRestoreDirection) {
-        switch direction {
-        case .back:
-            navigationHistory.discardBackCandidate()
-        case .forward:
-            navigationHistory.discardForwardCandidate()
-        }
-        resetLinearReadingHistoryExpirationIfHistoryIsEmpty()
-    }
-
-    private func recordSuccessfulNonlinearNavigation(
-        from sourceResumePoint: NovelResumePoint?,
-        to targetResumePoint: NovelResumePoint?
-    ) {
-        guard let sourceResumePoint, let targetResumePoint, sourceResumePoint != targetResumePoint else { return }
-        navigationHistory.recordNonlinearJump(from: sourceResumePoint, to: targetResumePoint)
-        armLinearReadingHistoryExpirationIfNeeded()
-    }
-
-    private func recordLinearReadingForNavigationHistory() {
-        guard navigationHistory.canGoBack || navigationHistory.canGoForward else {
-            linearReadingHistoryExpiration.reset()
-            return
-        }
-        guard let pageKey = currentLinearReadingPageKey else { return }
-        if linearReadingHistoryExpiration.recordLinearReading(at: pageKey) {
-            navigationHistory.clear()
-        }
-    }
-
-    private func armLinearReadingHistoryExpirationIfNeeded() {
-        guard navigationHistory.canGoBack || navigationHistory.canGoForward,
-              let pageKey = currentLinearReadingPageKey else {
-            linearReadingHistoryExpiration.reset()
-            return
-        }
-        linearReadingHistoryExpiration.arm(at: pageKey)
-    }
-
-    private func resetNavigationHistory() {
-        navigationHistory = ReaderNavigationHistory()
-        linearReadingHistoryExpiration.reset()
-    }
-
-    private func resetLinearReadingHistoryExpirationIfHistoryIsEmpty() {
-        guard !navigationHistory.canGoBack, !navigationHistory.canGoForward else { return }
-        linearReadingHistoryExpiration.reset()
     }
 
     private var currentLinearReadingPageKey: NovelReaderLinearReadingPageKey? {
@@ -1466,38 +1150,14 @@ public final class NovelReaderViewModel: ObservableObject {
         .authorFilteredPage
     }
 
-    private var cacheOperationSnapshot: NovelReaderCacheOperationSnapshot {
-        let context = cacheContext(forView: displayedView)
-        return NovelReaderCacheOperationSnapshot(
-            cacheableViews: Set(allCacheableViews),
-            cachedViews: cacheState.views.cachedViews,
-            cachingViews: cacheState.views.cachingViews,
-            updateTimesByView: cacheState.views.updateTimesByView,
-            context: NovelReaderCacheOperationContext(
-                ownerTitle: title,
-                threadID: self.context.threadID,
-                authorID: context.authorID,
-                contentSource: context.contentSource
-            )
+    private func currentCacheOperationContext() -> NovelReaderCacheOperationContext {
+        let cacheContext = cacheContext(forView: displayedView)
+        return NovelReaderCacheOperationContext(
+            ownerTitle: title,
+            threadID: context.threadID,
+            authorID: cacheContext.authorID,
+            contentSource: cacheContext.contentSource
         )
-    }
-
-    private func cacheOperationSummary(
-        mode: NovelReaderCacheOperationMode,
-        result: NovelReaderCacheBatchResult
-    ) -> String {
-        let actionText = switch mode {
-        case .cache: L10n.string("reader.cache_action.cache")
-        case .update: L10n.string("reader.cache_action.update")
-        }
-
-        var summary = result.wasCancelled
-            ? L10n.string("reader.cache_summary.cancelled", result.completedViews.count, result.totalCount, actionText)
-            : L10n.string("reader.cache_summary.completed", result.completedViews.count, result.totalCount, actionText)
-        if !result.failedViews.isEmpty {
-            summary += L10n.string("reader.cache_summary.failed_suffix", result.failedViews.count)
-        }
-        return summary
     }
 
     @discardableResult
@@ -1557,10 +1217,6 @@ public final class NovelReaderViewModel: ObservableObject {
                 }
             }
         }
-    }
-
-    private func syncCacheState(_ snapshot: NovelOfflineCacheViewsSnapshot) {
-        cacheOperationModule.syncCacheState(snapshot)
     }
 
     private func beginApplyingAppearanceSettings() -> UInt64 {

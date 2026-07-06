@@ -44,6 +44,7 @@ struct NovelReaderChromeControls: View {
     private var topChrome: some View {
         NovelReaderTopChrome(
             model: model,
+            navigation: model.navigation,
             topInset: topInset,
             onNavigateBack: onNavigateBack,
             onNavigateForward: onNavigateForward,

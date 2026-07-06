@@ -165,29 +165,29 @@ final class NovelReaderViewModelTests: XCTestCase {
 
         await MainActor.run {
             XCTAssertEqual(model.currentView, 1)
-            XCTAssertFalse(model.canNavigateBack)
-            XCTAssertFalse(model.canNavigateForward)
+            XCTAssertFalse(model.navigation.canNavigateBack)
+            XCTAssertFalse(model.navigation.canNavigateForward)
         }
 
         await model.jumpToWebView(2)
         await MainActor.run {
             XCTAssertEqual(model.currentView, 2)
-            XCTAssertTrue(model.canNavigateBack)
-            XCTAssertFalse(model.canNavigateForward)
+            XCTAssertTrue(model.navigation.canNavigateBack)
+            XCTAssertFalse(model.navigation.canNavigateForward)
         }
 
-        await model.navigateBack()
+        await model.navigation.navigateBack()
         await MainActor.run {
             XCTAssertEqual(model.currentView, 1)
-            XCTAssertFalse(model.canNavigateBack)
-            XCTAssertTrue(model.canNavigateForward)
+            XCTAssertFalse(model.navigation.canNavigateBack)
+            XCTAssertTrue(model.navigation.canNavigateForward)
         }
 
-        await model.navigateForward()
+        await model.navigation.navigateForward()
         await MainActor.run {
             XCTAssertEqual(model.currentView, 2)
-            XCTAssertTrue(model.canNavigateBack)
-            XCTAssertFalse(model.canNavigateForward)
+            XCTAssertTrue(model.navigation.canNavigateBack)
+            XCTAssertFalse(model.navigation.canNavigateForward)
         }
     }
 
@@ -200,22 +200,22 @@ final class NovelReaderViewModelTests: XCTestCase {
 
         await MainActor.run {
             model.jumpToSurface(1)
-            XCTAssertTrue(model.canNavigateBack)
-            XCTAssertFalse(model.canNavigateForward)
+            XCTAssertTrue(model.navigation.canNavigateBack)
+            XCTAssertFalse(model.navigation.canNavigateForward)
         }
 
         for _ in 0..<4 {
             await model.jumpRelativeSurface(1)
         }
         await MainActor.run {
-            XCTAssertTrue(model.canNavigateBack)
-            XCTAssertFalse(model.canNavigateForward)
+            XCTAssertTrue(model.navigation.canNavigateBack)
+            XCTAssertFalse(model.navigation.canNavigateForward)
         }
 
         await model.jumpRelativeSurface(1)
         await MainActor.run {
-            XCTAssertFalse(model.canNavigateBack)
-            XCTAssertFalse(model.canNavigateForward)
+            XCTAssertFalse(model.navigation.canNavigateBack)
+            XCTAssertFalse(model.navigation.canNavigateForward)
         }
     }
 
@@ -229,19 +229,19 @@ final class NovelReaderViewModelTests: XCTestCase {
 
         await MainActor.run {
             model.jumpToSurface(1)
-            XCTAssertTrue(model.canNavigateBack)
+            XCTAssertTrue(model.navigation.canNavigateBack)
             model.updateVerticalViewportPosition(surfaceIndex: 1, intraSurfaceProgress: 0.2, force: true)
             model.updateVerticalViewportPosition(surfaceIndex: 1, intraSurfaceProgress: 0.5, force: true)
-            XCTAssertTrue(model.canNavigateBack)
+            XCTAssertTrue(model.navigation.canNavigateBack)
 
             for surfaceIndex in 2...5 {
                 model.updateVerticalViewportPosition(surfaceIndex: surfaceIndex, intraSurfaceProgress: 0.3, force: true)
             }
-            XCTAssertTrue(model.canNavigateBack)
+            XCTAssertTrue(model.navigation.canNavigateBack)
 
             model.updateVerticalViewportPosition(surfaceIndex: 6, intraSurfaceProgress: 0.3, force: true)
-            XCTAssertFalse(model.canNavigateBack)
-            XCTAssertFalse(model.canNavigateForward)
+            XCTAssertFalse(model.navigation.canNavigateBack)
+            XCTAssertFalse(model.navigation.canNavigateForward)
         }
     }
 
@@ -264,11 +264,11 @@ final class NovelReaderViewModelTests: XCTestCase {
             model.jumpToSurface(model.surfaceCount - 1)
             XCTAssertEqual(model.currentView, 1)
             XCTAssertEqual(model.currentSurfaceNumber, model.surfaceCount)
-            XCTAssertTrue(model.canNavigateBack)
+            XCTAssertTrue(model.navigation.canNavigateBack)
             navigationStateRecorder.removeAll()
         }
 
-        await model.navigateBack()
+        await model.navigation.navigateBack()
 
         await MainActor.run {
             XCTAssertEqual(model.currentView, 1)
@@ -400,15 +400,15 @@ final class NovelReaderViewModelTests: XCTestCase {
         )
 
         await MainActor.run {
-            let chapters = model.visibleChapterDirectoryChapters
+            let chapters = model.navigation.visibleChapterDirectoryChapters
             XCTAssertEqual(chapters.map(\.title), ["同名章", "同名章"])
             XCTAssertTrue(chapters.indices.contains(1))
 
             model.jumpToSurface(chapters[1].startIndex)
 
-            XCTAssertEqual(model.currentChapterDirectoryIndex, 1)
-            XCTAssertFalse(model.isCurrentChapterDirectoryChapter(chapters[0]))
-            XCTAssertTrue(model.isCurrentChapterDirectoryChapter(chapters[1]))
+            XCTAssertEqual(model.navigation.currentChapterDirectoryIndex, 1)
+            XCTAssertFalse(model.navigation.isCurrentChapterDirectoryChapter(chapters[0]))
+            XCTAssertTrue(model.navigation.isCurrentChapterDirectoryChapter(chapters[1]))
         }
     }
 
@@ -449,17 +449,17 @@ final class NovelReaderViewModelTests: XCTestCase {
             XCTAssertEqual(model.currentChapterTitle, "第二章")
         }
 
-        await model.previewChapterDirectoryWebView(2)
+        await model.navigation.previewChapterDirectoryWebView(2)
 
         await MainActor.run {
             XCTAssertEqual(model.currentView, 1)
             XCTAssertEqual(model.currentChapterTitle, "第二章")
             XCTAssertEqual(model.currentSurfaceNumber, model.surfaceCount)
-            XCTAssertEqual(model.visibleChapterDirectoryView, 2)
-            XCTAssertEqual(model.visibleChapterDirectoryChapters.map(\.title), ["第三章", "第四章"])
-            XCTAssertEqual(model.previousChapterDirectoryWebView, 1)
-            XCTAssertNil(model.nextChapterDirectoryWebView)
-            XCTAssertNil(model.currentChapterDirectoryIndex)
+            XCTAssertEqual(model.navigation.visibleChapterDirectoryView, 2)
+            XCTAssertEqual(model.navigation.visibleChapterDirectoryChapters.map(\.title), ["第三章", "第四章"])
+            XCTAssertEqual(model.navigation.previousChapterDirectoryWebView, 1)
+            XCTAssertNil(model.navigation.nextChapterDirectoryWebView)
+            XCTAssertNil(model.navigation.currentChapterDirectoryIndex)
         }
     }
 
@@ -471,22 +471,22 @@ final class NovelReaderViewModelTests: XCTestCase {
             ]
         )
 
-        await model.previewChapterDirectoryWebView(2)
+        await model.navigation.previewChapterDirectoryWebView(2)
         await MainActor.run {
-            XCTAssertEqual(model.visibleChapterDirectoryView, 2)
-            XCTAssertEqual(model.previousChapterDirectoryWebView, 1)
-            XCTAssertNil(model.nextChapterDirectoryWebView)
+            XCTAssertEqual(model.navigation.visibleChapterDirectoryView, 2)
+            XCTAssertEqual(model.navigation.previousChapterDirectoryWebView, 1)
+            XCTAssertNil(model.navigation.nextChapterDirectoryWebView)
         }
 
-        await model.previewChapterDirectoryWebView(1)
+        await model.navigation.previewChapterDirectoryWebView(1)
 
         await MainActor.run {
             XCTAssertEqual(model.currentView, 1)
-            XCTAssertEqual(model.visibleChapterDirectoryView, 1)
-            XCTAssertNil(model.previousChapterDirectoryWebView)
-            XCTAssertEqual(model.nextChapterDirectoryWebView, 2)
-            XCTAssertEqual(model.visibleChapterDirectoryChapters.map(\.title), ["第一章", "第二章"])
-            XCTAssertEqual(model.currentChapterDirectoryIndex, model.currentChapterIndex)
+            XCTAssertEqual(model.navigation.visibleChapterDirectoryView, 1)
+            XCTAssertNil(model.navigation.previousChapterDirectoryWebView)
+            XCTAssertEqual(model.navigation.nextChapterDirectoryWebView, 2)
+            XCTAssertEqual(model.navigation.visibleChapterDirectoryChapters.map(\.title), ["第一章", "第二章"])
+            XCTAssertEqual(model.navigation.currentChapterDirectoryIndex, model.currentChapterIndex)
         }
     }
 
@@ -498,17 +498,17 @@ final class NovelReaderViewModelTests: XCTestCase {
             ]
         )
 
-        await model.previewChapterDirectoryWebView(2)
+        await model.navigation.previewChapterDirectoryWebView(2)
         let target = try await MainActor.run {
-            try XCTUnwrap(model.visibleChapterDirectoryChapters.first(where: { $0.title == "第四章" }))
+            try XCTUnwrap(model.navigation.visibleChapterDirectoryChapters.first(where: { $0.title == "第四章" }))
         }
-        await model.jumpToChapterDirectoryChapter(target)
+        await model.navigation.jumpToChapterDirectoryChapter(target)
 
         await MainActor.run {
             XCTAssertEqual(model.currentView, 2)
             XCTAssertEqual(model.currentChapterTitle, "第四章")
-            XCTAssertEqual(model.visibleChapterDirectoryView, model.visibleView)
-            XCTAssertEqual(model.visibleChapterDirectoryChapters.map(\.title), ["第三章", "第四章"])
+            XCTAssertEqual(model.navigation.visibleChapterDirectoryView, model.visibleView)
+            XCTAssertEqual(model.navigation.visibleChapterDirectoryChapters.map(\.title), ["第三章", "第四章"])
         }
     }
 
@@ -521,11 +521,11 @@ final class NovelReaderViewModelTests: XCTestCase {
             settings: NovelReaderAppearanceSettings(readingMode: .paged)
         )
 
-        await model.previewChapterDirectoryWebView(2)
+        await model.navigation.previewChapterDirectoryWebView(2)
         let target = try await MainActor.run {
-            try XCTUnwrap(model.visibleChapterDirectoryChapters.first(where: { $0.title == "第五章" }))
+            try XCTUnwrap(model.navigation.visibleChapterDirectoryChapters.first(where: { $0.title == "第五章" }))
         }
-        await model.jumpToChapterDirectoryChapter(target)
+        await model.navigation.jumpToChapterDirectoryChapter(target)
 
         await MainActor.run {
             XCTAssertEqual(model.currentView, 2)
@@ -1419,14 +1419,14 @@ final class NovelReaderViewModelTests: XCTestCase {
             }
         )
 
-        await model.previewChapterDirectoryWebView(2)
+        await model.navigation.previewChapterDirectoryWebView(2)
 
         await MainActor.run {
-            XCTAssertNil(model.chapterDirectory.error)
-            XCTAssertEqual(model.visibleChapterDirectoryView, 2)
-            XCTAssertEqual(model.visibleChapterDirectoryChapters.map(\.title), ["第二章"])
-            XCTAssertEqual(model.chapterDirectory.pageCount, 0)
-            XCTAssertFalse(model.chapterDirectory.isLoading)
+            XCTAssertNil(model.navigation.chapterDirectory.error)
+            XCTAssertEqual(model.navigation.visibleChapterDirectoryView, 2)
+            XCTAssertEqual(model.navigation.visibleChapterDirectoryChapters.map(\.title), ["第二章"])
+            XCTAssertEqual(model.navigation.chapterDirectory.pageCount, 0)
+            XCTAssertFalse(model.navigation.chapterDirectory.isLoading)
         }
     }
 
@@ -1478,15 +1478,15 @@ final class NovelReaderViewModelTests: XCTestCase {
         )
 
         await MainActor.run {
-            XCTAssertEqual(model.visibleChapterDirectoryChapters.map(\.title), ["第一章"])
+            XCTAssertEqual(model.navigation.visibleChapterDirectoryChapters.map(\.title), ["第一章"])
         }
 
-        await model.previewChapterDirectoryWebView(2)
+        await model.navigation.previewChapterDirectoryWebView(2)
 
         await MainActor.run {
-            XCTAssertNil(model.chapterDirectory.error)
-            XCTAssertEqual(model.visibleChapterDirectoryView, 2)
-            XCTAssertEqual(model.visibleChapterDirectoryChapters.map(\.title), ["第二章", "第三章"])
+            XCTAssertNil(model.navigation.chapterDirectory.error)
+            XCTAssertEqual(model.navigation.visibleChapterDirectoryView, 2)
+            XCTAssertEqual(model.navigation.visibleChapterDirectoryChapters.map(\.title), ["第二章", "第三章"])
         }
     }
 
@@ -2571,7 +2571,7 @@ final class NovelReaderViewModelTests: XCTestCase {
             offlineCacheStore: unfilteredOfflineStore
         )
         await MainActor.run {
-            XCTAssertEqual(unfilteredModel.cacheState.views.cachedViews, [1])
+            XCTAssertEqual(unfilteredModel.cache.state.views.cachedViews, [1])
         }
 
         let filteredOfflineStore = try makeReaderModelOfflineCacheStore()
@@ -2587,7 +2587,7 @@ final class NovelReaderViewModelTests: XCTestCase {
             offlineCacheStore: filteredOfflineStore
         )
         await MainActor.run {
-            XCTAssertEqual(filteredModel.cacheState.views.cachedViews, [1])
+            XCTAssertEqual(filteredModel.cache.state.views.cachedViews, [1])
         }
     }
 
@@ -2697,9 +2697,9 @@ final class NovelReaderViewModelTests: XCTestCase {
             forumCacheStore: forumCacheStore,
             offlineCacheStore: offlineStore
         )
-        await model.refreshCurrentCache()
+        await model.cache.refreshCurrentCache()
         try await waitFor {
-            await MainActor.run { model.cacheState.views.cachingViews == [1] }
+            await MainActor.run { model.cache.state.views.cachingViews == [1] }
         }
 
         let preservedAuthorFiltered = await cacheStore.loadProjection(
@@ -2718,8 +2718,8 @@ final class NovelReaderViewModelTests: XCTestCase {
             preservedUnfiltered?.segments.contains(.text(String(repeating: "全部回复旧缓存 内容。", count: 80), chapterTitle: "全部回复旧缓存")) == true
         )
         await MainActor.run {
-            XCTAssertEqual(model.cacheState.views.cachedViews, [1])
-            XCTAssertEqual(model.cacheState.queueEntryCount, 1)
+            XCTAssertEqual(model.cache.state.views.cachedViews, [1])
+            XCTAssertEqual(model.cache.state.queueEntryCount, 1)
         }
     }
 
@@ -2962,7 +2962,7 @@ final class NovelReaderViewModelTests: XCTestCase {
         )
 
         await MainActor.run {
-            let selection = model.cacheSelectionState(for: [1, 2])
+            let selection = model.cache.selectionState(for: [1, 2])
             XCTAssertEqual(selection.cachedSelectedViews, [1])
             XCTAssertEqual(selection.uncachedSelectedViews, [2])
             XCTAssertTrue(selection.canCache)
@@ -2982,18 +2982,18 @@ final class NovelReaderViewModelTests: XCTestCase {
         )
 
         await MainActor.run {
-            model.startCaching(views: [2, 3])
+            model.cache.startCaching(views: [2, 3])
         }
 
         try await waitFor {
-            await MainActor.run { model.cacheState.views.cachingViews == [2, 3] }
+            await MainActor.run { model.cache.state.views.cachingViews == [2, 3] }
         }
 
         await MainActor.run {
-            XCTAssertEqual(model.cacheState.views.cachedViews, [])
-            XCTAssertEqual(model.cacheState.queueEntryCount, 2)
-            XCTAssertEqual(model.cacheState.operation.status, .completed)
-            XCTAssertEqual(model.cacheState.operation.completedViews, [2, 3])
+            XCTAssertEqual(model.cache.state.views.cachedViews, [])
+            XCTAssertEqual(model.cache.state.queueEntryCount, 2)
+            XCTAssertEqual(model.cache.state.operation.status, .completed)
+            XCTAssertEqual(model.cache.state.operation.completedViews, [2, 3])
         }
     }
 
@@ -3009,7 +3009,7 @@ final class NovelReaderViewModelTests: XCTestCase {
         )
 
         await MainActor.run {
-            model.startCaching(views: [2])
+            model.cache.startCaching(views: [2])
         }
 
         try await waitFor {
@@ -3040,8 +3040,8 @@ final class NovelReaderViewModelTests: XCTestCase {
         )
 
         await MainActor.run {
-            XCTAssertEqual(model.cacheStatus(for: 2), .uncached)
-            XCTAssertEqual(model.cacheState.queueEntryCount, 0)
+            XCTAssertEqual(model.cache.status(for: 2), .uncached)
+            XCTAssertEqual(model.cache.state.queueEntryCount, 0)
         }
 
         let request = NovelOfflineCacheWorkRequest(
@@ -3056,8 +3056,8 @@ final class NovelReaderViewModelTests: XCTestCase {
 
         try await waitFor {
             await MainActor.run {
-                model.cacheStatus(for: 2) == .caching
-                    && model.cacheState.queueEntryCount == 1
+                model.cache.status(for: 2) == .caching
+                    && model.cache.state.queueEntryCount == 1
             }
         }
 
@@ -3086,9 +3086,9 @@ final class NovelReaderViewModelTests: XCTestCase {
 
         try await waitFor {
             await MainActor.run {
-                model.cacheStatus(for: 2) == .cached
-                    && model.cacheState.queueEntryCount == 0
-                    && model.cacheUpdateTime(for: 2) == completedAt
+                model.cache.status(for: 2) == .cached
+                    && model.cache.state.queueEntryCount == 0
+                    && model.cache.updateTime(for: 2) == completedAt
             }
         }
     }
@@ -3107,18 +3107,18 @@ final class NovelReaderViewModelTests: XCTestCase {
         )
 
         await MainActor.run {
-            model.updateCachedViews([1])
+            model.cache.updateCachedViews([1])
         }
 
         try await waitFor {
-            await MainActor.run { model.cacheStatus(for: 1) == .caching }
+            await MainActor.run { model.cache.status(for: 1) == .caching }
         }
 
         await MainActor.run {
-            XCTAssertEqual(model.cacheState.views.cachedViews, [1])
-            XCTAssertEqual(model.cacheState.views.cachingViews, [1])
-            XCTAssertEqual(model.cacheUpdateTime(for: 1), updatedAt)
-            XCTAssertEqual(model.cacheState.queueEntryCount, 1)
+            XCTAssertEqual(model.cache.state.views.cachedViews, [1])
+            XCTAssertEqual(model.cache.state.views.cachingViews, [1])
+            XCTAssertEqual(model.cache.updateTime(for: 1), updatedAt)
+            XCTAssertEqual(model.cache.state.queueEntryCount, 1)
         }
     }
 
@@ -3145,11 +3145,11 @@ final class NovelReaderViewModelTests: XCTestCase {
         )
 
         await MainActor.run {
-            XCTAssertEqual(model.cacheState.views.cachedViews, [1])
+            XCTAssertEqual(model.cache.state.views.cachedViews, [1])
         }
-        await model.deleteCachedViews([1])
+        await model.cache.deleteCachedViews([1])
         try await waitFor {
-            await MainActor.run { model.cacheState.views.cachedViews.isEmpty }
+            await MainActor.run { model.cache.state.views.cachedViews.isEmpty }
         }
 
         let thread = makeThreadIdentity(from: threadID)
@@ -3230,7 +3230,7 @@ private func makeModel(
     }
 
     await model.prepare(layout: NovelReaderLayout(width: 320, height: 568))
-    await model.refreshCachedState()
+    await model.cache.refresh()
     return model
 }
 

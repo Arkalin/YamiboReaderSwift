@@ -5,17 +5,17 @@ import YamiboReaderCore
 import UIKit
 
 struct NovelReaderCachePanel: View {
-    @ObservedObject var model: NovelReaderViewModel
+    @ObservedObject var cache: NovelReaderCacheCoordinator
     let onShowProgress: () -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var selectedViews: Set<Int> = []
     @State private var isQueuePresented = false
     @State private var queueViewModel: MineHomeViewModel
 
-    init(model: NovelReaderViewModel, onShowProgress: @escaping () -> Void) {
-        _model = ObservedObject(wrappedValue: model)
+    init(cache: NovelReaderCacheCoordinator, onShowProgress: @escaping () -> Void) {
+        _cache = ObservedObject(wrappedValue: cache)
         self.onShowProgress = onShowProgress
-        _queueViewModel = State(initialValue: model.makeOfflineCacheQueueViewModel())
+        _queueViewModel = State(initialValue: cache.makeOfflineCacheQueueViewModel())
     }
 
     var body: some View {
@@ -23,9 +23,9 @@ struct NovelReaderCachePanel: View {
             List {
                 Section(L10n.string("reader.cache_scope")) {
                     VStack(alignment: .leading, spacing: 6) {
-                        Text(model.cacheScopeTitle)
+                        Text(cache.scopeTitle)
                             .font(.headline)
-                        Text(model.cacheScopeDescription)
+                        Text(cache.scopeDescription)
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                     }
@@ -37,16 +37,16 @@ struct NovelReaderCachePanel: View {
                         if selectionState.isAllSelected {
                             selectedViews = []
                         } else {
-                            selectedViews = Set(model.allCacheableViews)
+                            selectedViews = Set(cache.allCacheableViews)
                         }
                     }
-                    .disabled(model.allCacheableViews.isEmpty)
+                    .disabled(cache.allCacheableViews.isEmpty)
 
-                    if model.allCacheableViews.isEmpty {
+                    if cache.allCacheableViews.isEmpty {
                         Text(L10n.string("reader.no_cacheable_pages"))
                             .foregroundStyle(.secondary)
                     } else {
-                        ForEach(model.allCacheableViews, id: \.self) { view in
+                        ForEach(cache.allCacheableViews, id: \.self) { view in
                             Button {
                                 toggleSelection(for: view)
                             } label: {
@@ -87,13 +87,13 @@ struct NovelReaderCachePanel: View {
 
                 ToolbarItem(placement: .topBarTrailing) {
                     NovelReaderCacheQueueToolbarButton(
-                        entryCount: model.cacheState.queueEntryCount,
+                        entryCount: cache.state.queueEntryCount,
                         action: showQueue
                     )
                 }
             }
             .task {
-                await model.refreshCachedState()
+                await cache.refresh()
             }
             .sheet(isPresented: $isQueuePresented) {
                 MineOfflineCacheQueueSheet(viewModel: queueViewModel)
@@ -102,7 +102,7 @@ struct NovelReaderCachePanel: View {
     }
 
     private var selectionState: NovelReaderCacheSelectionState {
-        model.cacheSelectionState(for: selectedViews)
+        cache.selectionState(for: selectedViews)
     }
 
     private var actionBar: some View {
@@ -110,20 +110,20 @@ struct NovelReaderCachePanel: View {
             Divider()
             HStack(spacing: 12) {
                 Button(L10n.string("reader.cache_action.cache")) {
-                    model.startCaching(views: selectionState.uncachedSelectedViews)
+                    cache.startCaching(views: selectionState.uncachedSelectedViews)
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(!selectionState.canCache)
 
                 Button(L10n.string("reader.cache_action.update")) {
-                    model.updateCachedViews(selectionState.updatableSelectedViews)
+                    cache.updateCachedViews(selectionState.updatableSelectedViews)
                 }
                 .buttonStyle(.bordered)
                 .disabled(!selectionState.canUpdate)
 
                 Button(L10n.string("common.delete"), role: .destructive) {
                     Task {
-                        await model.deleteCachedViews(selectionState.cachedSelectedViews)
+                        await cache.deleteCachedViews(selectionState.cachedSelectedViews)
                         selectedViews.subtract(selectionState.cachedSelectedViews)
                     }
                 }
@@ -140,7 +140,7 @@ struct NovelReaderCachePanel: View {
     @ViewBuilder
     private func cacheStateLabel(for view: Int) -> some View {
         VStack(alignment: .trailing, spacing: 3) {
-            switch model.cacheStatus(for: view) {
+            switch cache.status(for: view) {
             case .caching:
                 Label(L10n.string("reader.caching"), systemImage: "arrow.down.circle.fill")
                     .labelStyle(.titleAndIcon)
@@ -155,7 +155,7 @@ struct NovelReaderCachePanel: View {
                 EmptyView()
             }
 
-            if let updateTime = model.cacheUpdateTime(for: view) {
+            if let updateTime = cache.updateTime(for: view) {
                 Text(L10n.string("reader.cache_updated_at", updateTime.formatted(date: .abbreviated, time: .shortened)))
                     .font(.caption2)
                     .foregroundStyle(.secondary)
@@ -202,7 +202,7 @@ private struct NovelReaderCacheQueueToolbarButton: View {
 }
 
 struct NovelReaderCacheProgressSheet: View {
-    @ObservedObject var model: NovelReaderViewModel
+    @ObservedObject var cache: NovelReaderCacheCoordinator
     let onClose: () -> Void
     @Environment(\.dismiss) private var dismiss
 
@@ -221,7 +221,7 @@ struct NovelReaderCacheProgressSheet: View {
                         .multilineTextAlignment(.center)
                         .foregroundStyle(.secondary)
 
-                    if let summary = model.cacheState.operation.summaryMessage, model.cacheState.operation.isFinished {
+                    if let summary = cache.state.operation.summaryMessage, cache.state.operation.isFinished {
                         Text(summary)
                             .font(.footnote)
                             .multilineTextAlignment(.center)
@@ -237,23 +237,23 @@ struct NovelReaderCacheProgressSheet: View {
             .toolbar {
                 ToolbarItem(placement: .bottomBar) {
                     HStack {
-                        if model.cacheState.operation.isFinished {
+                        if cache.state.operation.isFinished {
                             Button(L10n.string("common.done")) {
-                                model.dismissCacheProgress()
+                                cache.dismissProgress()
                                 onClose()
                                 dismiss()
                             }
                             .buttonStyle(.borderedProminent)
                         } else {
                             Button(L10n.string("reader.run_in_background")) {
-                                model.hideCacheProgress()
+                                cache.hideProgress()
                                 onClose()
                                 dismiss()
                             }
                             .buttonStyle(.borderedProminent)
 
                             Button(L10n.string("common.stop"), role: .destructive) {
-                                model.stopCaching()
+                                cache.stopCaching()
                             }
                             .buttonStyle(.bordered)
                         }
@@ -264,12 +264,12 @@ struct NovelReaderCacheProgressSheet: View {
     }
 
     private var progressValue: Double {
-        guard model.cacheState.operation.totalCount > 0 else { return 0 }
-        return Double(model.cacheState.operation.completedCount) / Double(model.cacheState.operation.totalCount)
+        guard cache.state.operation.totalCount > 0 else { return 0 }
+        return Double(cache.state.operation.completedCount) / Double(cache.state.operation.totalCount)
     }
 
     private var titleText: String {
-        switch model.cacheState.operation.status {
+        switch cache.state.operation.status {
         case .idle:
             return L10n.string("reader.cache_status.ready")
         case .running:
@@ -282,12 +282,12 @@ struct NovelReaderCacheProgressSheet: View {
     }
 
     private var detailText: String {
-        if model.cacheState.operation.isFinished {
-            return L10n.string("reader.cache_detail.completed", model.cacheState.operation.completedCount, max(model.cacheState.operation.totalCount, 1))
+        if cache.state.operation.isFinished {
+            return L10n.string("reader.cache_detail.completed", cache.state.operation.completedCount, max(cache.state.operation.totalCount, 1))
         }
 
-        if let currentView = model.cacheState.operation.currentView {
-            return L10n.string("reader.cache_detail.running", currentView, model.cacheState.operation.completedCount, max(model.cacheState.operation.totalCount, 1))
+        if let currentView = cache.state.operation.currentView {
+            return L10n.string("reader.cache_detail.running", currentView, cache.state.operation.completedCount, max(cache.state.operation.totalCount, 1))
         }
 
         return L10n.string("reader.cache_detail.ready")

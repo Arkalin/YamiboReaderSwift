@@ -63,7 +63,7 @@ private struct FavoriteUpdateEventRow: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(event.title)
                         .font(.subheadline.weight(.semibold))
-                    Text(event.summary)
+                    Text(event.summary.displayText)
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                     if let forumName = event.forumName {

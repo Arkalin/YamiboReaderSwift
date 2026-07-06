@@ -271,7 +271,6 @@
 "favorites.updates.checking" = "正在检查";
 "favorites.updates.checking_item" = "正在检查 %d/%d：%@";
 "favorites.updates.completed" = "检查完成";
-"favorites.updates.detected_count" = "发现 %d 个更新。";
 "favorites.updates.dismiss" = "忽略";
 "favorites.updates.dismiss_all" = "全部忽略";
 "favorites.updates.events" = "收藏更新";
@@ -296,7 +295,6 @@
 "favorites.updates.summary.changed" = "内容有更新";
 "favorites.updates.summary.pages" = "新增 %d 页";
 "favorites.updates.summary.replies" = "新增 %d 条回复";
-"favorites.updates.task_lost" = "上次运行中的更新检查任务已丢失，已标记为中断。";
 "favorites.syncing" = "同步收藏中…";
 "favorites.tag_name" = "标签名称";
 "favorites.tag_sort.association_count" = "关联数量";

@@ -20,7 +20,7 @@ struct FavoriteRemoteSyncStatusCard: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(statusTitle)
                         .font(.subheadline.weight(.semibold))
-                    Text(snapshot.phase)
+                    Text(snapshot.phase.displayTitle)
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                         .lineLimit(2)

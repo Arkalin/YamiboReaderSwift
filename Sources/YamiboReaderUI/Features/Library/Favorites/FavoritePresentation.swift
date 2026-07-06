@@ -94,3 +94,97 @@ extension [FavoriteCategory] {
         }
     }
 }
+
+extension LocalFavoriteOpenError: LocalizedError {
+    var errorDescription: String? {
+        switch self {
+        case .mangaTitleUnresolved:
+            L10n.string("favorite_library.manga_title_resolution_failed")
+        }
+    }
+}
+
+extension FavoriteRemoteSyncPhase {
+    var displayTitle: String {
+        switch self {
+        case .queued:
+            L10n.string("favorites.sync.phase.queued")
+        case .fetching:
+            L10n.string("favorites.sync.phase.fetching")
+        case .importing:
+            L10n.string("favorites.sync.phase.importing")
+        case .completed:
+            L10n.string("favorites.sync.phase.completed")
+        case .failed:
+            L10n.string("favorites.sync.phase.failed")
+        case .interrupted:
+            L10n.string("favorites.sync.phase.interrupted")
+        }
+    }
+}
+
+extension FavoriteRemoteSyncLogEntry {
+    var displayText: String {
+        switch self {
+        case let .started(categoryName):
+            L10n.string("favorites.sync.log.started", categoryName)
+        case .fetching:
+            L10n.string("favorites.sync.log.fetching")
+        case let .fetched(count):
+            L10n.string("favorites.sync.log.fetched", count)
+        case let .completed(importedCount):
+            L10n.string("favorites.sync.log.completed", importedCount)
+        case .failed:
+            L10n.string("favorites.sync.log.failed")
+        case .interrupted:
+            L10n.string("favorites.sync.log.interrupted")
+        case .taskLost:
+            L10n.string("favorites.sync.log.task_lost")
+        }
+    }
+}
+
+extension FavoriteRemoteSyncWarning {
+    var displayText: String {
+        switch self {
+        case .interruptedByUser:
+            L10n.string("favorites.sync.warning.interrupted_by_user")
+        case .interrupted:
+            L10n.string("favorites.sync.warning.interrupted")
+        case .taskLost:
+            L10n.string("favorites.sync.warning.task_lost")
+        case .backgroundExpired:
+            L10n.string("favorites.sync.warning.background_expired")
+        case .backgroundUnavailable:
+            L10n.string("favorites.sync.warning.background_unavailable")
+        case let .failedItems(count):
+            L10n.string("favorites.sync.warning.failed_items", count)
+        case let .uploadPending(count):
+            L10n.string("favorites.sync.warning.upload_pending", count)
+        }
+    }
+}
+
+extension FavoriteUpdateRunProgress {
+    var displayText: String {
+        switch self {
+        case let .loadedTargets(count):
+            L10n.string("favorites.updates.loaded_targets", count)
+        case let .checking(index, total, title):
+            L10n.string("favorites.updates.checking_item", index, total, title)
+        }
+    }
+}
+
+extension FavoriteUpdateSummary {
+    var displayText: String {
+        switch self {
+        case let .newReplies(count):
+            L10n.string("favorites.updates.summary.replies", count)
+        case let .newPages(count):
+            L10n.string("favorites.updates.summary.pages", count)
+        case .changed:
+            L10n.string("favorites.updates.summary.changed")
+        }
+    }
+}

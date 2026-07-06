@@ -73,10 +73,10 @@ final class FavoriteRemoteSyncSession: ObservableObject {
             status: .running,
             targetCategoryID: targetCategoryID,
             targetCategoryName: categoryName,
-            phase: L10n.string("favorites.sync.phase.queued"),
+            phase: .queued,
             startedAt: now,
             updatedAt: now,
-            logMessages: [L10n.string("favorites.sync.log.started", categoryName)]
+            logEntries: [.started(categoryName: categoryName)]
         )
         snapshot = startedSnapshot
         await persistSnapshot(startedSnapshot)
@@ -103,10 +103,10 @@ final class FavoriteRemoteSyncSession: ObservableObject {
         Self.activeRunCancelHandlers[runID]?()
         await updateSnapshot { snapshot in
             snapshot.status = .interrupted
-            snapshot.phase = L10n.string("favorites.sync.phase.interrupted")
+            snapshot.phase = .interrupted
             snapshot.finishedAt = .now
-            snapshot.warningMessages.append(L10n.string("favorites.sync.warning.interrupted_by_user"))
-            snapshot.logMessages.append(L10n.string("favorites.sync.log.interrupted"))
+            snapshot.warnings.append(.interruptedByUser)
+            snapshot.logEntries.append(.interrupted)
         }
         endBackgroundTask()
     }
@@ -129,8 +129,8 @@ final class FavoriteRemoteSyncSession: ObservableObject {
 
         do {
             await updateSnapshot(runID: runID) { snapshot in
-                snapshot.phase = L10n.string("favorites.sync.phase.fetching")
-                snapshot.logMessages.append(L10n.string("favorites.sync.log.fetching"))
+                snapshot.phase = .fetching
+                snapshot.logEntries.append(.fetching)
             }
             if let executor {
                 let report = try await executor(runID, targetCategoryID)
@@ -151,10 +151,10 @@ final class FavoriteRemoteSyncSession: ObservableObject {
                 )
             }
             await updateSnapshot(runID: runID) { snapshot in
-                snapshot.phase = L10n.string("favorites.sync.phase.importing")
+                snapshot.phase = .importing
                 snapshot.totalRemoteCount = entries.count
                 snapshot.scannedCount = entries.count
-                snapshot.logMessages.append(L10n.string("favorites.sync.log.fetched", entries.count))
+                snapshot.logEntries.append(.fetched(count: entries.count))
             }
             let resolver = await makeThreadRouteResolver()
             let coverRepository = await makeForumThreadReaderRepository()
@@ -180,10 +180,10 @@ final class FavoriteRemoteSyncSession: ObservableObject {
             if error.isTaskCancellation {
                 await updateSnapshot(runID: runID) { snapshot in
                     snapshot.status = .interrupted
-                    snapshot.phase = L10n.string("favorites.sync.phase.interrupted")
+                    snapshot.phase = .interrupted
                     snapshot.finishedAt = .now
-                    snapshot.warningMessages.append(L10n.string("favorites.sync.warning.interrupted"))
-                    snapshot.logMessages.append(L10n.string("favorites.sync.log.interrupted"))
+                    snapshot.warnings.append(.interrupted)
+                    snapshot.logEntries.append(.interrupted)
                 }
                 return
             }
@@ -191,10 +191,10 @@ final class FavoriteRemoteSyncSession: ObservableObject {
             errorMessage = message
             await updateSnapshot(runID: runID) { snapshot in
                 snapshot.status = .failed
-                snapshot.phase = L10n.string("favorites.sync.phase.failed")
+                snapshot.phase = .failed
                 snapshot.finishedAt = .now
                 snapshot.errorMessages.append(message)
-                snapshot.logMessages.append(L10n.string("favorites.sync.log.failed"))
+                snapshot.logEntries.append(.failed)
             }
         }
     }
@@ -202,18 +202,18 @@ final class FavoriteRemoteSyncSession: ObservableObject {
     private func finish(runID: String, report: YamiboFavoriteSyncReport) async {
         await updateSnapshot(runID: runID) { snapshot in
             snapshot.status = .completed
-            snapshot.phase = L10n.string("favorites.sync.phase.completed")
+            snapshot.phase = .completed
             snapshot.finishedAt = .now
             snapshot.importedCount = report.importedTargetIDs.count
             snapshot.failedCount = report.failedRemoteFavoriteIDs.count
             snapshot.markedMissingCount = report.markedMissingTargetIDs.count
             snapshot.uploadTargetCount = report.uploadTargetIDs.count
-            snapshot.logMessages.append(L10n.string("favorites.sync.log.completed", report.importedTargetIDs.count))
+            snapshot.logEntries.append(.completed(importedCount: report.importedTargetIDs.count))
             if !report.failedRemoteFavoriteIDs.isEmpty {
-                snapshot.warningMessages.append(L10n.string("favorites.sync.warning.failed_items", report.failedRemoteFavoriteIDs.count))
+                snapshot.warnings.append(.failedItems(count: report.failedRemoteFavoriteIDs.count))
             }
             if !report.uploadTargetIDs.isEmpty {
-                snapshot.warningMessages.append(L10n.string("favorites.sync.warning.upload_pending", report.uploadTargetIDs.count))
+                snapshot.warnings.append(.uploadPending(count: report.uploadTargetIDs.count))
             }
         }
     }
@@ -225,11 +225,11 @@ final class FavoriteRemoteSyncSession: ObservableObject {
         guard snapshot.status == .running else { return snapshot }
         guard !Self.isRunActive(snapshot.runID) else { return snapshot }
         snapshot.status = .interrupted
-        snapshot.phase = L10n.string("favorites.sync.phase.interrupted")
+        snapshot.phase = .interrupted
         snapshot.finishedAt = snapshot.finishedAt ?? .now
         snapshot.updatedAt = .now
-        snapshot.warningMessages.append(L10n.string("favorites.sync.warning.task_lost"))
-        snapshot.logMessages.append(L10n.string("favorites.sync.log.task_lost"))
+        snapshot.warnings.append(.taskLost)
+        snapshot.logEntries.append(.taskLost)
         await persistSnapshot(snapshot)
         return snapshot
     }
@@ -267,10 +267,10 @@ final class FavoriteRemoteSyncSession: ObservableObject {
                 self.syncTask?.cancel()
                 await self.updateSnapshot(runID: runID) { snapshot in
                     snapshot.status = .interrupted
-                    snapshot.phase = L10n.string("favorites.sync.phase.interrupted")
+                    snapshot.phase = .interrupted
                     snapshot.finishedAt = .now
-                    snapshot.warningMessages.append(L10n.string("favorites.sync.warning.background_expired"))
-                    snapshot.logMessages.append(L10n.string("favorites.sync.log.interrupted"))
+                    snapshot.warnings.append(.backgroundExpired)
+                    snapshot.logEntries.append(.interrupted)
                 }
                 self.endBackgroundTask()
             }
@@ -278,7 +278,7 @@ final class FavoriteRemoteSyncSession: ObservableObject {
         if backgroundTaskID == .invalid {
             Task { @MainActor in
                 await updateSnapshot(runID: runID) { snapshot in
-                    snapshot.warningMessages.append(L10n.string("favorites.sync.warning.background_unavailable"))
+                    snapshot.warnings.append(.backgroundUnavailable)
                 }
             }
         }
@@ -339,19 +339,26 @@ final class FavoriteRemoteSyncSession: ObservableObject {
                 contentUpdatedAt: metadata.contentUpdatedAt
             )
         case let .webFallback(url):
-            let resolvedTitle = title ?? L10n.string("forum.default_title")
             let canonicalURL = YamiboThreadURLCanonicalizer.canonicalThreadURL(from: url) ?? url
             guard let threadID = YamiboThreadURLCanonicalizer.threadID(from: canonicalURL) else {
                 throw YamiboError.missingFavoriteThreadID
             }
-            let metadata = await threadMetadata(
+            // Route the fallback through the routing payload so a missing or
+            // blank title gets the same default as resolved `.thread` routes.
+            let payload = YamiboThreadRoutePayload(
                 thread: ThreadIdentity(tid: threadID),
-                title: resolvedTitle,
+                title: title ?? "",
+                canonicalURL: canonicalURL,
+                requestedURL: url
+            )
+            let metadata = await threadMetadata(
+                thread: payload.thread,
+                title: payload.title,
                 repository: coverRepository
             )
             return FavoriteThreadProbeResult(
                 target: .normalThread(threadID: threadID),
-                title: resolvedTitle,
+                title: payload.title,
                 sourceGroup: metadata.sourceGroup,
                 coverURL: metadata.coverURL,
                 contentUpdatedAt: metadata.contentUpdatedAt

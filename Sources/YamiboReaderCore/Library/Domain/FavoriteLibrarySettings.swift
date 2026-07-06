@@ -148,12 +148,45 @@ public enum FavoriteRemoteSyncTaskStatus: String, Codable, Hashable, Sendable {
     case interrupted
 }
 
+public enum FavoriteRemoteSyncPhase: String, Codable, Hashable, Sendable {
+    case queued
+    case fetching
+    case importing
+    case completed
+    case failed
+    case interrupted
+}
+
+/// Semantic log events recorded during a remote favorite sync run.
+/// The presentation layer maps these to localized text; the model never
+/// stores display copy.
+public enum FavoriteRemoteSyncLogEntry: Codable, Hashable, Sendable {
+    case started(categoryName: String)
+    case fetching
+    case fetched(count: Int)
+    case completed(importedCount: Int)
+    case failed
+    case interrupted
+    case taskLost
+}
+
+/// Semantic warnings surfaced by a remote favorite sync run.
+public enum FavoriteRemoteSyncWarning: Codable, Hashable, Sendable {
+    case interruptedByUser
+    case interrupted
+    case taskLost
+    case backgroundExpired
+    case backgroundUnavailable
+    case failedItems(count: Int)
+    case uploadPending(count: Int)
+}
+
 public struct FavoriteRemoteSyncSnapshot: Codable, Hashable, Identifiable, Sendable {
     public var runID: String
     public var status: FavoriteRemoteSyncTaskStatus
     public var targetCategoryID: String
     public var targetCategoryName: String
-    public var phase: String
+    public var phase: FavoriteRemoteSyncPhase
     public var startedAt: Date
     public var updatedAt: Date
     public var finishedAt: Date?
@@ -163,8 +196,10 @@ public struct FavoriteRemoteSyncSnapshot: Codable, Hashable, Identifiable, Senda
     public var failedCount: Int
     public var markedMissingCount: Int
     public var uploadTargetCount: Int
-    public var logMessages: [String]
-    public var warningMessages: [String]
+    public var logEntries: [FavoriteRemoteSyncLogEntry]
+    public var warnings: [FavoriteRemoteSyncWarning]
+    /// Raw error descriptions from failed operations; unlike logs and
+    /// warnings these carry free-form error text, not display copy.
     public var errorMessages: [String]
     public var isHiddenFromFavoritePage: Bool
 
@@ -175,7 +210,7 @@ public struct FavoriteRemoteSyncSnapshot: Codable, Hashable, Identifiable, Senda
         status: FavoriteRemoteSyncTaskStatus = .running,
         targetCategoryID: String,
         targetCategoryName: String,
-        phase: String,
+        phase: FavoriteRemoteSyncPhase,
         startedAt: Date = .now,
         updatedAt: Date = .now,
         finishedAt: Date? = nil,
@@ -185,8 +220,8 @@ public struct FavoriteRemoteSyncSnapshot: Codable, Hashable, Identifiable, Senda
         failedCount: Int = 0,
         markedMissingCount: Int = 0,
         uploadTargetCount: Int = 0,
-        logMessages: [String] = [],
-        warningMessages: [String] = [],
+        logEntries: [FavoriteRemoteSyncLogEntry] = [],
+        warnings: [FavoriteRemoteSyncWarning] = [],
         errorMessages: [String] = [],
         isHiddenFromFavoritePage: Bool = false
     ) {
@@ -204,8 +239,8 @@ public struct FavoriteRemoteSyncSnapshot: Codable, Hashable, Identifiable, Senda
         self.failedCount = failedCount
         self.markedMissingCount = markedMissingCount
         self.uploadTargetCount = uploadTargetCount
-        self.logMessages = logMessages
-        self.warningMessages = warningMessages
+        self.logEntries = logEntries
+        self.warnings = warnings
         self.errorMessages = errorMessages
         self.isHiddenFromFavoritePage = isHiddenFromFavoritePage
     }

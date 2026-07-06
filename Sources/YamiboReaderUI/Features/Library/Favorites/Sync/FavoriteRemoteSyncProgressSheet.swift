@@ -29,12 +29,12 @@ struct FavoriteRemoteSyncProgressSheet: View {
 
                 FavoriteRemoteSyncMessageSection(
                     title: L10n.string("favorites.sync.progress.logs"),
-                    messages: snapshot.logMessages,
+                    messages: snapshot.logEntries.map(\.displayText),
                     fallback: L10n.string("favorites.sync.progress.no_logs")
                 )
                 FavoriteRemoteSyncMessageSection(
                     title: L10n.string("favorites.sync.progress.warnings"),
-                    messages: snapshot.warningMessages,
+                    messages: snapshot.warnings.map(\.displayText),
                     fallback: L10n.string("favorites.sync.progress.no_warnings")
                 )
                 FavoriteRemoteSyncMessageSection(
@@ -105,7 +105,7 @@ private struct FavoriteRemoteSyncSummary: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
-            Text(snapshot.phase)
+            Text(snapshot.phase.displayTitle)
                 .foregroundStyle(.secondary)
             if let total = snapshot.totalRemoteCount {
                 ProgressView(value: Double(snapshot.scannedCount), total: Double(max(total, 1)))

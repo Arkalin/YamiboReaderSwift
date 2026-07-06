@@ -12,6 +12,7 @@ struct NovelReaderChapterSheet: View {
     let onSelectWebView: (Int) -> Void
 
     @ObservedObject var model: NovelReaderViewModel
+    @ObservedObject private var navigation: NovelReaderNavigationCoordinator
     @State private var showingWebPicker = false
 
     init(
@@ -20,6 +21,7 @@ struct NovelReaderChapterSheet: View {
         onSelectWebView: @escaping (Int) -> Void
     ) {
         self.model = model
+        self.navigation = model.navigation
         self.onSelect = onSelect
         self.onSelectWebView = onSelectWebView
     }
@@ -28,7 +30,7 @@ struct NovelReaderChapterSheet: View {
         NavigationStack {
             ScrollViewReader { scrollProxy in
                 ZStack {
-                    if model.chapterDirectory.isLoading {
+                    if navigation.chapterDirectory.isLoading {
                         Text(L10n.string("common.loading"))
                             .font(.body)
                             .foregroundStyle(.secondary)
@@ -36,13 +38,13 @@ struct NovelReaderChapterSheet: View {
                     } else {
                         List {
                             Section {
-                                if let error = model.chapterDirectory.error {
+                                if let error = navigation.chapterDirectory.error {
                                     Label(error, systemImage: "exclamationmark.triangle")
                                         .font(.footnote)
                                         .foregroundStyle(.secondary)
                                 }
 
-                                if let previousView = model.previousChapterDirectoryWebView {
+                                if let previousView = navigation.previousChapterDirectoryWebView {
                                     NovelReaderChapterWebNavigationButton(
                                         title: L10n.string("reader.go_previous_web_page"),
                                         systemImage: "chevron.up",
@@ -50,7 +52,7 @@ struct NovelReaderChapterSheet: View {
                                     )
                                 }
 
-                                ForEach(model.visibleChapterDirectoryChapters, id: \.ordinal) { chapter in
+                                ForEach(navigation.visibleChapterDirectoryChapters, id: \.ordinal) { chapter in
                                     Button {
                                         onSelect(chapter)
                                         dismiss()
@@ -73,7 +75,7 @@ struct NovelReaderChapterSheet: View {
                                     .id(chapter.ordinal)
                                 }
 
-                                if let nextView = model.nextChapterDirectoryWebView {
+                                if let nextView = navigation.nextChapterDirectoryWebView {
                                     NovelReaderChapterWebNavigationButton(
                                         title: L10n.string("reader.go_next_web_page"),
                                         systemImage: "chevron.down",
@@ -92,7 +94,7 @@ struct NovelReaderChapterSheet: View {
                             showingWebPicker.toggle()
                         } label: {
                             HStack(spacing: 6) {
-                                Text(model.chapterDirectoryWebTitle)
+                                Text(navigation.chapterDirectoryWebTitle)
                                     .lineLimit(1)
                                 Image(systemName: "chevron.down")
                                     .font(.caption.weight(.semibold))
@@ -103,14 +105,14 @@ struct NovelReaderChapterSheet: View {
                         .buttonStyle(.plain)
                         .disabled(model.maxView <= 1)
                         .popover(isPresented: $showingWebPicker, arrowEdge: .top) {
-                            NovelReaderChapterWebPicker(model: model) { view in
+                            NovelReaderChapterWebPicker(model: model, navigation: navigation) { view in
                                 showingWebPicker = false
-                                guard view != model.visibleChapterDirectoryView else { return }
+                                guard view != navigation.visibleChapterDirectoryView else { return }
                                 onSelectWebView(view)
                             }
                             .presentationCompactAdaptation(.popover)
                         }
-                        .accessibilityLabel(model.chapterDirectoryWebTitle)
+                        .accessibilityLabel(navigation.chapterDirectoryWebTitle)
                     }
                     ToolbarItem(placement: .topBarLeading) {
                         ReaderToolbarIconButton(
@@ -121,7 +123,7 @@ struct NovelReaderChapterSheet: View {
                     }
                 }
                 .onAppear {
-                    model.resetChapterDirectoryBrowsing()
+                    navigation.resetChapterDirectoryBrowsing()
                     scrollToCurrentChapter(using: scrollProxy)
                 }
                 .onChange(of: model.currentChapterIndex) { _, _ in
@@ -131,7 +133,7 @@ struct NovelReaderChapterSheet: View {
                     showingWebPicker = false
                     scrollToCurrentChapter(using: scrollProxy)
                 }
-                .onChange(of: model.visibleChapterDirectoryView) { _, _ in
+                .onChange(of: navigation.visibleChapterDirectoryView) { _, _ in
                     scrollToCurrentChapter(using: scrollProxy)
                 }
                 .onChange(of: model.maxView) { _, newValue in
@@ -144,23 +146,23 @@ struct NovelReaderChapterSheet: View {
     }
 
     private func isCurrent(_ chapter: NovelReaderChapter) -> Bool {
-        model.isCurrentChapterDirectoryChapter(chapter)
+        navigation.isCurrentChapterDirectoryChapter(chapter)
     }
 
     private func chapterLocationText(for chapter: NovelReaderChapter) -> String {
         if model.settings.readingMode == .vertical {
-            guard model.visibleChapterDirectoryPageCount > 1 else { return "0%" }
-            let fraction = Double(chapter.startIndex) / Double(model.visibleChapterDirectoryPageCount - 1)
+            guard navigation.visibleChapterDirectoryPageCount > 1 else { return "0%" }
+            let fraction = Double(chapter.startIndex) / Double(navigation.visibleChapterDirectoryPageCount - 1)
             return "\(Int((fraction * 100).rounded()))%"
         }
         return L10n.string("reader.page_number_spaced", chapter.startIndex + 1)
     }
 
     private func scrollToCurrentChapter(using proxy: ScrollViewProxy) {
-        guard let currentChapterIndex = model.currentChapterDirectoryIndex,
-              model.visibleChapterDirectoryChapters.indices.contains(currentChapterIndex) else { return }
+        guard let currentChapterIndex = navigation.currentChapterDirectoryIndex,
+              navigation.visibleChapterDirectoryChapters.indices.contains(currentChapterIndex) else { return }
         let targetIndex = max(currentChapterIndex - 3, 0)
-        let targetChapter = model.visibleChapterDirectoryChapters[targetIndex]
+        let targetChapter = navigation.visibleChapterDirectoryChapters[targetIndex]
         withAnimation(.easeInOut(duration: 0.2)) {
             proxy.scrollTo(targetChapter.ordinal, anchor: .top)
         }
@@ -193,6 +195,7 @@ private struct NovelReaderChapterWebNavigationButton: View {
 
 private struct NovelReaderChapterWebPicker: View {
     @ObservedObject var model: NovelReaderViewModel
+    @ObservedObject var navigation: NovelReaderNavigationCoordinator
     let onSelect: (Int) -> Void
 
     var body: some View {
@@ -204,8 +207,8 @@ private struct NovelReaderChapterWebPicker: View {
                             onSelect(view)
                         } label: {
                             HStack(spacing: 10) {
-                                Image(systemName: view == model.visibleChapterDirectoryView ? "checkmark.circle.fill" : "circle")
-                                    .foregroundStyle(view == model.visibleChapterDirectoryView ? Color.accentColor : Color.secondary)
+                                Image(systemName: view == navigation.visibleChapterDirectoryView ? "checkmark.circle.fill" : "circle")
+                                    .foregroundStyle(view == navigation.visibleChapterDirectoryView ? Color.accentColor : Color.secondary)
 
                                 Text(L10n.string("reader.page_number_spaced", view))
                                     .foregroundStyle(.primary)
@@ -223,7 +226,7 @@ private struct NovelReaderChapterWebPicker: View {
                             .padding(.vertical, 10)
                             .background(
                                 RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                    .fill(view == model.visibleChapterDirectoryView ? Color.accentColor.opacity(0.12) : Color.clear)
+                                    .fill(view == navigation.visibleChapterDirectoryView ? Color.accentColor.opacity(0.12) : Color.clear)
                             )
                         }
                         .buttonStyle(.plain)
@@ -237,7 +240,7 @@ private struct NovelReaderChapterWebPicker: View {
             .onAppear {
                 scrollToCurrentView(using: proxy)
             }
-            .onChange(of: model.visibleChapterDirectoryView) { _, _ in
+            .onChange(of: navigation.visibleChapterDirectoryView) { _, _ in
                 scrollToCurrentView(using: proxy)
             }
         }
@@ -245,7 +248,7 @@ private struct NovelReaderChapterWebPicker: View {
 
     private func scrollToCurrentView(using proxy: ScrollViewProxy) {
         guard model.maxView > 0 else { return }
-        let target = max(model.visibleChapterDirectoryView - 2, 1)
+        let target = max(navigation.visibleChapterDirectoryView - 2, 1)
         withAnimation(.easeInOut(duration: 0.2)) {
             proxy.scrollTo(target, anchor: .top)
         }

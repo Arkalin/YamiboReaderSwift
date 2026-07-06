@@ -230,7 +230,7 @@ public struct NovelReaderView: View {
                 Task { await jumpToChapterDirectoryChapter(chapter) }
             },
             onPreviewChapterDirectoryWebView: { view in
-                Task { await model.previewChapterDirectoryWebView(view) }
+                Task { await model.navigation.previewChapterDirectoryWebView(view) }
             },
             onOpenOriginalPostFromComments: { url in
                 openOriginalPostFromComments(url)
@@ -802,8 +802,8 @@ public struct NovelReaderView: View {
     }
 
     private func openCachePanel() {
-        if model.hasCacheOperationSession {
-            model.showCacheProgressIfRunning()
+        if model.cache.hasOperationSession {
+            model.cache.showProgressIfRunning()
             showingCacheProgress = true
         } else {
             showingCachePanel = true
@@ -894,7 +894,7 @@ public struct NovelReaderView: View {
     }
 
     private func jumpToChapterDirectoryChapter(_ chapter: NovelReaderChapter) async {
-        await model.jumpToChapterDirectoryChapter(chapter)
+        await model.navigation.jumpToChapterDirectoryChapter(chapter)
         restoreVerticalPositionIfNeeded()
     }
 
@@ -909,12 +909,12 @@ public struct NovelReaderView: View {
     }
 
     private func navigateBackFromChrome() async {
-        await model.navigateBack()
+        await model.navigation.navigateBack()
         restoreVerticalPositionIfNeeded()
     }
 
     private func navigateForwardFromChrome() async {
-        await model.navigateForward()
+        await model.navigation.navigateForward()
         restoreVerticalPositionIfNeeded()
     }
 
@@ -1337,7 +1337,7 @@ private struct NovelReaderPresentationModifier: ViewModifier {
                 )
             }
             .sheet(isPresented: $showingCachePanel) {
-                NovelReaderCachePanel(model: model) {
+                NovelReaderCachePanel(cache: model.cache) {
                     showingCachePanel = false
                     showingCacheProgress = true
                 }
@@ -1345,12 +1345,12 @@ private struct NovelReaderPresentationModifier: ViewModifier {
             .sheet(
                 isPresented: $showingCacheProgress,
                 onDismiss: {
-                    if model.hasCacheOperationSession {
-                        model.hideCacheProgress()
+                    if model.cache.hasOperationSession {
+                        model.cache.hideProgress()
                     }
                 }
             ) {
-                NovelReaderCacheProgressSheet(model: model) {
+                NovelReaderCacheProgressSheet(cache: model.cache) {
                     showingCacheProgress = false
                 }
             }
