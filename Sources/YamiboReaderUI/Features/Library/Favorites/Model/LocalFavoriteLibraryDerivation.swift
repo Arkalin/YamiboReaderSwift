@@ -22,6 +22,14 @@ struct FavoriteLibraryDisplayState: Equatable {
     var showsCategoryCounts = true
 }
 
+/// One slot of a collection's 4-tile preview mosaic: a member's own cover
+/// (when it has one) or its own title for a text-fallback tile — never
+/// silently dropped just because it has no image.
+struct LocalFavoriteCollectionPreviewTile: Equatable {
+    let coverURL: URL?
+    let title: String
+}
+
 /// Everything the favorites UI renders that is computed from the library
 /// document plus filter state. Produced only by `LocalFavoriteLibraryDerivation`.
 struct LocalFavoriteDerivedState: Equatable {
@@ -30,9 +38,10 @@ struct LocalFavoriteDerivedState: Equatable {
     var categoryEntryCounts: [String: Int] = [:]
     var collectionEntryCounts: [String: Int] = [:]
     var sourceFilterEntryCounts: [LocalFavoriteSourceFilter: Int] = [:]
-    /// Up to four cover URLs per visible collection for the preview mosaic,
-    /// resolved from the collection's own members (not the filtered cards).
-    var collectionPreviewCoverURLs: [String: [URL]] = [:]
+    /// Up to four preview tiles per visible collection for the preview
+    /// mosaic, resolved from the collection's own members (not the filtered
+    /// cards).
+    var collectionPreviewTiles: [String: [LocalFavoriteCollectionPreviewTile]] = [:]
 }
 
 /// Pure computation: (document, navigation, filter, progress, covers) -> derived state.
@@ -74,7 +83,7 @@ enum LocalFavoriteLibraryDerivation {
             categoryEntryCounts: categoryEntryCounts(inputs, collectionEntryCounts: collectionCounts),
             collectionEntryCounts: collectionCounts,
             sourceFilterEntryCounts: sourceFilterEntryCounts(inputs),
-            collectionPreviewCoverURLs: collectionPreviewCoverURLs(inputs)
+            collectionPreviewTiles: collectionPreviewTiles(inputs)
         )
     }
 
@@ -143,15 +152,25 @@ enum LocalFavoriteLibraryDerivation {
         })
     }
 
-    private static func collectionPreviewCoverURLs(_ inputs: Inputs) -> [String: [URL]] {
+    private static func collectionPreviewTiles(_ inputs: Inputs) -> [String: [LocalFavoriteCollectionPreviewTile]] {
         Dictionary(uniqueKeysWithValues: inputs.document.collections.map { collection in
             let location = FavoriteLocation.collection(categoryID: collection.categoryID, collectionID: collection.id)
-            let urls = inputs.document.items
+            // Every member gets a tile — image-backed when a cover resolves,
+            // otherwise the member's own title for a text-fallback tile.
+            // Members without a cover must not be silently dropped here, or
+            // the mosaic shows fewer/blank tiles instead of that member's
+            // text cover.
+            let tiles = inputs.document.items
                 .filter { $0.locations.contains(location) }
                 .sorted { $0.updatedAt > $1.updatedAt }
-                .compactMap { inputs.contentCoverURLsByTargetID[$0.target.id] }
                 .prefix(4)
-            return (collection.id, Array(urls))
+                .map { item in
+                    LocalFavoriteCollectionPreviewTile(
+                        coverURL: inputs.contentCoverURLsByTargetID[item.target.id],
+                        title: item.resolvedDisplayTitle
+                    )
+                }
+            return (collection.id, Array(tiles))
         })
     }
 

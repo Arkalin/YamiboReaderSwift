@@ -10,7 +10,7 @@ struct LocalFavoriteCollectionRow: View {
     let showsCover: Bool
     let isSelectionMode: Bool
     let isSelected: Bool
-    let previewCoverURLs: [URL]
+    let previewTiles: [LocalFavoriteCollectionPreviewTile]
     let onOpen: () -> Void
     let onToggleSelection: () -> Void
     let onEdit: () -> Void
@@ -54,8 +54,7 @@ struct LocalFavoriteCollectionRow: View {
                 // favorite rows come out the same height.
                 LocalFavoriteCollectionCoverPreview(
                     color: collection.color.swiftUIColor,
-                    title: collection.name,
-                    coverURLs: previewCoverURLs
+                    tiles: previewTiles
                 )
                 .frame(width: 92, height: 128)
             }
@@ -86,7 +85,7 @@ struct LocalFavoriteCollectionGridCard: View {
     let categories: [FavoriteCategory]
     let isSelectionMode: Bool
     let isSelected: Bool
-    let previewCoverURLs: [URL]
+    let previewTiles: [LocalFavoriteCollectionPreviewTile]
     let onOpen: () -> Void
     let onToggleSelection: () -> Void
     let onEdit: () -> Void
@@ -101,8 +100,7 @@ struct LocalFavoriteCollectionGridCard: View {
             }
             LocalFavoriteCollectionMosaic(
                 color: collection.color.swiftUIColor,
-                title: collection.name,
-                coverURLs: previewCoverURLs
+                tiles: previewTiles
             )
             Text(collection.name)
                 .font(.subheadline.weight(.semibold))

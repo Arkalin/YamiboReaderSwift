@@ -103,7 +103,7 @@ struct LocalFavoriteGridEntryCell: View {
                 categories: organizer.categories,
                 isSelectionMode: selection.isSelectionMode,
                 isSelected: selection.selectedCollectionIDs.contains(collection.id),
-                previewCoverURLs: organizer.derived.collectionPreviewCoverURLs[collection.id] ?? [],
+                previewTiles: organizer.derived.collectionPreviewTiles[collection.id] ?? [],
                 onOpen: { organizer.openCollection(id: collection.id) },
                 onToggleSelection: { organizer.toggleCollectionSelection(id: collection.id) },
                 onEdit: { routes.sheet = .collectionEditor(LocalFavoriteCollectionDraft(collection: collection)) },

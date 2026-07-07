@@ -117,12 +117,13 @@ struct LocalFavoriteCoverTextFallback: View {
     }
 }
 
-/// Width-filling 2x2 cover mosaic for the grid collection card: square tiles
-/// with the collection color as tint, empty slots staying as tinted squares.
+/// Width-filling 2x2 cover mosaic for the grid collection card: square tiles,
+/// empty slots (fewer than 4 members) staying as collection-tinted squares.
+/// Each occupied tile carries its own member's title, so a member with no
+/// cover image renders its own text-fallback tile instead of being dropped.
 struct LocalFavoriteCollectionMosaic: View {
     let color: Color
-    let title: String
-    let coverURLs: [URL]
+    let tiles: [LocalFavoriteCollectionPreviewTile]
 
     var body: some View {
         VStack(spacing: 6) {
@@ -139,11 +140,16 @@ struct LocalFavoriteCollectionMosaic: View {
 
     @ViewBuilder
     private func tile(at index: Int) -> some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(color.opacity(0.18))
-            if index < coverURLs.count {
-                LocalFavoriteCoverThumbnail(url: coverURLs[index], title: title)
+        Group {
+            if index < tiles.count {
+                // Not layered under a background fill: LocalFavoriteCoverTextFallback's
+                // own background is only ~12% opaque, so a collection-tinted
+                // rectangle painted underneath it would bleed through and tint
+                // every text-fallback tile with the collection's color.
+                LocalFavoriteCoverThumbnail(url: tiles[index].coverURL, title: tiles[index].title)
+            } else {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(color.opacity(0.18))
             }
         }
         .aspectRatio(1, contentMode: .fit)
@@ -155,10 +161,11 @@ struct LocalFavoriteCollectionMosaic: View {
 /// Flexible 2x2 cover mosaic, sized entirely by whatever frame the caller
 /// applies (list rows size it to match an item row's cover so collection and
 /// favorite rows come out the same height; pickers can use a small square).
+/// Each tile carries its own member's title, so a member with no cover image
+/// renders its own text-fallback tile instead of being dropped.
 struct LocalFavoriteCollectionCoverPreview: View {
     let color: Color
-    let title: String
-    let coverURLs: [URL]
+    let tiles: [LocalFavoriteCollectionPreviewTile]
 
     var body: some View {
         GeometryReader { proxy in
@@ -183,8 +190,8 @@ struct LocalFavoriteCollectionCoverPreview: View {
     @ViewBuilder
     private func tile(at index: Int, width: CGFloat, height: CGFloat) -> some View {
         Group {
-            if index < coverURLs.count {
-                LocalFavoriteCoverThumbnail(url: coverURLs[index], title: title)
+            if index < tiles.count {
+                LocalFavoriteCoverThumbnail(url: tiles[index].coverURL, title: tiles[index].title)
             } else {
                 RoundedRectangle(cornerRadius: 3, style: .continuous)
                     .fill(color.opacity(index == 0 ? 0.8 : 0.18))
