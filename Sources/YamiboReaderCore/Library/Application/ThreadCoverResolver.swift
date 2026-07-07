@@ -37,53 +37,7 @@ public struct ThreadCoverResolver: Sendable {
         guard let owner = Self.owner(in: firstPage) else {
             return nil
         }
-        if let candidate = Self.findThreadCoverCandidate(in: firstPage, owner: owner) {
-            return candidate
-        }
-
-        let totalPages = Self.totalPages(from: firstPage)
-        if totalPages > 1 {
-            for page in 2...totalPages {
-                guard let cached = await repository.cachedThreadPage(
-                    thread: thread,
-                    title: title,
-                    authorID: nil,
-                    page: page
-                ) else {
-                    continue
-                }
-                if let candidate = Self.findThreadCoverCandidate(in: cached, owner: owner) {
-                    return candidate
-                }
-            }
-        }
-
-        let authorID = Self.validOwnerID(owner.uid)
-        var page = 1
-        var scanTotal = totalPages
-        while page <= scanTotal {
-            let loaded: ForumThreadPage?
-            if page == 1, authorID == nil {
-                loaded = firstPage
-            } else {
-                loaded = await loadPage(
-                    thread: thread,
-                    title: title,
-                    authorID: authorID,
-                    page: page,
-                    repository: repository
-                )
-            }
-            guard let loaded else {
-                return nil
-            }
-            scanTotal = Self.totalPages(from: loaded, fallback: scanTotal)
-            if let candidate = Self.findThreadCoverCandidate(in: loaded, owner: owner) {
-                return candidate
-            }
-            page += 1
-        }
-        return nil
+        return Self.findThreadCoverCandidate(in: firstPage, owner: owner)
     }
 
     public static func findThreadCoverCandidate(in page: ForumThreadPage?) -> URL? {
@@ -153,10 +107,6 @@ private extension ThreadCoverResolver {
 
     static func coverCandidateURL(in image: ForumThreadPostImage) -> URL? {
         ContentCoverStore.normalizedCoverURL(from: image.url)
-    }
-
-    static func totalPages(from page: ForumThreadPage, fallback: Int = 1) -> Int {
-        max(1, page.pageNavigation?.totalPages ?? fallback)
     }
 
     static func validOwnerID(_ value: String?) -> String? {

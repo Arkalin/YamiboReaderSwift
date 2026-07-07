@@ -59,35 +59,6 @@ import Testing
     #expect(ThreadCoverResolver.findThreadCoverCandidate(in: page)?.absoluteString == "https://img.example.com/name.jpg")
 }
 
-@Test func threadCoverResolverScansRegularPagesWhenOwnerUIDIsInvalid() async throws {
-    let owner = BlogReaderUser(uid: "0", name: "owner")
-    let firstPage = threadPage(
-        posts: [post(floor: "1#", author: owner)],
-        totalPages: 2
-    )
-    let repository = FakeThreadCoverPageRepository(fetchedPages: [
-        ThreadCoverPageKey(authorID: nil, page: 1): firstPage,
-        ThreadCoverPageKey(authorID: nil, page: 2): threadPage(
-            posts: [post(floor: "3#", author: owner, image: "https://img.example.com/regular.jpg")],
-            currentPage: 2,
-            totalPages: 2
-        )
-    ])
-
-    let resolved = await ThreadCoverResolver().resolve(
-        thread: testThread,
-        title: "title",
-        repository: repository
-    )
-
-    #expect(resolved?.absoluteString == "https://img.example.com/regular.jpg")
-    let fetchCalls = await repository.fetchCalls()
-    #expect(fetchCalls == [
-        ThreadCoverPageKey(authorID: nil, page: 1),
-        ThreadCoverPageKey(authorID: nil, page: 2)
-    ])
-}
-
 @Test func threadCoverResolverConsumesFlatPostImages() throws {
     let owner = BlogReaderUser(uid: "7", name: "owner")
     let page = threadPage(posts: [
@@ -120,57 +91,19 @@ import Testing
     #expect(ThreadCoverResolver.findThreadCoverCandidate(in: page)?.absoluteString == "https://img.example.com/cover.jpg")
 }
 
-@Test func threadCoverResolverUsesCachedNormalPageBeforeAuthorFilteredScan() async throws {
+@Test func threadCoverResolverOnlyChecksFirstPage() async throws {
     let owner = BlogReaderUser(uid: "7", name: "owner")
     let firstPage = threadPage(
         posts: [post(floor: "1#", author: owner)],
-        totalPages: 2
-    )
-    let cachedSecondPage = threadPage(
-        posts: [post(floor: "3#", author: owner, image: "https://img.example.com/cached.jpg")],
-        currentPage: 2,
-        totalPages: 2
-    )
-    let repository = FakeThreadCoverPageRepository(cachedPages: [
-        ThreadCoverPageKey(authorID: nil, page: 2): cachedSecondPage
-    ], fetchedPages: [
-        ThreadCoverPageKey(authorID: nil, page: 1): firstPage
-    ])
-
-    let resolved = await ThreadCoverResolver().resolve(
-        thread: testThread,
-        title: "title",
-        repository: repository
-    )
-
-    #expect(resolved?.absoluteString == "https://img.example.com/cached.jpg")
-    #expect(await repository.fetchCalls() == [
-        ThreadCoverPageKey(authorID: nil, page: 1)
-    ])
-}
-
-@Test func threadCoverResolverScansAuthorFilteredPagesAfterCacheMiss() async throws {
-    let owner = BlogReaderUser(uid: "7", name: "owner")
-    let firstPage = threadPage(
-        posts: [
-            post(floor: "1#", author: owner),
-            post(floor: "2#", author: BlogReaderUser(uid: "8", name: "other"), image: "https://img.example.com/wrong.jpg")
-        ],
-        totalPages: 2
-    )
-    let ownerFirstPage = threadPage(
-        posts: [post(floor: "1#", author: owner)],
-        totalPages: 2
-    )
-    let ownerSecondPage = threadPage(
-        posts: [post(floor: "3#", author: owner, image: "https://img.example.com/author-filtered.jpg")],
-        currentPage: 2,
         totalPages: 2
     )
     let repository = FakeThreadCoverPageRepository(fetchedPages: [
         ThreadCoverPageKey(authorID: nil, page: 1): firstPage,
-        ThreadCoverPageKey(authorID: "7", page: 1): ownerFirstPage,
-        ThreadCoverPageKey(authorID: "7", page: 2): ownerSecondPage
+        ThreadCoverPageKey(authorID: nil, page: 2): threadPage(
+            posts: [post(floor: "3#", author: owner, image: "https://img.example.com/page2.jpg")],
+            currentPage: 2,
+            totalPages: 2
+        )
     ])
 
     let resolved = await ThreadCoverResolver().resolve(
@@ -179,11 +112,9 @@ import Testing
         repository: repository
     )
 
-    #expect(resolved?.absoluteString == "https://img.example.com/author-filtered.jpg")
+    #expect(resolved == nil)
     #expect(await repository.fetchCalls() == [
-        ThreadCoverPageKey(authorID: nil, page: 1),
-        ThreadCoverPageKey(authorID: "7", page: 1),
-        ThreadCoverPageKey(authorID: "7", page: 2)
+        ThreadCoverPageKey(authorID: nil, page: 1)
     ])
 }
 
