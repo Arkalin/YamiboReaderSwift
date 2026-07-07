@@ -1064,6 +1064,83 @@ import YamiboReaderTestSupport
 }
 
 @MainActor
+@Test func forumNovelDetailMarksOnlyIdentityMatchedFloorWhenChapterTitlesDuplicate() throws {
+    let model = try makeForumNovelDetailViewModel()
+    model.readingProgress = ReadingProgressRecord(
+        threadID: model.context.thread.tid,
+        kind: .novel,
+        novel: NovelReadingProgressRecord(
+            lastView: 1,
+            lastChapter: "喜歡的人和義妹",
+            novelResumePoint: NovelResumePoint(
+                view: 1,
+                chapterIdentity: NovelChapterIdentity(rawValue: "post:1002#chapter:0"),
+                displayedTextOffset: 20,
+                chapterOrdinal: 1,
+                chapterTitle: "喜歡的人和義妹",
+                segmentProgress: 0.2,
+                readingModeHint: .vertical
+            ),
+            novelDocumentSurfaceProgressPercent: 20
+        )
+    )
+    let posts = ["1001", "1002", "1003"].map { postID in
+        ForumThreadPost(
+            postID: postID,
+            floorText: "\(postID)#",
+            author: BlogReaderUser(uid: "42", name: "楼主名", avatarURL: nil),
+            contentHTML: "",
+            contentText: "喜歡的人和義妹\n正文",
+            contentBlocks: []
+        )
+    }
+    let firstPage = ForumThreadPage(thread: model.context.thread, title: "小说标题", posts: posts)
+
+    let sections = ForumNovelDetailViewModel.chapterSections(
+        from: [1: firstPage],
+        totalPages: 1,
+        readingProgress: model.readingProgress,
+        favorite: model.favorite
+    )
+
+    #expect(sections[0].chapters.map(\.title) == ["喜歡的人和義妹", "喜歡的人和義妹", "喜歡的人和義妹"])
+    #expect(sections[0].chapters.map(\.isCurrentRead) == [false, true, false])
+}
+
+@MainActor
+@Test func forumNovelDetailTitleFallbackMarksOnlyFirstDuplicateWhenNoResumePointIdentityExists() throws {
+    let model = try makeForumNovelDetailViewModel()
+    model.readingProgress = ReadingProgressRecord(
+        threadID: model.context.thread.tid,
+        kind: .novel,
+        novel: NovelReadingProgressRecord(
+            lastView: 1,
+            lastChapter: "喜歡的人和義妹"
+        )
+    )
+    let posts = ["1001", "1002", "1003"].map { postID in
+        ForumThreadPost(
+            postID: postID,
+            floorText: "\(postID)#",
+            author: BlogReaderUser(uid: "42", name: "楼主名", avatarURL: nil),
+            contentHTML: "",
+            contentText: "喜歡的人和義妹\n正文",
+            contentBlocks: []
+        )
+    }
+    let firstPage = ForumThreadPage(thread: model.context.thread, title: "小说标题", posts: posts)
+
+    let sections = ForumNovelDetailViewModel.chapterSections(
+        from: [1: firstPage],
+        totalPages: 1,
+        readingProgress: model.readingProgress,
+        favorite: model.favorite
+    )
+
+    #expect(sections[0].chapters.map(\.isCurrentRead) == [true, false, false])
+}
+
+@MainActor
 @Test func forumNovelDetailRefreshesReadingProgressWhenReadingProgressStoreChanges() async throws {
     let suiteName = YamiboTestDefaults.suiteName(prefix: "novel-detail-progress-refresh")
     _ = try YamiboTestDefaults.make(suiteName: suiteName)

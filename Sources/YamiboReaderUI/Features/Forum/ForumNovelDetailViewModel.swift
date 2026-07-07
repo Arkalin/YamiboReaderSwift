@@ -516,20 +516,21 @@ final class ForumNovelDetailViewModel {
                     authorID: authorID
                 )
             } ?? []
+            let currentReadIndex = currentReadChapterIndex(
+                in: chapters,
+                readingProgress: readingProgress,
+                favorite: favorite
+            )
             return ForumNovelChapterSection(
                 page: page,
-                chapters: chapters.map { chapter in
+                chapters: chapters.enumerated().map { index, chapter in
                     var updatedChapter = chapter
                     updatedChapter.progressText = chapterProgressText(
                         for: chapter,
                         readingProgress: readingProgress,
                         favorite: favorite
                     )
-                    updatedChapter.isCurrentRead = isCurrentReadChapter(
-                        chapter,
-                        readingProgress: readingProgress,
-                        favorite: favorite
-                    )
+                    updatedChapter.isCurrentRead = index == currentReadIndex
                     return updatedChapter
                 },
                 isLoaded: pageDocument != nil,
@@ -708,31 +709,38 @@ final class ForumNovelDetailViewModel {
         readingProgress: ReadingProgressRecord?,
         favorite: Favorite?
     ) -> String? {
-        guard isCurrentReadChapter(chapter, readingProgress: readingProgress, favorite: favorite) else {
-            return nil
-        }
-        return nil
+        nil
     }
 
-    private static func isCurrentReadChapter(
-        _ chapter: ForumNovelChapterSummary,
+    /// Finds at most one chapter to flag as the current read position, preferring a
+    /// stable per-floor identity match. The title/view fallback only applies when no
+    /// identity is available at all, and only ever returns the first matching chapter,
+    /// so floors that share an identical extracted title are never all marked at once.
+    private static func currentReadChapterIndex(
+        in chapters: [ForumNovelChapterSummary],
         readingProgress: ReadingProgressRecord?,
         favorite: Favorite?
-    ) -> Bool {
+    ) -> Int? {
         let novel = readingProgress?.novel
         let resumePoint = novel?.novelResumePoint
-        if let resumeIdentity = resumePoint?.chapterIdentity,
-           resumeIdentity == chapter.resumePoint?.chapterIdentity {
-            return true
+
+        if let resumeIdentity = resumePoint?.chapterIdentity {
+            if let index = chapters.firstIndex(where: { $0.resumePoint?.chapterIdentity == resumeIdentity }) {
+                return index
+            }
+            return chapters.firstIndex { chapter in
+                guard let postID = chapter.postID else { return false }
+                return resumeIdentity.rawValue.hasPrefix("post:\(postID)#")
+            }
         }
-        if let postID = chapter.postID,
-           resumePoint?.chapterIdentity?.rawValue.hasPrefix("post:\(postID)#") == true {
-            return true
+
+        guard let lastView = novel?.lastView,
+              let lastChapter = trimmedNonEmpty(novel?.lastChapter) else {
+            return nil
         }
-        let lastView = novel?.lastView
-        let lastChapter = novel?.lastChapter
-        return lastView == chapter.view
-            && trimmedNonEmpty(lastChapter) == trimmedNonEmpty(chapter.title)
+        return chapters.firstIndex { chapter in
+            lastView == chapter.view && trimmedNonEmpty(chapter.title) == lastChapter
+        }
     }
 
     private static func hasReadingProgress(_ readingProgress: ReadingProgressRecord?, favorite: Favorite?) -> Bool {
