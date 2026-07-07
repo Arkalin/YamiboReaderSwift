@@ -47,6 +47,7 @@ struct LocalFavoritesOrganizationView: View {
                         ? L10n.string("favorites.selected_count", selection.selectedEntryCount)
                         : L10n.string("favorites.title")
                 )
+                .navigationBarTitleDisplayMode(.inline)
                 .searchable(
                     text: $organizer.filter.searchText,
                     prompt: L10n.string("favorites.search.placeholder")
@@ -111,7 +112,8 @@ struct LocalFavoritesOrganizationView: View {
                         },
                         onHide: {
                             await remoteSync.hideCard()
-                        }
+                        },
+                        showsCloseButton: false
                     )
                     .toolbar(selection.isSelectionMode ? .hidden : .automatic, for: .tabBar)
                 }
@@ -148,7 +150,7 @@ struct LocalFavoritesOrganizationView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 if selection.isSelectionMode {
-                    selectionToolbarContent
+                    selectionToolbarContent(showsBackButton: true)
                 } else {
                     ToolbarItem(placement: .topBarTrailing) {
                         collectionDetailMenu
@@ -300,32 +302,46 @@ struct LocalFavoritesOrganizationView: View {
     @ToolbarContentBuilder
     private var favoriteToolbarContent: some ToolbarContent {
         if selection.isSelectionMode {
-            selectionToolbarContent
+            selectionToolbarContent(showsBackButton: false)
         } else {
             normalToolbarContent
         }
     }
 
-    /// Selection mode: one select-all/invert menu on the leading edge and a
-    /// done button on the trailing edge (the bottom bar holds the actions).
+    /// Selection mode: a select-all/clear-all toggle on the leading edge and
+    /// a done button on the trailing edge (the bottom bar holds the
+    /// actions). Cache-sheet select-all button parity: a single button whose
+    /// label flips between "select all" and "invert" rather than a menu with
+    /// two separate actions, and "invert" here just clears the selection
+    /// (not a strict per-item inversion) since it only ever fires from an
+    /// already-fully-selected state.
+    ///
+    /// A custom leading toolbar item replaces `NavigationStack`'s automatic
+    /// back button rather than joining it — on the root page there's no back
+    /// button to lose, but the collection detail page is pushed and needs
+    /// one, so `showsBackButton` packs a back chevron into the same leading
+    /// item alongside the toggle there.
     @ToolbarContentBuilder
-    private var selectionToolbarContent: some ToolbarContent {
+    private func selectionToolbarContent(showsBackButton: Bool) -> some ToolbarContent {
         ToolbarItem(placement: .topBarLeading) {
-            Menu {
-                Button {
-                    organizer.selectAllVisible()
-                } label: {
-                    Label(L10n.string("common.select_all"), systemImage: "checkmark.circle")
+            HStack(spacing: 16) {
+                if showsBackButton {
+                    Button {
+                        organizer.closeCollection()
+                    } label: {
+                        Image(systemName: "chevron.left")
+                    }
+                    .accessibilityLabel(L10n.string("common.back"))
                 }
-                Button {
-                    organizer.invertVisibleSelection()
-                } label: {
-                    Label(L10n.string("common.invert_selection"), systemImage: "arrow.triangle.2.circlepath")
+                Button(
+                    organizer.isAllVisibleSelected
+                        ? L10n.string("common.invert_selection")
+                        : L10n.string("common.select_all")
+                ) {
+                    organizer.toggleSelectAllVisible()
                 }
-            } label: {
-                Image(systemName: "checklist")
+                .disabled(!organizer.hasVisibleSelectableEntries)
             }
-            .accessibilityLabel(L10n.string("common.select_all"))
         }
         ToolbarItem(placement: .topBarTrailing) {
             Button(L10n.string("common.done")) {
@@ -357,17 +373,6 @@ struct LocalFavoritesOrganizationView: View {
             .accessibilityLabel(L10n.string("favorites.updates.title"))
         }
         ToolbarItem(placement: .topBarTrailing) {
-            Button {
-                routes.sheet = .filters
-            } label: {
-                Image(systemName: organizer.filter.hasActiveFilters
-                    ? "line.3.horizontal.decrease.circle.fill"
-                    : "line.3.horizontal.decrease.circle")
-            }
-            .tint(organizer.filter.hasActiveFilters ? Color.accentColor : nil)
-            .accessibilityLabel(L10n.string("favorites.filter.title"))
-        }
-        ToolbarItem(placement: .topBarTrailing) {
             favoriteMoreMenu
         }
     }
@@ -384,11 +389,6 @@ struct LocalFavoritesOrganizationView: View {
                 }
             }
             Section {
-                Button {
-                    routes.sheet = .categoryName(LocalFavoriteCategoryNameDraft(mode: .create))
-                } label: {
-                    Label(L10n.string("favorites.category.create"), systemImage: "plus")
-                }
                 Button {
                     routes.sheet = .categoryManagement
                 } label: {

@@ -362,7 +362,6 @@
 "favorites.tags_action" = "标签";
 "favorites.tags_deselect_all" = "全不选";
 "favorites.tags.empty" = "暂无标签";
-"favorites.tags_limit_message" = "最多选择 %d 个标签。";
 "favorites.tags_overwrite_warning" = "所选收藏的标签不一致，确认后会用当前选择覆盖全部所选收藏。";
 "favorites.tags_select_all" = "全选";
 "favorites.tags_selected_count" = "已选择 %d 个标签";

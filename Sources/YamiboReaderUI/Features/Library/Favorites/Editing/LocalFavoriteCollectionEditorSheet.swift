@@ -53,9 +53,12 @@ struct LocalFavoriteCollectionEditorSheet: View {
                 TextField(L10n.string("favorites.collection_name"), text: $name)
                 Picker(L10n.string("common.select"), selection: $color) {
                     ForEach(FavoriteCollectionColor.allCases, id: \.self) { color in
-                        Label(color.localizedTitle, systemImage: "circle.fill")
-                            .foregroundStyle(color.swiftUIColor)
-                            .tag(color)
+                        Label {
+                            Text(color.localizedTitle)
+                        } icon: {
+                            color.pickerIcon
+                        }
+                        .tag(color)
                     }
                 }
             }

@@ -8,6 +8,11 @@ struct FavoriteRemoteSyncProgressSheet: View {
     var onResume: (() async -> String?)? = nil
     var onInterrupt: (() async -> Void)? = nil
     var onHide: (() async -> Void)? = nil
+    /// False when pushed onto an existing stack (the favorites page), which
+    /// already gets a back button from `NavigationStack` for free — showing
+    /// this too would duplicate it. True for the system-settings sheet,
+    /// which is the root of its own stack and has no other way to dismiss.
+    var showsCloseButton: Bool = true
 
     @Environment(\.dismiss) private var dismiss
 
@@ -55,9 +60,11 @@ struct FavoriteRemoteSyncProgressSheet: View {
         }
         .navigationTitle(L10n.string("favorites.sync.progress.title"))
         .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button(L10n.string("common.close")) {
-                    dismiss()
+            if showsCloseButton {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(L10n.string("common.close")) {
+                        dismiss()
+                    }
                 }
             }
             if let snapshot, hasActions {
@@ -174,17 +181,26 @@ private struct FavoriteRemoteSyncMessageSection: View {
     let messages: [String]
     let fallback: String
 
+    /// Matches Android SyncMessageBlock's default `maxHeight` (180dp): the
+    /// block scrolls within this bounded area as lines accumulate instead of
+    /// growing the whole sheet. `heightIn(max:)`-style behavior — short
+    /// content still shrinks to its natural height.
+    private let maxBlockHeight: CGFloat = 180
+
     var body: some View {
         Section(title) {
             if messages.isEmpty {
                 Text(fallback)
                     .foregroundStyle(.secondary)
             } else {
-                Text(messages.joined(separator: "\n"))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .textSelection(.enabled)
+                ScrollView {
+                    Text(messages.joined(separator: "\n"))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .textSelection(.enabled)
+                }
+                .frame(maxHeight: maxBlockHeight)
             }
         }
     }

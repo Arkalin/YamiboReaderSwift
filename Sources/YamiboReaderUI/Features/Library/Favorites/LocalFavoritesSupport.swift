@@ -26,52 +26,6 @@ enum FavoriteTagSortOrder: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 }
 
-let favoriteTagSelectionLimit = 20
-
-enum FavoriteTagSelectionDraftResult: Equatable {
-    case changed
-    case unchanged
-    case selectionLimitExceeded(max: Int)
-}
-
-struct FavoriteTagSelectionDraft: Equatable {
-    var selectedTagIDs: Set<String>
-
-    mutating func toggle(_ tagID: String, limit: Int = favoriteTagSelectionLimit) -> FavoriteTagSelectionDraftResult {
-        if selectedTagIDs.contains(tagID) {
-            selectedTagIDs.remove(tagID)
-            return .changed
-        }
-        return select(tagID, limit: limit)
-    }
-
-    mutating func select(_ tagID: String, limit: Int = favoriteTagSelectionLimit) -> FavoriteTagSelectionDraftResult {
-        guard !selectedTagIDs.contains(tagID) else { return .unchanged }
-        guard selectedTagIDs.count < limit else {
-            return .selectionLimitExceeded(max: limit)
-        }
-        selectedTagIDs.insert(tagID)
-        return .changed
-    }
-
-    mutating func selectAll(visibleTagIDs: [String], limit: Int = favoriteTagSelectionLimit) -> FavoriteTagSelectionDraftResult {
-        let updatedSelection = selectedTagIDs.union(visibleTagIDs)
-        guard updatedSelection.count <= limit else {
-            return .selectionLimitExceeded(max: limit)
-        }
-        guard updatedSelection != selectedTagIDs else { return .unchanged }
-        selectedTagIDs = updatedSelection
-        return .changed
-    }
-
-    mutating func deselectAll(visibleTagIDs: [String]) -> FavoriteTagSelectionDraftResult {
-        let updatedSelection = selectedTagIDs.subtracting(visibleTagIDs)
-        guard updatedSelection != selectedTagIDs else { return .unchanged }
-        selectedTagIDs = updatedSelection
-        return .changed
-    }
-}
-
 struct FavoriteTagEditorDraft: Identifiable {
     let tag: FavoriteTag?
     var name: String
@@ -101,7 +55,7 @@ func canReorderFavoriteTags(sortOrder: FavoriteTagSortOrder, searchText: String)
 
 func sortedFavoriteTags(
     _ tags: [FavoriteTag],
-    favorites: [Favorite],
+    favorites: [FavoriteItem],
     sortOrder: FavoriteTagSortOrder
 ) -> [FavoriteTag] {
     let associationCounts = tagAssociationCounts(from: favorites)
@@ -148,7 +102,7 @@ func sortedFavoriteTags(
     }
 }
 
-private func tagAssociationCounts(from favorites: [Favorite]) -> [String: Int] {
+private func tagAssociationCounts(from favorites: [FavoriteItem]) -> [String: Int] {
     var counts: [String: Int] = [:]
     for favorite in favorites {
         for tagID in Set(favorite.tagIDs) {

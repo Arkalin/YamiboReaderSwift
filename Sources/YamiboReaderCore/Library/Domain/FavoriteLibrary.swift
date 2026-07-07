@@ -1000,6 +1000,16 @@ public struct FavoriteLibraryDocument: Codable, Equatable, Sendable {
         }
     }
 
+    public mutating func reorderTags(orderedIDs: [String]) {
+        let orderByID = Dictionary(uniqueKeysWithValues: orderedIDs.enumerated().map { ($0.element, $0.offset) })
+        tags = tags.map { tag in
+            var tag = tag
+            guard let order = orderByID[tag.id] else { return tag }
+            tag.manualOrder = order
+            return tag
+        }
+    }
+
     public mutating func assignTag(id tagID: String, to target: FavoriteContentTarget) {
         guard tags.contains(where: { $0.id == tagID }),
               let index = items.firstIndex(where: { $0.target.id == target.id }) else { return }

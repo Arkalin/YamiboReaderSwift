@@ -21,8 +21,11 @@ final class LocalFavoriteBrowseSession: ObservableObject {
         selectedFavoriteIDs.count + selectedCollectionIDs.count
     }
 
+    /// Only meaningful for a pure-item selection: creating a collection
+    /// moves the selected favorites into it, which has no sensible effect on
+    /// a selected collection (collections don't nest).
     var canCreateCollectionFromSelection: Bool {
-        !selectedFavoriteIDs.isEmpty
+        !selectedFavoriteIDs.isEmpty && selectedCollectionIDs.isEmpty
     }
 
     // MARK: - Selection
@@ -63,24 +66,6 @@ final class LocalFavoriteBrowseSession: ObservableObject {
         isSelectionMode = true
         selectedFavoriteIDs.formUnion(favoriteIDs)
         selectedCollectionIDs.formUnion(collectionIDs)
-    }
-
-    func invertSelection(favoriteIDs: [String], collectionIDs: [String]) {
-        isSelectionMode = true
-        for id in favoriteIDs {
-            if selectedFavoriteIDs.contains(id) {
-                selectedFavoriteIDs.remove(id)
-            } else {
-                selectedFavoriteIDs.insert(id)
-            }
-        }
-        for id in collectionIDs {
-            if selectedCollectionIDs.contains(id) {
-                selectedCollectionIDs.remove(id)
-            } else {
-                selectedCollectionIDs.insert(id)
-            }
-        }
     }
 
     /// Drops selections that no longer exist in the library document and exits

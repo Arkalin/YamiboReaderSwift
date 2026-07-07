@@ -22,7 +22,7 @@ struct LocalFavoriteBrowseChrome: View {
             if organizer.filter.hasActiveFilters {
                 LocalFavoriteActiveFilterStrip(organizer: organizer)
             }
-            LocalFavoriteViewOptionChips(organizer: organizer)
+            LocalFavoriteViewOptionChips(organizer: organizer, routes: routes)
         }
     }
 }

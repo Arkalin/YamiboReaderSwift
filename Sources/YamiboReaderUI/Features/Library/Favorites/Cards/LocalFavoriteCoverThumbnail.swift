@@ -48,18 +48,31 @@ struct LocalFavoriteCoverThumbnail: View {
     }
 
     private func textFallback(in size: CGSize) -> some View {
-        LocalFavoriteCoverTextFallback(title: title)
+        LocalFavoriteCoverTextFallback(title: title, boxWidth: size.width)
             .frame(width: size.width, height: size.height)
     }
 }
 
 /// Title-on-color placeholder cover, mirroring the Android CoverTextFallback:
 /// the full title, bold, horizontally centered from the top, with the font
-/// size stepped by title length (32/24/19/15/12) and overflow clipped. Always
-/// rendered through an explicit size from its caller (see
-/// `LocalFavoriteCoverThumbnail`) rather than sizing itself.
+/// size stepped by title length (32/24/19/15/12, Android parity) and
+/// overflow clipped. Always rendered through an explicit size from its
+/// caller (see `LocalFavoriteCoverThumbnail`) rather than sizing itself.
+///
+/// Android applies that step table as a fixed point size everywhere because
+/// its own grid and row cards happen to compute to nearly the same cover
+/// width. This app's row card is a fixed 92pt while the grid card's cover is
+/// ~150pt+, so the same fixed size that fits the grid overflows the row
+/// card. Scaling the whole table by `boxWidth / referenceWidth` keeps the
+/// row-card fallback a proportional miniature of the grid one instead of a
+/// truncated blob.
 struct LocalFavoriteCoverTextFallback: View {
     let title: String
+    let boxWidth: CGFloat
+
+    /// The cover width the 32/24/19/15/12 step table below was tuned for —
+    /// the fixed/staggered grid card's typical cover width on iPhone.
+    private static let referenceWidth: CGFloat = 150
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -71,7 +84,7 @@ struct LocalFavoriteCoverTextFallback: View {
                 .foregroundStyle(Color.accentColor.opacity(0.75))
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: .infinity, alignment: .top)
-                .padding(8)
+                .padding(scaledPadding)
         }
         .clipped()
     }
@@ -80,7 +93,20 @@ struct LocalFavoriteCoverTextFallback: View {
         title.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    private var scale: CGFloat {
+        guard boxWidth.isFinite, boxWidth > 0 else { return 1 }
+        return boxWidth / Self.referenceWidth
+    }
+
+    private var scaledPadding: CGFloat {
+        max(2, 8 * scale)
+    }
+
     private var fontSize: CGFloat {
+        max(6, baseFontSize * scale)
+    }
+
+    private var baseFontSize: CGFloat {
         switch trimmedTitle.count {
         case ...6: 32
         case ...12: 24

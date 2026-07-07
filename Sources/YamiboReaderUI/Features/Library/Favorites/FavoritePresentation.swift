@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import YamiboReaderCore
 
 /// Presentation mapping for favorite domain values: user-facing labels and
@@ -57,6 +58,18 @@ extension FavoriteCollectionColor {
         case .gray:
             L10n.string("color.gray")
         }
+    }
+
+    /// A `circle.fill` baked to this color at the bitmap level via
+    /// `.alwaysOriginal`. Plain `Image(systemName:).foregroundStyle(_:)`
+    /// renders correctly in a normal row, but `Picker`/`Menu` force their
+    /// item icons to monochrome template rendering regardless of
+    /// `.foregroundStyle` — baking the color into the image bytes with a
+    /// `UIImage` and marking it "original" is what actually survives that.
+    var pickerIcon: Image {
+        let uiImage = UIImage(systemName: "circle.fill")?
+            .withTintColor(UIColor(swiftUIColor), renderingMode: .alwaysOriginal)
+        return Image(uiImage: uiImage ?? UIImage())
     }
 }
 

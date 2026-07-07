@@ -49,7 +49,7 @@ struct LocalFavoritesSheetContent: View {
                 }
             )
         case let .tagSelection(draft):
-            LocalFavoriteTagSelectionSheet(organizer: organizer, draft: draft)
+            FavoriteTagPickerView(organizer: organizer, draft: draft)
         case .selectionMove:
             LocalFavoriteSelectionMoveSheet(organizer: organizer, selection: organizer.selection)
         case .filters:

@@ -17,49 +17,50 @@ extension FavoriteTagSortOrder {
     }
 }
 
+struct LocalFavoriteTagSelectionDraft: Identifiable {
+    enum Mode: Equatable {
+        case filter
+        case favorite(String)
+        case selection
+    }
+
+    let id = UUID()
+    var mode: Mode
+    var initialTagIDs: Set<String>
+
+    static func filter(_ tagIDs: Set<String>) -> LocalFavoriteTagSelectionDraft {
+        LocalFavoriteTagSelectionDraft(mode: .filter, initialTagIDs: tagIDs)
+    }
+
+    static func favorite(_ itemID: String, initialTagIDs: Set<String>) -> LocalFavoriteTagSelectionDraft {
+        LocalFavoriteTagSelectionDraft(mode: .favorite(itemID), initialTagIDs: initialTagIDs)
+    }
+
+    static func selection(_ initialTagIDs: Set<String>) -> LocalFavoriteTagSelectionDraft {
+        LocalFavoriteTagSelectionDraft(mode: .selection, initialTagIDs: initialTagIDs)
+    }
+}
+
+/// Tag picker sheet used for filtering, editing one favorite's tags, or bulk
+/// tagging the current selection. Also hosts tag create/edit/delete/reorder,
+/// bound directly to `FavoriteLibraryOrganizer` — no ViewModel/closures.
 struct FavoriteTagPickerView: View {
-    let tags: [FavoriteTag]
-    let favorites: [Favorite]
-    let initialSelection: Set<String>
-    let showsOverwriteWarning: Bool
-    let onCancel: () -> Void
-    let onConfirm: (Set<String>) async -> Bool
-    let onCreateTag: (String, FavoriteTagColor) async -> FavoriteTag?
-    let onUpdateTag: (String, String, FavoriteTagColor) async -> Bool
-    let onDeleteTag: (String) async -> Bool
-    let onReorderTags: ([String], IndexSet, Int) async -> Bool
+    @Environment(\.dismiss) private var dismiss
+
+    @ObservedObject var organizer: FavoriteLibraryOrganizer
+    let draft: LocalFavoriteTagSelectionDraft
 
     @AppStorage("yamibo.favorite.tag.sort") private var sortRawValue = FavoriteTagSortOrder.manual.rawValue
-    @State private var selectionDraft: FavoriteTagSelectionDraft
+    @State private var selectedTagIDs: Set<String>
     @State private var searchText = ""
-    @State private var selectionErrorMessage: String?
     @State private var editorDraft: FavoriteTagEditorDraft?
     @State private var pendingDeleteTag: FavoriteTag?
     @State private var isConfirming = false
 
-    init(
-        tags: [FavoriteTag],
-        favorites: [Favorite],
-        initialSelection: Set<String>,
-        showsOverwriteWarning: Bool = false,
-        onCancel: @escaping () -> Void,
-        onConfirm: @escaping (Set<String>) async -> Bool,
-        onCreateTag: @escaping (String, FavoriteTagColor) async -> FavoriteTag?,
-        onUpdateTag: @escaping (String, String, FavoriteTagColor) async -> Bool,
-        onDeleteTag: @escaping (String) async -> Bool,
-        onReorderTags: @escaping ([String], IndexSet, Int) async -> Bool
-    ) {
-        self.tags = tags
-        self.favorites = favorites
-        self.initialSelection = initialSelection
-        self.showsOverwriteWarning = showsOverwriteWarning
-        self.onCancel = onCancel
-        self.onConfirm = onConfirm
-        self.onCreateTag = onCreateTag
-        self.onUpdateTag = onUpdateTag
-        self.onDeleteTag = onDeleteTag
-        self.onReorderTags = onReorderTags
-        _selectionDraft = State(initialValue: FavoriteTagSelectionDraft(selectedTagIDs: initialSelection))
+    init(organizer: FavoriteLibraryOrganizer, draft: LocalFavoriteTagSelectionDraft) {
+        self.organizer = organizer
+        self.draft = draft
+        _selectedTagIDs = State(initialValue: draft.initialTagIDs)
     }
 
     var body: some View {
@@ -80,7 +81,7 @@ struct FavoriteTagPickerView: View {
                     }
 
                     ForEach(visibleTags) { tag in
-                        let isSelected = selectionDraft.selectedTagIDs.contains(tag.id)
+                        let isSelected = selectedTagIDs.contains(tag.id)
 
                         Button {
                             toggle(tag)
@@ -112,7 +113,7 @@ struct FavoriteTagPickerView: View {
                     .onMove(perform: moveTags)
                 }
                 .overlay {
-                    if tags.isEmpty {
+                    if organizer.tags.isEmpty {
                         ContentUnavailableView(L10n.string("favorites.tags.empty"), systemImage: "tag")
                     }
                 }
@@ -142,23 +143,18 @@ struct FavoriteTagPickerView: View {
                     }
                 }
             }
-            .sensoryFeedback(.selection, trigger: selectionDraft.selectedTagIDs)
+            .sensoryFeedback(.selection, trigger: selectedTagIDs)
             .sheet(item: $editorDraft) { draft in
                 FavoriteTagEditorView(draft: draft) { name, color in
                     if let tagID = draft.tag?.id {
-                        if await onUpdateTag(tagID, name, color) {
-                            editorDraft = nil
-                            return true
-                        }
-                        return false
+                        await organizer.updateTag(id: tagID, name: name, color: color)
+                        return true
                     }
-
-                    guard let tag = await onCreateTag(name, color) else {
+                    guard let tag = await organizer.createTag(name: name, color: color) else {
                         return false
                     }
                     searchText = ""
-                    handleSelectionResult(selectionDraft.select(tag.id))
-                    editorDraft = nil
+                    selectedTagIDs.insert(tag.id)
                     return true
                 } onCancel: {
                     editorDraft = nil
@@ -174,10 +170,9 @@ struct FavoriteTagPickerView: View {
                 }
                 Button(L10n.string("common.delete"), role: .destructive) {
                     Task {
-                        if await onDeleteTag(tag.id) {
-                            selectionDraft.selectedTagIDs.remove(tag.id)
-                            pendingDeleteTag = nil
-                        }
+                        await organizer.deleteTag(id: tag.id)
+                        selectedTagIDs.remove(tag.id)
+                        pendingDeleteTag = nil
                     }
                 }
             } message: { tag in
@@ -229,15 +224,17 @@ struct FavoriteTagPickerView: View {
 
     private var tagSelectionFooter: some View {
         HStack {
-            Button(L10n.string("common.cancel"), action: onCancel)
-                .font(.headline)
-                .foregroundStyle(.red)
+            Button(L10n.string("common.cancel")) {
+                dismiss()
+            }
+            .font(.headline)
+            .foregroundStyle(.red)
 
             Spacer()
 
-            Text(selectionPrompt)
+            Text(L10n.string("favorites.tags_selected_count", selectedTagIDs.count))
                 .font(.headline)
-                .foregroundStyle(selectionErrorMessage == nil ? Color.secondary : Color.red)
+                .foregroundStyle(.secondary)
                 .lineLimit(2)
                 .multilineTextAlignment(.center)
 
@@ -246,7 +243,7 @@ struct FavoriteTagPickerView: View {
             Button(L10n.string("common.ok")) {
                 Task {
                     isConfirming = true
-                    _ = await onConfirm(selectionDraft.selectedTagIDs)
+                    await confirm()
                     isConfirming = false
                 }
             }
@@ -269,14 +266,18 @@ struct FavoriteTagPickerView: View {
         )
     }
 
+    private var showsOverwriteWarning: Bool {
+        draft.mode == .selection
+    }
+
     private var nextDefaultColor: FavoriteTagColor {
         let colors = FavoriteTagColor.allCases
         guard !colors.isEmpty else { return .gray }
-        return colors[tags.count % colors.count]
+        return colors[organizer.tags.count % colors.count]
     }
 
     private var orderedTags: [FavoriteTag] {
-        sortedFavoriteTags(tags, favorites: favorites, sortOrder: currentSortOrder)
+        sortedFavoriteTags(organizer.tags, favorites: organizer.favoriteItems, sortOrder: currentSortOrder)
     }
 
     private var visibleTags: [FavoriteTag] {
@@ -297,43 +298,45 @@ struct FavoriteTagPickerView: View {
 
     private var visibleTagsAreFullySelected: Bool {
         let ids = Set(visibleTagIDs)
-        return !ids.isEmpty && ids.isSubset(of: selectionDraft.selectedTagIDs)
-    }
-
-    private var selectionPrompt: String {
-        selectionErrorMessage ?? L10n.string("favorites.tags_selected_count", selectionDraft.selectedTagIDs.count)
+        return !ids.isEmpty && ids.isSubset(of: selectedTagIDs)
     }
 
     private func toggle(_ tag: FavoriteTag) {
-        handleSelectionResult(selectionDraft.toggle(tag.id))
+        if selectedTagIDs.contains(tag.id) {
+            selectedTagIDs.remove(tag.id)
+        } else {
+            selectedTagIDs.insert(tag.id)
+        }
     }
 
     private func toggleVisibleTagsSelection() {
-        let ids = visibleTagIDs
+        let ids = Set(visibleTagIDs)
         if visibleTagsAreFullySelected {
-            handleSelectionResult(selectionDraft.deselectAll(visibleTagIDs: ids))
+            selectedTagIDs.subtract(ids)
         } else {
-            handleSelectionResult(selectionDraft.selectAll(visibleTagIDs: ids))
+            selectedTagIDs.formUnion(ids)
         }
     }
 
     private func moveTags(fromOffsets: IndexSet, toOffset: Int) {
         guard canReorderCurrentTags else { return }
-        let visibleIDs = visibleTags.map(\.id)
+        var reorderedIDs = visibleTags.map(\.id)
+        reorderedIDs.move(fromOffsets: fromOffsets, toOffset: toOffset)
         Task {
-            _ = await onReorderTags(visibleIDs, fromOffsets, toOffset)
+            await organizer.reorderTags(reorderedIDs)
         }
     }
 
-    private func handleSelectionResult(_ result: FavoriteTagSelectionDraftResult) {
-        switch result {
-        case .changed:
-            selectionErrorMessage = nil
-        case .unchanged:
-            break
-        case let .selectionLimitExceeded(max):
-            selectionErrorMessage = L10n.string("favorites.tags_limit_message", max)
+    private func confirm() async {
+        switch draft.mode {
+        case .filter:
+            organizer.filter.selectedTagIDs = selectedTagIDs
+        case let .favorite(itemID):
+            await organizer.updateTags(for: itemID, tagIDs: selectedTagIDs)
+        case .selection:
+            await organizer.updateTagsForSelection(selectedTagIDs)
         }
+        dismiss()
     }
 }
 

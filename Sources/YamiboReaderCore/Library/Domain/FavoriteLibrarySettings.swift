@@ -130,11 +130,16 @@ public enum FavoriteLibraryLayoutMode: String, Codable, Hashable, CaseIterable, 
     public var systemImageName: String {
         switch self {
         case .fixedGrid:
+            // Uniform grid of even cells.
             "square.grid.2x2"
         case .staggered:
-            "rectangle.grid.2x2"
+            // Off-grid, unevenly-sized tiles — matches the masonry/waterfall
+            // layout instead of looking like another uniform grid.
+            "rectangle.3.offgrid"
         case .rowCard:
-            "list.bullet.rectangle"
+            // List rows with a portrait accessory, matching the actual
+            // portrait-oriented cover thumbnails this mode shows.
+            "list.bullet.rectangle.portrait"
         case .rowCardText:
             "list.bullet"
         }

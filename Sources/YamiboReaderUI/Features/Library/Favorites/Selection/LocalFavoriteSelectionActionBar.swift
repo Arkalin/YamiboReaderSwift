@@ -3,69 +3,111 @@ import YamiboReaderCore
 
 /// Floating bottom action bar shown while multi-selection is active, in a
 /// Liquid Glass container (material fallback below iOS 26). Select-all/invert
-/// live in the top-leading toolbar menu and done in the top-trailing button;
-/// this bar carries the actions, always visible and disabled when the current
-/// selection cannot use them.
+/// live in the top-leading toolbar menu and done in the top-trailing button.
+/// Nav/tab-bar style: icon over title, evenly distributed. Each action is
+/// hidden (not merely disabled) when the current selection can't use it, and
+/// the whole bar disappears once nothing is available (i.e. nothing is
+/// selected — every action needs at least one selected entry).
 struct LocalFavoriteSelectionActionBar: View {
     @ObservedObject var organizer: FavoriteLibraryOrganizer
     @ObservedObject var selection: LocalFavoriteBrowseSession
     let routes: LocalFavoritesRoutes
 
     var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 10) {
-                Button {
-                    routes.sheet = .selectionMove
-                } label: {
-                    Label(L10n.string("common.move"), systemImage: "folder")
+        if hasAnyAvailableAction {
+            HStack(spacing: 0) {
+                if canMove {
+                    actionButton(L10n.string("common.move"), systemImage: "folder") {
+                        routes.sheet = .selectionMove
+                    }
                 }
-                .disabled(selection.selectedFavoriteCount == 0)
-
-                Button {
-                    routes.sheet = .collectionEditor(LocalFavoriteCollectionDraft(mode: .createFromSelection))
-                } label: {
-                    Label(L10n.string("favorites.create_collection"), systemImage: "folder.badge.plus")
+                if canCreateCollection {
+                    actionButton(L10n.string("favorites.create_collection"), systemImage: "folder.badge.plus") {
+                        routes.sheet = .collectionEditor(LocalFavoriteCollectionDraft(mode: .createFromSelection))
+                    }
                 }
-                .disabled(!selection.canCreateCollectionFromSelection)
-
-                Button {
-                    routes.sheet = .tagSelection(.selection(organizer.commonTagIDsForSelection))
-                } label: {
-                    Label(L10n.string("favorites.tags_action"), systemImage: "tag")
+                if canEditTags {
+                    actionButton(L10n.string("favorites.tags_action"), systemImage: "tag") {
+                        routes.sheet = .tagSelection(.selection(organizer.commonTagIDsForSelection))
+                    }
                 }
-                .disabled(selection.selectedFavoriteCount == 0)
-
-                Button {
-                    if let collection = organizer.singleSelectedCollection {
+                if let collection = editableCollection {
+                    actionButton(L10n.string("common.edit"), systemImage: "pencil") {
                         routes.sheet = .collectionEditor(LocalFavoriteCollectionDraft(collection: collection))
                     }
-                } label: {
-                    Label(L10n.string("common.edit"), systemImage: "pencil")
                 }
-                .disabled(organizer.singleSelectedCollection == nil || selection.selectedFavoriteCount > 0)
-
-                Button {
-                    routes.dialog = .dissolveSelectedCollections
-                } label: {
-                    Label(L10n.string("favorites.dissolve"), systemImage: "folder.badge.minus")
+                if canDissolve {
+                    actionButton(L10n.string("favorites.dissolve"), systemImage: "folder.badge.minus") {
+                        routes.dialog = .dissolveSelectedCollections
+                    }
                 }
-                .disabled(selection.selectedCollectionCount == 0 || selection.selectedFavoriteCount > 0)
-
-                Button(role: .destructive) {
-                    routes.dialog = .deleteSelection
-                } label: {
-                    Label(L10n.string("common.delete"), systemImage: "trash")
+                if canDelete {
+                    actionButton(L10n.string("common.delete"), systemImage: "trash", tint: .red, role: .destructive) {
+                        routes.dialog = .deleteSelection
+                    }
                 }
-                .disabled(selection.selectedEntryCount == 0)
             }
-            .buttonStyle(.bordered)
-            .buttonBorderShape(.capsule)
-            .padding(.horizontal, 14)
+            .padding(.horizontal, 8)
             .padding(.vertical, 10)
+            .modifier(LocalFavoriteGlassBarBackground())
+            .padding(.horizontal, 12)
+            .padding(.bottom, 4)
         }
-        .modifier(LocalFavoriteGlassBarBackground())
-        .padding(.horizontal, 12)
-        .padding(.bottom, 4)
+    }
+
+    private func actionButton(
+        _ title: String,
+        systemImage: String,
+        tint: Color? = nil,
+        role: ButtonRole? = nil,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(role: role, action: action) {
+            VStack(spacing: 4) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 20))
+                Text(title)
+                    .font(.caption2)
+            }
+            .frame(maxWidth: .infinity)
+            .foregroundStyle(tint ?? .primary)
+        }
+        .buttonStyle(.plain)
+    }
+
+    // MARK: - Availability
+
+    /// Move only relocates the selected favorites; a mixed selection would
+    /// silently leave any selected collection untouched.
+    private var canMove: Bool {
+        selection.selectedFavoriteCount > 0 && selection.selectedCollectionCount == 0
+    }
+
+    private var canCreateCollection: Bool {
+        selection.canCreateCollectionFromSelection
+    }
+
+    /// Tags only apply to favorites, not collections — same pure-item
+    /// requirement as move.
+    private var canEditTags: Bool {
+        selection.selectedFavoriteCount > 0 && selection.selectedCollectionCount == 0
+    }
+
+    private var editableCollection: LocalFavoriteCollection? {
+        guard selection.selectedFavoriteCount == 0 else { return nil }
+        return organizer.singleSelectedCollection
+    }
+
+    private var canDissolve: Bool {
+        selection.selectedCollectionCount > 0 && selection.selectedFavoriteCount == 0
+    }
+
+    private var canDelete: Bool {
+        selection.selectedEntryCount > 0
+    }
+
+    private var hasAnyAvailableAction: Bool {
+        canMove || canCreateCollection || canEditTags || editableCollection != nil || canDissolve || canDelete
     }
 }
 
@@ -73,12 +115,12 @@ struct LocalFavoriteSelectionActionBar: View {
 private struct LocalFavoriteGlassBarBackground: ViewModifier {
     func body(content: Content) -> some View {
         if #available(iOS 26.0, *) {
-            content.glassEffect(.regular, in: .capsule)
+            content.glassEffect(.regular, in: .rect(cornerRadius: 26, style: .continuous))
         } else {
             content
-                .background(.regularMaterial, in: Capsule())
+                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 26, style: .continuous))
                 .overlay {
-                    Capsule()
+                    RoundedRectangle(cornerRadius: 26, style: .continuous)
                         .stroke(.quaternary, lineWidth: 0.5)
                 }
         }

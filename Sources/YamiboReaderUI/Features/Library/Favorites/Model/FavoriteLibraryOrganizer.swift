@@ -140,6 +140,13 @@ final class FavoriteLibraryOrganizer: ObservableObject {
         }
     }
 
+    /// All favorite items, for tag-association-count sorting in the tag
+    /// picker. Views go through the organizer's own surface rather than
+    /// reaching into `document` directly.
+    var favoriteItems: [FavoriteItem] {
+        document.items
+    }
+
     var currentCategoryCollections: [LocalFavoriteCollection] {
         document.collections
             .filter { $0.categoryID == selectedCategoryID }
@@ -412,6 +419,12 @@ final class FavoriteLibraryOrganizer: ObservableObject {
         selection.exitSelectionMode()
     }
 
+    func reorderTags(_ orderedIDs: [String]) async {
+        await commit { document in
+            document.reorderTags(orderedIDs: orderedIDs)
+        }
+    }
+
     // MARK: - Selection operations
 
     func toggleCollectionSelection(id: String) {
@@ -426,11 +439,33 @@ final class FavoriteLibraryOrganizer: ObservableObject {
         )
     }
 
-    func invertVisibleSelection() {
-        selection.invertSelection(
-            favoriteIDs: derived.cards.map(\.id),
-            collectionIDs: selectedCollectionID == nil ? derived.visibleCollections.map(\.id) : []
-        )
+    /// Whether every currently-visible favorite/collection is already
+    /// selected — this is a plain count comparison, not a per-item
+    /// membership diff (mirrors `MangaNovelReaderCacheSelectionState
+    /// .isAllSelected` in the cache sheets' own select-all button).
+    var isAllVisibleSelected: Bool {
+        let favoriteIDs = derived.cards.map(\.id)
+        let collectionIDs = selectedCollectionID == nil ? derived.visibleCollections.map(\.id) : []
+        let totalCount = favoriteIDs.count + collectionIDs.count
+        guard totalCount > 0 else { return false }
+        let selectedCount = favoriteIDs.filter(selection.selectedFavoriteIDs.contains).count
+            + collectionIDs.filter(selection.selectedCollectionIDs.contains).count
+        return selectedCount == totalCount
+    }
+
+    var hasVisibleSelectableEntries: Bool {
+        !derived.cards.isEmpty || (selectedCollectionID == nil && !derived.visibleCollections.isEmpty)
+    }
+
+    /// Select-all ↔ clear-all toggle (cache-sheet select-all button parity):
+    /// not a strict per-item inversion — just select everything visible, or
+    /// clear it all when everything is already selected.
+    func toggleSelectAllVisible() {
+        if isAllVisibleSelected {
+            selection.clearSelection()
+        } else {
+            selectAllVisible()
+        }
     }
 
     @discardableResult

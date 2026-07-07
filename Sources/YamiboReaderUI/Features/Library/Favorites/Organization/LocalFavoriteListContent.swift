@@ -57,10 +57,6 @@ struct LocalFavoriteListContent: View {
                         actions: .standard(organizer: organizer, selection: selection, routes: routes, onOpen: onOpen)
                     )
                 }
-            } header: {
-                if organizer.showsCategoryBadges {
-                    Text(L10n.string("favorites.items_count", organizer.derived.cards.count))
-                }
             }
         }
         // Grid mode is a plain `ScrollView` whose LazyVStack has an explicit

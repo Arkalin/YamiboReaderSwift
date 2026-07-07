@@ -21,12 +21,6 @@ struct LocalFavoriteGridContent: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 12) {
                     LocalFavoriteBrowseChrome(organizer: organizer, routes: routes)
-                    if organizer.showsCategoryBadges {
-                        Text(L10n.string("favorites.items_count", organizer.derived.cards.count))
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                            .padding(.horizontal)
-                    }
                     if isStaggered {
                         LocalFavoriteStaggeredCards(
                             entries: gridEntries,
