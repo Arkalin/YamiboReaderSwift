@@ -38,7 +38,7 @@ final class LocalFavoriteOpenTargetResolverTests: XCTestCase {
         }
         XCTAssertEqual(openedURL, YamiboRoute.threadByID(tid: "901", page: 1, authorID: nil, reverse: false).url)
         XCTAssertEqual(title, "普通主题")
-        let storedItem = await localFavoriteLibraryStore.load().items.first { $0.id == item.id }
+        let storedItem = try await localFavoriteLibraryStore.load().items.first { $0.id == item.id }
         XCTAssertEqual(storedItem?.updatedAt, originalUpdatedAt)
     }
 }

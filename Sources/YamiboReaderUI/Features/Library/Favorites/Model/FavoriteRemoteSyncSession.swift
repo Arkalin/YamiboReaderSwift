@@ -77,7 +77,9 @@ final class FavoriteRemoteSyncSession: ObservableObject {
             return snapshot?.runID
         }
 
-        let document = await libraryStore.load()
+        // Display-name resolution only; the engine re-validates the category
+        // against its own (throwing) load, so an empty fallback is safe here.
+        let document = (try? await libraryStore.load()) ?? FavoriteLibraryDocument()
         let categoryName = document.categories.first { $0.id == targetCategoryID }?.displayName
             ?? document.defaultCategory.displayName
         let now = Date()

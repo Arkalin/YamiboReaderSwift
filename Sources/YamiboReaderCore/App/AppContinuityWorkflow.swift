@@ -243,13 +243,13 @@ public final class AppContinuityWorkflow: Sendable {
 
     private func favoriteItem(forThreadID threadID: String) async -> FavoriteItem? {
         let target = FavoriteContentTarget.novelThread(threadID: threadID)
-        return await appContext.localFavoriteLibraryStore.load().items.first { item in
+        return (try? await appContext.localFavoriteLibraryStore.load())?.items.first { item in
             item.target.id == target.id || item.target.threadID == target.threadID
         }
     }
 
     private func favoriteItem(forMangaContext context: MangaLaunchContext) async -> FavoriteItem? {
-        let document = await appContext.localFavoriteLibraryStore.load()
+        guard let document = try? await appContext.localFavoriteLibraryStore.load() else { return nil }
         if let directoryName = context.directoryName?.trimmingCharacters(in: .whitespacesAndNewlines),
            !directoryName.isEmpty {
             let target = FavoriteContentTarget(mangaCleanBookName: directoryName)

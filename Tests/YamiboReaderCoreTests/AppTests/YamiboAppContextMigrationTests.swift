@@ -15,7 +15,7 @@ import YamiboReaderTestSupport
     defaults.set(legacyProgressData, forKey: "yamibo.readingProgress.records")
     let appContext = try makeIsolatedAppContext(suiteName: suiteName, rootDirectory: rootDirectory)
 
-    let library = await appContext.localFavoriteLibraryStore.load()
+    let library = try await appContext.localFavoriteLibraryStore.load()
     let progress = await appContext.readingProgressStore.loadAll()
 
     #expect(library.defaultCategory.id == FavoriteCategory.defaultID)

@@ -236,7 +236,7 @@ public final class MangaReaderCacheViewModel: ObservableObject {
     }
 
     private func localFavoriteItem() async -> FavoriteItem? {
-        let document = await localFavoriteLibraryStore.load()
+        guard let document = try? await localFavoriteLibraryStore.load() else { return nil }
         let directoryName = panel.directoryTitle.trimmingCharacters(in: .whitespacesAndNewlines)
         if !directoryName.isEmpty {
             let target = FavoriteContentTarget(mangaCleanBookName: directoryName)

@@ -208,7 +208,15 @@ final class FavoriteLibraryOrganizer: ObservableObject {
 
     func load() async {
         readingProgress = await readingProgressStore.loadAll()
-        let loadedDocument = await libraryStore.load()
+        let loadedDocument: FavoriteLibraryDocument
+        do {
+            loadedDocument = try await libraryStore.load()
+        } catch {
+            // Keep whatever the UI currently shows; an empty placeholder here
+            // would read as "all favorites gone".
+            errorMessage = error.localizedDescription
+            return
+        }
         contentCoverURLsByTargetID = await contentCoverURLs(for: loadedDocument.items)
         let settings = await settingsStore.load()
         display = FavoriteLibraryDisplayState(
@@ -241,7 +249,11 @@ final class FavoriteLibraryOrganizer: ObservableObject {
     }
 
     func reload() async {
-        let loadedDocument = await libraryStore.load()
+        guard let loadedDocument = try? await libraryStore.load() else {
+            // Transient read failure: keep the current document on screen and
+            // let the next change notification retry.
+            return
+        }
         contentCoverURLsByTargetID = await contentCoverURLs(for: loadedDocument.items)
         document = loadedDocument
         if !loadedDocument.categories.contains(where: { $0.id == selectedCategoryID }) {
@@ -736,18 +748,24 @@ final class FavoriteLibraryOrganizer: ObservableObject {
 
     /// Loads the latest document, applies `transform`, saves, and republishes.
     /// Throwing aborts without saving; errors surface through `errorMessage`.
+    /// A failed load aborts the same way — the transform must never run
+    /// against a placeholder document, or the save would wipe the library.
+    /// (The transform can await remote work, so this stays load-modify-save
+    /// rather than `FavoriteLibraryStore.update`.)
     @discardableResult
     private func commit<Result>(
         _ transform: (inout FavoriteLibraryDocument) async throws -> Result
     ) async -> Result? {
         do {
-            var updatedDocument = await libraryStore.load()
+            var updatedDocument = try await libraryStore.load()
             let result = try await transform(&updatedDocument)
             try await libraryStore.save(updatedDocument)
             document = updatedDocument
             errorMessage = nil
             return result
         } catch is CommitAbort {
+            return nil
+        } catch is CancellationError {
             return nil
         } catch {
             YamiboLog.persistence.error("Favorite library document commit failed: \(error.localizedDescription)")

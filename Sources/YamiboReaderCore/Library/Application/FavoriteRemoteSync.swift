@@ -100,10 +100,11 @@ public struct FavoriteYamiboSyncEngine: Sendable {
             pendingOperations.append(operation)
         }
 
-        /// Reloads the current on-disk document, replays every mutation this run
-        /// has queued since the last save, and persists the merged result — this
-        /// is what keeps a long-running sync from clobbering concurrent local
-        /// edits (deletes, moves, tag changes) with a stale in-memory snapshot.
+        /// Replays every mutation this run has queued since the last save onto
+        /// the current on-disk document and persists the merged result, all
+        /// inside one store transaction — this is what keeps a long-running
+        /// sync from clobbering concurrent local edits (deletes, moves, tag
+        /// changes) with a stale in-memory snapshot.
         func saveDocumentIfDirty() async throws -> FavoriteLibraryDocument? {
             guard !pendingOperations.isEmpty else { return nil }
             let operations = pendingOperations
@@ -112,12 +113,12 @@ public struct FavoriteYamiboSyncEngine: Sendable {
             // the cancelled task, and GRDB's async accesses honor Task
             // cancellation — the write must not inherit it.
             let merged = try await Task { () -> FavoriteLibraryDocument in
-                var fresh = await libraryStore.load()
-                for operation in operations {
-                    operation(&fresh)
+                try await libraryStore.update { fresh in
+                    for operation in operations {
+                        operation(&fresh)
+                    }
+                    return fresh
                 }
-                try await libraryStore.save(fresh)
-                return fresh
             }.value
             pendingOperations.removeAll()
             return merged
@@ -127,7 +128,7 @@ public struct FavoriteYamiboSyncEngine: Sendable {
             // Phase 1: preparing
             try Task.checkCancellation()
             await commit { $0.phase = .preparing }
-            var workingDocument = await libraryStore.load()
+            var workingDocument = try await libraryStore.load()
             guard workingDocument.categories.contains(where: { $0.id == snapshot.targetCategoryID }) else {
                 throw YamiboError.persistenceFailed(L10n.string("favorites.sync.error.category_missing"))
             }

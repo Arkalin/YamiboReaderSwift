@@ -86,7 +86,7 @@ import Testing
 
     try await store.save(document)
 
-    let loaded = await store.load()
+    let loaded = try await store.load()
     let loadedItem = try #require(loaded.items.first)
     #expect(loaded.defaultCategory.id == FavoriteCategory.defaultID)
     #expect(loadedItem.id == target.id)
@@ -127,7 +127,7 @@ import Testing
     defaults.set(legacyData, forKey: "library")
     let store = FavoriteLibraryStore(defaults: defaults, key: "library", databasePool: database)
 
-    let fresh = await store.load()
+    let fresh = try await store.load()
     #expect(fresh.defaultCategory.id == FavoriteCategory.defaultID)
     #expect(fresh.items.isEmpty)
     #expect(await store.hasStoredDocument() == false)
@@ -162,7 +162,7 @@ import Testing
 
     try await store.save(document)
 
-    let loaded = await store.load()
+    let loaded = try await store.load()
     let loadedItem = try #require(loaded.items.first)
     #expect(loadedItem.id == "thread:novel:321")
     #expect(loadedItem.target.threadID == "321")
@@ -213,4 +213,83 @@ import Testing
     #expect(databaseRows.locationCollectionIDs == [nil, collection.id])
     #expect(databaseRows.remoteID == "remote-321")
     #expect(databaseRows.tagID == tag.id)
+}
+
+@Test func favoriteLibraryStoreUpdatePersistsTransformAndReturnsItsResult() async throws {
+    let suiteName = "FavoriteLibraryStoreUpdateTests.\(UUID().uuidString)"
+    let suite = try #require(UserDefaults(suiteName: suiteName))
+    let store = FavoriteLibraryStore(defaults: suite, key: "library")
+    let target = FavoriteContentTarget(kind: .normalThread, threadID: "610")
+
+    let created = try await store.update { document in
+        let item = try FavoriteItem(
+            target: target,
+            title: "原子写入",
+            locations: [.category(document.defaultCategory.id)]
+        )
+        document.addItem(item)
+        return item
+    }
+
+    let loaded = try await store.load()
+    #expect(created.id == target.id)
+    #expect(loaded.items.map(\.id) == [target.id])
+}
+
+@Test func favoriteLibraryStoreUpdateRollsBackAndRethrowsWhenTransformFails() async throws {
+    struct TransformAbort: Error {}
+    let suiteName = "FavoriteLibraryStoreUpdateRollbackTests.\(UUID().uuidString)"
+    let suite = try #require(UserDefaults(suiteName: suiteName))
+    let store = FavoriteLibraryStore(defaults: suite, key: "library")
+    let target = FavoriteContentTarget(kind: .normalThread, threadID: "611")
+    try await store.update { document in
+        let item = try FavoriteItem(
+            target: target,
+            title: "既有收藏",
+            locations: [.category(document.defaultCategory.id)]
+        )
+        document.addItem(item)
+    }
+
+    // The caller's error must come back unchanged (not wrapped in
+    // persistenceFailed), and the aborted mutation must not persist.
+    await #expect(throws: TransformAbort.self) {
+        try await store.update { document in
+            document.removeItem(target: target)
+            throw TransformAbort()
+        }
+    }
+
+    let loaded = try await store.load()
+    #expect(loaded.items.map(\.id) == [target.id])
+}
+
+@Test func favoriteLibraryStoreConcurrentUpdatesLoseNoWrites() async throws {
+    let suiteName = "FavoriteLibraryStoreConcurrencyTests.\(UUID().uuidString)"
+    let suite = try #require(UserDefaults(suiteName: suiteName))
+    let store = FavoriteLibraryStore(defaults: suite, key: "library")
+    let threadIDs = (700 ..< 720).map(String.init)
+
+    // Every read-modify-write runs inside one store transaction, so parallel
+    // writers must not overwrite each other's items (the lost-update race
+    // that load-modify-save callers used to have).
+    try await withThrowingTaskGroup(of: Void.self) { group in
+        for threadID in threadIDs {
+            group.addTask {
+                try await store.update { document in
+                    let item = try FavoriteItem(
+                        target: FavoriteContentTarget(kind: .normalThread, threadID: threadID),
+                        title: "并发收藏 \(threadID)",
+                        locations: [.category(document.defaultCategory.id)]
+                    )
+                    document.addItem(item)
+                }
+            }
+        }
+        try await group.waitForAll()
+    }
+
+    let loaded = try await store.load()
+    #expect(loaded.items.count == threadIDs.count)
+    #expect(Set(loaded.items.compactMap(\.target.threadID)) == Set(threadIDs))
 }

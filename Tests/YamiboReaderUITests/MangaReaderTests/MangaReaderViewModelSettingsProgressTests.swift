@@ -374,7 +374,7 @@ final class MangaReaderViewModelSettingsProgressTests: XCTestCase {
         fixture.model.updateCurrentPage(globalIndex: 2)
         _ = await fixture.model.saveProgress()
 
-        let favorites = await fixture.localFavoriteLibraryStore.load().items
+        let favorites = try await fixture.localFavoriteLibraryStore.load().items
         XCTAssertTrue(favorites.isEmpty)
         let progress = await readingProgressStore.load(threadID: "700")
         XCTAssertEqual(progress?.manga?.chapterThreadID, "701")

@@ -34,14 +34,62 @@ public actor FavoriteLibraryStore {
         self.database = databasePool
     }
 
-    public func load() async -> FavoriteLibraryDocument {
+    /// Throws instead of returning an empty document: `save` replaces the
+    /// whole database, so a load-modify-save writer that mistakes a transient
+    /// read failure (SQLITE_BUSY, IO error, cancellation) for "library is
+    /// empty" would wipe every favorite on its next save.
+    public func load() async throws -> FavoriteLibraryDocument {
         do {
             return try await database.read { db in
                 try Self.loadDocument(in: db)
             }
+        } catch is CancellationError {
+            throw CancellationError()
         } catch {
-            return FavoriteLibraryDocument()
+            throw YamiboError.persistenceFailed(error.localizedDescription)
         }
+    }
+
+    /// Applies `transform` to the persisted document inside one write
+    /// transaction — the read, mutation, and save cannot interleave with any
+    /// other writer, so concurrent read-modify-write cycles never overwrite
+    /// each other. Throwing from `transform` rolls the transaction back and
+    /// rethrows the caller's error unchanged.
+    @discardableResult
+    public func update<T: Sendable>(
+        _ transform: @escaping @Sendable (inout FavoriteLibraryDocument) throws -> T
+    ) async throws -> T {
+        do {
+            let result = try await database.write { db in
+                var document = try Self.loadDocument(in: db)
+                let result: T
+                do {
+                    result = try transform(&document)
+                } catch {
+                    throw TransformFailure(underlying: error)
+                }
+                let normalized = FavoriteLibraryDocument(
+                    categories: document.categories,
+                    collections: document.collections,
+                    items: document.items,
+                    tags: document.tags
+                )
+                try Self.save(normalized, in: db)
+                return result
+            }
+            postChangeNotification()
+            return result
+        } catch let failure as TransformFailure {
+            throw failure.underlying
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            throw YamiboError.persistenceFailed(error.localizedDescription)
+        }
+    }
+
+    private struct TransformFailure: Error {
+        let underlying: any Error
     }
 
     public func hasStoredDocument() async -> Bool {

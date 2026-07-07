@@ -93,9 +93,6 @@ struct ForumNovelDetailView: View {
                 Task { await model.confirmFavoriteRemoval(favorite, removeRemote: removeRemote, remember: remember) }
             }
         )
-        .forumTransientMessage(model.transientMessage, bottomPadding: 24) {
-            model.transientMessage = nil
-        }
         .alert(
             L10n.string("forum.thread_route.copied"),
             isPresented: Binding(

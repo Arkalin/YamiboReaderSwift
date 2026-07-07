@@ -466,7 +466,7 @@ final class ForumThreadReaderViewModel {
     private func localFavoriteItem(forThreadID threadID: String) async -> FavoriteItem? {
         guard let localFavoriteLibraryStore = await localFavoriteLibraryStoreProvider() else { return nil }
         let target = FavoriteContentTarget.normalThread(threadID: threadID)
-        return await localFavoriteLibraryStore.load().items.first { item in
+        return (try? await localFavoriteLibraryStore.load())?.items.first { item in
             item.target.id == target.id || item.target.threadID == target.threadID
         }
     }

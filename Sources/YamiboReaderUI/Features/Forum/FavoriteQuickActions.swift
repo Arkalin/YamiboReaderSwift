@@ -65,9 +65,9 @@ enum FavoriteQuickActions {
             guard let remoteFavoriteID = normalizedRemoteFavoriteID(remoteFavorite?.remoteFavoriteID) else {
                 return AddResult(favorite: item.favorite(type: type), remote: .syncedWithoutMapping)
             }
-            var document = await localFavoriteLibraryStore.load()
-            document.updateRemoteMapping(for: item.target, yamiboFavoriteID: remoteFavoriteID, yamiboRemoteOrder: nil)
-            try await localFavoriteLibraryStore.save(document)
+            try await localFavoriteLibraryStore.update { document in
+                document.updateRemoteMapping(for: item.target, yamiboFavoriteID: remoteFavoriteID, yamiboRemoteOrder: nil)
+            }
             var synced = item
             synced.remoteMapping = FavoriteRemoteMapping(yamiboFavoriteID: remoteFavoriteID, lastSeenAt: .now)
             return AddResult(favorite: synced.favorite(type: type), remote: .synced)
@@ -93,9 +93,10 @@ enum FavoriteQuickActions {
                 try await remoteRepository.deleteFavorite(remoteFavoriteID: remoteFavoriteID)
             }
         }
-        var document = await localFavoriteLibraryStore.load()
-        document.removeItem(target: try localTarget(for: favorite))
-        try await localFavoriteLibraryStore.save(document)
+        let target = try localTarget(for: favorite)
+        try await localFavoriteLibraryStore.update { document in
+            document.removeItem(target: target)
+        }
     }
 
     /// Pushes one existing favorite item to Yamibo (favorites item menu's
@@ -119,9 +120,9 @@ enum FavoriteQuickActions {
         guard let remoteFavoriteID = normalizedRemoteFavoriteID(remoteFavorite?.remoteFavoriteID) else {
             return .syncedWithoutMapping
         }
-        var document = await localFavoriteLibraryStore.load()
-        document.updateRemoteMapping(for: item.target, yamiboFavoriteID: remoteFavoriteID, yamiboRemoteOrder: nil)
-        try await localFavoriteLibraryStore.save(document)
+        try await localFavoriteLibraryStore.update { document in
+            document.updateRemoteMapping(for: item.target, yamiboFavoriteID: remoteFavoriteID, yamiboRemoteOrder: nil)
+        }
         return .synced
     }
 
@@ -135,23 +136,23 @@ enum FavoriteQuickActions {
         contentUpdatedAt: Date?,
         localFavoriteLibraryStore: FavoriteLibraryStore
     ) async throws -> FavoriteItem {
-        var document = await localFavoriteLibraryStore.load()
         let target = try localTarget(for: favorite)
-        let item = try FavoriteItem(
-            target: target,
-            title: favorite.title,
-            displayName: favorite.displayName,
-            forumID: forumID,
-            forumName: forumName,
-            contentUpdatedAt: contentUpdatedAt,
-            locations: [.category(document.defaultCategory.id)],
-            tagIDs: favorite.tagIDs,
-            createdAt: .now,
-            updatedAt: .now
-        )
-        document.addItem(item)
-        try await localFavoriteLibraryStore.save(document)
-        return item
+        return try await localFavoriteLibraryStore.update { document in
+            let item = try FavoriteItem(
+                target: target,
+                title: favorite.title,
+                displayName: favorite.displayName,
+                forumID: forumID,
+                forumName: forumName,
+                contentUpdatedAt: contentUpdatedAt,
+                locations: [.category(document.defaultCategory.id)],
+                tagIDs: favorite.tagIDs,
+                createdAt: .now,
+                updatedAt: .now
+            )
+            document.addItem(item)
+            return item
+        }
     }
 
     private static func localTarget(for favorite: Favorite) throws -> FavoriteContentTarget {

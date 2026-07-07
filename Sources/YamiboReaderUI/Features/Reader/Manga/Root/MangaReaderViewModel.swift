@@ -61,10 +61,10 @@ struct MangaReaderViewModelDependencies {
                 )
             ),
             migrateMangaTitleReferences: { oldName, newName in
-                var document = await dependencies.localFavoriteLibraryStore.load()
-                document.renameMangaTitle(from: oldName, to: newName)
                 do {
-                    try await dependencies.localFavoriteLibraryStore.save(document)
+                    try await dependencies.localFavoriteLibraryStore.update { document in
+                        document.renameMangaTitle(from: oldName, to: newName)
+                    }
                 } catch {
                     YamiboLog.persistence.error("Failed to save favorite library after manga title rename: \(error.localizedDescription)")
                 }

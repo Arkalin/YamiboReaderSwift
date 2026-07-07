@@ -199,7 +199,7 @@ struct ReaderSharedTestsOfflineCacheQueueExecutor {
         await executor.waitForIdle()
 
         #expect(await store.mangaOfflineCacheState(ownerName: favorite.id, tid: "350") == .cached)
-        #expect(await localFavoriteLibraryStore.load() == favoriteLibrary)
+        #expect(try await localFavoriteLibraryStore.load() == favoriteLibrary)
         #expect(await resumeRouteStore.load() == .manga(MangaLaunchContext(
             originalThreadID: "350",
             chapterTID: "350",
