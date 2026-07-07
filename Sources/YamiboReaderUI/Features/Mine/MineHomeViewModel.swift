@@ -384,8 +384,12 @@ final class MineHomeViewModel {
         for work in works.sorted(by: { $0.insertionIndex < $1.insertionIndex }) {
             guard work.groupID.readerKind == .manga else { continue }
             guard directoriesByOwnerName[work.groupID.ownerKey] == nil else { continue }
-            if let directory = try? await dependencies.mangaDirectoryStore.directory(named: work.groupID.ownerKey) {
-                directoriesByOwnerName[work.groupID.ownerKey] = directory
+            do {
+                if let directory = try await dependencies.mangaDirectoryStore.directory(named: work.groupID.ownerKey) {
+                    directoriesByOwnerName[work.groupID.ownerKey] = directory
+                }
+            } catch {
+                YamiboLog.offlineCache.warning("Failed to load manga directory metadata for offline cache queue owner: \(error)")
             }
         }
         return directoriesByOwnerName
@@ -401,7 +405,11 @@ final class MineHomeViewModel {
             session = await dependencies.sessionStore.load()
             errorMessage = nil
         } catch YamiboError.notAuthenticated {
-            try? await dependencies.makeAccountService().clearLocalAuthentication()
+            do {
+                try await dependencies.makeAccountService().clearLocalAuthentication()
+            } catch {
+                YamiboLog.account.error("Failed to clear local authentication after server reported notAuthenticated: \(error)")
+            }
             session = await dependencies.sessionStore.load()
             profile = await dependencies.profileStore.load()
             await refreshCheckInState()

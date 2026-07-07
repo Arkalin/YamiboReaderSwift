@@ -14,29 +14,45 @@ public actor ReaderChapterCommentsRepository {
             page: target.view
         )
         var page = try ChapterCommentsHTMLParser.parseInitialPage(html: html, target: target)
-        if let fullRatingsURL = try ChapterCommentsHTMLParser.fullRatingReasonsURL(html: html, target: target),
-           let fullRatingsHTML = try? await client.fetchHTML(url: fullRatingsURL) {
-            let fullRatings = try ChapterCommentsHTMLParser.parseFullRatingReasonsPage(
-                html: fullRatingsHTML,
-                target: target
-            )
-            if !fullRatings.isEmpty {
-                page.comments = Self.replacingPreviewRatings(in: page.comments, with: fullRatings)
+        if let fullRatingsURL = try ChapterCommentsHTMLParser.fullRatingReasonsURL(html: html, target: target) {
+            let fullRatingsHTML: String?
+            do {
+                fullRatingsHTML = try await client.fetchHTML(url: fullRatingsURL)
+            } catch {
+                YamiboLog.forum.warning("loadChapterComments: failed to fetch full rating-reasons page; falling back to truncated preview ratings: \(error)")
+                fullRatingsHTML = nil
+            }
+            if let fullRatingsHTML {
+                let fullRatings = try ChapterCommentsHTMLParser.parseFullRatingReasonsPage(
+                    html: fullRatingsHTML,
+                    target: target
+                )
+                if !fullRatings.isEmpty {
+                    page.comments = Self.replacingPreviewRatings(in: page.comments, with: fullRatings)
+                }
             }
         }
-        if target.authorID != nil,
-           let unfilteredHTML = try? await loadUnfilteredChapterCommentHTML(for: target) {
-            let unfilteredView = (try? ChapterCommentsHTMLParser.currentView(
-                html: unfilteredHTML,
-                fallback: target.view
-            )) ?? target.view
-            var unfilteredTarget = target
-            unfilteredTarget.view = unfilteredView
-            let unfilteredPage = try ChapterCommentsHTMLParser.parseInitialPage(
-                html: unfilteredHTML,
-                target: unfilteredTarget
-            )
-            page = Self.appendingSamePageReplies(from: unfilteredPage, to: page)
+        if target.authorID != nil {
+            let unfilteredHTML: String?
+            do {
+                unfilteredHTML = try await loadUnfilteredChapterCommentHTML(for: target)
+            } catch {
+                YamiboLog.forum.warning("loadChapterComments: failed to fetch unfiltered chapter comment HTML; same-page replies will be omitted: \(error)")
+                unfilteredHTML = nil
+            }
+            if let unfilteredHTML {
+                let unfilteredView = (try? ChapterCommentsHTMLParser.currentView(
+                    html: unfilteredHTML,
+                    fallback: target.view
+                )) ?? target.view
+                var unfilteredTarget = target
+                unfilteredTarget.view = unfilteredView
+                let unfilteredPage = try ChapterCommentsHTMLParser.parseInitialPage(
+                    html: unfilteredHTML,
+                    target: unfilteredTarget
+                )
+                page = Self.appendingSamePageReplies(from: unfilteredPage, to: page)
+            }
         }
         return page
     }

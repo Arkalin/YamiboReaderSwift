@@ -205,10 +205,14 @@ public actor OfflineCacheQueueExecutor {
                 await finishRun(generation: generation, pauseQueue: false)
                 return
             } catch {
-                try? await store.markOfflineCacheWorkFailed(
-                    id: work.id,
-                    message: Self.failureMessage(from: error)
-                )
+                do {
+                    try await store.markOfflineCacheWorkFailed(
+                        id: work.id,
+                        message: Self.failureMessage(from: error)
+                    )
+                } catch {
+                    YamiboLog.offlineCache.error("Failed to persist offline cache work \(work.id.rawValue) failure state: \(error)")
+                }
                 await runObserver?.queueRunDidFinish(success: false)
                 await finishRun(generation: generation, pauseQueue: true)
                 return
@@ -222,7 +226,11 @@ public actor OfflineCacheQueueExecutor {
     private func finishRun(generation: Int, pauseQueue: Bool) async {
         guard runGeneration == generation else { return }
         if pauseQueue {
-            try? await store.setOfflineCacheQueueRunState(.paused)
+            do {
+                try await store.setOfflineCacheQueueRunState(.paused)
+            } catch {
+                YamiboLog.offlineCache.error("Failed to persist paused offline cache queue run state: \(error)")
+            }
         }
         runTask = nil
     }

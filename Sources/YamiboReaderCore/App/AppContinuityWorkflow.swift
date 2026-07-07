@@ -62,7 +62,11 @@ public final class AppContinuityWorkflow: Sendable {
         }
 
         if restoredRoute != route {
-            try? await appContext.readerResumeRouteStore.save(restoredRoute)
+            do {
+                try await appContext.readerResumeRouteStore.save(restoredRoute)
+            } catch {
+                YamiboLog.persistence.error("Failed to save reconciled reader resume route after restore: \(error)")
+            }
         }
         state.withLock { $0.isReaderRoutePresented = true }
         return restoredRoute
@@ -92,6 +96,7 @@ public final class AppContinuityWorkflow: Sendable {
                     try await service.synchronizeAutomatically()
                 } catch {
                     // Keep local data authoritative until the next foreground or manual sync.
+                    YamiboLog.sync.warning("Debounced local-change WebDAV upload failed: \(error)")
                 }
             }
         )
@@ -107,7 +112,11 @@ public final class AppContinuityWorkflow: Sendable {
     public func readerRoutePresented(_ route: ReaderResumeRoute) {
         state.withLock { $0.isReaderRoutePresented = true }
         Task { [appContext] in
-            try? await appContext.readerResumeRouteStore.save(route)
+            do {
+                try await appContext.readerResumeRouteStore.save(route)
+            } catch {
+                YamiboLog.persistence.error("Failed to save presented reader resume route: \(error)")
+            }
         }
     }
 
@@ -119,7 +128,11 @@ public final class AppContinuityWorkflow: Sendable {
     public func readerReadingPositionChanged(_ route: ReaderResumeRoute) {
         guard state.withLock({ $0.isReaderRoutePresented }) else { return }
         Task { [appContext] in
-            try? await appContext.readerResumeRouteStore.saveReadingPosition(route)
+            do {
+                try await appContext.readerResumeRouteStore.saveReadingPosition(route)
+            } catch {
+                YamiboLog.persistence.error("Failed to save reader reading position: \(error)")
+            }
         }
     }
 
@@ -170,6 +183,7 @@ public final class AppContinuityWorkflow: Sendable {
             return try await appContext.makeWebDAVSyncService().synchronizeAutomatically()
         } catch {
             // Automatic sync should never block the app shell.
+            YamiboLog.sync.warning("Automatic WebDAV sync failed: \(error)")
             return .skipped
         }
     }
@@ -182,6 +196,7 @@ public final class AppContinuityWorkflow: Sendable {
             try await appContext.makeWebDAVSyncService().synchronizeAutomatically()
         } catch {
             // Background flush is best effort.
+            YamiboLog.sync.warning("Background WebDAV sync flush failed: \(error)")
         }
     }
 

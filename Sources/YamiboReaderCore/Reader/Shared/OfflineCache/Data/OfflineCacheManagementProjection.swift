@@ -4,13 +4,18 @@ import Foundation
 extension OfflineCacheStore {
     func offlineCacheManagementSnapshot() async -> OfflineCacheManagementSnapshot {
         try? await recoverQueueStateAfterRestart()
-        return (try? await database.read { db in
-            try Self.managementSnapshot(
-                fileManager: fileManager,
-                mangaSourcePagesDirectory: mangaSourcePagesDirectory,
-                in: db
-            )
-        }) ?? OfflineCacheManagementSnapshot(groups: [])
+        do {
+            return try await database.read { db in
+                try Self.managementSnapshot(
+                    fileManager: fileManager,
+                    mangaSourcePagesDirectory: mangaSourcePagesDirectory,
+                    in: db
+                )
+            }
+        } catch {
+            YamiboLog.offlineCache.error("Failed to build offline cache management snapshot: \(error)")
+            return OfflineCacheManagementSnapshot(groups: [])
+        }
     }
 
     private static func managementSnapshot(

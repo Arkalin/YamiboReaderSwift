@@ -133,39 +133,54 @@ public actor ReadingProgressStore {
 
     public func load(threadID: String) async -> ReadingProgressRecord? {
         guard let threadID = Self.trimmedNonEmpty(threadID) else { return nil }
-        return try? await database.read { db in
-            try Self.fetchRecord(
-                in: db,
-                sql: """
-                SELECT * FROM reading_progress
-                WHERE thread_id = ? OR manga_chapter_thread_id = ?
-                ORDER BY updated_at DESC, id ASC
-                LIMIT 1
-                """,
-                arguments: [threadID, threadID]
-            )
+        do {
+            return try await database.read { db in
+                try Self.fetchRecord(
+                    in: db,
+                    sql: """
+                    SELECT * FROM reading_progress
+                    WHERE thread_id = ? OR manga_chapter_thread_id = ?
+                    ORDER BY updated_at DESC, id ASC
+                    LIMIT 1
+                    """,
+                    arguments: [threadID, threadID]
+                )
+            }
+        } catch {
+            YamiboLog.persistence.warning("load(threadID:) failed to read reading progress; treating as no recorded progress: \(error)")
+            return nil
         }
     }
 
     public func loadAll() async -> [ReadingProgressRecord] {
-        (try? await database.read { db in
-            try Row.fetchAll(
-                db,
-                sql: """
-                SELECT * FROM reading_progress
-                ORDER BY updated_at DESC, id ASC
-                """
-            ).compactMap(Self.record(from:))
-        }) ?? []
+        do {
+            return try await database.read { db in
+                try Row.fetchAll(
+                    db,
+                    sql: """
+                    SELECT * FROM reading_progress
+                    ORDER BY updated_at DESC, id ASC
+                    """
+                ).compactMap(Self.record(from:))
+            }
+        } catch {
+            YamiboLog.persistence.warning("loadAll() failed to read reading progress list; returning empty list: \(error)")
+            return []
+        }
     }
 
     public func load(for target: FavoriteContentTarget) async -> ReadingProgressRecord? {
-        try? await database.read { db in
-            try Self.fetchRecord(
-                in: db,
-                sql: "SELECT * FROM reading_progress WHERE id = ? LIMIT 1",
-                arguments: [target.id]
-            )
+        do {
+            return try await database.read { db in
+                try Self.fetchRecord(
+                    in: db,
+                    sql: "SELECT * FROM reading_progress WHERE id = ? LIMIT 1",
+                    arguments: [target.id]
+                )
+            }
+        } catch {
+            YamiboLog.persistence.warning("load(for:) failed to read reading progress; treating as no recorded progress: \(error)")
+            return nil
         }
     }
 
@@ -394,6 +409,7 @@ public actor ReadingProgressStore {
     private static func record(from row: Row) throws -> ReadingProgressRecord? {
         guard let kind = ReadingProgressKind(rawValue: row["kind"] as String),
               let targetKind = FavoriteContentTargetKind(rawValue: row["target_kind"] as String) else {
+            YamiboLog.persistence.warning("record(from:) dropped a reading_progress row with unparseable kind/target_kind, id=\(row["id"] as String? ?? "unknown", privacy: .public)")
             return nil
         }
         let target = contentTarget(
@@ -439,7 +455,12 @@ public actor ReadingProgressStore {
         let resumePoint: NovelResumePoint?
         if let resumeJSON = row["novel_resume_point_json"] as String?,
            let data = resumeJSON.data(using: .utf8) {
-            resumePoint = try? JSONDecoder().decode(NovelResumePoint.self, from: data)
+            do {
+                resumePoint = try JSONDecoder().decode(NovelResumePoint.self, from: data)
+            } catch {
+                YamiboLog.persistence.warning("novelRecord(from:) failed to decode novel_resume_point_json; degrading to coarse last-view position: \(error)")
+                resumePoint = nil
+            }
         } else {
             resumePoint = nil
         }
@@ -471,9 +492,14 @@ public actor ReadingProgressStore {
     private static func upsert(_ record: ReadingProgressRecord, in db: Database) throws {
         let columns = targetColumns(for: record.contentTarget)
         let novelResumePointJSON: String?
-        if let resumePoint = record.novel?.novelResumePoint,
-           let data = try? JSONEncoder().encode(resumePoint) {
-            novelResumePointJSON = String(data: data, encoding: .utf8)
+        if let resumePoint = record.novel?.novelResumePoint {
+            do {
+                let data = try JSONEncoder().encode(resumePoint)
+                novelResumePointJSON = String(data: data, encoding: .utf8)
+            } catch {
+                YamiboLog.persistence.error("upsert(_:in:) failed to encode novel resume point; row will be written without it: \(error)")
+                novelResumePointJSON = nil
+            }
         } else {
             novelResumePointJSON = nil
         }

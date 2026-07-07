@@ -166,6 +166,7 @@ public final class MangaReaderCacheViewModel: ObservableObject {
             }
             await refreshRows()
         } catch {
+            YamiboLog.offlineCache.error("Failed to cache selected manga chapters: \(error.localizedDescription)")
             errorMessage = error.localizedDescription
             await refreshRows()
         }
@@ -183,6 +184,7 @@ public final class MangaReaderCacheViewModel: ObservableObject {
             }
             await refreshRows()
         } catch {
+            YamiboLog.offlineCache.error("Failed to delete selected manga offline cache chapters: \(error.localizedDescription)")
             errorMessage = error.localizedDescription
         }
     }

@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 public actor YamiboThreadRouteResolver {
     private let client: YamiboClient
@@ -265,6 +266,7 @@ public actor YamiboThreadRouteResolver {
                 title: title
             )
         } catch {
+            YamiboLog.forum.warning("Failed to resolve native thread reader initial page from findpost lookup, falling back to base page: \(error)")
             return baseInitialPage
         }
     }

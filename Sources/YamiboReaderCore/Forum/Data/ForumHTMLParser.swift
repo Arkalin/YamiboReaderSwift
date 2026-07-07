@@ -237,6 +237,7 @@ enum ForumHTMLParser {
             return parseThreadRows(rows, fid: fid)
         }
 
+        YamiboLog.forum.warning("parseThreadSummaries: '.threadlist li.list' matched no rows, falling back to generic thread-link scan")
         var summaries: [ForumThreadSummary] = []
         var seen = Set<String>()
 

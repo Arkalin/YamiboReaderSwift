@@ -58,12 +58,16 @@ struct ReaderThreadPageProjectionLoadingStrategy<Adapter: ReaderThreadPageProjec
                 thread: thread,
                 fallbackTitle: nil
             )
-            try? await adapter.forumCacheStore.saveThreadPage(
-                discoveryPage,
-                thread: thread,
-                pageNumber: 1,
-                authorID: nil
-            )
+            do {
+                try await adapter.forumCacheStore.saveThreadPage(
+                    discoveryPage,
+                    thread: thread,
+                    pageNumber: 1,
+                    authorID: nil
+                )
+            } catch {
+                YamiboLog.forum.warning("identity(for:ignoresCache:): failed to cache discovery page tid=\(thread.tid, privacy: .public): \(error)")
+            }
             if let authorID = Self.normalizedAuthorID(
                 YamiboThreadHTMLFacts.onlyAuthorID(from: html, threadID: thread.tid)
             ) {
@@ -98,12 +102,16 @@ struct ReaderThreadPageProjectionLoadingStrategy<Adapter: ReaderThreadPageProjec
             authorID: identity.authorID
         )
         let parsed = try ForumThreadPageHTMLParser.parsePage(from: html, thread: thread, fallbackTitle: nil)
-        try? await adapter.forumCacheStore.saveThreadPage(
-            parsed,
-            thread: thread,
-            pageNumber: identity.view,
-            authorID: identity.authorID
-        )
+        do {
+            try await adapter.forumCacheStore.saveThreadPage(
+                parsed,
+                thread: thread,
+                pageNumber: identity.view,
+                authorID: identity.authorID
+            )
+        } catch {
+            YamiboLog.forum.warning("onlineSourcePage(for:identity:ignoresCache:): failed to cache thread page tid=\(thread.tid, privacy: .public) page=\(identity.view, privacy: .public): \(error)")
+        }
         return ReaderProjectionSourcePageLoad(sourcePage: parsed, loadedOnline: true)
     }
 

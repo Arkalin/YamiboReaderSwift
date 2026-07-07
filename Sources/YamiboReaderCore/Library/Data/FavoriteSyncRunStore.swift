@@ -26,14 +26,19 @@ public actor FavoriteSyncRunStore {
     /// whether an old `running` snapshot needs downgrading to interrupted.
     public func latestSnapshot() async -> FavoriteRemoteSyncSnapshot? {
         let decoder = decoder
-        return try? await database.read { db in
-            guard let json = try String.fetchOne(
-                db,
-                sql: "SELECT snapshot_json FROM favorite_sync_runs ORDER BY updated_at DESC, run_id DESC LIMIT 1"
-            ), let data = json.data(using: .utf8) else {
-                return nil
+        do {
+            return try await database.read { db in
+                guard let json = try String.fetchOne(
+                    db,
+                    sql: "SELECT snapshot_json FROM favorite_sync_runs ORDER BY updated_at DESC, run_id DESC LIMIT 1"
+                ), let data = json.data(using: .utf8) else {
+                    return nil
+                }
+                return try decoder.decode(FavoriteRemoteSyncSnapshot.self, from: data)
             }
-            return try decoder.decode(FavoriteRemoteSyncSnapshot.self, from: data)
+        } catch {
+            YamiboLog.sync.error("Failed to load latest favorite sync run snapshot: \(error)")
+            return nil
         }
     }
 

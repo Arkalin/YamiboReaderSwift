@@ -73,7 +73,12 @@ public actor FavoriteRepository {
         }
 
         guard resolveRemoteFavorite else { return nil }
-        return try? await remoteFavorite(forThreadID: tid)
+        do {
+            return try await remoteFavorite(forThreadID: tid)
+        } catch {
+            YamiboLog.library.warning("Failed to resolve remote favorite id for thread \(tid, privacy: .public) after add succeeded: \(error)")
+            return nil
+        }
     }
 
     public func remoteFavorite(forThreadID threadID: String, maxPages: Int = 30) async throws -> Favorite? {

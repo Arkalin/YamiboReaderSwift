@@ -63,8 +63,16 @@ struct MangaReaderViewModelDependencies {
             migrateMangaTitleReferences: { oldName, newName in
                 var document = await dependencies.localFavoriteLibraryStore.load()
                 document.renameMangaTitle(from: oldName, to: newName)
-                try? await dependencies.localFavoriteLibraryStore.save(document)
-                try? await dependencies.readingProgressStore.migrateMangaTitleKey(from: oldName, to: newName)
+                do {
+                    try await dependencies.localFavoriteLibraryStore.save(document)
+                } catch {
+                    YamiboLog.persistence.error("Failed to save favorite library after manga title rename: \(error.localizedDescription)")
+                }
+                do {
+                    try await dependencies.readingProgressStore.migrateMangaTitleKey(from: oldName, to: newName)
+                } catch {
+                    YamiboLog.persistence.error("Failed to migrate reading progress key after manga title rename: \(error.localizedDescription)")
+                }
             }
         )
     }
@@ -379,12 +387,24 @@ public final class MangaReaderViewModel: ObservableObject {
 
     func setMangaCover(page: MangaReaderPageProjection) async -> Bool {
         guard let key = mangaCoverKey, let store = dependencies.makeContentCoverStore() else { return false }
-        return (try? await store.setManualCover(imageSource(for: page).url, for: key)) ?? false
+        do {
+            try await store.setManualCover(imageSource(for: page).url, for: key)
+            return true
+        } catch {
+            YamiboLog.library.error("Failed to set manual manga cover: \(error.localizedDescription)")
+            return false
+        }
     }
 
     func restoreAutomaticMangaCover() async -> Bool {
         guard let key = mangaCoverKey, let store = dependencies.makeContentCoverStore() else { return false }
-        return (try? await store.clearManualCover(for: key)) ?? false
+        do {
+            try await store.clearManualCover(for: key)
+            return true
+        } catch {
+            YamiboLog.library.error("Failed to clear manual manga cover: \(error.localizedDescription)")
+            return false
+        }
     }
 
     public func loadChapterComments(for target: ReaderChapterCommentTarget?) async {
@@ -415,7 +435,11 @@ public final class MangaReaderViewModel: ObservableObject {
         Task { [settingsStore = dependencies.settingsStore, normalizedSettings] in
             var appSettings = await settingsStore.load()
             appSettings.manga = normalizedSettings
-            try? await settingsStore.save(appSettings)
+            do {
+                try await settingsStore.save(appSettings)
+            } catch {
+                YamiboLog.persistence.error("Failed to save manga reader settings: \(error.localizedDescription)")
+            }
         }
     }
 
@@ -585,6 +609,7 @@ public final class MangaReaderViewModel: ObservableObject {
             refreshDirectoryPanelTiming(errorMessage: currentDirectoryPanelErrorMessage)
         } catch {
             guard !Task.isCancelled, directoryMutationGeneration == mutationGeneration else { return }
+            YamiboLog.reader.error("Manga directory update failed: \(error.localizedDescription)")
             if case let YamiboError.searchCooldown(seconds) = error {
                 directoryCooldownExpiresAt = dependencies.directoryWorkflowConfiguration.now()
                     .addingTimeInterval(TimeInterval(seconds))
@@ -625,6 +650,7 @@ public final class MangaReaderViewModel: ObservableObject {
                     try await offlineCacheStore.renameMangaOfflineCacheOwner(from: oldOwnerName, to: updated.cleanBookName)
                     cacheRenameError = nil
                 } catch {
+                    YamiboLog.offlineCache.error("Failed to rename offline cache owner directory after manga rename: \(error.localizedDescription)")
                     cacheRenameError = error
                 }
             } else {
@@ -638,6 +664,7 @@ public final class MangaReaderViewModel: ObservableObject {
             refreshDirectoryPanelTiming(errorMessage: currentDirectoryPanelErrorMessage)
         } catch {
             guard !Task.isCancelled, directoryMutationGeneration == mutationGeneration else { return }
+            YamiboLog.reader.error("Manga directory rename failed: \(error.localizedDescription)")
             refreshDirectoryPanelTiming(errorMessage: error.localizedDescription)
         }
     }
@@ -665,6 +692,7 @@ public final class MangaReaderViewModel: ObservableObject {
             refreshDirectoryPanelTiming(errorMessage: currentDirectoryPanelErrorMessage)
         } catch {
             guard !Task.isCancelled, directoryMutationGeneration == mutationGeneration else { return }
+            YamiboLog.reader.error("Deleting manga directory chapters failed: \(error.localizedDescription)")
             refreshDirectoryPanelTiming(errorMessage: error.localizedDescription)
         }
     }
@@ -698,6 +726,7 @@ public final class MangaReaderViewModel: ObservableObject {
             return
         } catch {
             guard !Task.isCancelled, chapterJumpGeneration == jumpGeneration else { return }
+            YamiboLog.reader.error("Jumping to manga chapter failed: \(error.localizedDescription)")
             refreshDirectoryPanelTiming(errorMessage: error.localizedDescription)
         }
     }
@@ -709,7 +738,11 @@ public final class MangaReaderViewModel: ObservableObject {
         }
 
         await onReaderResumeRouteChange(.manga(snapshot.resumeContext))
-        try? await dependencies.progressSync.flush(.manga(snapshot.progress))
+        do {
+            try await dependencies.progressSync.flush(.manga(snapshot.progress))
+        } catch {
+            YamiboLog.sync.error("Failed to flush final manga reading progress on close: \(error.localizedDescription)")
+        }
         lastQueuedProgressSnapshot = snapshot
         return snapshot.resumeContext
     }
@@ -770,6 +803,7 @@ public final class MangaReaderViewModel: ObservableObject {
         } catch is CancellationError {
             return
         } catch {
+            YamiboLog.reader.warning("Jumping to adjacent manga chapter boundary failed: \(error.localizedDescription)")
             return
         }
     }
@@ -880,6 +914,7 @@ public final class MangaReaderViewModel: ObservableObject {
             } catch is CancellationError {
                 return
             } catch {
+                YamiboLog.reader.warning("Restoring manga navigation history target failed, discarding and trying next: \(error.localizedDescription)")
                 guard isCurrentNavigationRequest(navigationGeneration) else { return }
                 discardNavigationTarget(for: direction)
             }

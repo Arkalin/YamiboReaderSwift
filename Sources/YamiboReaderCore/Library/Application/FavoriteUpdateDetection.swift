@@ -372,11 +372,15 @@ public actor FavoriteUpdateStore {
     }
 
     private func loadStateSync() -> FavoriteUpdateStoreState {
-        guard let data = defaults.data(forKey: key),
-              let state = try? decoder.decode(FavoriteUpdateStoreState.self, from: data) else {
+        guard let data = defaults.data(forKey: key) else {
             return FavoriteUpdateStoreState()
         }
-        return state
+        do {
+            return try decoder.decode(FavoriteUpdateStoreState.self, from: data)
+        } catch {
+            YamiboLog.library.error("Failed to decode stored favorite update tracking state, resetting to empty state: \(error)")
+            return FavoriteUpdateStoreState()
+        }
     }
 
     private func persist(_ state: FavoriteUpdateStoreState) throws {

@@ -244,14 +244,18 @@ public struct FavoriteYamiboSyncEngine: Sendable {
                             remoteMapping: mapping
                         )
                         record { doc in
-                            _ = try? doc.importMangaChapterFavorite(
-                                chapterTID: entry.threadID,
-                                chapterTitle: chapterTitle,
-                                directories: directories,
-                                fallbackCleanBookName: cleanBookName,
-                                location: targetLocation,
-                                remoteMapping: mapping
-                            )
+                            do {
+                                _ = try doc.importMangaChapterFavorite(
+                                    chapterTID: entry.threadID,
+                                    chapterTitle: chapterTitle,
+                                    directories: directories,
+                                    fallbackCleanBookName: cleanBookName,
+                                    location: targetLocation,
+                                    remoteMapping: mapping
+                                )
+                            } catch {
+                                YamiboLog.sync.error("Failed to replay manga chapter favorite import for thread \(entry.threadID, privacy: .public) onto reloaded document: \(error)")
+                            }
                         }
                     } else {
                         _ = try workingDocument.importThreadFavorite(
@@ -260,11 +264,15 @@ public struct FavoriteYamiboSyncEngine: Sendable {
                             remoteMapping: mapping
                         )
                         record { doc in
-                            _ = try? doc.importThreadFavorite(
-                                probeResult: probeResult,
-                                location: targetLocation,
-                                remoteMapping: mapping
-                            )
+                            do {
+                                _ = try doc.importThreadFavorite(
+                                    probeResult: probeResult,
+                                    location: targetLocation,
+                                    remoteMapping: mapping
+                                )
+                            } catch {
+                                YamiboLog.sync.error("Failed to replay thread favorite import for thread \(entry.threadID, privacy: .public) onto reloaded document: \(error)")
+                            }
                         }
                     }
                     await commit { $0.importedCount += 1 }
@@ -367,7 +375,11 @@ public struct FavoriteYamiboSyncEngine: Sendable {
                 snapshot.logEntries.append(.completed(importedCount: importedCount, uploadedCount: uploadedCount))
             }
         } catch let error where error.isTaskCancellation {
-            _ = try? await saveDocumentIfDirty()
+            do {
+                _ = try await saveDocumentIfDirty()
+            } catch let saveError {
+                YamiboLog.sync.error("Failed to save queued favorite sync mutations after cancellation: \(saveError)")
+            }
             let reason = interruptionReason() ?? .interrupted
             await commit { snapshot in
                 snapshot.status = .interrupted
@@ -377,7 +389,11 @@ public struct FavoriteYamiboSyncEngine: Sendable {
                 snapshot.logEntries.append(.interrupted)
             }
         } catch {
-            _ = try? await saveDocumentIfDirty()
+            do {
+                _ = try await saveDocumentIfDirty()
+            } catch let saveError {
+                YamiboLog.sync.error("Failed to save queued favorite sync mutations after run failure: \(saveError)")
+            }
             let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
             await commit { snapshot in
                 snapshot.status = .failed

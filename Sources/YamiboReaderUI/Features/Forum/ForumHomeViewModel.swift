@@ -94,6 +94,8 @@ final class ForumHomeViewModel {
                 transientMessage = L10n.string("forum.home.refresh_failed", error.localizedDescription)
             } else if presentsErrors || page == nil {
                 errorMessage = error.localizedDescription
+            } else {
+                YamiboLog.forum.warning("Silent background forum home refresh failed: \(error)")
             }
         }
     }

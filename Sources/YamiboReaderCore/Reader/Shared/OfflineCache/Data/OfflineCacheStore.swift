@@ -34,39 +34,54 @@ actor OfflineCacheStore {
     func mangaOfflineCacheMembership(ownerName: String, tid: String) async -> MangaOfflineCacheMembership? {
         try? await recoverQueueStateAfterRestart()
         guard let id = normalizedID(ownerName: ownerName, tid: tid) else { return nil }
-        return try? await database.read { db in
-            try Self.membership(
-                ownerName: id.ownerName,
-                tid: id.tid,
-                fileManager: fileManager,
-                mangaSourcePagesDirectory: mangaSourcePagesDirectory,
-                in: db
-            )
+        do {
+            return try await database.read { db in
+                try Self.membership(
+                    ownerName: id.ownerName,
+                    tid: id.tid,
+                    fileManager: fileManager,
+                    mangaSourcePagesDirectory: mangaSourcePagesDirectory,
+                    in: db
+                )
+            }
+        } catch {
+            YamiboLog.offlineCache.error("Failed to read manga offline cache membership for tid \(id.tid): \(error)")
+            return nil
         }
     }
 
     func mangaOfflineCacheMemberships(forOwnerName ownerName: String) async -> [MangaOfflineCacheMembership] {
         try? await recoverQueueStateAfterRestart()
         guard let ownerName = ownerName.mangaReaderTrimmedNonEmpty else { return [] }
-        return (try? await database.read { db in
-            try Self.memberships(
-                ownerName: ownerName,
-                fileManager: fileManager,
-                mangaSourcePagesDirectory: mangaSourcePagesDirectory,
-                in: db
-            )
-        }) ?? []
+        do {
+            return try await database.read { db in
+                try Self.memberships(
+                    ownerName: ownerName,
+                    fileManager: fileManager,
+                    mangaSourcePagesDirectory: mangaSourcePagesDirectory,
+                    in: db
+                )
+            }
+        } catch {
+            YamiboLog.offlineCache.error("Failed to read manga offline cache memberships for owner \(ownerName): \(error)")
+            return []
+        }
     }
 
     func allMangaOfflineCacheMemberships() async -> [MangaOfflineCacheMembership] {
         try? await recoverQueueStateAfterRestart()
-        return (try? await database.read { db in
-            try Self.allMangaMemberships(
-                fileManager: fileManager,
-                mangaSourcePagesDirectory: mangaSourcePagesDirectory,
-                in: db
-            )
-        }) ?? []
+        do {
+            return try await database.read { db in
+                try Self.allMangaMemberships(
+                    fileManager: fileManager,
+                    mangaSourcePagesDirectory: mangaSourcePagesDirectory,
+                    in: db
+                )
+            }
+        } catch {
+            YamiboLog.offlineCache.error("Failed to read all manga offline cache memberships: \(error)")
+            return []
+        }
     }
 
     func saveMangaOfflineCacheMembership(_ membership: MangaOfflineCacheMembership) async throws {
@@ -102,9 +117,13 @@ actor OfflineCacheStore {
             notifyOfflineCacheDidChange()
         } catch {
             if let writtenPayload, !writtenPayload.fileExistedBeforeWrite {
-                try? fileManager.removeItem(
-                    at: mangaSourcePagesDirectory.appendingPathComponent(writtenPayload.fileName, isDirectory: false)
-                )
+                do {
+                    try fileManager.removeItem(
+                        at: mangaSourcePagesDirectory.appendingPathComponent(writtenPayload.fileName, isDirectory: false)
+                    )
+                } catch {
+                    YamiboLog.offlineCache.warning("Failed to roll back manga source page file \(writtenPayload.fileName) after save failure: \(error)")
+                }
             }
             throw offlineCachePersistenceError(from: error)
         }
@@ -256,7 +275,11 @@ actor OfflineCacheStore {
             notifyOfflineCacheDidChange()
         } catch {
             for payload in writtenPayloads where !payload.fileExistedBeforeWrite {
-                try? fileManager.removeItem(at: mangaSourcePagesDirectory.appendingPathComponent(payload.fileName, isDirectory: false))
+                do {
+                    try fileManager.removeItem(at: mangaSourcePagesDirectory.appendingPathComponent(payload.fileName, isDirectory: false))
+                } catch {
+                    YamiboLog.offlineCache.warning("Failed to roll back manga source page file \(payload.fileName) after rename failure: \(error)")
+                }
             }
             throw offlineCachePersistenceError(from: error)
         }
@@ -331,9 +354,14 @@ actor OfflineCacheStore {
 
     func offlineCacheQueueRunState() async -> OfflineCacheQueueRunState {
         try? await recoverQueueStateAfterRestart()
-        return (try? await database.read { db in
-            try Self.queueRunState(in: db)
-        }) ?? .paused
+        do {
+            return try await database.read { db in
+                try Self.queueRunState(in: db)
+            }
+        } catch {
+            YamiboLog.offlineCache.error("Failed to read offline cache queue run state: \(error)")
+            return .paused
+        }
     }
 
     func setOfflineCacheQueueRunState(_ state: OfflineCacheQueueRunState) async throws {
@@ -354,22 +382,27 @@ actor OfflineCacheStore {
     func mangaOfflineCacheState(ownerName: String, tid: String) async -> MangaOfflineCacheState {
         try? await recoverQueueStateAfterRestart()
         guard let id = normalizedID(ownerName: ownerName, tid: tid) else { return .uncached }
-        return (try? await database.read { db in
-            if let membership = try Self.membership(
-                ownerName: id.ownerName,
-                tid: id.tid,
-                fileManager: fileManager,
-                mangaSourcePagesDirectory: mangaSourcePagesDirectory,
-                in: db
-            ),
-               try Self.isMembershipComplete(membership, fileManager: fileManager, imagesDirectory: imagesDirectory, in: db) {
-                return .cached
+        do {
+            return try await database.read { db in
+                if let membership = try Self.membership(
+                    ownerName: id.ownerName,
+                    tid: id.tid,
+                    fileManager: fileManager,
+                    mangaSourcePagesDirectory: mangaSourcePagesDirectory,
+                    in: db
+                ),
+                   try Self.isMembershipComplete(membership, fileManager: fileManager, imagesDirectory: imagesDirectory, in: db) {
+                    return .cached
+                }
+                if try Self.rawWork(readerKind: .manga, ownerKey: id.ownerName, entryKey: id.tid, in: db) != nil {
+                    return .caching
+                }
+                return .uncached
             }
-            if try Self.rawWork(readerKind: .manga, ownerKey: id.ownerName, entryKey: id.tid, in: db) != nil {
-                return .caching
-            }
+        } catch {
+            YamiboLog.offlineCache.error("Failed to read manga offline cache state for tid \(id.tid): \(error)")
             return .uncached
-        }) ?? .uncached
+        }
     }
 
     func clearAll() async throws {
@@ -397,31 +430,41 @@ actor OfflineCacheStore {
 
     func totalDiskUsageBytes() async -> Int {
         try? await recoverQueueStateAfterRestart()
-        return (try? await database.read { db in
-            let imageBytes = try Int.fetchOne(
-                db,
-                sql: "SELECT COALESCE(SUM(byte_count), 0) FROM offline_cache_image_assets"
-            ) ?? 0
-            let novelBytes = try Int.fetchOne(
-                db,
-                sql: "SELECT COALESCE(SUM(byte_count), 0) FROM offline_cache_novel_entries"
-            ) ?? 0
-            let mangaSourcePageBytes = try Int.fetchOne(
-                db,
-                sql: "SELECT COALESCE(SUM(byte_count), 0) FROM offline_cache_manga_entries"
-            ) ?? 0
-            return imageBytes + novelBytes + mangaSourcePageBytes
-        }) ?? 0
+        do {
+            return try await database.read { db in
+                let imageBytes = try Int.fetchOne(
+                    db,
+                    sql: "SELECT COALESCE(SUM(byte_count), 0) FROM offline_cache_image_assets"
+                ) ?? 0
+                let novelBytes = try Int.fetchOne(
+                    db,
+                    sql: "SELECT COALESCE(SUM(byte_count), 0) FROM offline_cache_novel_entries"
+                ) ?? 0
+                let mangaSourcePageBytes = try Int.fetchOne(
+                    db,
+                    sql: "SELECT COALESCE(SUM(byte_count), 0) FROM offline_cache_manga_entries"
+                ) ?? 0
+                return imageBytes + novelBytes + mangaSourcePageBytes
+            }
+        } catch {
+            YamiboLog.offlineCache.error("Failed to read total offline cache disk usage: \(error)")
+            return 0
+        }
     }
 
     func recoverQueueStateAfterRestart() async throws {
         guard !didRecoverQueueState else { return }
         didRecoverQueueState = true
-        try await database.write { db in
-            if try Self.queueRunState(in: db) == .running {
-                try Self.setQueueRunState(.paused, in: db)
-                try Self.pauseRunningOfflineCacheWorks(in: db)
+        do {
+            try await database.write { db in
+                if try Self.queueRunState(in: db) == .running {
+                    try Self.setQueueRunState(.paused, in: db)
+                    try Self.pauseRunningOfflineCacheWorks(in: db)
+                }
             }
+        } catch {
+            YamiboLog.offlineCache.error("Failed to recover offline cache queue state after restart: \(error)")
+            throw error
         }
     }
 
@@ -764,10 +807,12 @@ actor OfflineCacheStore {
         }
         guard byteCount == data.count,
               sourcePageFingerprint(for: data) == fingerprint else {
+            YamiboLog.offlineCache.error("Manga source page file \(fileName) failed fingerprint/byte-count check for tid \(tid); treating cache entry as corrupted")
             return nil
         }
         guard let sourcePage = try? JSONDecoder().decode(ForumThreadPage.self, from: data),
               sourcePage.thread.tid == tid else {
+            YamiboLog.offlineCache.error("Failed to decode manga source page file \(fileName) or tid mismatch for tid \(tid)")
             return nil
         }
         return sourcePage
@@ -816,7 +861,11 @@ actor OfflineCacheStore {
             sql: "SELECT source_page_file_name FROM offline_cache_manga_entries WHERE source_page_file_name IS NOT NULL"
         ).compactMap(\.mangaReaderTrimmedNonEmpty))
         for fileName in candidateFileNames where !referenced.contains(fileName) {
-            try? fileManager.removeItem(at: mangaSourcePagesDirectory.appendingPathComponent(fileName, isDirectory: false))
+            do {
+                try fileManager.removeItem(at: mangaSourcePagesDirectory.appendingPathComponent(fileName, isDirectory: false))
+            } catch {
+                YamiboLog.offlineCache.error("Failed to remove unreferenced manga source page file \(fileName): \(error)")
+            }
         }
     }
 

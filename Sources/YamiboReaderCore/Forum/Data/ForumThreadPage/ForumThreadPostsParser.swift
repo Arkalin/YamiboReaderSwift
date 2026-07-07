@@ -73,6 +73,7 @@ enum ForumThreadPostsParser {
             return explicit
         }
 
+        YamiboLog.forum.warning("postContainers: primary '[id^=post_], [id^=pid]' scan yielded no resolvable-body elements, falling back to broad '.message, [id^=postmessage_]' scan")
         return document.selectAll(".message, [id^=postmessage_]")
     }
 

@@ -19,13 +19,20 @@ extension OfflineCacheStore {
     func offlineImageData(for imageURL: URL) async -> Data? {
         try? await recoverQueueStateAfterRestart()
         let imageURLString = imageURL.absoluteString
-        guard let fileName = try? await database.read({ db in
-            try String.fetchOne(
-                db,
-                sql: "SELECT file_name FROM offline_cache_image_assets WHERE image_url = ?",
-                arguments: [imageURLString]
-            )
-        }) else {
+        let fileName: String?
+        do {
+            fileName = try await database.read { db in
+                try String.fetchOne(
+                    db,
+                    sql: "SELECT file_name FROM offline_cache_image_assets WHERE image_url = ?",
+                    arguments: [imageURLString]
+                )
+            }
+        } catch {
+            YamiboLog.offlineCache.error("Failed to resolve offline image file name for \(imageURLString): \(error)")
+            return nil
+        }
+        guard let fileName else {
             return nil
         }
 
@@ -37,24 +44,31 @@ extension OfflineCacheStore {
         let imageURLString = imageURL.absoluteString
         let normalizedThreadID = threadID.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !normalizedThreadID.isEmpty else { return nil }
-        guard let fileName = try? await database.read({ db in
-            try String.fetchOne(
-                db,
-                sql: """
-                SELECT assets.file_name
-                FROM offline_cache_novel_entry_images AS entry_images
-                JOIN offline_cache_novel_entries AS entries
-                    ON entries.entry_key = entry_images.entry_key
-                JOIN offline_cache_image_assets AS assets
-                    ON assets.image_url = entry_images.image_url
-                WHERE entry_images.image_url = ?
-                    AND entries.thread_id = ?
-                ORDER BY entries.updated_at DESC, entry_images.entry_key ASC
-                LIMIT 1
-                """,
-                arguments: [imageURLString, normalizedThreadID]
-            )
-        }) else {
+        let fileName: String?
+        do {
+            fileName = try await database.read { db in
+                try String.fetchOne(
+                    db,
+                    sql: """
+                    SELECT assets.file_name
+                    FROM offline_cache_novel_entry_images AS entry_images
+                    JOIN offline_cache_novel_entries AS entries
+                        ON entries.entry_key = entry_images.entry_key
+                    JOIN offline_cache_image_assets AS assets
+                        ON assets.image_url = entry_images.image_url
+                    WHERE entry_images.image_url = ?
+                        AND entries.thread_id = ?
+                    ORDER BY entries.updated_at DESC, entry_images.entry_key ASC
+                    LIMIT 1
+                    """,
+                    arguments: [imageURLString, normalizedThreadID]
+                )
+            }
+        } catch {
+            YamiboLog.offlineCache.error("Failed to resolve novel offline image file name for \(imageURLString): \(error)")
+            return nil
+        }
+        guard let fileName else {
             return nil
         }
 
@@ -64,8 +78,12 @@ extension OfflineCacheStore {
     private func offlineImageData(imageURLString: String, fileName: String) async -> Data? {
         let fileURL = imagesDirectory.appendingPathComponent(fileName, isDirectory: false)
         guard let data = try? Data(contentsOf: fileURL), !data.isEmpty else {
-            try? await database.write { db in
-                try Self.deleteImage(imageURLString: imageURLString, fileManager: fileManager, imagesDirectory: imagesDirectory, in: db)
+            do {
+                try await database.write { db in
+                    try Self.deleteImage(imageURLString: imageURLString, fileManager: fileManager, imagesDirectory: imagesDirectory, in: db)
+                }
+            } catch {
+                YamiboLog.offlineCache.warning("Failed to remove orphaned offline image DB row for \(imageURLString) after missing file \(fileName): \(error)")
             }
             return nil
         }
@@ -94,7 +112,11 @@ extension OfflineCacheStore {
                     sql: "SELECT file_name FROM offline_cache_image_assets WHERE image_url = ?",
                     arguments: [imageURLString]
                 ), oldFileName != fileName {
-                    try? fileManager.removeItem(at: imagesDirectory.appendingPathComponent(oldFileName, isDirectory: false))
+                    do {
+                        try fileManager.removeItem(at: imagesDirectory.appendingPathComponent(oldFileName, isDirectory: false))
+                    } catch {
+                        YamiboLog.offlineCache.error("Failed to remove superseded offline image file \(oldFileName): \(error)")
+                    }
                 }
                 try db.execute(
                     sql: """
@@ -123,40 +145,45 @@ extension OfflineCacheStore {
 
     func mangaOfflineCacheDiskUsageByOwner() async -> [MangaOfflineCacheOwnerUsage] {
         try? await recoverQueueStateAfterRestart()
-        return (try? await database.read { db in
-            var imageURLsByOwner: [String: Set<String>] = [:]
-            var byteCountByOwner: [String: Int] = [:]
-            for membership in try Self.allMangaMemberships(
-                fileManager: fileManager,
-                mangaSourcePagesDirectory: mangaSourcePagesDirectory,
-                in: db
-            ) {
-                imageURLsByOwner[membership.ownerName, default: []].formUnion(membership.imageURLs.map(\.absoluteString))
-                byteCountByOwner[membership.ownerName, default: 0] += try Self.mangaEntryByteCount(
-                    ownerName: membership.ownerName,
-                    tid: membership.tid,
+        do {
+            return try await database.read { db in
+                var imageURLsByOwner: [String: Set<String>] = [:]
+                var byteCountByOwner: [String: Int] = [:]
+                for membership in try Self.allMangaMemberships(
+                    fileManager: fileManager,
+                    mangaSourcePagesDirectory: mangaSourcePagesDirectory,
                     in: db
-                )
-            }
-            for work in try Self.allRawWorks(in: db) where work.readerKind == .manga {
-                imageURLsByOwner[work.ownerKey, default: []].formUnion((work.targetImageURLs + work.completedImageURLs).map(\.absoluteString))
-            }
-
-            var usage: [MangaOfflineCacheOwnerUsage] = []
-            for ownerName in Set(imageURLsByOwner.keys).union(byteCountByOwner.keys) {
-                var byteCount = byteCountByOwner[ownerName] ?? 0
-                let imageURLs = imageURLsByOwner[ownerName] ?? []
-                for imageURL in imageURLs {
-                    byteCount += try Int.fetchOne(
-                        db,
-                        sql: "SELECT byte_count FROM offline_cache_image_assets WHERE image_url = ?",
-                        arguments: [imageURL]
-                    ) ?? 0
+                ) {
+                    imageURLsByOwner[membership.ownerName, default: []].formUnion(membership.imageURLs.map(\.absoluteString))
+                    byteCountByOwner[membership.ownerName, default: 0] += try Self.mangaEntryByteCount(
+                        ownerName: membership.ownerName,
+                        tid: membership.tid,
+                        in: db
+                    )
                 }
-                usage.append(MangaOfflineCacheOwnerUsage(ownerName: ownerName, byteCount: byteCount))
+                for work in try Self.allRawWorks(in: db) where work.readerKind == .manga {
+                    imageURLsByOwner[work.ownerKey, default: []].formUnion((work.targetImageURLs + work.completedImageURLs).map(\.absoluteString))
+                }
+
+                var usage: [MangaOfflineCacheOwnerUsage] = []
+                for ownerName in Set(imageURLsByOwner.keys).union(byteCountByOwner.keys) {
+                    var byteCount = byteCountByOwner[ownerName] ?? 0
+                    let imageURLs = imageURLsByOwner[ownerName] ?? []
+                    for imageURL in imageURLs {
+                        byteCount += try Int.fetchOne(
+                            db,
+                            sql: "SELECT byte_count FROM offline_cache_image_assets WHERE image_url = ?",
+                            arguments: [imageURL]
+                        ) ?? 0
+                    }
+                    usage.append(MangaOfflineCacheOwnerUsage(ownerName: ownerName, byteCount: byteCount))
+                }
+                return usage.sorted { $0.ownerName.localizedStandardCompare($1.ownerName) == .orderedAscending }
             }
-            return usage.sorted { $0.ownerName.localizedStandardCompare($1.ownerName) == .orderedAscending }
-        }) ?? []
+        } catch {
+            YamiboLog.offlineCache.error("Failed to compute manga offline cache disk usage by owner: \(error)")
+            return []
+        }
     }
 
     func ensureImagesDirectoryExists() throws {
@@ -242,7 +269,11 @@ extension OfflineCacheStore {
             sql: "SELECT file_name FROM offline_cache_image_assets WHERE image_url = ?",
             arguments: [imageURLString]
         ) {
-            try? fileManager.removeItem(at: imagesDirectory.appendingPathComponent(fileName, isDirectory: false))
+            do {
+                try fileManager.removeItem(at: imagesDirectory.appendingPathComponent(fileName, isDirectory: false))
+            } catch {
+                YamiboLog.offlineCache.error("Failed to remove offline image file \(fileName): \(error)")
+            }
         }
         try db.execute(sql: "DELETE FROM offline_cache_image_assets WHERE image_url = ?", arguments: [imageURLString])
     }

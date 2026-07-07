@@ -104,7 +104,11 @@ struct ImageBrowserView: View {
         }
         .sheet(item: $shareItem) { item in
             ImageBrowserActivityView(activityItems: [item.fileURL]) {
-                try? FileManager.default.removeItem(at: item.fileURL)
+                do {
+                    try FileManager.default.removeItem(at: item.fileURL)
+                } catch {
+                    YamiboLog.reader.warning("Failed to clean up temporary share file: \(error)")
+                }
                 shareItem = nil
             }
         }
@@ -192,6 +196,7 @@ struct ImageBrowserView: View {
         } catch MangaImagePhotoSaveError.authorizationDenied {
             feedback = .failure(message: L10n.string("image.save_photo_permission_denied"))
         } catch {
+            YamiboLog.reader.error("Image browser action failed for item \(currentItem.id): \(error)")
             feedback = .failure(message: L10n.string("image.action_failed"))
         }
     }
@@ -293,6 +298,7 @@ private struct ImageBrowserPageView: View {
         do {
             image = try await YamiboUIImagePipeline.shared.image(for: item.source)
         } catch {
+            YamiboLog.reader.warning("Failed to load image for browser item \(item.id): \(error)")
             didFail = true
         }
     }

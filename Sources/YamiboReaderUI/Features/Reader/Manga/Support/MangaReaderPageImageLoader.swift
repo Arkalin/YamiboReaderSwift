@@ -28,7 +28,14 @@ final class MangaReaderPageImageLoader {
     }
 
     func image(for page: MangaReaderPageProjection) async throws -> UIImage {
-        try await uiImagePipeline.image(for: imageSource(page))
+        do {
+            return try await uiImagePipeline.image(for: imageSource(page))
+        } catch {
+            if !(error is CancellationError) {
+                YamiboLog.reader.warning("Failed to load manga page image: \(error.localizedDescription)")
+            }
+            throw error
+        }
     }
 }
 

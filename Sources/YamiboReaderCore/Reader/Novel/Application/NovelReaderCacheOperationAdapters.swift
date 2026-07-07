@@ -149,6 +149,7 @@ struct NovelOfflineStoreReaderCacheOperationAdapter: NovelReaderCacheOperationRe
                     didEnqueueWork = true
                 }
             } catch {
+                YamiboLog.offlineCache.error("Failed to enqueue novel offline cache work for thread \(context.threadID), view \(view): \(error)")
                 failedViews.append(view)
             }
         }
@@ -156,6 +157,7 @@ struct NovelOfflineStoreReaderCacheOperationAdapter: NovelReaderCacheOperationRe
             do {
                 try await continueOfflineCacheQueueIfAllowed()
             } catch {
+                YamiboLog.offlineCache.warning("Failed to continue novel offline cache queue for thread \(context.threadID) after enqueueing work: \(error)")
                 failedViews.append(contentsOf: submittedViews.filter { !failedViews.contains($0) })
             }
         }

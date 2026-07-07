@@ -38,7 +38,11 @@ public enum FavoriteUpdateBackgroundScheduler {
             }
             let request = BGAppRefreshTaskRequest(identifier: taskIdentifier)
             request.earliestBeginDate = Date(timeIntervalSinceNow: delay)
-            try? BGTaskScheduler.shared.submit(request)
+            do {
+                try BGTaskScheduler.shared.submit(request)
+            } catch {
+                YamiboLog.sync.warning("Failed to submit background refresh task \(taskIdentifier): \(error.localizedDescription)")
+            }
         }
     }
 

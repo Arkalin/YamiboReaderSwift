@@ -188,7 +188,11 @@ actor ReaderProjectionLoader<Strategy: ReaderProjectionLoadingStrategy> {
                 identity: identity,
                 fingerprint: fingerprint
             )
-            try? await strategy.saveProjection(projection)
+            do {
+                try await strategy.saveProjection(projection)
+            } catch {
+                YamiboLog.offlineCache.warning("loadOnline: failed to cache freshly-derived projection; subsequent loads will re-derive from scratch: \(error)")
+            }
             return ReaderProjectionPreparedSourcePage(
                 projection: projection,
                 sourcePage: sourceLoad.sourcePage,
@@ -220,14 +224,22 @@ actor ReaderProjectionLoader<Strategy: ReaderProjectionLoadingStrategy> {
             )
         }
 
-        guard let projection = try? strategy.deriveProjection(
-            sourcePage: sourceLoad.sourcePage,
-            identity: sourceLoad.identity,
-            fingerprint: fingerprint
-        ) else {
+        let projection: Strategy.Projection
+        do {
+            projection = try strategy.deriveProjection(
+                sourcePage: sourceLoad.sourcePage,
+                identity: sourceLoad.identity,
+                fingerprint: fingerprint
+            )
+        } catch {
+            YamiboLog.offlineCache.warning("loadOfflineFallback: offline projection derivation also failed; original online error will be surfaced instead: \(error)")
             return nil
         }
-        try? await strategy.saveProjection(projection)
+        do {
+            try await strategy.saveProjection(projection)
+        } catch {
+            YamiboLog.offlineCache.warning("loadOfflineFallback: failed to cache offline-derived projection: \(error)")
+        }
         return ReaderProjectionLoadedValue(
             projection: projection,
             sourcePage: sourceLoad.sourcePage,

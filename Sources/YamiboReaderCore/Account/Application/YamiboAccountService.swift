@@ -93,7 +93,11 @@ public struct YamiboAccountService: Sendable {
                 cookie: sessionState.cookie,
                 userAgent: sessionState.userAgent
             )
-            _ = try? await client.fetchHTML(for: .logout(formHash: formHash))
+            do {
+                _ = try await client.fetchHTML(for: .logout(formHash: formHash))
+            } catch {
+                YamiboLog.account.warning("Best-effort server-side logout request failed, proceeding with local sign-out: \(error)")
+            }
         }
         try await clearLocalAuthentication()
     }

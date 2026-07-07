@@ -138,6 +138,7 @@ public actor ProgressSyncModule {
             needsRetry = false
         } catch {
             needsRetry = true
+            YamiboLog.sync.error("ProgressSyncModule failed to persist queued reading position; will retry on next queued update: \(error)")
             throw error
         }
     }

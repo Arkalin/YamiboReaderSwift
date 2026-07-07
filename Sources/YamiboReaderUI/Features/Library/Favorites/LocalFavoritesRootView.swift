@@ -75,6 +75,7 @@ struct LocalFavoritesRootView: View {
                 appModel.openNativeForumThread(url: url, title: title)
             }
         } catch {
+            YamiboLog.library.error("Failed to resolve open target for favorite \(item.id): \(error.localizedDescription)")
             organizer.errorMessage = error.localizedDescription
         }
     }

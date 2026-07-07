@@ -312,8 +312,10 @@ public struct MangaReaderView: View {
             try await photoSaver.saveImageData(data)
             imageSavePresentation.finishSave(with: .success)
         } catch MangaImagePhotoSaveError.authorizationDenied {
+            YamiboLog.reader.warning("Manga page image save denied: Photos authorization was not granted")
             imageSavePresentation.finishSave(with: .failure(message: L10n.string("image.save_photo_permission_denied")))
         } catch {
+            YamiboLog.reader.error("Failed to save manga page image: \(error.localizedDescription)")
             imageSavePresentation.finishSave(with: .failure(message: L10n.string("image.save_failed")))
         }
     }

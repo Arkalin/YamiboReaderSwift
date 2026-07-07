@@ -54,7 +54,11 @@ final class FavoriteUpdateMonitor: ObservableObject {
             loaded.finishedAt = loaded.finishedAt ?? .now
             loaded.updatedAt = .now
             loaded.progress = nil
-            try? await updateStore.saveRun(loaded)
+            do {
+                try await updateStore.saveRun(loaded)
+            } catch {
+                YamiboLog.persistence.error("Failed to persist interrupted-run downgrade for favorite update run \(loaded.runID): \(error.localizedDescription)")
+            }
             latest = loaded
         }
         snapshot = latest
@@ -98,6 +102,7 @@ final class FavoriteUpdateMonitor: ObservableObject {
         do {
             try await updateStore.saveRun(startedSnapshot)
         } catch {
+            YamiboLog.persistence.error("Failed to persist initial running snapshot for favorite update run \(startedSnapshot.runID): \(error.localizedDescription)")
             errorMessage = error.localizedDescription
             return nil
         }
@@ -135,7 +140,11 @@ final class FavoriteUpdateMonitor: ObservableObject {
         guard let settingsStore else { return }
         var settings = await settingsStore.load()
         settings.favorites.updateCheckInterval = interval
-        try? await settingsStore.save(settings)
+        do {
+            try await settingsStore.save(settings)
+        } catch {
+            YamiboLog.persistence.error("Failed to persist favorite update check interval: \(error.localizedDescription)")
+        }
     }
 
     /// Whether recent events keep arriving; drives the smart interval.
@@ -167,6 +176,7 @@ final class FavoriteUpdateMonitor: ObservableObject {
             try await updateStore.markEventRead(eventID)
             await load()
         } catch {
+            YamiboLog.persistence.error("Failed to mark favorite update event \(eventID) read: \(error.localizedDescription)")
             errorMessage = error.localizedDescription
         }
     }
@@ -176,6 +186,7 @@ final class FavoriteUpdateMonitor: ObservableObject {
             try await updateStore.dismissEvent(eventID)
             await load()
         } catch {
+            YamiboLog.persistence.error("Failed to dismiss favorite update event \(eventID): \(error.localizedDescription)")
             errorMessage = error.localizedDescription
         }
     }
@@ -185,6 +196,7 @@ final class FavoriteUpdateMonitor: ObservableObject {
             try await updateStore.dismissAllEvents()
             await load()
         } catch {
+            YamiboLog.persistence.error("Failed to dismiss all favorite update events: \(error.localizedDescription)")
             errorMessage = error.localizedDescription
         }
     }
@@ -194,6 +206,7 @@ final class FavoriteUpdateMonitor: ObservableObject {
             try await updateStore.setFidEnabled(fid, enabled: enabled)
             await load()
         } catch {
+            YamiboLog.persistence.error("Failed to toggle favorite update forum filter \(fid): \(error.localizedDescription)")
             errorMessage = error.localizedDescription
         }
     }
@@ -203,6 +216,7 @@ final class FavoriteUpdateMonitor: ObservableObject {
             try await updateStore.setCategoryEnabled(categoryID, enabled: enabled)
             await load()
         } catch {
+            YamiboLog.persistence.error("Failed to toggle favorite update category filter \(categoryID): \(error.localizedDescription)")
             errorMessage = error.localizedDescription
         }
     }
@@ -271,6 +285,7 @@ final class FavoriteUpdateMonitor: ObservableObject {
                 }
                 return
             }
+            YamiboLog.sync.error("Favorite update check run \(runID) failed: \(error.localizedDescription)")
             await reloadEventState()
             await updateSnapshot(runID: runID) { snapshot in
                 snapshot.status = .failed
@@ -294,6 +309,7 @@ final class FavoriteUpdateMonitor: ObservableObject {
         do {
             try await updateStore.saveRun(snapshot)
         } catch {
+            YamiboLog.persistence.error("Failed to persist favorite update run snapshot \(snapshot.runID): \(error.localizedDescription)")
             errorMessage = error.localizedDescription
         }
     }
@@ -430,6 +446,7 @@ final class FavoriteUpdateMonitor: ObservableObject {
             try await updateStore.insertEvent(event)
             return .checked(detected: 1)
         } catch {
+            YamiboLog.persistence.error("Failed to persist tracked target or update event for \(item.target.id): \(error.localizedDescription)")
             return .failed(error.localizedDescription)
         }
     }
@@ -448,6 +465,7 @@ final class FavoriteUpdateMonitor: ObservableObject {
             let context = ThreadNovelLaunchContext(thread: thread, title: item.resolvedDisplayTitle)
             return try await repository.fetchThreadPage(context: context, page: 1)
         } catch {
+            YamiboLog.sync.warning("Failed to fetch thread page for favorite update check on \(item.target.id): \(error.localizedDescription)")
             return nil
         }
     }

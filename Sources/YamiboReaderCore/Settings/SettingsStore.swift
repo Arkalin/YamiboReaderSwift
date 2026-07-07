@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 public actor SettingsStore {
     public static let didChangeNotification = Notification.Name("yamibo.settingsStore.didChange")
@@ -52,6 +53,11 @@ public actor SettingsStore {
 
     private nonisolated static func decodeSettings(from data: Data) -> AppSettings {
         let decoder = JSONDecoder()
-        return (try? decoder.decode(AppSettings.self, from: data)) ?? AppSettings()
+        do {
+            return try decoder.decode(AppSettings.self, from: data)
+        } catch {
+            YamiboLog.persistence.error("Failed to decode persisted app settings, resetting to defaults: \(error)")
+            return AppSettings()
+        }
     }
 }

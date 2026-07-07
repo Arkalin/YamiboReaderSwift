@@ -90,6 +90,7 @@ actor DiskCacheStore {
             try await touchLastAccessedAt(namespace: resolvedNamespace, key: resolvedKey)
             return value
         } catch {
+            YamiboLog.offlineCache.warning("Discarding unreadable cache entry \(resolvedNamespace)/\(resolvedKey): \(error)")
             try await removeValidated(namespace: resolvedNamespace, key: resolvedKey)
             return nil
         }
@@ -210,7 +211,11 @@ actor DiskCacheStore {
     }
 
     private func removeValidated(namespace: String, key: String) async throws {
-        try? fileManager.removeItem(at: cacheFileURL(namespace: namespace, key: key))
+        do {
+            try fileManager.removeItem(at: cacheFileURL(namespace: namespace, key: key))
+        } catch {
+            YamiboLog.offlineCache.warning("Failed to remove cache file for \(namespace)/\(key), leaving an orphaned file: \(error)")
+        }
         try await removeMetadata(namespace: namespace, key: key)
     }
 
