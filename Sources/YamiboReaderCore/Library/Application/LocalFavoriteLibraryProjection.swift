@@ -301,16 +301,29 @@ public enum LocalFavoriteLibraryProjection {
         }
     }
 
+    /// Manga has no forum metadata, so its sort key falls back to the clean
+    /// book name directly rather than `sourceGroupLabel`, which shows the
+    /// fixed "智能漫画" category text and would collapse every manga card
+    /// into one bucket.
     private static func sourceGroupSortKey(for card: FavoriteCardProjection) -> String {
-        card.item.forumName ?? card.item.forumID ?? card.sourceGroupLabel
+        if let forumName = card.item.forumName {
+            return forumName
+        }
+        if let forumID = card.item.forumID {
+            return forumID
+        }
+        if let cleanBookName = card.item.target.mangaCleanBookName {
+            return cleanBookName
+        }
+        return card.sourceGroupLabel
     }
 
     private static func label(for sourceGroup: FavoriteSourceGroup) -> String {
         switch sourceGroup {
         case let .forumBoard(_, label):
             label
-        case let .mangaTitle(_, cleanBookName):
-            cleanBookName
+        case .mangaTitle:
+            L10n.string("favorites.filter.manga")
         case .unknown:
             L10n.string("favorites.source_group.unknown")
         }
