@@ -21,7 +21,11 @@ public actor ForumThreadReaderRepository: ThreadCoverPageResolving {
             thread: context.thread,
             fallbackTitle: context.title
         )
-        try? await cacheStore.saveThreadPage(parsed, thread: context.thread, pageNumber: page, authorID: nil)
+        do {
+            try await cacheStore.saveThreadPage(parsed, thread: context.thread, pageNumber: page, authorID: nil)
+        } catch {
+            YamiboLog.forum.error("fetchThreadPage: failed to cache thread page tid=\(context.thread.tid, privacy: .public) page=\(page, privacy: .public): \(error)")
+        }
         return parsed
     }
 
@@ -38,7 +42,11 @@ public actor ForumThreadReaderRepository: ThreadCoverPageResolving {
             thread: context.thread,
             fallbackTitle: context.title
         )
-        try? await cacheStore.saveThreadPage(parsed, thread: context.thread, pageNumber: page, authorID: context.authorID)
+        do {
+            try await cacheStore.saveThreadPage(parsed, thread: context.thread, pageNumber: page, authorID: context.authorID)
+        } catch {
+            YamiboLog.forum.error("fetchNovelThreadPage: failed to cache thread page tid=\(context.thread.tid, privacy: .public) page=\(page, privacy: .public): \(error)")
+        }
         return parsed
     }
 

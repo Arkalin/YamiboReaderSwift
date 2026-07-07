@@ -39,6 +39,7 @@ public final class OfflineCacheContinuedProcessingCoordinator: OfflineCacheQueue
         do {
             try BGTaskScheduler.shared.submit(request)
         } catch {
+            YamiboLog.offlineCache.warning("Failed to submit background continued-processing task request for offline cache queue: \(error)")
             return
         }
         #endif

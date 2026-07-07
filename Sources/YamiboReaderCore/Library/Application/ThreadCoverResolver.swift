@@ -63,12 +63,17 @@ public struct ThreadCoverResolver: Sendable {
         ) {
             return cached
         }
-        return try? await repository.fetchThreadPage(
-            thread: thread,
-            title: title,
-            authorID: authorID,
-            page: page
-        )
+        do {
+            return try await repository.fetchThreadPage(
+                thread: thread,
+                title: title,
+                authorID: authorID,
+                page: page
+            )
+        } catch {
+            YamiboLog.library.warning("Failed to fetch thread page while resolving cover candidate for thread \(thread.tid, privacy: .public): \(error)")
+            return nil
+        }
     }
 }
 

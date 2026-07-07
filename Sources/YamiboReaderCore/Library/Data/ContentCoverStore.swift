@@ -92,8 +92,13 @@ public actor ContentCoverStore {
 
     public func cover(for key: ContentCoverKey) async -> ContentCover? {
         guard !key.targetID.isEmpty else { return nil }
-        return try? await database.read { db in
-            try Self.fetchCover(for: key, in: db)
+        do {
+            return try await database.read { db in
+                try Self.fetchCover(for: key, in: db)
+            }
+        } catch {
+            YamiboLog.library.warning("Failed to read content cover for key \(key.targetID, privacy: .public): \(error)")
+            return nil
         }
     }
 

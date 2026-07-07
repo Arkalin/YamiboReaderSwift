@@ -303,6 +303,7 @@ final class FavoriteLibraryOrganizer: ObservableObject {
                 break
             }
         } catch {
+            YamiboLog.sync.error("Failed to sync favorite item \(item.id) to Yamibo: \(error.localizedDescription)")
             errorMessage = error.localizedDescription
         }
     }
@@ -767,6 +768,7 @@ final class FavoriteLibraryOrganizer: ObservableObject {
         } catch is CancellationError {
             return nil
         } catch {
+            YamiboLog.persistence.error("Favorite library document commit failed: \(error.localizedDescription)")
             errorMessage = error.localizedDescription
             return nil
         }
@@ -794,7 +796,11 @@ final class FavoriteLibraryOrganizer: ObservableObject {
                     || settings.favorites.selectedCollectionID != validCollectionID else { return }
             settings.favorites.selectedCategoryID = categoryID
             settings.favorites.selectedCollectionID = validCollectionID
-            try? await settingsStore.save(settings)
+            do {
+                try await settingsStore.save(settings)
+            } catch {
+                YamiboLog.persistence.error("Failed to persist favorites navigation state: \(error.localizedDescription)")
+            }
         }
     }
 
@@ -813,6 +819,7 @@ final class FavoriteLibraryOrganizer: ObservableObject {
             do {
                 try await settingsStore.save(settings)
             } catch {
+                YamiboLog.persistence.error("Failed to persist favorites view preferences: \(error.localizedDescription)")
                 await MainActor.run {
                     rollback()
                     errorMessage = error.localizedDescription
@@ -871,8 +878,12 @@ final class FavoriteLibraryOrganizer: ObservableObject {
                       ) else {
                     continue
                 }
-                if (try? await contentCoverStore.setAutomaticCover(coverURL, for: key)) == true {
-                    resolvedAny = true
+                do {
+                    if try await contentCoverStore.setAutomaticCover(coverURL, for: key) {
+                        resolvedAny = true
+                    }
+                } catch {
+                    YamiboLog.library.warning("Failed to persist automatic cover for manga \(cleanBookName): \(error.localizedDescription)")
                 }
             }
             guard let self, !Task.isCancelled else { return }
@@ -887,10 +898,15 @@ final class FavoriteLibraryOrganizer: ObservableObject {
         for item: FavoriteItem,
         mangaDirectoryStore: MangaDirectoryStore
     ) async -> String? {
-        if let cleanBookName = item.target.mangaCleanBookName,
-           let directory = try? await mangaDirectoryStore.directory(named: cleanBookName),
-           let tid = directory.chapters.first?.tid.trimmedNonEmptyOrNil {
-            return tid
+        if let cleanBookName = item.target.mangaCleanBookName {
+            do {
+                if let directory = try await mangaDirectoryStore.directory(named: cleanBookName),
+                   let tid = directory.chapters.first?.tid.trimmedNonEmptyOrNil {
+                    return tid
+                }
+            } catch {
+                YamiboLog.library.warning("Manga directory lookup failed for \(cleanBookName), falling back to tid derivation from favorite target: \(error.localizedDescription)")
+            }
         }
         // Remote-synced and chapter-seeded favorites carry a tid in their identity.
         if let mangaID = item.target.mangaID {

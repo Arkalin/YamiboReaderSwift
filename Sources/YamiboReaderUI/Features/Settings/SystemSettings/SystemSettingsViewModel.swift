@@ -150,10 +150,18 @@ final class SystemSettingsViewModel: ObservableObject {
             try await dependencies.settingsStore.save(settings)
 
             favoriteBackground = updatedBackground
-            try? await dependencies.favoriteBackgroundImageStore.prune(keeping: imageID)
+            do {
+                try await dependencies.favoriteBackgroundImageStore.prune(keeping: imageID)
+            } catch {
+                YamiboLog.persistence.warning("Failed to prune orphaned favorite background images after apply: \(error)")
+            }
             return true
         } catch {
-            try? await dependencies.favoriteBackgroundImageStore.delete(imageID: imageID)
+            do {
+                try await dependencies.favoriteBackgroundImageStore.delete(imageID: imageID)
+            } catch {
+                YamiboLog.persistence.warning("Failed to roll back favorite background image after save failure: \(error)")
+            }
             errorMessage = error.localizedDescription
             return false
         }
@@ -166,7 +174,11 @@ final class SystemSettingsViewModel: ObservableObject {
             try await dependencies.settingsStore.save(settings)
 
             favoriteBackground = FavoriteBackgroundSettings()
-            try? await dependencies.favoriteBackgroundImageStore.deleteAll()
+            do {
+                try await dependencies.favoriteBackgroundImageStore.deleteAll()
+            } catch {
+                YamiboLog.persistence.warning("Failed to delete favorite background images when restoring default: \(error)")
+            }
             return true
         } catch {
             errorMessage = error.localizedDescription

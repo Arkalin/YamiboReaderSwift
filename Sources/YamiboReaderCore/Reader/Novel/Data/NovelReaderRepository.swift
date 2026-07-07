@@ -271,15 +271,23 @@ public actor NovelReaderRepository {
             targetImageURLs: targetImageURLs,
             retainsInlineImages: retainsInlineImages
         )
-        try? await offlineCacheStore.saveNovelOfflineSourcePage(
-            onlinePage.sourcePage,
-            request: request,
-            updatedAt: .now,
-            completesMatchingWork: targetImageURLs.isEmpty,
-            preservesExistingImageReferencesWhenEmpty: !retainsInlineImages
-        )
+        do {
+            try await offlineCacheStore.saveNovelOfflineSourcePage(
+                onlinePage.sourcePage,
+                request: request,
+                updatedAt: .now,
+                completesMatchingWork: targetImageURLs.isEmpty,
+                preservesExistingImageReferencesWhenEmpty: !retainsInlineImages
+            )
+        } catch {
+            YamiboLog.offlineCache.error("Failed to save auto-refreshed novel offline source page for thread \(onlinePage.projection.threadID), view \(onlinePage.projection.view): \(error)")
+        }
         guard retainsInlineImages, !targetImageURLs.isEmpty else { return }
-        _ = try? await offlineCacheStore.enqueueNovelOfflineCacheUpdateWork(request)
+        do {
+            _ = try await offlineCacheStore.enqueueNovelOfflineCacheUpdateWork(request)
+        } catch {
+            YamiboLog.offlineCache.warning("Failed to enqueue novel offline cache update work for thread \(onlinePage.projection.threadID), view \(onlinePage.projection.view): \(error)")
+        }
     }
 
     private static func inlineImageURLs(in document: NovelReaderProjection) -> [URL] {

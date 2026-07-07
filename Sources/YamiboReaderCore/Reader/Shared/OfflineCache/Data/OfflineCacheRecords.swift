@@ -46,16 +46,26 @@ extension OfflineCacheStore {
     func novelOfflineCacheEntry(id: OfflineCacheEntryID) async -> NovelOfflineCacheEntry? {
         try? await recoverQueueStateAfterRestart()
         guard id.readerKind == .novel else { return nil }
-        return try? await database.read { db in
-            try Self.novelEntry(entryKey: id.entryKey, in: db)
+        do {
+            return try await database.read { db in
+                try Self.novelEntry(entryKey: id.entryKey, in: db)
+            }
+        } catch {
+            YamiboLog.offlineCache.error("Failed to read novel offline cache entry \(id.entryKey): \(error)")
+            return nil
         }
     }
 
     func allNovelOfflineCacheEntries() async -> [NovelOfflineCacheEntry] {
         try? await recoverQueueStateAfterRestart()
-        return (try? await database.read { db in
-            try Self.allNovelEntries(in: db)
-        }) ?? []
+        do {
+            return try await database.read { db in
+                try Self.allNovelEntries(in: db)
+            }
+        } catch {
+            YamiboLog.offlineCache.error("Failed to read all novel offline cache entries: \(error)")
+            return []
+        }
     }
 
     func novelOfflineCacheViewsSnapshot(
@@ -72,74 +82,79 @@ extension OfflineCacheStore {
             authorID: authorID,
             contentSource: contentSource
         ) else { return NovelOfflineCacheViewsSnapshot() }
-        return (try? await database.read { db in
-            let cachedRows: [Row]
-            if let authorID = lookup.authorID {
-                cachedRows = try Row.fetchAll(
-                    db,
-                    sql: """
-                    SELECT view, source_page_file_name, updated_at
-                    FROM offline_cache_novel_entries
-                    WHERE owner_name = ? AND thread_id = ? AND author_id = ? AND content_source = ?
-                    ORDER BY view ASC
-                    """,
-                    arguments: [
-                        lookup.groupKey,
-                        lookup.threadID,
-                        authorID,
-                        lookup.contentSource.rawValue
-                    ]
-                )
-            } else {
-                cachedRows = try Row.fetchAll(
-                    db,
-                    sql: """
-                    SELECT view, source_page_file_name, updated_at
-                    FROM offline_cache_novel_entries
-                    WHERE owner_name = ? AND thread_id = ? AND author_id IS NULL AND content_source = ?
-                    ORDER BY view ASC
-                    """,
-                    arguments: [
-                        lookup.groupKey,
-                        lookup.threadID,
-                        lookup.contentSource.rawValue
-                    ]
-                )
-            }
-            var cachedViews: Set<Int> = []
-            var updateTimes: [Int: Date] = [:]
-            for row in cachedRows {
-                let view = row["view"] as Int
-                guard let fileName = row["source_page_file_name"] as String?,
-                      Self.payloadFileExists(
-                        fileName: fileName,
-                        directory: novelSourcePagesDirectory,
-                        fileManager: fileManager
-                      ) else {
-                    continue
+        do {
+            return try await database.read { db in
+                let cachedRows: [Row]
+                if let authorID = lookup.authorID {
+                    cachedRows = try Row.fetchAll(
+                        db,
+                        sql: """
+                        SELECT view, source_page_file_name, updated_at
+                        FROM offline_cache_novel_entries
+                        WHERE owner_name = ? AND thread_id = ? AND author_id = ? AND content_source = ?
+                        ORDER BY view ASC
+                        """,
+                        arguments: [
+                            lookup.groupKey,
+                            lookup.threadID,
+                            authorID,
+                            lookup.contentSource.rawValue
+                        ]
+                    )
+                } else {
+                    cachedRows = try Row.fetchAll(
+                        db,
+                        sql: """
+                        SELECT view, source_page_file_name, updated_at
+                        FROM offline_cache_novel_entries
+                        WHERE owner_name = ? AND thread_id = ? AND author_id IS NULL AND content_source = ?
+                        ORDER BY view ASC
+                        """,
+                        arguments: [
+                            lookup.groupKey,
+                            lookup.threadID,
+                            lookup.contentSource.rawValue
+                        ]
+                    )
                 }
-                cachedViews.insert(view)
-                if let updatedAt = offlineCacheOptionalDate(from: row["updated_at"] as Double?) {
-                    updateTimes[view] = updatedAt
+                var cachedViews: Set<Int> = []
+                var updateTimes: [Int: Date] = [:]
+                for row in cachedRows {
+                    let view = row["view"] as Int
+                    guard let fileName = row["source_page_file_name"] as String?,
+                          Self.payloadFileExists(
+                            fileName: fileName,
+                            directory: novelSourcePagesDirectory,
+                            fileManager: fileManager
+                          ) else {
+                        continue
+                    }
+                    cachedViews.insert(view)
+                    if let updatedAt = offlineCacheOptionalDate(from: row["updated_at"] as Double?) {
+                        updateTimes[view] = updatedAt
+                    }
                 }
-            }
 
-            let works = try Self.rawWorks(readerKind: .novel, ownerKey: lookup.groupKey, in: db)
-            let cachingViews = Set(works.compactMap { work -> Int? in
-                guard let parsed = NovelOfflineCacheEntry.entryKeyComponents(from: work.entryKey),
-                      parsed.threadID == lookup.threadID,
-                      parsed.authorID == lookup.authorID,
-                      parsed.contentSource == lookup.contentSource else {
-                    return nil
-                }
-                return parsed.view
-            })
-            return NovelOfflineCacheViewsSnapshot(
-                cachedViews: cachedViews,
-                cachingViews: cachingViews,
-                updateTimesByView: updateTimes
-            )
-        }) ?? NovelOfflineCacheViewsSnapshot()
+                let works = try Self.rawWorks(readerKind: .novel, ownerKey: lookup.groupKey, in: db)
+                let cachingViews = Set(works.compactMap { work -> Int? in
+                    guard let parsed = NovelOfflineCacheEntry.entryKeyComponents(from: work.entryKey),
+                          parsed.threadID == lookup.threadID,
+                          parsed.authorID == lookup.authorID,
+                          parsed.contentSource == lookup.contentSource else {
+                        return nil
+                    }
+                    return parsed.view
+                })
+                return NovelOfflineCacheViewsSnapshot(
+                    cachedViews: cachedViews,
+                    cachingViews: cachingViews,
+                    updateTimesByView: updateTimes
+                )
+            }
+        } catch {
+            YamiboLog.offlineCache.error("Failed to compute novel offline cache views snapshot for thread \(lookup.threadID): \(error)")
+            return NovelOfflineCacheViewsSnapshot()
+        }
     }
 
     func removeNovelOfflineCacheViews(
@@ -168,7 +183,17 @@ extension OfflineCacheStore {
             let files = try await database.write { db -> NovelPayloadFileNames in
                 let removed = try Self.novelEntry(entryKey: entryKey, in: db)
                 let groupKey = removed?.id.ownerKey ?? Self.novelGroupKey(fromEntryKey: entryKey)
-                let canceled = groupKey.flatMap { try? Self.rawWork(readerKind: .novel, ownerKey: $0, entryKey: entryKey, in: db) }
+                let canceled: OfflineCacheRawWork?
+                if let groupKey {
+                    do {
+                        canceled = try Self.rawWork(readerKind: .novel, ownerKey: groupKey, entryKey: entryKey, in: db)
+                    } catch {
+                        YamiboLog.offlineCache.warning("Failed to look up canceled novel offline cache work for entry \(entryKey): \(error)")
+                        canceled = nil
+                    }
+                } else {
+                    canceled = nil
+                }
                 let files = try Self.novelPayloadFileNames(entryKey: entryKey, in: db)
                 try Self.deleteNovelEntry(entryKey: entryKey, in: db)
                 if let groupKey {

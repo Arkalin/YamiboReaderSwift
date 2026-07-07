@@ -101,6 +101,7 @@ public final class MangaReaderWorkflow {
                 guard let offlineDirectory = await offlineReadableCurrentChapterDirectory(for: document) else {
                     throw error
                 }
+                YamiboLog.reader.warning("Initial directory resolution failed, falling back to offline-readable directory: \(error)")
                 resolution = MangaDirectoryResolutionResult(
                     directory: offlineDirectory,
                     shouldAutoUpdateAfterInitialLoad: false
@@ -215,6 +216,7 @@ public final class MangaReaderWorkflow {
                 )
             } catch {
                 guard !Task.isCancelled else { return nil }
+                YamiboLog.reader.warning("Adjacent chapter prefetch failed to load reader projection: \(error)")
                 continue
             }
             guard !Task.isCancelled else { return nil }

@@ -110,6 +110,7 @@ public actor MangaDirectoryStore: MangaDirectoryPersisting, MangaDirectoryRenami
                 return directoryBytes + chapterBytes
             }
         } catch {
+            YamiboLog.persistence.warning("Failed to read manga directory disk usage: \(error)")
             return 0
         }
     }
@@ -233,6 +234,7 @@ public actor MangaDirectoryStore: MangaDirectoryPersisting, MangaDirectoryRenami
             let oldTitle = row["title"] as String
             let itemJSON = row["item_json"] as String
             guard var item = try? decoder.decode(FavoriteItem.self, from: Data(itemJSON.utf8)) else {
+                YamiboLog.persistence.error("Failed to decode favorite_items.item_json while renaming directory '\(oldName)' -> '\(newName)' for id \(oldID); only clean_book_name/title columns were patched, item_json was left stale")
                 try db.execute(
                     sql: """
                     UPDATE favorite_items

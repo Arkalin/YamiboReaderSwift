@@ -79,16 +79,22 @@ extension OfflineCacheStore {
             authorID: authorID,
             contentSource: contentSource
         ) else { return nil }
-        let fileName = try? await database.read { db in
-            try String.fetchOne(
-                db,
-                sql: """
-                SELECT source_page_file_name
-                FROM offline_cache_novel_entries
-                WHERE entry_key = ?
-                """,
-                arguments: [identity.entryKey]
-            )
+        let fileName: String?
+        do {
+            fileName = try await database.read { db in
+                try String.fetchOne(
+                    db,
+                    sql: """
+                    SELECT source_page_file_name
+                    FROM offline_cache_novel_entries
+                    WHERE entry_key = ?
+                    """,
+                    arguments: [identity.entryKey]
+                )
+            }
+        } catch {
+            YamiboLog.offlineCache.error("Failed to look up cached novel source page file name for entry \(identity.entryKey): \(error)")
+            return nil
         }
         guard let fileName else {
             return nil
@@ -118,27 +124,33 @@ extension OfflineCacheStore {
             authorID: normalizedAuthorID,
             contentSource: source
         )
-        let row = try? await database.read { db -> NovelOfflineSourcePageSnapshotRow? in
-            guard let row = try Row.fetchOne(
-                db,
-                sql: """
-                SELECT owner_title, source_page_file_name, updated_at
-                FROM offline_cache_novel_entries
-                WHERE entry_key = ? AND source_page_file_name IS NOT NULL
-                ORDER BY updated_at DESC
-                LIMIT 1
-                """,
-                arguments: [entryKey]
-            ),
-                let fileName = row["source_page_file_name"] as String? else {
-                return nil
+        let row: NovelOfflineSourcePageSnapshotRow?
+        do {
+            row = try await database.read { db -> NovelOfflineSourcePageSnapshotRow? in
+                guard let row = try Row.fetchOne(
+                    db,
+                    sql: """
+                    SELECT owner_title, source_page_file_name, updated_at
+                    FROM offline_cache_novel_entries
+                    WHERE entry_key = ? AND source_page_file_name IS NOT NULL
+                    ORDER BY updated_at DESC
+                    LIMIT 1
+                    """,
+                    arguments: [entryKey]
+                ),
+                    let fileName = row["source_page_file_name"] as String? else {
+                    return nil
+                }
+                return NovelOfflineSourcePageSnapshotRow(
+                    ownerTitle: (row["owner_title"] as String?)
+                        ?? Self.novelDisplayOwnerTitle(ownerTitle: "", threadID: normalizedThreadID),
+                    fileName: fileName,
+                    updatedAt: novelPayloadOptionalDate(from: row["updated_at"] as Double?)
+                )
             }
-            return NovelOfflineSourcePageSnapshotRow(
-                ownerTitle: (row["owner_title"] as String?)
-                    ?? Self.novelDisplayOwnerTitle(ownerTitle: "", threadID: normalizedThreadID),
-                fileName: fileName,
-                updatedAt: novelPayloadOptionalDate(from: row["updated_at"] as Double?)
-            )
+        } catch {
+            YamiboLog.offlineCache.error("Failed to fetch novel offline source page snapshot for entry \(entryKey): \(error)")
+            return nil
         }
         guard let row,
               let sourcePage = Self.decodeFile(
@@ -198,7 +210,11 @@ extension OfflineCacheStore {
 
     func removeNovelPayloadFiles(_ files: NovelPayloadFileNames) {
         for fileName in files.sourcePageFileNames {
-            try? fileManager.removeItem(at: novelSourcePagesDirectory.appendingPathComponent(fileName, isDirectory: false))
+            do {
+                try fileManager.removeItem(at: novelSourcePagesDirectory.appendingPathComponent(fileName, isDirectory: false))
+            } catch {
+                YamiboLog.offlineCache.error("Failed to remove novel offline payload file \(fileName): \(error)")
+            }
         }
     }
 
@@ -252,8 +268,15 @@ extension OfflineCacheStore {
             return nil
         }
         let url = directory.appendingPathComponent(fileName, isDirectory: false)
-        guard let data = try? Data(contentsOf: url) else { return nil }
-        return try? JSONDecoder().decode(T.self, from: data)
+        guard let data = try? Data(contentsOf: url) else {
+            YamiboLog.offlineCache.error("Failed to read cached novel payload file \(fileName)")
+            return nil
+        }
+        guard let decoded = try? JSONDecoder().decode(T.self, from: data) else {
+            YamiboLog.offlineCache.error("Failed to decode cached novel payload file \(fileName)")
+            return nil
+        }
+        return decoded
     }
 
     static func payloadFileExists(

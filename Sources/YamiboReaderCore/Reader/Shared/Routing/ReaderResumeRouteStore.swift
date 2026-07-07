@@ -21,7 +21,12 @@ public final class ReaderResumeRouteStore: @unchecked Sendable {
         lock.unlock()
 
         guard let data else { return nil }
-        return try? JSONDecoder().decode(ReaderResumeRoute.self, from: data)
+        do {
+            return try JSONDecoder().decode(ReaderResumeRoute.self, from: data)
+        } catch {
+            YamiboLog.reader.warning("ReaderResumeRouteStore failed to decode persisted resume route; treating as no resume route: \(error)")
+            return nil
+        }
     }
 
     public func save(_ route: ReaderResumeRoute) async throws {

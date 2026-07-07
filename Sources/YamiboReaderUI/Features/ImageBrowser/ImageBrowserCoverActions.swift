@@ -40,19 +40,24 @@ enum ImageBrowserThreadCoverActions {
 
             var mangaKey: ContentCoverKey?
             var mangaBookName: String?
-            if let directoryStore = await mangaDirectoryStore(),
-               let directory = try? await directoryStore.directory(containingTID: trimmedTID) {
-                let cleanBookName = directory.cleanBookName.trimmingCharacters(in: .whitespacesAndNewlines)
-                if !cleanBookName.isEmpty {
-                    let key = ContentCoverKey.mangaTitle(cleanBookName: cleanBookName)
-                    mangaKey = key
-                    mangaBookName = cleanBookName
-                    actions.append(setAction(
-                        id: "cover.set.manga",
-                        title: L10n.string("cover.set_as_manga_cover", cleanBookName),
-                        key: key,
-                        store: store
-                    ))
+            if let directoryStore = await mangaDirectoryStore() {
+                do {
+                    if let directory = try await directoryStore.directory(containingTID: trimmedTID) {
+                        let cleanBookName = directory.cleanBookName.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if !cleanBookName.isEmpty {
+                            let key = ContentCoverKey.mangaTitle(cleanBookName: cleanBookName)
+                            mangaKey = key
+                            mangaBookName = cleanBookName
+                            actions.append(setAction(
+                                id: "cover.set.manga",
+                                title: L10n.string("cover.set_as_manga_cover", cleanBookName),
+                                key: key,
+                                store: store
+                            ))
+                        }
+                    }
+                } catch {
+                    YamiboLog.library.warning("Failed to look up manga directory for thread \(trimmedTID) while building cover actions: \(error)")
                 }
             }
 

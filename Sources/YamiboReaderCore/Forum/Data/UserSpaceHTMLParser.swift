@@ -440,6 +440,7 @@ enum UserSpaceHTMLParser {
         if !scoped.isEmpty {
             return scoped
         }
+        YamiboLog.forum.warning("privateMessageContainers: no scoped private-message selectors matched, falling back to broad 'li, .cl' scan")
         return document.selectAll("li, .cl")
     }
 
@@ -513,6 +514,7 @@ enum UserSpaceHTMLParser {
         if !scoped.isEmpty {
             return scoped
         }
+        YamiboLog.forum.warning("friendListContainers: no scoped friend-list selectors matched, falling back to scanning entire document body")
         return document.selectAll("body")
     }
 
@@ -531,6 +533,7 @@ enum UserSpaceHTMLParser {
         if !scoped.isEmpty {
             return scoped
         }
+        YamiboLog.forum.warning("noticeContainers: no scoped notice-container selectors matched, falling back to broad 'li, .cl' scan")
         return document.selectAll("li, .cl")
     }
 

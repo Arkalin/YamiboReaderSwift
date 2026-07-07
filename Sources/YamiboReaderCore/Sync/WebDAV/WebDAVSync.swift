@@ -69,7 +69,12 @@ public actor WebDAVSyncSettingsStore {
 
     public func load() async -> WebDAVSyncSettings {
         guard let data = defaults.data(forKey: key) else { return WebDAVSyncSettings() }
-        return (try? decoder.decode(WebDAVSyncSettings.self, from: data)) ?? WebDAVSyncSettings()
+        do {
+            return try decoder.decode(WebDAVSyncSettings.self, from: data)
+        } catch {
+            YamiboLog.sync.error("Failed to decode stored WebDAV sync settings, resetting to defaults: \(error)")
+            return WebDAVSyncSettings()
+        }
     }
 
     public func save(_ settings: WebDAVSyncSettings) async throws {
@@ -410,9 +415,13 @@ public actor WebDAVSyncService {
         do {
             return RemotePayload(data: data, info: try participant.inspectRemote(data))
         } catch let error as WebDAVSyncError {
-            if case .underlying = error { return nil }
+            if case .underlying = error {
+                YamiboLog.sync.warning("WebDAV inspectRemote failed for dataset \(participant.datasetID): \(error)")
+                return nil
+            }
             throw error
         } catch {
+            YamiboLog.sync.warning("WebDAV inspectRemote failed for dataset \(participant.datasetID): \(error)")
             return nil
         }
     }

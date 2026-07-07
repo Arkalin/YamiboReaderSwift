@@ -27,7 +27,12 @@ public actor SessionStore: SessionStoring {
 
     public func load() async -> SessionState {
         guard let data = defaults.data(forKey: key) else { return SessionState() }
-        return (try? decoder.decode(SessionState.self, from: data)) ?? SessionState()
+        do {
+            return try decoder.decode(SessionState.self, from: data)
+        } catch {
+            YamiboLog.account.error("Failed to decode stored session state, resetting to logged-out state: \(error)")
+            return SessionState()
+        }
     }
 
     public func save(_ session: SessionState) async throws {

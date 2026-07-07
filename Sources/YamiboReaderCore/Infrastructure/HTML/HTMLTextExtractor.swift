@@ -7,6 +7,7 @@ enum HTMLTextExtractor {
         options: NSRegularExpression.Options = [.dotMatchesLineSeparators, .caseInsensitive]
     ) -> [[String]] {
         guard let regex = try? NSRegularExpression(pattern: pattern, options: options) else {
+            YamiboLog.app.warning("HTMLTextExtractor: malformed regex pattern \(pattern, privacy: .public), returning no matches")
             return []
         }
 

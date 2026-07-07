@@ -105,6 +105,7 @@ enum BlogReaderHTMLParser {
         if !scoped.isEmpty {
             return scoped
         }
+        YamiboLog.forum.warning("commentContainers: no scoped blog-comment selectors matched, falling back to broad 'li, dl' scan")
         return document.selectAll("li, dl")
     }
 

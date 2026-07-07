@@ -456,12 +456,17 @@ public final class NovelReaderViewModel: ObservableObject {
                 favoriteAuthorID: novelProgress?.authorID
             )
         } else {
-            if let state = try? await requestRuntimeUpdate(
-                settings: settings,
-                layout: layout,
-                usesPadPresentation: usesPadPresentation
-            ) {
-                syncFromWorkflowState(state)
+            do {
+                if let state = try await requestRuntimeUpdate(
+                    settings: settings,
+                    layout: layout,
+                    usesPadPresentation: usesPadPresentation
+                ) {
+                    syncFromWorkflowState(state)
+                }
+            } catch is CancellationError {
+            } catch {
+                YamiboLog.reader.warning("prepare(layout:) failed to refresh runtime state on relaunch; UI may show a stale layout: \(error)")
             }
             await cache.refresh()
         }
@@ -846,6 +851,8 @@ public final class NovelReaderViewModel: ObservableObject {
         } catch {
             if reportsError {
                 errorMessage = error.localizedDescription
+            } else {
+                YamiboLog.reader.warning("load(view:) failed on a non-reporting fallback path (reportsError=false); error dropped without surfacing to UI: \(error)")
             }
             isLoading = false
             return false
@@ -1198,6 +1205,8 @@ public final class NovelReaderViewModel: ObservableObject {
         } catch {
             if reportsError {
                 errorMessage = error.localizedDescription
+            } else {
+                YamiboLog.reader.warning("promotePrefetchedDocument failed on a non-reporting fallback path (reportsError=false); error dropped without surfacing to UI: \(error)")
             }
             return false
         }

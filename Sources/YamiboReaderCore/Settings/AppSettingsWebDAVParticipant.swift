@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 /// WebDAV sync participant for the synchronized subset of app settings.
 /// Last-writer-wins: the payload is a snapshot, never merged, and it is only
@@ -40,7 +41,13 @@ struct AppSettingsWebDAVParticipant: WebDAVSyncParticipant {
         let snapshot = WebDAVSyncedAppSettings(settings: await store.load())
         let fingerprintEncoder = JSONEncoder()
         fingerprintEncoder.outputFormatting = [.sortedKeys]
-        guard let data = try? fingerprintEncoder.encode(snapshot) else { return nil }
+        let data: Data
+        do {
+            data = try fingerprintEncoder.encode(snapshot)
+        } catch {
+            YamiboLog.sync.warning("Failed to encode app settings fingerprint for WebDAV sync: \(error)")
+            return nil
+        }
         return data.base64EncodedString()
     }
 }

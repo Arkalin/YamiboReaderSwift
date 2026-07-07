@@ -295,6 +295,7 @@ final class ForumNovelDetailViewModel {
                     self?.document = loaded
                 }
             } catch {
+                YamiboLog.forum.error("Failed to preload reader document for thread \(request.threadID): \(error)")
                 return
             }
         }
@@ -462,14 +463,22 @@ final class ForumNovelDetailViewModel {
         var settings = await dependencies.settingsStore.load()
         settings.favorites.addSyncPromptEnabled = false
         settings.favorites.addSyncDefault = syncToRemote
-        try? await dependencies.settingsStore.save(settings)
+        do {
+            try await dependencies.settingsStore.save(settings)
+        } catch {
+            YamiboLog.forum.error("Failed to save remembered add-sync choice: \(error)")
+        }
     }
 
     private func rememberRemoveRemoteChoice(_ removeRemote: Bool) async {
         var settings = await dependencies.settingsStore.load()
         settings.favorites.removeRemotePromptEnabled = false
         settings.favorites.removeRemoteDefault = removeRemote
-        try? await dependencies.settingsStore.save(settings)
+        do {
+            try await dependencies.settingsStore.save(settings)
+        } catch {
+            YamiboLog.forum.error("Failed to save remembered remove-remote choice: \(error)")
+        }
     }
 
     func clearFavoriteError() {
@@ -550,6 +559,7 @@ final class ForumNovelDetailViewModel {
             do {
                 _ = try await dependencies.contentCoverStore.setAutomaticCover(candidate, for: key)
             } catch {
+                YamiboLog.library.error("Failed to set automatic cover for \(String(describing: key)): \(error)")
                 return
             }
         }
@@ -574,6 +584,7 @@ final class ForumNovelDetailViewModel {
             request: request,
             authorID: resolvedAuthorID
         ) else {
+            YamiboLog.forum.warning("Failed to build novel reader projection for thread \(page.thread.tid) page \(pageNumber); returning empty chapter list")
             return []
         }
         let floorTextByPostID = page.posts.reduce(into: [String: String]()) { partial, post in

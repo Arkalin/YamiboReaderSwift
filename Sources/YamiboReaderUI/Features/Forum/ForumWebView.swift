@@ -112,7 +112,11 @@ public struct IOSForumWebView: UIViewRepresentable {
         public func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
             model.sync(with: webView)
             Task {
-                try? await persistCookies(from: webView)
+                do {
+                    try await persistCookies(from: webView)
+                } catch {
+                    YamiboLog.forum.error("Failed to persist web session cookies after navigation finished: \(error)")
+                }
             }
         }
 

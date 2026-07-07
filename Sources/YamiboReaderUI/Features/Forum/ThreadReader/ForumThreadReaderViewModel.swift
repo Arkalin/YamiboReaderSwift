@@ -223,7 +223,11 @@ final class ForumThreadReaderViewModel {
             )
             if let coverCandidate = ThreadCoverResolver.findThreadCoverCandidate(in: page),
                let coverStore = await contentCoverStoreProvider() {
-                _ = try? await coverStore.setAutomaticCover(coverCandidate, for: .thread(tid: context.thread.tid))
+                do {
+                    _ = try await coverStore.setAutomaticCover(coverCandidate, for: .thread(tid: context.thread.tid))
+                } catch {
+                    YamiboLog.library.error("Failed to set automatic cover for thread \(self.context.thread.tid) during favorite add: \(error)")
+                }
             }
             isFavorited = true
             transientMessage = result.remote.addFeedbackMessage
@@ -266,7 +270,11 @@ final class ForumThreadReaderViewModel {
         var settings = await settingsStore.load()
         settings.favorites.addSyncPromptEnabled = false
         settings.favorites.addSyncDefault = syncToRemote
-        try? await settingsStore.save(settings)
+        do {
+            try await settingsStore.save(settings)
+        } catch {
+            YamiboLog.forum.error("Failed to save remembered add-sync choice: \(error)")
+        }
     }
 
     private func rememberRemoveRemoteChoice(_ removeRemote: Bool) async {
@@ -274,7 +282,11 @@ final class ForumThreadReaderViewModel {
         var settings = await settingsStore.load()
         settings.favorites.removeRemotePromptEnabled = false
         settings.favorites.removeRemoteDefault = removeRemote
-        try? await settingsStore.save(settings)
+        do {
+            try await settingsStore.save(settings)
+        } catch {
+            YamiboLog.forum.error("Failed to save remembered remove-remote choice: \(error)")
+        }
     }
 
     func loadRatingResults(postID: String) async throws -> ForumThreadRatingResultsPage {

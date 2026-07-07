@@ -44,7 +44,7 @@ public actor ForumCacheStore {
 
     public func loadHome(allowExpired: Bool = false) async -> ForumHomePage? {
         let ttl = allowExpired ? nil : Self.homeTTL
-        guard let entry: ForumCacheEntry<ForumHomePage> = try? await cacheStore.get(
+        guard let entry: ForumCacheEntry<ForumHomePage> = await loggedGet(
             namespace: Self.homeNamespace,
             key: Self.homeKey,
             ttl: ttl
@@ -71,7 +71,7 @@ public actor ForumCacheStore {
         allowExpired: Bool = false
     ) async -> ForumBoardPage? {
         let ttl = allowExpired ? nil : Self.boardTTL
-        guard let entry: ForumCacheEntry<ForumBoardPage> = try? await cacheStore.get(
+        guard let entry: ForumCacheEntry<ForumBoardPage> = await loggedGet(
             namespace: Self.boardNamespace,
             key: boardCacheKey(fid: fid, page: page, filterID: filterID, orderFilter: orderFilter, orderBy: orderBy),
             ttl: ttl
@@ -103,7 +103,7 @@ public actor ForumCacheStore {
         allowExpired: Bool = false
     ) async -> ForumThreadPage? {
         let ttl = allowExpired ? nil : Self.threadPageTTL
-        guard let entry: ForumCacheEntry<ForumThreadPage> = try? await cacheStore.get(
+        guard let entry: ForumCacheEntry<ForumThreadPage> = await loggedGet(
             namespace: Self.threadPageNamespace,
             key: threadPageCacheKey(thread: thread, page: page, authorID: authorID),
             ttl: ttl
@@ -120,7 +120,13 @@ public actor ForumCacheStore {
     ) async -> Set<Int> {
         let prefix = threadPageCacheKeyPrefix(thread: thread)
         let normalizedAuthorID = authorID?.nilIfBlank
-        let entries = (try? await cacheStore.entries(namespace: Self.threadPageNamespace)) ?? []
+        let entries: [DiskCacheStore.CacheEntry]
+        do {
+            entries = try await cacheStore.entries(namespace: Self.threadPageNamespace)
+        } catch {
+            YamiboLog.offlineCache.warning("ForumCacheStore: failed to list cache entries namespace=\(Self.threadPageNamespace, privacy: .public): \(error)")
+            entries = []
+        }
         return Set(entries.compactMap { entry -> Int? in
             guard entry.key.hasPrefix(prefix),
                   threadPageCacheAuthorID(from: entry.key) == normalizedAuthorID,
@@ -183,6 +189,21 @@ public actor ForumCacheStore {
 
     private func isExpired(_ fetchedAt: Date, ttl: TimeInterval) -> Bool {
         now().timeIntervalSince(fetchedAt) > ttl
+    }
+
+    /// Wraps `DiskCacheStore.get`, logging genuine read/decode errors (as opposed to a plain
+    /// cache miss, which `get` already represents as `nil` without throwing).
+    private func loggedGet<Value: Decodable & Sendable>(
+        namespace: String,
+        key: String,
+        ttl: TimeInterval?
+    ) async -> Value? {
+        do {
+            return try await cacheStore.get(namespace: namespace, key: key, ttl: ttl)
+        } catch {
+            YamiboLog.offlineCache.warning("ForumCacheStore: cache read failed namespace=\(namespace, privacy: .public) key=\(key, privacy: .public): \(error)")
+            return nil
+        }
     }
 
     private func boardCacheKey(fid: String, page: Int, filterID: String?, orderFilter: String?, orderBy: String?) -> String {

@@ -204,7 +204,11 @@ final class FavoriteRemoteSyncSession: ObservableObject {
                         coverRepository: coverRepository
                     )
                     if let coverURL = result.coverURL, let key = ContentCoverKey(target: result.target) {
-                        _ = try? await contentCoverStore.setAutomaticCover(coverURL, for: key)
+                        do {
+                            _ = try await contentCoverStore.setAutomaticCover(coverURL, for: key)
+                        } catch {
+                            YamiboLog.sync.warning("Failed to persist automatic cover during sync for thread \(entry.threadID): \(error.localizedDescription)")
+                        }
                     }
                     return result
                 },
@@ -252,6 +256,7 @@ final class FavoriteRemoteSyncSession: ObservableObject {
                 try await runStore.save(snapshot)
             }.value
         } catch {
+            YamiboLog.sync.error("Failed to persist favorite sync snapshot for run \(snapshot.runID): \(error.localizedDescription)")
             errorMessage = error.localizedDescription
         }
     }
@@ -367,7 +372,12 @@ final class FavoriteRemoteSyncSession: ObservableObject {
         if let cachedFirstPage {
             firstPage = cachedFirstPage
         } else {
-            firstPage = try? await repository.fetchThreadPage(thread: thread, title: title, authorID: nil, page: 1)
+            do {
+                firstPage = try await repository.fetchThreadPage(thread: thread, title: title, authorID: nil, page: 1)
+            } catch {
+                YamiboLog.sync.warning("Failed to fetch thread page for \(thread.tid) during sync probe, defaulting sourceGroup/contentUpdatedAt: \(error.localizedDescription)")
+                firstPage = nil
+            }
         }
         let sourceGroup = sourceGroup(from: firstPage)
         let contentUpdatedAt = contentUpdatedAt(from: firstPage)

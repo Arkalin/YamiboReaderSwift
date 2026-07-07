@@ -39,10 +39,17 @@ public actor NovelReaderProjectionStore {
     ) async -> NovelReaderProjection? {
         let key = projectionCacheKey(threadID: request.threadID, view: request.view, authorID: request.authorID, contentSource: contentSource)
 
-        guard let projection: NovelReaderProjection = try? await cacheStore.get(
-            namespace: Self.projectionNamespace,
-            key: key
-        ) else {
+        let projection: NovelReaderProjection?
+        do {
+            projection = try await cacheStore.get(
+                namespace: Self.projectionNamespace,
+                key: key
+            )
+        } catch {
+            YamiboLog.offlineCache.warning("Failed to read cached novel reader projection for key \(key): \(error)")
+            projection = nil
+        }
+        guard let projection else {
             memoryCache.removeObject(forKey: key as NSString)
             return nil
         }
@@ -65,7 +72,13 @@ public actor NovelReaderProjectionStore {
         let identity = NovelReaderCacheIdentity(threadID: threadID, view: 1, authorID: authorID, contentSource: contentSource)
         let resolvedSource = resolvedContentSource(authorID: authorID, contentSource: contentSource)
         let normalizedAuthorID = authorID?.nilIfBlank
-        let entries = (try? await cacheStore.entries(namespace: Self.projectionNamespace)) ?? []
+        let entries: [DiskCacheStore.CacheEntry]
+        do {
+            entries = try await cacheStore.entries(namespace: Self.projectionNamespace)
+        } catch {
+            YamiboLog.offlineCache.warning("Failed to enumerate cached novel reader projection entries for thread \(threadID): \(error)")
+            entries = []
+        }
         return Set(entries.compactMap { entry -> Int? in
             guard let parsed = projectionKeyComponents(from: entry.key),
                   parsed.threadID == identity.threadID,
@@ -100,7 +113,11 @@ public actor NovelReaderProjectionStore {
     }
 
     public func totalDiskUsageBytes() async -> Int {
-        guard let entries = try? await cacheStore.entries(namespace: Self.projectionNamespace) else {
+        let entries: [DiskCacheStore.CacheEntry]
+        do {
+            entries = try await cacheStore.entries(namespace: Self.projectionNamespace)
+        } catch {
+            YamiboLog.offlineCache.warning("Failed to enumerate cached novel reader projection entries for disk usage accounting: \(error)")
             return 0
         }
         var total = 0

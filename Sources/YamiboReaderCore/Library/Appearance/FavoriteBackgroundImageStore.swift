@@ -24,7 +24,12 @@ public actor FavoriteBackgroundImageStore {
 
     public func loadData(imageID: String?) async -> Data? {
         guard let imageID, !imageID.isEmpty else { return nil }
-        return try? Data(contentsOf: imageURL(for: imageID))
+        do {
+            return try Data(contentsOf: imageURL(for: imageID))
+        } catch {
+            YamiboLog.library.warning("Failed to read favorite background image data for id \(imageID, privacy: .public): \(error)")
+            return nil
+        }
     }
 
     public func save(_ data: Data, imageID: String) async throws {
@@ -52,7 +57,11 @@ public actor FavoriteBackgroundImageStore {
             includingPropertiesForKeys: nil
         )
         for url in urls where url.lastPathComponent != keepFileName {
-            try? fileManager.removeItem(at: url)
+            do {
+                try fileManager.removeItem(at: url)
+            } catch {
+                YamiboLog.library.warning("Failed to remove stale favorite background image \(url.lastPathComponent, privacy: .public): \(error)")
+            }
         }
     }
 

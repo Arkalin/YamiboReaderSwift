@@ -33,13 +33,15 @@ public actor MangaReaderProjectionStore: MangaReaderProjectionPersisting {
     }
 
     public func projection(for identity: MangaReaderProjectionSourceIdentity) async -> MangaReaderProjection? {
-        guard let projection: MangaReaderProjection = try? await cacheStore.get(
-            namespace: Self.projectionNamespace,
-            key: projectionCacheKey(identity: identity)
-        ) else {
+        do {
+            return try await cacheStore.get(
+                namespace: Self.projectionNamespace,
+                key: projectionCacheKey(identity: identity)
+            )
+        } catch {
+            YamiboLog.offlineCache.warning("Failed to read cached manga reader projection: \(error)")
             return nil
         }
-        return projection
     }
 
     public func save(_ projection: MangaReaderProjection) async throws {
@@ -55,7 +57,11 @@ public actor MangaReaderProjectionStore: MangaReaderProjectionPersisting {
     }
 
     public func totalDiskUsageBytes() async -> Int {
-        guard let entries = try? await cacheStore.entries(namespace: Self.projectionNamespace) else {
+        let entries: [DiskCacheStore.CacheEntry]
+        do {
+            entries = try await cacheStore.entries(namespace: Self.projectionNamespace)
+        } catch {
+            YamiboLog.offlineCache.warning("Failed to enumerate cached manga reader projections for disk usage: \(error)")
             return 0
         }
         var total = 0

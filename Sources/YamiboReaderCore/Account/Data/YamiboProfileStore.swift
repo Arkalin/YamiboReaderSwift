@@ -18,7 +18,12 @@ public actor YamiboProfileStore {
 
     public func load() async -> YamiboProfile? {
         guard let data = defaults.data(forKey: key) else { return nil }
-        return try? decoder.decode(YamiboProfile.self, from: data)
+        do {
+            return try decoder.decode(YamiboProfile.self, from: data)
+        } catch {
+            YamiboLog.account.error("Failed to decode stored profile data: \(error)")
+            return nil
+        }
     }
 
     public func save(_ profile: YamiboProfile) async throws {

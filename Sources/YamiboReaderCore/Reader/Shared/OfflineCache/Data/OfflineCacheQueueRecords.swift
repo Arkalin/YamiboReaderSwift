@@ -4,23 +4,38 @@ import Foundation
 extension OfflineCacheStore {
     func offlineCacheQueueWorks() async -> [OfflineCacheQueueWorkProjection] {
         try? await recoverQueueStateAfterRestart()
-        return (try? await database.read { db in
-            try Self.allRawWorks(in: db).map(Self.queueWorkProjection(from:))
-        }) ?? []
+        do {
+            return try await database.read { db in
+                try Self.allRawWorks(in: db).map(Self.queueWorkProjection(from:))
+            }
+        } catch {
+            YamiboLog.offlineCache.error("Failed to read offline cache queue works: \(error)")
+            return []
+        }
     }
 
     func nextOfflineCacheProcessingWork() async -> OfflineCacheProcessingWork? {
         try? await recoverQueueStateAfterRestart()
-        return try? await database.read { db in
-            try Self.allRawWorks(in: db).first.map(Self.processingWork(from:))
+        do {
+            return try await database.read { db in
+                try Self.allRawWorks(in: db).first.map(Self.processingWork(from:))
+            }
+        } catch {
+            YamiboLog.offlineCache.error("Failed to read next offline cache processing work: \(error)")
+            return nil
         }
     }
 
     func offlineCacheProcessingWork(id: OfflineCacheWorkID) async -> OfflineCacheProcessingWork? {
         try? await recoverQueueStateAfterRestart()
-        return try? await database.read { db in
-            try Self.rawWork(workID: id.rawValue, readerKind: id.readerKind, in: db)
-                .map(Self.processingWork(from:))
+        do {
+            return try await database.read { db in
+                try Self.rawWork(workID: id.rawValue, readerKind: id.readerKind, in: db)
+                    .map(Self.processingWork(from:))
+            }
+        } catch {
+            YamiboLog.offlineCache.error("Failed to read offline cache processing work \(id.rawValue): \(error)")
+            return nil
         }
     }
 
