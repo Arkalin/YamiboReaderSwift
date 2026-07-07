@@ -820,6 +820,30 @@ public struct FavoriteLibraryDocument: Codable, Equatable, Sendable {
         items[index].updatedAt = date
     }
 
+    /// Heals a `.unknown` source group once the actual forum resolves (e.g.
+    /// the favorite-update checker fetched the thread and learned its fid).
+    /// Items whose forum never resolved at add-time would otherwise never
+    /// regain one, which permanently excludes them from fid-scoped features
+    /// (like the update-check filter) once the user disables any other
+    /// forum's filter. No-ops if the item already has a resolved source
+    /// group, so this never clobbers a value obtained elsewhere.
+    public mutating func healUnknownSourceGroup(for target: FavoriteContentTarget, forumID: String, forumName: String?, date: Date = .now) {
+        guard let index = items.firstIndex(where: { $0.target.id == target.id }),
+              items[index].sourceGroup == .unknown else {
+            return
+        }
+        let metadata = FavoriteSourceGroup.normalizedForumMetadata(
+            sourceGroup: .forumBoard(id: forumID, label: forumName ?? forumID),
+            forumID: forumID,
+            forumName: forumName
+        )
+        guard case .forumBoard = metadata.sourceGroup else { return }
+        items[index].sourceGroup = metadata.sourceGroup
+        items[index].forumID = metadata.forumID
+        items[index].forumName = metadata.forumName
+        items[index].updatedAt = date
+    }
+
     public mutating func retargetItem(from oldTarget: FavoriteContentTarget, to newTarget: FavoriteContentTarget) {
         guard let index = items.firstIndex(where: { $0.target.id == oldTarget.id }) else { return }
         var replacement = items[index]

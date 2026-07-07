@@ -19,6 +19,7 @@ final class FavoriteUpdateMonitor: ObservableObject {
     private let pageFetcher: ((FavoriteItem) async throws -> ForumThreadPage)?
 
     private var checkTask: Task<Void, Never>?
+    private var storeUpdatesTask: Task<Void, Never>?
 
     private static var activeRunIDs: Set<String> = []
 
@@ -38,10 +39,30 @@ final class FavoriteUpdateMonitor: ObservableObject {
         self.makeForumThreadReaderRepository = makeForumThreadReaderRepository
         self.settingsStore = settingsStore
         self.pageFetcher = pageFetcher
+        storeUpdatesTask = Task { @MainActor [weak self, store = updateStore] in
+            for await notification in NotificationCenter.default.notifications(named: FavoriteUpdateStore.didChangeNotification) {
+                guard !Task.isCancelled else { return }
+                guard let self else { return }
+                guard let changeID = notification.userInfo?[FavoriteUpdateStore.changeIDUserInfoKey] as? String,
+                      changeID == store.changeID else {
+                    continue
+                }
+                // Skip while this instance is actively driving its own check
+                // run — its explicit updateSnapshot/reloadEventState calls
+                // already keep it current, so reloading here would just be
+                // redundant churn. Once idle, any store change (including
+                // one from a different monitor instance, e.g. a background
+                // refresh task) must be picked up so the UI never sits on
+                // stale background-detected results.
+                guard self.snapshot?.status != .running else { continue }
+                await self.load()
+            }
+        }
     }
 
     deinit {
         checkTask?.cancel()
+        storeUpdatesTask?.cancel()
     }
 
     /// Reloads the persisted run, events, and filters. A run still marked
@@ -153,7 +174,11 @@ final class FavoriteUpdateMonitor: ObservableObject {
             return false
         }
         guard snapshot?.status != .running else { return false }
-        if let last = snapshot, last.status == .completed, let finishedAt = last.finishedAt,
+        // Throttle on elapsed time regardless of how the last run ended: a
+        // failed or interrupted run (e.g. the background task's execution
+        // budget expired mid-check) must not bypass the interval and trigger
+        // a brand-new full check on every single foreground catch-up.
+        if let last = snapshot, let finishedAt = last.finishedAt,
            Date.now.timeIntervalSince(finishedAt) < delay {
             return false
         }
@@ -264,6 +289,14 @@ final class FavoriteUpdateMonitor: ObservableObject {
             if error.isTaskCancellation {
                 await reloadEventState()
                 await updateSnapshot(runID: runID) { snapshot in
+                    // interrupt() may have already written the terminal state
+                    // for this exact run — its cancellation races with a
+                    // network fetch that doesn't observe Task cancellation
+                    // and runs to completion regardless. Don't re-terminate
+                    // an already-terminal snapshot, which would otherwise
+                    // duplicate the warning/log entry and push finishedAt
+                    // later than when the user actually interrupted.
+                    guard snapshot.status == .running else { return }
                     snapshot.status = .interrupted
                     snapshot.phase = .interrupted
                     snapshot.finishedAt = .now
@@ -342,13 +375,13 @@ final class FavoriteUpdateMonitor: ObservableObject {
         let enabledCategories = Set(state.categoryFilters.filter(\.enabled).map(\.categoryID))
         let disabledCategoriesExist = state.categoryFilters.contains { !$0.enabled }
         return candidates.filter { item in
+            // The fid filter only ever gets a row for items whose forum
+            // actually resolved (see refreshFilters); an item stuck at
+            // .unknown has no filter row it could be re-enabled through, so
+            // disabling some OTHER forum must not silently exclude it too.
             let fidMatches: Bool
-            if disabledFidsExist {
-                if case let .forumBoard(id, _) = item.sourceGroup {
-                    fidMatches = enabledFids.contains(id)
-                } else {
-                    fidMatches = false
-                }
+            if disabledFidsExist, case let .forumBoard(id, _) = item.sourceGroup {
+                fidMatches = enabledFids.contains(id)
             } else {
                 fidMatches = true
             }
@@ -386,19 +419,49 @@ final class FavoriteUpdateMonitor: ObservableObject {
         case failed(String)
     }
 
+    /// After this many consecutive failed check attempts, a target backs off
+    /// to being retried at most once per `circuitBreakerCooldown` instead of
+    /// on every single run — otherwise a permanently broken target (deleted
+    /// thread, moved board) gets re-fetched forever with no end in sight.
+    private static let circuitBreakerThreshold = 5
+    private static let circuitBreakerCooldown: TimeInterval = 24 * 3600
+
     private func checkUpdate(for item: FavoriteItem) async -> CheckResult {
-        guard let page = await threadPage(for: item) else { return .skipped }
-        let fingerprint = FavoriteUpdateFingerprint(page: page)
         let state = await updateStore.loadState()
         var target = state.trackedTargets.first { $0.target == item.target } ?? FavoriteUpdateTrackedTarget(
             target: item.target,
             title: item.resolvedDisplayTitle,
             mode: item.target.kind == .novelThread ? .novelThread : .normalThread
         )
+
+        if target.consecutiveFailures >= Self.circuitBreakerThreshold,
+           let lastCheckedAt = target.lastCheckedAt,
+           Date.now.timeIntervalSince(lastCheckedAt) < Self.circuitBreakerCooldown {
+            return .skipped
+        }
+
+        guard let page = await threadPage(for: item, knownPageCount: target.knownPageCount) else {
+            target.consecutiveFailures += 1
+            target.lastError = "thread fetch failed"
+            target.lastCheckedAt = .now
+            try? await updateStore.upsertTrackedTarget(target)
+            return .skipped
+        }
+
+        await healUnknownSourceGroupIfNeeded(item: item, page: page)
+
+        let fingerprint = FavoriteUpdateFingerprint(page: page)
         let previous = FavoriteUpdateFingerprint(target: target)
-        target.knownLatestPostID = fingerprint.latestPostID
-        target.knownReplyCount = fingerprint.replyCount
-        target.knownPageCount = fingerprint.pageCount
+
+        // Only advance fields this fetch actually produced a value for — a
+        // transient parse miss on one field must not erase a previously
+        // known-good baseline, which would otherwise silently and
+        // permanently break future comparisons for that field (the next
+        // good fetch would compare against nil instead of the real prior
+        // value, masking whatever changed in between).
+        target.knownLatestPostID = fingerprint.latestPostID ?? target.knownLatestPostID
+        target.knownReplyCount = fingerprint.replyCount ?? target.knownReplyCount
+        target.knownPageCount = fingerprint.pageCount ?? target.knownPageCount
         target.baselineReady = true
         target.lastCheckedAt = .now
         target.lastError = nil
@@ -410,31 +473,72 @@ final class FavoriteUpdateMonitor: ObservableObject {
             target.forumName = forumName
         }
 
-        do {
-            try await updateStore.upsertTrackedTarget(target)
-            guard previous.isReady, fingerprint.isNewer(than: previous) else {
+        guard previous.isReady, fingerprint.isNewer(than: previous) else {
+            do {
+                try await updateStore.upsertTrackedTarget(target)
                 return .checked(detected: 0)
+            } catch {
+                return .failed(error.localizedDescription)
             }
-            let summary = FavoriteUpdateFingerprint.summary(from: previous, to: fingerprint)
-            let event = FavoriteUpdateEvent(
-                target: item.target,
-                title: item.resolvedDisplayTitle,
-                mode: item.target.kind == .novelThread ? .novelThread : .normalThread,
-                fid: target.fid,
-                forumName: target.forumName,
-                summary: summary,
-                detailIDs: fingerprint.latestPostID.map { [$0] } ?? [],
-                detectedAt: .now,
-                ambiguous: fingerprint.latestPostID == nil
-            )
+        }
+
+        let existingEvent = state.events.first { $0.target == item.target && $0.dismissedAt == nil }
+        let summary = Self.mergedSummary(
+            existing: existingEvent?.summary,
+            new: FavoriteUpdateFingerprint.summary(from: previous, to: fingerprint)
+        )
+        let event = FavoriteUpdateEvent(
+            target: item.target,
+            title: item.resolvedDisplayTitle,
+            mode: item.target.kind == .novelThread ? .novelThread : .normalThread,
+            fid: target.fid,
+            forumName: target.forumName,
+            summary: summary,
+            detailIDs: fingerprint.latestPostID.map { [$0] } ?? [],
+            detectedAt: .now,
+            ambiguous: fingerprint.latestPostID == nil
+        )
+        do {
+            // Insert the event BEFORE advancing the persisted baseline: if
+            // this throws, the target's stored baseline must not have moved,
+            // so the next check re-derives the same delta and retries
+            // instead of silently losing the detected update.
             try await updateStore.insertEvent(event)
+            try await updateStore.upsertTrackedTarget(target)
             return .checked(detected: 1)
         } catch {
             return .failed(error.localizedDescription)
         }
     }
 
-    private func threadPage(for item: FavoriteItem) async -> ForumThreadPage? {
+    /// Accumulates a newly detected delta onto an existing undismissed event
+    /// for the same target instead of replacing it outright, so a user who
+    /// misses several check cycles in a row sees the true accumulated total
+    /// rather than only the most recent cycle's delta.
+    private static func mergedSummary(existing: FavoriteUpdateSummary?, new: FavoriteUpdateSummary) -> FavoriteUpdateSummary {
+        guard let existing else { return new }
+        switch (existing, new) {
+        case let (.newReplies(a), .newReplies(b)):
+            return .newReplies(count: a + b)
+        case let (.newPages(a), .newPages(b)):
+            return .newPages(count: a + b)
+        default:
+            return new
+        }
+    }
+
+    /// Writes a resolved forum id/name back onto the favorite's own source
+    /// group once a check successfully fetches its thread — items that never
+    /// resolved a forum at add-time would otherwise stay `.unknown` forever,
+    /// since nothing else in the app re-probes an already-favorited item.
+    private func healUnknownSourceGroupIfNeeded(item: FavoriteItem, page: ForumThreadPage) async {
+        guard item.sourceGroup == .unknown, let forumID = page.forumID ?? page.thread.fid else { return }
+        var document = await libraryStore.load()
+        document.healUnknownSourceGroup(for: item.target, forumID: forumID, forumName: page.forumName)
+        try? await libraryStore.save(document)
+    }
+
+    private func threadPage(for item: FavoriteItem, knownPageCount: Int?) async -> ForumThreadPage? {
         do {
             if let pageFetcher {
                 return try await pageFetcher(item)
@@ -446,7 +550,13 @@ final class FavoriteUpdateMonitor: ObservableObject {
             let fid: String? = if case let .forumBoard(id, _) = item.sourceGroup { id } else { nil }
             let thread = ThreadIdentity(tid: tid, fid: fid)
             let context = ThreadNovelLaunchContext(thread: thread, title: item.resolvedDisplayTitle)
-            return try await repository.fetchThreadPage(context: context, page: 1)
+            // New replies land on the last page — fetching the previously
+            // known last page (falling back to page 1 for a first-ever
+            // check) is what lets latestPostID track the thread's actual
+            // newest content instead of freezing at whatever was on page 1
+            // forever once the thread grows past one page.
+            let page = max(1, knownPageCount ?? 1)
+            return try await repository.fetchThreadPage(context: context, page: page)
         } catch {
             return nil
         }

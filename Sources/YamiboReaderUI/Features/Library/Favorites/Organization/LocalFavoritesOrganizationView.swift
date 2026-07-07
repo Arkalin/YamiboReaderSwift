@@ -89,8 +89,12 @@ struct LocalFavoritesOrganizationView: View {
                     FavoriteUpdatesPage(
                         updateMonitor: updateMonitor,
                         routes: routes,
+                        isEventVisible: isEventInFilterScope,
                         onOpen: { event in
-                            guard let item = organizer.favoriteItems.first(where: { $0.target.id == event.target.id }) else { return }
+                            guard let item = organizer.favoriteItems.first(where: { $0.target.id == event.target.id }) else {
+                                organizer.transientMessage = L10n.string("favorites.updates.event_target_missing")
+                                return
+                            }
                             await onOpen(item, .resume)
                         }
                     )
@@ -261,7 +265,39 @@ struct LocalFavoritesOrganizationView: View {
     }
 
     private var unreadUpdateCount: Int {
-        updateMonitor.events.filter { $0.readAt == nil }.count
+        updateMonitor.events.filter { $0.readAt == nil && isEventInFilterScope($0) }.count
+    }
+
+    /// Whether `event` still falls within the currently-enabled fid/category
+    /// filters. The bell badge and the updates page's event list must agree
+    /// with what a fresh check run would actually surface — otherwise
+    /// disabling a forum's filter leaves its stale events still counted and
+    /// listed as if nothing changed.
+    private func isEventInFilterScope(_ event: FavoriteUpdateEvent) -> Bool {
+        let fidFilters = updateMonitor.fidFilters
+        let categoryFilters = updateMonitor.categoryFilters
+        let disabledFidsExist = fidFilters.contains { !$0.enabled }
+        let disabledCategoriesExist = categoryFilters.contains { !$0.enabled }
+        guard disabledFidsExist || disabledCategoriesExist else { return true }
+
+        let fidMatches: Bool
+        if disabledFidsExist, let fid = event.fid {
+            fidMatches = fidFilters.first { $0.fid == fid }?.enabled ?? true
+        } else {
+            fidMatches = true
+        }
+
+        let categoryMatches: Bool
+        if disabledCategoriesExist,
+           let item = organizer.favoriteItems.first(where: { $0.target.id == event.target.id }) {
+            let itemCategoryIDs = Set(item.locations.compactMap(\.categoryID))
+            let enabledCategoryIDs = Set(categoryFilters.filter(\.enabled).map(\.categoryID))
+            categoryMatches = !itemCategoryIDs.isDisjoint(with: enabledCategoryIDs)
+        } else {
+            categoryMatches = true
+        }
+
+        return fidMatches && categoryMatches
     }
 
     private var statusCards: some View {

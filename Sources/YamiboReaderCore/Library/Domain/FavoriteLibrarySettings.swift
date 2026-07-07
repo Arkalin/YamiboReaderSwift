@@ -287,8 +287,11 @@ public enum FavoriteUpdateCheckInterval: String, Codable, Hashable, CaseIterable
     case day
     case threeDays
     case week
-    /// Adaptive: checks twice a day while recent updates keep appearing,
-    /// otherwise backs off to every two days.
+    /// Adaptive: checks twice a day as long as any update was detected in
+    /// the last 7 days (see `FavoriteUpdateMonitor.hasRecentEvents`), then
+    /// backs off to every two days. The 7-day window means a single event
+    /// keeps the aggressive cadence for up to a week even without further
+    /// activity — that's deliberate smoothing, not a bug.
     case smart
 
     public var id: String { rawValue }

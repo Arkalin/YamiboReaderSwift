@@ -6,6 +6,7 @@ import YamiboReaderCore
 struct FavoriteUpdatesPage: View {
     @ObservedObject var updateMonitor: FavoriteUpdateMonitor
     let routes: LocalFavoritesRoutes
+    let isEventVisible: (FavoriteUpdateEvent) -> Bool
     let onOpen: (FavoriteUpdateEvent) async -> Void
 
     @State private var selectedInterval: FavoriteUpdateCheckInterval = .off
@@ -87,14 +88,19 @@ struct FavoriteUpdatesPage: View {
         }
     }
 
+    private var visibleEvents: [FavoriteUpdateEvent] {
+        updateMonitor.events.filter(isEventVisible)
+    }
+
     @ViewBuilder
     private var eventsSection: some View {
         Section {
-            if updateMonitor.events.isEmpty {
+            let events = visibleEvents
+            if events.isEmpty {
                 Text(L10n.string("favorites.updates.no_events"))
                     .foregroundStyle(.secondary)
             } else {
-                ForEach(updateMonitor.events) { event in
+                ForEach(events) { event in
                     FavoriteUpdateEventRow(
                         event: event,
                         onOpen: {
@@ -113,7 +119,7 @@ struct FavoriteUpdatesPage: View {
             HStack {
                 Text(L10n.string("favorites.updates.events"))
                 Spacer()
-                if !updateMonitor.events.isEmpty {
+                if !visibleEvents.isEmpty {
                     Button(L10n.string("favorites.updates.dismiss_all")) {
                         Task { await updateMonitor.dismissAllEvents() }
                     }

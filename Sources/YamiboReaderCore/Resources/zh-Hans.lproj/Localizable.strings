@@ -319,6 +319,7 @@
 "favorites.updates.dismiss_all" = "全部忽略";
 "favorites.updates.events" = "收藏更新";
 "favorites.updates.events_count" = "%d 个更新";
+"favorites.updates.event_target_missing" = "对应的收藏已被删除";
 "favorites.updates.failed" = "检查失败";
 "favorites.updates.filters" = "更新筛选";
 "favorites.updates.filters.categories" = "分类";
