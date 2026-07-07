@@ -202,7 +202,7 @@ private enum YamiboAccountTestError: Error {
 
     #expect(await sessionStore.load() == SessionState())
     #expect(await profileStore.load() == nil)
-    #expect(await localFavoriteLibraryStore.load() == favoriteLibrary)
+    #expect(try await localFavoriteLibraryStore.load() == favoriteLibrary)
     #expect(await offlineStore.mangaOfflineCacheMembership(ownerName: favoriteItem.title, tid: "970") != nil)
     #expect(await offlineStore.mangaQueueWork(ownerName: favoriteItem.title, tid: "971") != nil)
     #expect(await offlineStore.offlineImageData(for: imageURL) == Data([7]))

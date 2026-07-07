@@ -61,9 +61,9 @@ struct MangaReaderViewModelDependencies {
                 )
             ),
             migrateMangaTitleReferences: { oldName, newName in
-                var document = await dependencies.localFavoriteLibraryStore.load()
-                document.renameMangaTitle(from: oldName, to: newName)
-                try? await dependencies.localFavoriteLibraryStore.save(document)
+                try? await dependencies.localFavoriteLibraryStore.update { document in
+                    document.renameMangaTitle(from: oldName, to: newName)
+                }
                 try? await dependencies.readingProgressStore.migrateMangaTitleKey(from: oldName, to: newName)
             }
         )

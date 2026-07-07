@@ -350,7 +350,9 @@ public final class YamiboAppContext: Sendable {
             session: await sessionStore.load(),
             profile: await profileStore.load(),
             settings: await settingsStore.load(),
-            localFavoriteLibrary: await localFavoriteLibraryStore.load()
+            // Startup snapshot for first paint only — every writer re-reads
+            // the store, so this fallback can never leak into a save.
+            localFavoriteLibrary: (try? await localFavoriteLibraryStore.load()) ?? FavoriteLibraryDocument()
         )
     }
 

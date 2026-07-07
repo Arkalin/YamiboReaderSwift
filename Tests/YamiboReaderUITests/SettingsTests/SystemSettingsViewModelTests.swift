@@ -342,7 +342,7 @@ final class SystemSettingsViewModelTests: XCTestCase {
         let offlineWorkAfterClear = await fixture.offlineCacheStore.mangaQueueWork(ownerName: "作品B", tid: "904")
         let favoriteBackgroundDataAfterClear = await fixture.favoriteBackgroundImageStore.loadData(imageID: favoriteBackgroundID)
         let settingsAfterClear = await fixture.settingsStore.load()
-        let favoriteLibraryAfterClear = await fixture.appContext.localFavoriteLibraryStore.load()
+        let favoriteLibraryAfterClear = try await fixture.appContext.localFavoriteLibraryStore.load()
 
         XCTAssertTrue(didClear)
         XCTAssertEqual(fixture.ordinaryImageCache.removeAllCallCount, 1)

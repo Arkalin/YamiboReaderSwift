@@ -142,7 +142,7 @@ struct MangaReaderTestsMangaStores {
             )
         )
 
-        let favorite = try #require(await favoriteStore.load().items.first)
+        let favorite = try #require(try await favoriteStore.load().items.first)
         #expect(favorite.target == FavoriteContentTarget(mangaID: "旧书名", mangaCleanBookName: "新书名"))
         #expect(favorite.title == "新书名")
         #expect(favorite.sourceGroup == .mangaTitle(mangaID: "旧书名", cleanBookName: "新书名"))

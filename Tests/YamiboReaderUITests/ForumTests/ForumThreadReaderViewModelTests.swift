@@ -389,7 +389,7 @@ private struct ForumThreadReaderViewModelFixture {
 
     func localFavoriteItem() async -> FavoriteItem? {
         let target = FavoriteContentTarget(kind: .normalThread, threadID: "704")
-        return await localFavoriteLibraryStore.load().items.first { item in
+        return (try? await localFavoriteLibraryStore.load())?.items.first { item in
             item.target.id == target.id
         }
     }

@@ -58,7 +58,7 @@ import YamiboReaderTestSupport
 
     try await sync.flush(.novel(NovelReadingPosition(threadID: "6", view: 6)))
 
-    #expect(await localFavoriteLibraryStore.load().items.isEmpty)
+    #expect(try await localFavoriteLibraryStore.load().items.isEmpty)
     let progress = await readingProgressStore.load(threadID: "6")
     #expect(progress?.novel?.lastView == 6)
 }
@@ -111,7 +111,7 @@ import YamiboReaderTestSupport
         pageCount: 9
     )))
 
-    let storedFavoriteLibrary = await localFavoriteLibraryStore.load()
+    let storedFavoriteLibrary = try await localFavoriteLibraryStore.load()
     let novelProgress = await readingProgressStore.load(threadID: "7")
     let mangaProgress = await readingProgressStore.load(threadID: "8")
     #expect(storedFavoriteLibrary == favoriteLibrary)
