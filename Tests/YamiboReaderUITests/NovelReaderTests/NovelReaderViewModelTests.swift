@@ -1686,7 +1686,7 @@ final class NovelReaderViewModelTests: XCTestCase {
         }
         await model.saveProgress()
 
-        let favorites = await appContext.localFavoriteLibraryStore.load().items
+        let favorites = try await appContext.localFavoriteLibraryStore.load().items
         let readingProgress = await readingProgressStore.load(threadID: document.threadID)
         XCTAssertTrue(favorites.isEmpty)
         XCTAssertNotNil(readingProgress?.novel)

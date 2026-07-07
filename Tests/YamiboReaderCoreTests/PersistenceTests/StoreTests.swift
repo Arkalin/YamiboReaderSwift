@@ -810,7 +810,7 @@ private func persistedResumeRoute(_ route: ReaderResumeRoute) throws -> ReaderRe
     let session = await sessionStore.load()
     let settings = await settingsStore.load()
     let readerResumeRoute = await readerResumeRouteStore.load()
-    let localFavoriteLibrary = await localFavoriteLibraryStore.load()
+    let localFavoriteLibrary = try await localFavoriteLibraryStore.load()
     let contentCover = await contentCoverStore.cover(for: coverKey)
     let readerCacheBytes = await novelReaderCacheStore.totalDiskUsageBytes()
     let backgroundData = await favoriteBackgroundImageStore.loadData(imageID: "background")

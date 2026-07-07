@@ -212,7 +212,7 @@ final class FavoriteUpdateMonitor: ObservableObject {
     private func runCheck(runID: String) async {
         defer { Self.activeRunIDs.remove(runID) }
         do {
-            let document = await libraryStore.load()
+            let document = try await libraryStore.load()
             let candidates = Self.candidates(in: document)
             try await refreshFilters(candidates: candidates, document: document)
             let scopedCandidates = await scopedCandidates(candidates)

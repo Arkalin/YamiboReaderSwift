@@ -20,7 +20,7 @@ struct LocalFavoriteOpenTargetResolver {
     let readingProgressStore: ReadingProgressStore
 
     func openTarget(for item: FavoriteItem, mode: FavoriteLaunchMode = .resume) async throws -> LocalFavoriteOpenTarget? {
-        let latestDocument = await libraryStore.load()
+        let latestDocument = try await libraryStore.load()
         guard let latestItem = latestDocument.items.first(where: { $0.id == item.id }) else {
             return nil
         }

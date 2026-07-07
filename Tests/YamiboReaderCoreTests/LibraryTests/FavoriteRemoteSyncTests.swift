@@ -78,7 +78,7 @@ private func runEngine(
 
 @Test func engineImportsRemoteOnlyThreadIntoTargetCategory() async throws {
     let store = makeLibraryStore()
-    var document = await store.load()
+    var document = try await store.load()
     let category = document.createCategory(name: "远端")
     try await store.save(document)
 
@@ -92,7 +92,7 @@ private func runEngine(
     #expect(final.status == .completed)
     #expect(final.importedCount == 1)
     #expect(final.uploadTargetCount == 0)
-    let saved = await store.load()
+    let saved = try await store.load()
     let item = try #require(saved.items.first)
     #expect(item.locations == [.category(category.id)])
     #expect(item.remoteMapping?.yamiboFavoriteID == "r-901")
@@ -103,7 +103,7 @@ private func runEngine(
 
 @Test func engineImportsMangaChapterViaProbe() async throws {
     let store = makeLibraryStore()
-    let document = await store.load()
+    let document = try await store.load()
     let categoryID = document.defaultCategory.id
 
     let recorder = SyncCallRecorder()
@@ -122,7 +122,7 @@ private func runEngine(
 
     #expect(final.status == .completed)
     #expect(final.importedCount == 1)
-    let saved = await store.load()
+    let saved = try await store.load()
     let item = try #require(saved.items.first)
     #expect(item.target == FavoriteContentTarget(mangaID: "chapter:905", mangaCleanBookName: "漫画书名"))
     #expect(item.mangaChapterMetadata?.chapterTID == "905")
@@ -131,7 +131,7 @@ private func runEngine(
 
 @Test func engineAddsCategoryLocationToExistingUnmappedItemWithoutProbe() async throws {
     let store = makeLibraryStore()
-    var document = await store.load()
+    var document = try await store.load()
     let category = document.createCategory(name: "远端")
     let existing = try FavoriteItem(
         target: FavoriteContentTarget(kind: .normalThread, threadID: "902"),
@@ -151,7 +151,7 @@ private func runEngine(
     #expect(final.status == .completed)
     #expect(final.importedCount == 1)
     #expect(final.skippedCount == 0)
-    let saved = await store.load()
+    let saved = try await store.load()
     let item = try #require(saved.items.first)
     #expect(Set(item.locations) == [.category(document.defaultCategory.id), .category(category.id)])
     #expect(item.remoteMapping?.yamiboFavoriteID == "r-902")
@@ -161,7 +161,7 @@ private func runEngine(
 
 @Test func engineSkipsAlreadyMappedItemAndRefreshesMapping() async throws {
     let store = makeLibraryStore()
-    var document = await store.load()
+    var document = try await store.load()
     let existing = try FavoriteItem(
         target: FavoriteContentTarget(kind: .normalThread, threadID: "903"),
         title: "已映射",
@@ -186,7 +186,7 @@ private func runEngine(
         if case .skippedSyncedItems = entry { return true }
         return false
     })
-    let saved = await store.load()
+    let saved = try await store.load()
     let item = try #require(saved.items.first)
     #expect(item.remoteMapping?.yamiboFavoriteID == "r-new")
     #expect(item.remoteMapping?.yamiboRemoteOrder == 0)
@@ -194,7 +194,7 @@ private func runEngine(
 
 @Test func engineRecordsItemFailureAndContinues() async throws {
     let store = makeLibraryStore()
-    let document = await store.load()
+    let document = try await store.load()
     let categoryID = document.defaultCategory.id
 
     let recorder = SyncCallRecorder()
@@ -220,7 +220,7 @@ private func runEngine(
         if case .importFailedItem = warning { return true }
         return false
     })
-    let saved = await store.load()
+    let saved = try await store.load()
     #expect(saved.items.count == 1)
     // Failed probes retry before giving up: 3 attempts for the bad entry.
     let probed = await recorder.probedThreadIDs
@@ -231,7 +231,7 @@ private func runEngine(
 
 @Test func engineUploadsLocalOnlyThreadsIncludingRemoteDeletedAndReconciles() async throws {
     let store = makeLibraryStore()
-    var document = await store.load()
+    var document = try await store.load()
     let categoryID = document.defaultCategory.id
     let unmapped = try FavoriteItem(
         target: FavoriteContentTarget(kind: .normalThread, threadID: "301"),
@@ -288,7 +288,7 @@ private func runEngine(
     #expect(final.uploadedCount == 2)
     let added = await recorder.addedThreadIDs
     #expect(Set(added) == ["301", "302"])
-    let saved = await store.load()
+    let saved = try await store.load()
     let savedUnmapped = try #require(saved.items.first { $0.target.threadID == "301" })
     let savedRemoteDeleted = try #require(saved.items.first { $0.target.threadID == "302" })
     #expect(savedUnmapped.remoteMapping?.yamiboFavoriteID == "r-301")
@@ -299,7 +299,7 @@ private func runEngine(
 
 @Test func enginePaginatesAndRecordsProgress() async throws {
     let store = makeLibraryStore()
-    let document = await store.load()
+    let document = try await store.load()
     let categoryID = document.defaultCategory.id
 
     let recorder = SyncCallRecorder()
@@ -333,7 +333,7 @@ private func runEngine(
 
 @Test func engineFailsRunOnNotAuthenticated() async throws {
     let store = makeLibraryStore()
-    let document = await store.load()
+    let document = try await store.load()
     let categoryID = document.defaultCategory.id
 
     let client = FavoriteYamiboSyncClient(

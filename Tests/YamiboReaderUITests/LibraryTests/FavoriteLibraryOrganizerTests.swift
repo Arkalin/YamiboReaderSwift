@@ -24,7 +24,7 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
         let secondTarget = FavoriteContentTarget(kind: .normalThread, threadID: "941")
         let thirdTarget = FavoriteContentTarget(kind: .normalThread, threadID: "942")
         let fourthTarget = FavoriteContentTarget(kind: .normalThread, threadID: "943")
-        var document = await localFavoriteLibraryStore.load()
+        var document = try await localFavoriteLibraryStore.load()
         let tag = document.createTag(name: "筛选", color: .blue)
         document.addItem(try FavoriteItem(
             target: firstTarget,
@@ -89,7 +89,7 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
 
         let firstTarget = FavoriteContentTarget(kind: .normalThread, threadID: "930")
         let secondTarget = FavoriteContentTarget(kind: .normalThread, threadID: "931")
-        var document = await localFavoriteLibraryStore.load()
+        var document = try await localFavoriteLibraryStore.load()
         document.addItem(try FavoriteItem(
             target: firstTarget,
             title: "第一条",
@@ -127,7 +127,7 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
 
         await organizer.deleteTag(id: tag.id)
         XCTAssertTrue(organizer.tags.isEmpty)
-        let storedItems = await localFavoriteLibraryStore.load().items
+        let storedItems = try await localFavoriteLibraryStore.load().items
         XCTAssertTrue(storedItems.allSatisfy(\.tagIDs.isEmpty))
     }
 
@@ -149,7 +149,7 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
 
         let firstTarget = FavoriteContentTarget(kind: .normalThread, threadID: "920")
         let secondTarget = FavoriteContentTarget(kind: .normalThread, threadID: "921")
-        var document = await localFavoriteLibraryStore.load()
+        var document = try await localFavoriteLibraryStore.load()
         document.addItem(try FavoriteItem(
             target: firstTarget,
             title: "第一条",
@@ -167,7 +167,7 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
         let createdMergedCollection = await organizer.createCollectionFromSelection(name: "合成合集", color: .green)
         let mergedCollection = try XCTUnwrap(createdMergedCollection)
         XCTAssertFalse(organizer.selection.isSelectionMode)
-        let mergedItem = await localFavoriteLibraryStore.load().items.first { $0.target == firstTarget }
+        let mergedItem = try await localFavoriteLibraryStore.load().items.first { $0.target == firstTarget }
         XCTAssertTrue(mergedItem?.locations.contains(.collection(categoryID: category.id, collectionID: mergedCollection.id)) == true)
 
         organizer.closeCollection()
@@ -181,7 +181,7 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
         XCTAssertFalse(organizer.selection.isSelectionMode)
         XCTAssertEqual(organizer.selectedCategoryID, secondCategory.id)
         XCTAssertTrue(organizer.collections.contains { $0.id == existingCollection.id && $0.categoryID == secondCategory.id })
-        let movedItem = await localFavoriteLibraryStore.load().items.first { $0.target == secondTarget }
+        let movedItem = try await localFavoriteLibraryStore.load().items.first { $0.target == secondTarget }
         XCTAssertTrue(movedItem?.locations.contains(.category(secondCategory.id)) == true)
         XCTAssertFalse(movedItem?.locations.contains(.category(category.id)) == true)
 
@@ -191,7 +191,7 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
 
         organizer.selection.toggleFavoriteSelection(id: secondTarget.id)
         await organizer.deleteSelection()
-        let deletedItem = await localFavoriteLibraryStore.load().items.first { $0.target == secondTarget }
+        let deletedItem = try await localFavoriteLibraryStore.load().items.first { $0.target == secondTarget }
         XCTAssertNil(deletedItem)
     }
 
@@ -216,7 +216,7 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
         organizer.closeCollection()
 
         let target = FavoriteContentTarget(kind: .normalThread, threadID: "940")
-        var document = await localFavoriteLibraryStore.load()
+        var document = try await localFavoriteLibraryStore.load()
         document.addItem(try FavoriteItem(
             target: target,
             title: "多路径收藏",
@@ -228,7 +228,7 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
         organizer.selection.toggleFavoriteSelection(id: target.id)
         await organizer.addSelectionToCategory(id: destinationCategory.id)
 
-        var loadedDocument = await localFavoriteLibraryStore.load()
+        var loadedDocument = try await localFavoriteLibraryStore.load()
         var storedItem = try XCTUnwrap(loadedDocument.items.first { $0.target == target })
         XCTAssertTrue(storedItem.locations.contains(.category(sourceCategory.id)))
         XCTAssertTrue(storedItem.locations.contains(.category(destinationCategory.id)))
@@ -237,7 +237,7 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
         organizer.selection.toggleFavoriteSelection(id: target.id)
         await organizer.removeSelectionFromCurrentLocation()
 
-        loadedDocument = await localFavoriteLibraryStore.load()
+        loadedDocument = try await localFavoriteLibraryStore.load()
         storedItem = try XCTUnwrap(loadedDocument.items.first { $0.target == target })
         XCTAssertFalse(storedItem.locations.contains(.category(sourceCategory.id)))
         XCTAssertTrue(storedItem.locations.contains(.category(destinationCategory.id)))
@@ -246,7 +246,7 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
         organizer.selection.toggleFavoriteSelection(id: target.id)
         await organizer.addSelectionToCollection(id: collection.id)
 
-        loadedDocument = await localFavoriteLibraryStore.load()
+        loadedDocument = try await localFavoriteLibraryStore.load()
         storedItem = try XCTUnwrap(loadedDocument.items.first { $0.target == target })
         XCTAssertTrue(storedItem.locations.contains(.category(destinationCategory.id)))
         XCTAssertTrue(storedItem.locations.contains(.collection(categoryID: destinationCategory.id, collectionID: collection.id)))
@@ -273,7 +273,7 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
         let createdDestinationCategory = await organizer.createCategory(name: "分类B")
         let destinationCategory = try XCTUnwrap(createdDestinationCategory)
         let target = FavoriteContentTarget(kind: .normalThread, threadID: "952")
-        var document = await localFavoriteLibraryStore.load()
+        var document = try await localFavoriteLibraryStore.load()
         document.addItem(try FavoriteItem(
             target: target,
             title: "多位置远端收藏",
@@ -287,7 +287,7 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
         organizer.selection.toggleFavoriteSelection(id: target.id)
         await organizer.deleteSelection(scope: .currentLocation)
 
-        let loadedDocument = await localFavoriteLibraryStore.load()
+        let loadedDocument = try await localFavoriteLibraryStore.load()
         let storedItem = try XCTUnwrap(loadedDocument.items.first { $0.target == target })
         let recordedTargetIDs = await recorder.recordedTargetIDs()
         XCTAssertFalse(storedItem.locations.contains(.category(sourceCategory.id)))
@@ -311,7 +311,7 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
         let collection = try XCTUnwrap(createdCollection)
         organizer.closeCollection()
         let target = FavoriteContentTarget(kind: .normalThread, threadID: "956")
-        var document = await localFavoriteLibraryStore.load()
+        var document = try await localFavoriteLibraryStore.load()
         document.addItem(try FavoriteItem(
             target: target,
             title: "多位置收藏",
@@ -328,7 +328,7 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
         organizer.toggleCollectionSelection(id: collection.id)
         await organizer.deleteSelection(scope: .currentLocation)
 
-        let loadedDocument = await localFavoriteLibraryStore.load()
+        let loadedDocument = try await localFavoriteLibraryStore.load()
         XCTAssertTrue(loadedDocument.collections.contains { $0.id == collection.id })
         let storedItem = try XCTUnwrap(loadedDocument.items.first { $0.target == target })
         XCTAssertFalse(storedItem.locations.contains(.category(category.id)))
@@ -352,7 +352,7 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
         await organizer.load()
 
         let target = FavoriteContentTarget(kind: .normalThread, threadID: "953")
-        var document = await localFavoriteLibraryStore.load()
+        var document = try await localFavoriteLibraryStore.load()
         document.addItem(try FavoriteItem(
             target: target,
             title: "远端删除失败收藏",
@@ -365,7 +365,7 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
         organizer.selection.toggleFavoriteSelection(id: target.id)
         await organizer.deleteSelection(scope: .everywhere)
 
-        let storedItem = await localFavoriteLibraryStore.load().items.first { $0.target == target }
+        let storedItem = try await localFavoriteLibraryStore.load().items.first { $0.target == target }
         let recordedTargetIDs = await recorder.recordedTargetIDs()
         XCTAssertNotNil(storedItem)
         XCTAssertEqual(recordedTargetIDs, [target.id])
@@ -388,7 +388,7 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
         await organizer.load()
 
         let target = FavoriteContentTarget(kind: .normalThread, threadID: "955")
-        var document = await localFavoriteLibraryStore.load()
+        var document = try await localFavoriteLibraryStore.load()
         let item = try FavoriteItem(
             target: target,
             title: "需要回查远端 ID 的收藏",
@@ -401,7 +401,7 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
 
         await organizer.deleteItem(item, scope: .everywhere)
 
-        let storedItem = await localFavoriteLibraryStore.load().items.first { $0.target == target }
+        let storedItem = try await localFavoriteLibraryStore.load().items.first { $0.target == target }
         XCTAssertNil(storedItem)
         XCTAssertNil(organizer.errorMessage)
         XCTAssertEqual(LocalFavoriteDeleteTestURLProtocol.deletedFavoriteIDs, ["997"])
@@ -418,7 +418,7 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
         await organizer.load()
 
         let target = FavoriteContentTarget(kind: .normalThread, threadID: "954")
-        var document = await localFavoriteLibraryStore.load()
+        var document = try await localFavoriteLibraryStore.load()
         let item = try FavoriteItem(
             target: target,
             title: "纯本地收藏",
@@ -430,7 +430,7 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
 
         await organizer.deleteItem(item, scope: .everywhere)
 
-        let storedItem = await localFavoriteLibraryStore.load().items.first { $0.target == target }
+        let storedItem = try await localFavoriteLibraryStore.load().items.first { $0.target == target }
         XCTAssertNil(storedItem)
         XCTAssertNil(organizer.errorMessage)
     }
@@ -454,7 +454,7 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
 
         let firstTarget = FavoriteContentTarget(kind: .normalThread, threadID: "910")
         let secondTarget = FavoriteContentTarget(kind: .normalThread, threadID: "911")
-        var document = await localFavoriteLibraryStore.load()
+        var document = try await localFavoriteLibraryStore.load()
         document.addItem(try FavoriteItem(
             target: firstTarget,
             title: "合集内主题",
@@ -491,13 +491,13 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
         organizer.openCollection(id: firstCollection.id)
         XCTAssertEqual(organizer.selectedCategoryID, secondCategory.id)
         XCTAssertEqual(organizer.derived.cards.map(\.item.target), [firstTarget])
-        let movedItem = await localFavoriteLibraryStore.load().items.first { $0.target == firstTarget }
+        let movedItem = try await localFavoriteLibraryStore.load().items.first { $0.target == firstTarget }
         XCTAssertTrue(movedItem?.locations.contains(.collection(categoryID: secondCategory.id, collectionID: firstCollection.id)) == true)
 
         await organizer.dissolveCollection(id: firstCollection.id)
         XCTAssertNil(organizer.selectedCollection)
         XCTAssertFalse(organizer.collections.contains { $0.id == firstCollection.id })
-        let dissolvedItem = await localFavoriteLibraryStore.load().items.first { $0.target == firstTarget }
+        let dissolvedItem = try await localFavoriteLibraryStore.load().items.first { $0.target == firstTarget }
         XCTAssertTrue(dissolvedItem?.locations.contains(.category(secondCategory.id)) == true)
         XCTAssertFalse(dissolvedItem?.locations.contains { $0.collectionID == firstCollection.id } == true)
     }
@@ -523,7 +523,7 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
         let category = try XCTUnwrap(createdCategory)
         XCTAssertEqual(organizer.selectedCategoryID, category.id)
 
-        var document = await localFavoriteLibraryStore.load()
+        var document = try await localFavoriteLibraryStore.load()
         let item = try FavoriteItem(
             target: FavoriteContentTarget(kind: .normalThread, threadID: "904"),
             title: "主题",
@@ -657,7 +657,7 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
         )
 
         let target = FavoriteContentTarget(kind: .normalThread, threadID: "902")
-        let storedItem = await localFavoriteLibraryStore.load().items.first { $0.target == target }
+        let storedItem = try await localFavoriteLibraryStore.load().items.first { $0.target == target }
         XCTAssertEqual(storedItem?.forumID, "60")
         XCTAssertEqual(storedItem?.forumName, "图文区")
         XCTAssertEqual(storedItem?.sourceGroup, .forumBoard(id: "60", label: "图文区"))
@@ -686,7 +686,7 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
         )
 
         let target = FavoriteContentTarget(kind: .novelThread, threadID: "903")
-        let storedItem = await localFavoriteLibraryStore.load().items.first { $0.target == target }
+        let storedItem = try await localFavoriteLibraryStore.load().items.first { $0.target == target }
         XCTAssertEqual(storedItem?.target.kind, .novelThread)
         XCTAssertEqual(storedItem?.forumID, "49")
         XCTAssertEqual(storedItem?.forumName, "百合小说区")

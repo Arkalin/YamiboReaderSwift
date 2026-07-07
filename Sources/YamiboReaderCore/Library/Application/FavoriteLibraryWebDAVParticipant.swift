@@ -20,14 +20,19 @@ struct FavoriteLibraryWebDAVParticipant: WebDAVSyncParticipant {
     }
 
     func mergeAndExport(remoteData: Data?, updatedAt: Date, accountUID: String) async throws -> Data {
-        let local = FavoriteLibraryWebDAVPayload(
-            updatedAt: updatedAt,
-            accountUID: accountUID,
-            library: await store.load()
-        )
         let remote = try remoteData.map { try decoder.decode(FavoriteLibraryWebDAVPayload.self, from: $0) }
-        let merged = FavoriteLibraryWebDAVMerger().merge(local: local, remote: remote, updatedAt: updatedAt)
-        try await store.save(merged.library)
+        // Atomic update: merging against the same document state that gets
+        // overwritten, so local edits landing mid-merge are never lost.
+        let merged = try await store.update { document in
+            let local = FavoriteLibraryWebDAVPayload(
+                updatedAt: updatedAt,
+                accountUID: accountUID,
+                library: document
+            )
+            let merged = FavoriteLibraryWebDAVMerger().merge(local: local, remote: remote, updatedAt: updatedAt)
+            document = merged.library
+            return merged
+        }
         return try encoder.encode(merged)
     }
 
