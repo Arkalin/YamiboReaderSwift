@@ -550,7 +550,10 @@ final class FavoriteUpdateMonitor: ObservableObject {
     /// since nothing else in the app re-probes an already-favorited item.
     private func healUnknownSourceGroupIfNeeded(item: FavoriteItem, page: ForumThreadPage) async {
         guard item.sourceGroup == .unknown, let forumID = page.forumID ?? page.thread.fid else { return }
-        var document = await libraryStore.load()
+        guard var document = try? await libraryStore.load() else {
+            YamiboLog.persistence.error("Failed to load favorite library while healing unknown source group for target \(item.target.id)")
+            return
+        }
         document.healUnknownSourceGroup(for: item.target, forumID: forumID, forumName: page.forumName)
         try? await libraryStore.save(document)
     }
