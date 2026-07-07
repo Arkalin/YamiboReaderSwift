@@ -85,8 +85,7 @@ public struct FavoriteYamiboSyncEngine: Sendable {
         persist: @escaping @Sendable (FavoriteRemoteSyncSnapshot) async -> Void
     ) async -> FavoriteRemoteSyncSnapshot {
         var snapshot = initial
-        var document: FavoriteLibraryDocument?
-        var documentDirty = false
+        var pendingOperations: [@Sendable (inout FavoriteLibraryDocument) -> Void] = []
 
         func commit(_ mutate: (inout FavoriteRemoteSyncSnapshot) -> Void) async {
             mutate(&snapshot)
@@ -94,16 +93,34 @@ public struct FavoriteYamiboSyncEngine: Sendable {
             await persist(snapshot)
         }
 
-        func saveDocumentIfDirty() async throws {
-            guard documentDirty, let current = document else { return }
+        /// Records a mutation against `workingDocument` and queues it for replay
+        /// onto a freshly-loaded document at save time, so a save never blindly
+        /// overwrites edits the user made elsewhere while this run was fetching.
+        func record(_ operation: @escaping @Sendable (inout FavoriteLibraryDocument) -> Void) {
+            pendingOperations.append(operation)
+        }
+
+        /// Reloads the current on-disk document, replays every mutation this run
+        /// has queued since the last save, and persists the merged result — this
+        /// is what keeps a long-running sync from clobbering concurrent local
+        /// edits (deletes, moves, tag changes) with a stale in-memory snapshot.
+        func saveDocumentIfDirty() async throws -> FavoriteLibraryDocument? {
+            guard !pendingOperations.isEmpty else { return nil }
+            let operations = pendingOperations
+            let libraryStore = libraryStore
             // Unstructured task: interruption persists partial progress from
             // the cancelled task, and GRDB's async accesses honor Task
             // cancellation — the write must not inherit it.
-            let libraryStore = libraryStore
-            try await Task {
-                try await libraryStore.save(current)
+            let merged = try await Task { () -> FavoriteLibraryDocument in
+                var fresh = await libraryStore.load()
+                for operation in operations {
+                    operation(&fresh)
+                }
+                try await libraryStore.save(fresh)
+                return fresh
             }.value
-            documentDirty = false
+            pendingOperations.removeAll()
+            return merged
         }
 
         do {
@@ -125,7 +142,16 @@ public struct FavoriteYamiboSyncEngine: Sendable {
             var totalPages: Int?
             while true {
                 try Task.checkCancellation()
-                let result = try await client.fetchPage(page)
+                let result: FavoriteYamiboRemotePage
+                do {
+                    result = try await client.fetchPage(page)
+                } catch let error where page == 1 && Self.isEmptyRemoteFavoritesError(error) {
+                    // An empty first page (HTML parsed fine, zero entries, no
+                    // auth/flood markers) means the account genuinely has no
+                    // remote favorites yet — a valid state, not a failure.
+                    // Sync must still proceed to the upload phase.
+                    result = FavoriteYamiboRemotePage(entries: [], currentPage: 1, totalPages: 1)
+                }
                 if let known = totalPages, known != result.totalPages, !reportedPageCountChange {
                     reportedPageCountChange = true
                     await commit { $0.warnings.append(.remotePageCountChanged) }
@@ -159,7 +185,6 @@ public struct FavoriteYamiboSyncEngine: Sendable {
             }
 
             // Phase 3: importing
-            document = workingDocument
             await commit { $0.phase = .importing }
             var skippedPathCounts: [(path: String, count: Int)] = []
             let importTotal = remoteEntries.count
@@ -170,16 +195,23 @@ public struct FavoriteYamiboSyncEngine: Sendable {
 
                 if let existing = workingDocument.items.first(where: { $0.target.threadID == entry.threadID }) {
                     let alreadyMapped = existing.remoteMapping?.yamiboFavoriteID != nil
+                    let existingTarget = existing.target
                     if !alreadyMapped {
-                        workingDocument.addLocation(targetLocation, to: existing.target)
+                        workingDocument.addLocation(targetLocation, to: existingTarget)
+                        record { doc in doc.addLocation(targetLocation, to: existingTarget) }
                     }
                     workingDocument.updateRemoteMapping(
-                        for: existing.target,
+                        for: existingTarget,
                         yamiboFavoriteID: entry.remoteFavoriteID,
                         yamiboRemoteOrder: entry.remoteOrder
                     )
-                    document = workingDocument
-                    documentDirty = true
+                    record { doc in
+                        doc.updateRemoteMapping(
+                            for: existingTarget,
+                            yamiboFavoriteID: entry.remoteFavoriteID,
+                            yamiboRemoteOrder: entry.remoteOrder
+                        )
+                    }
                     if alreadyMapped {
                         let path = Self.pathDescription(for: existing, in: workingDocument)
                         if let index = skippedPathCounts.firstIndex(where: { $0.path == path }) {
@@ -202,23 +234,39 @@ public struct FavoriteYamiboSyncEngine: Sendable {
                         lastSeenAt: .now
                     )
                     if case let .mangaTitle(_, cleanBookName) = probeResult.target {
+                        let chapterTitle = entry.title ?? probeResult.title
                         _ = try workingDocument.importMangaChapterFavorite(
                             chapterTID: entry.threadID,
-                            chapterTitle: entry.title ?? probeResult.title,
+                            chapterTitle: chapterTitle,
                             directories: directories,
                             fallbackCleanBookName: cleanBookName,
                             location: targetLocation,
                             remoteMapping: mapping
                         )
+                        record { doc in
+                            _ = try? doc.importMangaChapterFavorite(
+                                chapterTID: entry.threadID,
+                                chapterTitle: chapterTitle,
+                                directories: directories,
+                                fallbackCleanBookName: cleanBookName,
+                                location: targetLocation,
+                                remoteMapping: mapping
+                            )
+                        }
                     } else {
                         _ = try workingDocument.importThreadFavorite(
                             probeResult: probeResult,
                             location: targetLocation,
                             remoteMapping: mapping
                         )
+                        record { doc in
+                            _ = try? doc.importThreadFavorite(
+                                probeResult: probeResult,
+                                location: targetLocation,
+                                remoteMapping: mapping
+                            )
+                        }
                     }
-                    document = workingDocument
-                    documentDirty = true
                     await commit { $0.importedCount += 1 }
                 } catch is CancellationError {
                     throw CancellationError()
@@ -237,7 +285,9 @@ public struct FavoriteYamiboSyncEngine: Sendable {
                     snapshot.logEntries.append(.skippedSyncedItems(path: entry.path, count: entry.count))
                 }
             }
-            try await saveDocumentIfDirty()
+            if let merged = try await saveDocumentIfDirty() {
+                workingDocument = merged
+            }
 
             // Phase 4: uploading
             let uploadCandidates = workingDocument.items.filter { item in
@@ -289,10 +339,17 @@ public struct FavoriteYamiboSyncEngine: Sendable {
                             yamiboFavoriteID: entry.remoteFavoriteID,
                             yamiboRemoteOrder: entry.remoteOrder
                         )
+                        record { doc in
+                            doc.updateRemoteMapping(
+                                for: target,
+                                yamiboFavoriteID: entry.remoteFavoriteID,
+                                yamiboRemoteOrder: entry.remoteOrder
+                            )
+                        }
                     }
-                    document = workingDocument
-                    documentDirty = true
-                    try await saveDocumentIfDirty()
+                    if let merged = try await saveDocumentIfDirty() {
+                        workingDocument = merged
+                    }
                 } catch is CancellationError {
                     throw CancellationError()
                 } catch {
@@ -310,7 +367,7 @@ public struct FavoriteYamiboSyncEngine: Sendable {
                 snapshot.logEntries.append(.completed(importedCount: importedCount, uploadedCount: uploadedCount))
             }
         } catch let error where error.isTaskCancellation {
-            try? await saveDocumentIfDirty()
+            _ = try? await saveDocumentIfDirty()
             let reason = interruptionReason() ?? .interrupted
             await commit { snapshot in
                 snapshot.status = .interrupted
@@ -320,7 +377,7 @@ public struct FavoriteYamiboSyncEngine: Sendable {
                 snapshot.logEntries.append(.interrupted)
             }
         } catch {
-            try? await saveDocumentIfDirty()
+            _ = try? await saveDocumentIfDirty()
             let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
             await commit { snapshot in
                 snapshot.status = .failed
@@ -387,6 +444,15 @@ public struct FavoriteYamiboSyncEngine: Sendable {
         default:
             return false
         }
+    }
+
+    /// True only for the specific "HTML parsed but zero favorite entries"
+    /// failure mode — not for auth/flood-control errors, which must still
+    /// abort the run.
+    private static func isEmptyRemoteFavoritesError(_ error: any Error) -> Bool {
+        guard let yamiboError = error as? YamiboError else { return false }
+        if case .parsingFailed = yamiboError { return true }
+        return false
     }
 
     private static func postLabel(threadID: String, title: String?) -> String {

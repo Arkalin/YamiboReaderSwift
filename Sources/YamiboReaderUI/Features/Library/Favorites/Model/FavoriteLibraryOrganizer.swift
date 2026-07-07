@@ -25,6 +25,7 @@ final class FavoriteLibraryOrganizer: ObservableObject {
     }
     @Published var selectedCategoryID = FavoriteCategory.defaultID {
         didSet {
+            selection.clearSelection()
             if let selectedCollectionID,
                !document.collections.contains(where: { $0.id == selectedCollectionID && $0.categoryID == selectedCategoryID }) {
                 self.selectedCollectionID = nil
@@ -35,6 +36,7 @@ final class FavoriteLibraryOrganizer: ObservableObject {
     }
     @Published private(set) var selectedCollectionID: String? {
         didSet {
+            selection.clearSelection()
             refreshDerivedState()
             persistNavigationState()
         }
@@ -67,6 +69,7 @@ final class FavoriteLibraryOrganizer: ObservableObject {
     private var contentCoverURLsByTargetID: [String: URL] = [:]
     private var libraryUpdatesTask: Task<Void, Never>?
     private var progressUpdatesTask: Task<Void, Never>?
+    private var coverUpdatesTask: Task<Void, Never>?
     private var mangaCoverBackfillTask: Task<Void, Never>?
     private var attemptedMangaCoverTargetIDs: Set<String> = []
 
@@ -113,11 +116,23 @@ final class FavoriteLibraryOrganizer: ObservableObject {
                 await self.reloadReadingProgress()
             }
         }
+        coverUpdatesTask = Task { @MainActor [weak self, store = contentCoverStore] in
+            for await notification in NotificationCenter.default.notifications(named: ContentCoverStore.didChangeNotification) {
+                guard !Task.isCancelled else { return }
+                guard let self else { return }
+                guard let changeID = notification.userInfo?[ContentCoverStore.changeIDUserInfoKey] as? String,
+                      changeID == store.changeID else {
+                    continue
+                }
+                await self.reloadContentCovers()
+            }
+        }
     }
 
     deinit {
         libraryUpdatesTask?.cancel()
         progressUpdatesTask?.cancel()
+        coverUpdatesTask?.cancel()
         mangaCoverBackfillTask?.cancel()
     }
 
@@ -247,6 +262,11 @@ final class FavoriteLibraryOrganizer: ObservableObject {
 
     private func reloadReadingProgress() async {
         readingProgress = await readingProgressStore.loadAll()
+        refreshDerivedState()
+    }
+
+    private func reloadContentCovers() async {
+        contentCoverURLsByTargetID = await contentCoverURLs(for: document.items)
         refreshDerivedState()
     }
 
@@ -813,6 +833,7 @@ final class FavoriteLibraryOrganizer: ObservableObject {
         guard !missing.isEmpty else { return }
         attemptedMangaCoverTargetIDs.formUnion(missing.map(\.target.id))
         mangaCoverBackfillTask = Task { [weak self, contentCoverStore] in
+            defer { self?.mangaCoverBackfillTask = nil }
             let repository = await makeForumThreadReaderRepository()
             let resolver = ThreadCoverResolver()
             var resolvedAny = false
@@ -837,7 +858,6 @@ final class FavoriteLibraryOrganizer: ObservableObject {
                 }
             }
             guard let self, !Task.isCancelled else { return }
-            self.mangaCoverBackfillTask = nil
             if resolvedAny {
                 self.contentCoverURLsByTargetID = await self.contentCoverURLs(for: self.document.items)
                 self.refreshDerivedState()

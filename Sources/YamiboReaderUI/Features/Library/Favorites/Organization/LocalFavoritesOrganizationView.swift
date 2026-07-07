@@ -29,19 +29,7 @@ struct LocalFavoritesOrganizationView: View {
     var body: some View {
         NavigationStack {
             content
-                .overlay {
-                    if organizer.derived.cards.isEmpty, organizer.derived.visibleCollections.isEmpty {
-                        if hasSubmittedSearch {
-                            ContentUnavailableView(L10n.string("favorites.empty.no_results"), systemImage: "magnifyingglass")
-                        } else {
-                            ContentUnavailableView {
-                                Label(L10n.string("favorites.empty.favorites"), systemImage: "books.vertical")
-                            } description: {
-                                Text(L10n.string("favorites.empty.sync_hint"))
-                            }
-                        }
-                    }
-                }
+                .overlay { emptyStateOverlay }
                 .navigationTitle(
                     selection.isSelectionMode
                         ? L10n.string("favorites.selected_count", selection.selectedEntryCount)
@@ -68,7 +56,7 @@ struct LocalFavoritesOrganizationView: View {
                         statusCards
                     }
                 }
-                .alert(L10n.string("favorites.delete_failed"), isPresented: errorAlertBinding) {
+                .alert(L10n.string("common.operation_failed"), isPresented: errorAlertBinding) {
                     Button(L10n.string("common.ok")) {
                         clearErrorMessages()
                     }
@@ -98,8 +86,15 @@ struct LocalFavoritesOrganizationView: View {
                     collectionDetail
                 }
                 .navigationDestination(isPresented: $routes.isUpdatesPagePushed) {
-                    FavoriteUpdatesPage(updateMonitor: updateMonitor, routes: routes)
-                        .toolbar(selection.isSelectionMode ? .hidden : .automatic, for: .tabBar)
+                    FavoriteUpdatesPage(
+                        updateMonitor: updateMonitor,
+                        routes: routes,
+                        onOpen: { event in
+                            guard let item = organizer.favoriteItems.first(where: { $0.target.id == event.target.id }) else { return }
+                            await onOpen(item, .resume)
+                        }
+                    )
+                    .toolbar(selection.isSelectionMode ? .hidden : .automatic, for: .tabBar)
                 }
                 .navigationDestination(isPresented: $routes.isSyncProgressPushed) {
                     FavoriteRemoteSyncProgressSheet(
@@ -138,6 +133,7 @@ struct LocalFavoritesOrganizationView: View {
 
     private var collectionDetail: some View {
         content
+            .overlay { emptyStateOverlay }
             .searchable(
                 text: $organizer.filter.searchText,
                 prompt: L10n.string("favorites.search.placeholder")
@@ -546,7 +542,25 @@ struct LocalFavoritesOrganizationView: View {
         )
     }
 
+    @ViewBuilder
+    private var emptyStateOverlay: some View {
+        if organizer.derived.cards.isEmpty, organizer.derived.visibleCollections.isEmpty {
+            if hasSubmittedSearch {
+                ContentUnavailableView(L10n.string("favorites.empty.no_results"), systemImage: "magnifyingglass")
+            } else if organizer.selectedCollectionID != nil {
+                ContentUnavailableView(L10n.string("favorites.empty.collection"), systemImage: "folder")
+            } else {
+                ContentUnavailableView {
+                    Label(L10n.string("favorites.empty.favorites"), systemImage: "books.vertical")
+                } description: {
+                    Text(L10n.string("favorites.empty.sync_hint"))
+                }
+            }
+        }
+    }
+
     private var hasSubmittedSearch: Bool {
         !organizer.filter.searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || organizer.filter.hasActiveFilters
     }
 }

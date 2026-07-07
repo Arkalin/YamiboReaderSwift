@@ -12,6 +12,10 @@ struct MangaReaderViewModelDependencies {
     var makeContentCoverStore: @Sendable () -> ContentCoverStore?
     var directoryWorkflowConfiguration: MangaDirectoryWorkflowConfiguration
     var progressSync: ProgressSyncModule
+    /// Migrates the favorite item's target and reading-progress records to a
+    /// renamed manga title. No-op by default so callers that don't care
+    /// (tests, previews) don't need to supply one.
+    var migrateMangaTitleReferences: @Sendable (_ oldCleanBookName: String, _ newCleanBookName: String) async -> Void
 
     init(
         settingsStore: SettingsStore,
@@ -25,7 +29,8 @@ struct MangaReaderViewModelDependencies {
         makeChapterCommentsRepository: (@Sendable () async -> ReaderChapterCommentsRepository)? = nil,
         makeContentCoverStore: @escaping @Sendable () -> ContentCoverStore? = { nil },
         directoryWorkflowConfiguration: MangaDirectoryWorkflowConfiguration = MangaDirectoryWorkflowConfiguration(),
-        progressSync: ProgressSyncModule
+        progressSync: ProgressSyncModule,
+        migrateMangaTitleReferences: @escaping @Sendable (_ oldCleanBookName: String, _ newCleanBookName: String) async -> Void = { _, _ in }
     ) {
         self.settingsStore = settingsStore
         self.makeProjectionLoader = makeProjectionLoader
@@ -37,6 +42,7 @@ struct MangaReaderViewModelDependencies {
         self.makeContentCoverStore = makeContentCoverStore
         self.directoryWorkflowConfiguration = directoryWorkflowConfiguration
         self.progressSync = progressSync
+        self.migrateMangaTitleReferences = migrateMangaTitleReferences
     }
 
     init(dependencies: MangaReaderDependencies) {
@@ -53,7 +59,13 @@ struct MangaReaderViewModelDependencies {
                 adapter: FavoriteLibraryProgressSyncAdapter(
                     readingProgressStore: dependencies.readingProgressStore
                 )
-            )
+            ),
+            migrateMangaTitleReferences: { oldName, newName in
+                var document = await dependencies.localFavoriteLibraryStore.load()
+                document.renameMangaTitle(from: oldName, to: newName)
+                try? await dependencies.localFavoriteLibraryStore.save(document)
+                try? await dependencies.readingProgressStore.migrateMangaTitleKey(from: oldName, to: newName)
+            }
         )
     }
 }
@@ -602,6 +614,9 @@ public final class MangaReaderViewModel: ObservableObject {
         do {
             let oldOwnerName = offlineCacheOwnerName
             let updated = try await workflow.renameDirectory(cleanBookName: cleanBookName, searchKeyword: searchKeyword)
+            if let oldOwnerName, oldOwnerName != updated.cleanBookName {
+                await dependencies.migrateMangaTitleReferences(oldOwnerName, updated.cleanBookName)
+            }
             let cacheRenameError: Error?
             if let oldOwnerName,
                oldOwnerName != updated.cleanBookName,

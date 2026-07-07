@@ -195,6 +195,10 @@ public actor FavoriteRepository {
     }
 
     private func isFavoriteDeleteSuccess(_ html: String) -> Bool {
+        let failureMarkers = ["不成功", "失败", "错误"]
+        if failureMarkers.contains(where: { html.localizedCaseInsensitiveContains($0) }) {
+            return false
+        }
         let markers = [
             "成功",
             "succeed",

@@ -6,6 +6,7 @@ import YamiboReaderCore
 struct FavoriteUpdatesPage: View {
     @ObservedObject var updateMonitor: FavoriteUpdateMonitor
     let routes: LocalFavoritesRoutes
+    let onOpen: (FavoriteUpdateEvent) async -> Void
 
     @State private var selectedInterval: FavoriteUpdateCheckInterval = .off
 
@@ -96,6 +97,9 @@ struct FavoriteUpdatesPage: View {
                 ForEach(updateMonitor.events) { event in
                     FavoriteUpdateEventRow(
                         event: event,
+                        onOpen: {
+                            await onOpen(event)
+                        },
                         onMarkRead: {
                             await updateMonitor.markEventRead(event.id)
                         },

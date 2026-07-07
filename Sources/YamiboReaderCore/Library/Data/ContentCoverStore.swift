@@ -73,6 +73,10 @@ public struct ContentCover: Codable, Hashable, Sendable {
 }
 
 public actor ContentCoverStore {
+    public static let didChangeNotification = Notification.Name("yamibo.contentCoverStore.didChange")
+    public static let changeIDUserInfoKey = "changeID"
+    public nonisolated let changeID = UUID().uuidString
+
     private let database: DatabasePool
 
     public init(databasePool: DatabasePool? = nil) {
@@ -105,6 +109,7 @@ public actor ContentCoverStore {
             cover.updatedAt = date
             try Self.upsert(cover, in: db)
         }
+        postChangeNotification()
         return true
     }
 
@@ -121,6 +126,7 @@ public actor ContentCoverStore {
             cover.updatedAt = date
             try Self.upsert(cover, in: db)
         }
+        postChangeNotification()
         return true
     }
 
@@ -129,7 +135,7 @@ public actor ContentCoverStore {
     @discardableResult
     public func clearManualCover(for key: ContentCoverKey, date: Date = .now) async throws -> Bool {
         guard !key.targetID.isEmpty else { return false }
-        return try await database.write { db in
+        let didClear = try await database.write { db in
             guard var cover = try Self.fetchCover(for: key, in: db), cover.manualCoverURL != nil else {
                 return false
             }
@@ -139,6 +145,10 @@ public actor ContentCoverStore {
             try Self.upsert(cover, in: db)
             return true
         }
+        if didClear {
+            postChangeNotification()
+        }
+        return didClear
     }
 
     public func setDynamicEnabled(_ enabled: Bool, for key: ContentCoverKey, date: Date = .now) async throws {
@@ -149,12 +159,14 @@ public actor ContentCoverStore {
             cover.updatedAt = date
             try Self.upsert(cover, in: db)
         }
+        postChangeNotification()
     }
 
     public func clearAll() async throws {
         try await database.write { db in
             try db.execute(sql: "DELETE FROM content_cover")
         }
+        postChangeNotification()
     }
 
     public static func normalizedCoverURL(from rawValue: String) -> URL? {
@@ -234,6 +246,14 @@ public actor ContentCoverStore {
                 cover.dynamicEnabled,
                 cover.updatedAt.timeIntervalSince1970,
             ]
+        )
+    }
+
+    private nonisolated func postChangeNotification() {
+        NotificationCenter.default.post(
+            name: Self.didChangeNotification,
+            object: nil,
+            userInfo: [Self.changeIDUserInfoKey: changeID]
         )
     }
 

@@ -149,6 +149,7 @@ public enum LocalFavoriteLibraryProjection {
     ) -> [FavoriteCardProjection] {
         let categoryID = query.categoryID ?? document.defaultCategory.id
         let progressByKey = readingProgressLookup(readingProgress)
+        let progressByMangaCleanBookName = mangaReadingProgressLookup(readingProgress)
         let trimmedSearch = query.searchText.trimmingCharacters(in: .whitespacesAndNewlines)
 
         let cards = document.items
@@ -166,7 +167,9 @@ public enum LocalFavoriteLibraryProjection {
                 query.selectedTagIDs.isEmpty || query.selectedTagIDs.isSubset(of: Set(item.tagIDs))
             }
             .map { item in
-                card(for: item, document: document, progress: progressByKey[progressKey(for: item)])
+                let progress = progressByKey[progressKey(for: item)]
+                    ?? item.target.mangaCleanBookName.flatMap { progressByMangaCleanBookName[$0] }
+                return card(for: item, document: document, progress: progress)
             }
             .filter { card in
                 guard !trimmedSearch.isEmpty else { return true }
@@ -345,6 +348,23 @@ public enum LocalFavoriteLibraryProjection {
 
     private static func readingProgressLookup(_ records: [ReadingProgressRecord]) -> [String: ReadingProgressRecord] {
         Dictionary(uniqueKeysWithValues: records.map { ($0.id, $0) })
+    }
+
+    /// Fallback lookup for manga progress by book title: the favorite item's
+    /// mangaID and the live progress record's mangaID are computed
+    /// independently (different ID schemes) and drift apart, but both
+    /// reliably carry the same cleanBookName. Picks the most recently
+    /// updated record per title.
+    private static func mangaReadingProgressLookup(_ records: [ReadingProgressRecord]) -> [String: ReadingProgressRecord] {
+        var result: [String: ReadingProgressRecord] = [:]
+        for record in records {
+            guard record.kind == .manga, let cleanBookName = record.contentTarget?.mangaCleanBookName else { continue }
+            if let existing = result[cleanBookName], existing.updatedAt >= record.updatedAt {
+                continue
+            }
+            result[cleanBookName] = record
+        }
+        return result
     }
 
     private static func progressKey(for item: FavoriteItem) -> String {

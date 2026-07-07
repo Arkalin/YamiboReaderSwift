@@ -6,8 +6,6 @@ struct FavoritesNavigationHostView: View {
     let appModel: YamiboAppModel
 
     var body: some View {
-        NavigationStack {
-            LocalFavoritesRootView(dependencies: dependencies, appModel: appModel)
-        }
+        LocalFavoritesRootView(dependencies: dependencies, appModel: appModel)
     }
 }

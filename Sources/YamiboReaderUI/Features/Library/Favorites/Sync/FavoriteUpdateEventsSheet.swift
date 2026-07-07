@@ -5,6 +5,7 @@ import YamiboReaderCore
 /// the favorite-updates page.
 struct FavoriteUpdateEventRow: View {
     let event: FavoriteUpdateEvent
+    let onOpen: () async -> Void
     let onMarkRead: () async -> Void
     let onDismiss: () async -> Void
 
@@ -33,6 +34,10 @@ struct FavoriteUpdateEventRow: View {
                 Text(event.detectedAt, style: .time)
                     .font(.caption)
                     .foregroundStyle(.secondary)
+            }
+            .contentShape(Rectangle())
+            .onTapGesture {
+                Task { await onOpen() }
             }
 
             HStack(spacing: 8) {

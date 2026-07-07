@@ -62,6 +62,9 @@ struct LocalFavoriteSelectionMoveSheet: View {
                 }
             }
         }
+        .onDisappear {
+            selection.exitSelectionMode()
+        }
     }
 
     private func collections(in categoryID: String) -> [LocalFavoriteCollection] {

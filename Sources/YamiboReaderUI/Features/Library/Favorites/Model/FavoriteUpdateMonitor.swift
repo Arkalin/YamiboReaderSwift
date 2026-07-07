@@ -20,6 +20,12 @@ final class FavoriteUpdateMonitor: ObservableObject {
 
     private var checkTask: Task<Void, Never>?
 
+    private static var activeRunIDs: Set<String> = []
+
+    private static func isRunActive(_ runID: String) -> Bool {
+        activeRunIDs.contains(runID)
+    }
+
     init(
         updateStore: FavoriteUpdateStore,
         libraryStore: FavoriteLibraryStore,
@@ -42,7 +48,7 @@ final class FavoriteUpdateMonitor: ObservableObject {
     /// running whose task no longer exists is downgraded to interrupted.
     func load() async {
         var latest = await updateStore.latestRun()
-        if var loaded = latest, loaded.status == .running, checkTask == nil {
+        if var loaded = latest, loaded.status == .running, !Self.isRunActive(loaded.runID) {
             loaded.status = .interrupted
             loaded.phase = .interrupted
             loaded.finishedAt = loaded.finishedAt ?? .now
@@ -99,6 +105,7 @@ final class FavoriteUpdateMonitor: ObservableObject {
         checkTask = Task { @MainActor [weak self] in
             await self?.runCheck(runID: startedSnapshot.runID)
         }
+        Self.activeRunIDs.insert(startedSnapshot.runID)
         return startedSnapshot.runID
     }
 
@@ -203,6 +210,7 @@ final class FavoriteUpdateMonitor: ObservableObject {
     // MARK: - Check run
 
     private func runCheck(runID: String) async {
+        defer { Self.activeRunIDs.remove(runID) }
         do {
             let document = await libraryStore.load()
             let candidates = Self.candidates(in: document)
