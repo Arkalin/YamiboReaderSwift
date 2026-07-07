@@ -39,6 +39,9 @@ public struct RootTabView: View {
                 presentClipboardForumLinkPromptIfNeeded()
             case .background:
                 appModel.flushWebDAVSyncBeforeBackground()
+#if os(iOS) && canImport(BackgroundTasks)
+                FavoriteUpdateBackgroundScheduler.scheduleNextIfNeeded(appContext: appModel.appContext)
+#endif
             case .inactive:
                 break
             @unknown default:

@@ -1,56 +1,59 @@
 import SwiftUI
 import YamiboReaderCore
 
-/// List section rendering the favorite item rows.
-struct LocalFavoriteItemSection: View {
-    let cards: [FavoriteCardProjection]
-    let showsCover: Bool
-    let showsCount: Bool
-    @ObservedObject var selection: LocalFavoriteBrowseSession
-    let routes: LocalFavoritesRoutes
-    let onOpen: (FavoriteItem, FavoriteLaunchMode) async -> Void
-
-    var body: some View {
-        Section {
-            ForEach(cards) { card in
-                LocalFavoriteItemRow(
-                    card: card,
-                    showsCover: showsCover,
-                    isSelectionMode: selection.isSelectionMode,
-                    isSelected: selection.selectedFavoriteIDs.contains(card.id),
-                    onToggleSelection: { selection.toggleFavoriteSelection(id: card.id) },
-                    onEditTags: { routes.sheet = .tagSelection(.favorite(card.item.id, initialTagIDs: Set(card.item.tagIDs))) },
-                    onOpen: onOpen,
-                    onDelete: { routes.dialog = .deleteItem(card.item) }
-                )
-            }
-        } header: {
-            if showsCount {
-                Text(L10n.string("favorites.items_count", cards.count))
-            }
-        }
-    }
-}
-
-/// One favorite row in the list layouts.
+/// One favorite row in the list layouts: cover thumbnail, two-line title,
+/// source, plain time lines, and tag chips. No visible buttons — tap resumes
+/// reading, long-press opens the context menu, swipes carry delete and tags.
 struct LocalFavoriteItemRow: View {
     let card: FavoriteCardProjection
     let showsCover: Bool
     let isSelectionMode: Bool
     let isSelected: Bool
     let onToggleSelection: () -> Void
-    let onEditTags: () -> Void
-    let onOpen: (FavoriteItem, FavoriteLaunchMode) async -> Void
-    let onDelete: () -> Void
+    let actions: LocalFavoriteCardActions
 
     var body: some View {
+        Button {
+            if isSelectionMode {
+                onToggleSelection()
+            } else {
+                actions.open(card.item, .resume)
+            }
+        } label: {
+            rowContent
+        }
+        .buttonStyle(.plain)
+        .contextMenu {
+            if !isSelectionMode {
+                LocalFavoriteCardContextMenu(card: card, actions: actions)
+            }
+        }
+        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+            if !isSelectionMode {
+                Button(role: .destructive) {
+                    actions.delete(card.item)
+                } label: {
+                    Label(L10n.string("common.delete"), systemImage: "trash")
+                }
+                Button {
+                    actions.editTags(card.item)
+                } label: {
+                    Label(L10n.string("favorites.tags_action"), systemImage: "tag")
+                }
+                .tint(.indigo)
+            }
+        }
+    }
+
+    private var rowContent: some View {
         HStack(spacing: 12) {
             if isSelectionMode {
                 LocalFavoriteSelectionIndicator(isSelected: isSelected)
             }
             if showsCover {
-                LocalFavoriteCoverThumbnail(url: card.coverURL, fallbackColor: .yellow)
-                    .frame(width: 48, height: 64)
+                // Android row cards use a 92dp-wide 0.72-ratio cover.
+                LocalFavoriteCoverThumbnail(url: card.coverURL, title: card.item.resolvedDisplayTitle)
+                    .frame(width: 92, height: 128)
             }
             VStack(alignment: .leading, spacing: 4) {
                 Text(card.item.resolvedDisplayTitle)
@@ -59,43 +62,13 @@ struct LocalFavoriteItemRow: View {
                 Text(card.sourceGroupLabel)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
-                LocalFavoriteItemMetadataLine(
-                    progressPercent: card.progressPercent,
-                    chapterPageProgress: card.chapterPageProgress,
-                    recentReadingAt: card.recentReadingAt,
-                    lastUpdatedAt: card.lastUpdatedAt
-                )
+                    .lineLimit(1)
+                LocalFavoriteCardTimeLines(card: card)
                 LocalFavoriteTagChipRow(tags: card.tags)
             }
-            Spacer(minLength: 8)
-            if !isSelectionMode {
-                Menu {
-                    Button {
-                        Task { await onOpen(card.item, .start) }
-                    } label: {
-                        Label(L10n.string("favorites.open_from_start"), systemImage: "text.page")
-                    }
-                    Button(role: .destructive, action: onDelete) {
-                        Label(L10n.string("common.delete"), systemImage: "trash")
-                    }
-                    Button(action: onEditTags) {
-                        Label(L10n.string("favorites.tags_action"), systemImage: "tag")
-                    }
-                } label: {
-                    Image(systemName: "ellipsis")
-                        .frame(width: 32, height: 32)
-                }
-                .accessibilityLabel(L10n.string("common.more"))
-            }
+            Spacer(minLength: 0)
         }
         .contentShape(Rectangle())
-        .onTapGesture {
-            if isSelectionMode {
-                onToggleSelection()
-            } else {
-                Task { await onOpen(card.item, .resume) }
-            }
-        }
         .padding(.vertical, 4)
     }
 }

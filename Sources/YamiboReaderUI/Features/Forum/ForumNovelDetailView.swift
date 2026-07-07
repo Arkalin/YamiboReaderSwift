@@ -83,6 +83,19 @@ struct ForumNovelDetailView: View {
         } message: {
             Text(model.favoriteErrorMessage ?? "")
         }
+        .favoriteQuickActionDialogs(
+            addPromptPresented: Bindable(model).favoriteAddPromptPresented,
+            removePrompt: Bindable(model).favoriteRemovePrompt,
+            onConfirmAdd: { syncToRemote, remember in
+                Task { await model.confirmFavoriteAdd(syncToRemote: syncToRemote, remember: remember) }
+            },
+            onConfirmRemoval: { favorite, removeRemote, remember in
+                Task { await model.confirmFavoriteRemoval(favorite, removeRemote: removeRemote, remember: remember) }
+            }
+        )
+        .forumTransientMessage(model.transientMessage, bottomPadding: 24) {
+            model.transientMessage = nil
+        }
         .alert(
             L10n.string("forum.thread_route.copied"),
             isPresented: Binding(

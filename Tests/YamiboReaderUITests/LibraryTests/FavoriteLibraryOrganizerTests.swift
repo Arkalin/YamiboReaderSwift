@@ -18,6 +18,8 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
         let boardA = FavoriteSourceGroup.forumBoard(id: "10", label: "版区A")
         let boardALegacy = FavoriteSourceGroup.forumBoard(id: "10", label: "旧版区A")
         let boardB = FavoriteSourceGroup.forumBoard(id: "20", label: "版区B")
+        let boardAFilter = LocalFavoriteSourceFilter.forumBoard(id: "10", label: "版区A")
+        let boardBFilter = LocalFavoriteSourceFilter.forumBoard(id: "20", label: "版区B")
         let firstTarget = FavoriteContentTarget(kind: .normalThread, threadID: "940")
         let secondTarget = FavoriteContentTarget(kind: .normalThread, threadID: "941")
         let thirdTarget = FavoriteContentTarget(kind: .normalThread, threadID: "942")
@@ -53,23 +55,26 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
         try await localFavoriteLibraryStore.save(document)
         await organizer.reload()
 
-        XCTAssertEqual(organizer.derived.sourceGroupEntryCounts[boardA], 3)
-        XCTAssertEqual(organizer.derived.sourceGroupEntryCounts[boardALegacy], 3)
-        XCTAssertEqual(organizer.derived.sourceGroupEntryCounts[boardB], 1)
+        XCTAssertEqual(organizer.derived.sourceFilterEntryCounts[boardAFilter], 3)
+        XCTAssertEqual(organizer.derived.sourceFilterEntryCounts[boardBFilter], 1)
 
         organizer.filter.searchText = "同名"
-        XCTAssertEqual(organizer.derived.sourceGroupEntryCounts[boardA], 2)
-        XCTAssertEqual(organizer.derived.sourceGroupEntryCounts[boardB], 1)
+        XCTAssertEqual(organizer.derived.sourceFilterEntryCounts[boardAFilter], 2)
+        XCTAssertEqual(organizer.derived.sourceFilterEntryCounts[boardBFilter], 1)
 
-        organizer.filter.sourceGroupFilter = .group(boardA)
+        organizer.filter.selectedSourceFilters = [boardAFilter]
         XCTAssertEqual(Set(organizer.derived.cards.map(\.item.target)), [firstTarget, fourthTarget])
 
-        organizer.filter.sourceGroupFilter = .group(boardB)
+        organizer.filter.selectedSourceFilters = [boardBFilter]
         XCTAssertEqual(organizer.derived.cards.map(\.item.target), [secondTarget])
 
+        organizer.filter.selectedSourceFilters = [boardAFilter, boardBFilter]
+        XCTAssertEqual(Set(organizer.derived.cards.map(\.item.target)), [firstTarget, secondTarget, fourthTarget])
+
+        organizer.filter.selectedSourceFilters = [boardBFilter]
         organizer.filter.selectedTagIDs = [tag.id]
-        XCTAssertEqual(organizer.derived.sourceGroupEntryCounts[boardA], 1)
-        XCTAssertEqual(organizer.derived.sourceGroupEntryCounts[boardB], 1)
+        XCTAssertEqual(organizer.derived.sourceFilterEntryCounts[boardAFilter], 1)
+        XCTAssertEqual(organizer.derived.sourceFilterEntryCounts[boardBFilter], 1)
     }
 
     func testLocalFirstTagsFilterDisplayAndBatchAssignment() async throws {
@@ -637,7 +642,7 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
             key: "local-favorites"
         )
 
-        _ = try await ForumThreadFavoriteSync.addFavorite(
+        _ = try await FavoriteQuickActions.addFavorite(
             threadID: "902",
             title: "普通主题",
             type: .other,
@@ -646,6 +651,7 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
             forumName: "图文区",
             contentUpdatedAt: Date(timeIntervalSince1970: 600),
             formHash: nil,
+            syncToRemote: false,
             localFavoriteLibraryStore: localFavoriteLibraryStore,
             remoteRepository: nil
         )
@@ -665,7 +671,7 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
             defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
             key: "local-favorites"
         )
-        _ = try await ForumThreadFavoriteSync.addFavorite(
+        _ = try await FavoriteQuickActions.addFavorite(
             threadID: "903",
             title: "小说主题",
             type: .novel,
@@ -674,6 +680,7 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
             forumName: "百合小说区",
             contentUpdatedAt: Date(timeIntervalSince1970: 700),
             formHash: nil,
+            syncToRemote: false,
             localFavoriteLibraryStore: localFavoriteLibraryStore,
             remoteRepository: nil
         )
@@ -795,29 +802,14 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
         await organizer.load()
 
         XCTAssertEqual(organizer.derived.cards.map(\.item.target), [firstTarget, secondTarget])
-        organizer.selection.toggleFavoriteSelection(id: firstTarget.id)
-        XCTAssertTrue(organizer.selection.isSelectionMode)
-        organizer.enterSearchMode()
-        XCTAssertTrue(organizer.selection.isSearchMode)
-        XCTAssertFalse(organizer.selection.isSelectionMode)
-        organizer.selection.searchDraftText = " 命中 "
-        XCTAssertEqual(organizer.derived.cards.map(\.item.target), [firstTarget, secondTarget])
 
-        organizer.submitSearch()
-        XCTAssertEqual(organizer.filter.searchText, "命中")
+        // Search is a live filter driven directly by the searchable text.
+        organizer.filter.searchText = "命中"
         XCTAssertEqual(organizer.derived.cards.map(\.item.target), [firstTarget])
         XCTAssertEqual(organizer.derived.categoryEntryCounts[document.defaultCategory.id], 2)
         XCTAssertEqual(organizer.derived.categoryEntryCounts[secondCategory.id], 1)
 
-        organizer.selection.toggleFavoriteSelection(id: firstTarget.id)
-        XCTAssertFalse(organizer.selection.isSearchMode)
-        XCTAssertTrue(organizer.selection.isSelectionMode)
-        organizer.exitSearchMode()
-        XCTAssertFalse(organizer.selection.isSearchMode)
-        XCTAssertEqual(organizer.selection.searchDraftText, "")
-        XCTAssertEqual(organizer.filter.searchText, "")
-        XCTAssertFalse(organizer.selection.isSelectionMode)
-        XCTAssertEqual(organizer.selection.selectedEntryCount, 0)
+        organizer.filter.searchText = ""
         XCTAssertEqual(organizer.derived.cards.map(\.item.target), [firstTarget, secondTarget])
     }
 }

@@ -1,0 +1,93 @@
+import SwiftUI
+import YamiboReaderCore
+
+/// Item actions reachable from a card's context menu and swipe actions.
+/// Cards carry no visible buttons: tap continues reading, long-press opens
+/// the menu (mirroring the Android cards, expressed as the iOS context menu).
+struct LocalFavoriteCardActions {
+    let open: (FavoriteItem, FavoriteLaunchMode) -> Void
+    let select: (FavoriteItem) -> Void
+    let move: (FavoriteItem) -> Void
+    let editTags: (FavoriteItem) -> Void
+    let syncToRemote: (FavoriteItem) -> Void
+    let delete: (FavoriteItem) -> Void
+
+    /// Standard wiring shared by the list and grid containers.
+    @MainActor
+    static func standard(
+        organizer: FavoriteLibraryOrganizer,
+        selection: LocalFavoriteBrowseSession,
+        routes: LocalFavoritesRoutes,
+        onOpen: @escaping (FavoriteItem, FavoriteLaunchMode) async -> Void
+    ) -> LocalFavoriteCardActions {
+        LocalFavoriteCardActions(
+            open: { item, mode in
+                Task { await onOpen(item, mode) }
+            },
+            select: { item in
+                selection.toggleFavoriteSelection(id: item.id)
+            },
+            move: { item in
+                selection.toggleFavoriteSelection(id: item.id)
+                routes.sheet = .selectionMove
+            },
+            editTags: { item in
+                routes.sheet = .tagSelection(.favorite(item.id, initialTagIDs: Set(item.tagIDs)))
+            },
+            syncToRemote: { item in
+                Task { await organizer.syncItemToYamibo(item) }
+            },
+            delete: { item in
+                routes.dialog = .deleteItem(item)
+            }
+        )
+    }
+}
+
+/// Shared context-menu content for a favorite item card.
+struct LocalFavoriteCardContextMenu: View {
+    let card: FavoriteCardProjection
+    let actions: LocalFavoriteCardActions
+
+    var body: some View {
+        Button {
+            actions.open(card.item, .resume)
+        } label: {
+            Label(L10n.string("favorites.open_resume"), systemImage: "book")
+        }
+        Button {
+            actions.open(card.item, .start)
+        } label: {
+            Label(L10n.string("favorites.open_from_start"), systemImage: "text.page")
+        }
+        Divider()
+        Button {
+            actions.select(card.item)
+        } label: {
+            Label(L10n.string("common.select"), systemImage: "checkmark.circle")
+        }
+        Button {
+            actions.move(card.item)
+        } label: {
+            Label(L10n.string("favorites.move_action"), systemImage: "folder")
+        }
+        Button {
+            actions.editTags(card.item)
+        } label: {
+            Label(L10n.string("favorites.tags_action"), systemImage: "tag")
+        }
+        if card.item.target.threadID != nil, card.item.remoteMapping?.yamiboFavoriteID == nil {
+            Button {
+                actions.syncToRemote(card.item)
+            } label: {
+                Label(L10n.string("favorites.quick.add_prompt.sync"), systemImage: "arrow.triangle.2.circlepath")
+            }
+        }
+        Divider()
+        Button(role: .destructive) {
+            actions.delete(card.item)
+        } label: {
+            Label(L10n.string("common.delete"), systemImage: "trash")
+        }
+    }
+}

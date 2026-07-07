@@ -67,6 +67,16 @@ struct ForumThreadReaderView: View {
                 Text(model.favoriteErrorMessage ?? "")
             }
         )
+        .favoriteQuickActionDialogs(
+            addPromptPresented: Bindable(model).favoriteAddPromptPresented,
+            removePrompt: Bindable(model).favoriteRemovePrompt,
+            onConfirmAdd: { syncToRemote, remember in
+                Task { await model.confirmFavoriteAdd(syncToRemote: syncToRemote, remember: remember) }
+            },
+            onConfirmRemoval: { favorite, removeRemote, remember in
+                Task { await model.confirmFavoriteRemoval(favorite, removeRemote: removeRemote, remember: remember) }
+            }
+        )
         .task {
             await model.load()
         }

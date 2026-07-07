@@ -13,9 +13,8 @@ final class LocalFavoritesRoutes: ObservableObject {
         case collectionEditor(LocalFavoriteCollectionDraft)
         case tagSelection(LocalFavoriteTagSelectionDraft)
         case selectionMove
+        case filters
         case remoteSyncCategory
-        case remoteSyncProgress
-        case updateEvents
         case updateFilters
 
         var id: String {
@@ -30,12 +29,10 @@ final class LocalFavoritesRoutes: ObservableObject {
                 "tagSelection-\(draft.id)"
             case .selectionMove:
                 "selectionMove"
+            case .filters:
+                "filters"
             case .remoteSyncCategory:
                 "remoteSyncCategory"
-            case .remoteSyncProgress:
-                "remoteSyncProgress"
-            case .updateEvents:
-                "updateEvents"
             case .updateFilters:
                 "updateFilters"
             }
@@ -64,4 +61,8 @@ final class LocalFavoritesRoutes: ObservableObject {
 
     @Published var sheet: Sheet?
     @Published var dialog: Dialog?
+    /// The sync progress page is pushed (a full screen, not a sheet).
+    @Published var isSyncProgressPushed = false
+    /// The favorite-updates page is pushed (toolbar bell entry).
+    @Published var isUpdatesPagePushed = false
 }

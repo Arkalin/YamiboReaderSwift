@@ -15,6 +15,7 @@ final class FavoriteUpdateMonitor: ObservableObject {
     private let updateStore: FavoriteUpdateStore
     private let libraryStore: FavoriteLibraryStore
     private let makeForumThreadReaderRepository: @Sendable () async -> ForumThreadReaderRepository
+    private let settingsStore: SettingsStore?
     private let pageFetcher: ((FavoriteItem) async throws -> ForumThreadPage)?
 
     private var checkTask: Task<Void, Never>?
@@ -23,11 +24,13 @@ final class FavoriteUpdateMonitor: ObservableObject {
         updateStore: FavoriteUpdateStore,
         libraryStore: FavoriteLibraryStore,
         makeForumThreadReaderRepository: @escaping @Sendable () async -> ForumThreadReaderRepository,
+        settingsStore: SettingsStore? = nil,
         pageFetcher: ((FavoriteItem) async throws -> ForumThreadPage)? = nil
     ) {
         self.updateStore = updateStore
         self.libraryStore = libraryStore
         self.makeForumThreadReaderRepository = makeForumThreadReaderRepository
+        self.settingsStore = settingsStore
         self.pageFetcher = pageFetcher
     }
 
@@ -108,6 +111,46 @@ final class FavoriteUpdateMonitor: ObservableObject {
             snapshot.finishedAt = .now
             snapshot.progress = nil
         }
+    }
+
+    /// Waits for an in-flight check to finish (background refresh completion).
+    func waitForCompletion() async {
+        await checkTask?.value
+    }
+
+    /// Configured automatic check interval, or nil without a settings store.
+    func configuredInterval() async -> FavoriteUpdateCheckInterval? {
+        guard let settingsStore else { return nil }
+        return await settingsStore.load().favorites.updateCheckInterval
+    }
+
+    func setConfiguredInterval(_ interval: FavoriteUpdateCheckInterval) async {
+        guard let settingsStore else { return }
+        var settings = await settingsStore.load()
+        settings.favorites.updateCheckInterval = interval
+        try? await settingsStore.save(settings)
+    }
+
+    /// Whether recent events keep arriving; drives the smart interval.
+    var hasRecentEvents: Bool {
+        events.contains { $0.detectedAt > Date.now.addingTimeInterval(-7 * 24 * 3600) }
+    }
+
+    /// Starts a check when the configured interval has elapsed since the last
+    /// completed run — the foreground catch-up half of automatic checking
+    /// (BGAppRefreshTask timing is only best-effort).
+    @discardableResult
+    func startCheckIfDue() async -> Bool {
+        guard let interval = await configuredInterval(),
+              let delay = interval.nextDelay(hasRecentEvents: hasRecentEvents) else {
+            return false
+        }
+        guard snapshot?.status != .running else { return false }
+        if let last = snapshot, last.status == .completed, let finishedAt = last.finishedAt,
+           Date.now.timeIntervalSince(finishedAt) < delay {
+            return false
+        }
+        return await startCheck() != nil
     }
 
     // MARK: - Events and filters

@@ -240,7 +240,7 @@ public actor FavoriteLibraryStore {
         let rows = try Row.fetchAll(
             db,
             sql: """
-            SELECT item_id, yamibo_favorite_id, yamibo_remote_order, last_seen_at, is_marked_remote_missing
+            SELECT item_id, yamibo_favorite_id, yamibo_remote_order, last_seen_at
             FROM favorite_remote_mappings
             """
         )
@@ -250,8 +250,7 @@ public actor FavoriteLibraryStore {
                 FavoriteRemoteMapping(
                     yamiboFavoriteID: row["yamibo_favorite_id"] as String?,
                     yamiboRemoteOrder: row["yamibo_remote_order"] as Int?,
-                    lastSeenAt: Self.optionalDate(from: row["last_seen_at"] as Double?),
-                    isMarkedRemoteMissing: row["is_marked_remote_missing"] as Bool
+                    lastSeenAt: Self.optionalDate(from: row["last_seen_at"] as Double?)
                 )
             )
         })
@@ -336,15 +335,14 @@ public actor FavoriteLibraryStore {
                 try db.execute(
                     sql: """
                     INSERT INTO favorite_remote_mappings
-                    (item_id, yamibo_favorite_id, yamibo_remote_order, last_seen_at, is_marked_remote_missing)
-                    VALUES (?, ?, ?, ?, ?)
+                    (item_id, yamibo_favorite_id, yamibo_remote_order, last_seen_at)
+                    VALUES (?, ?, ?, ?)
                     """,
                     arguments: [
                         item.id,
                         mapping.yamiboFavoriteID,
                         mapping.yamiboRemoteOrder,
                         mapping.lastSeenAt.map(Self.timeInterval(from:)),
-                        mapping.isMarkedRemoteMissing,
                     ]
                 )
             }

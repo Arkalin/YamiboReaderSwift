@@ -1,54 +1,9 @@
 import SwiftUI
 import YamiboReaderCore
 
-/// List of detected favorite updates with read and dismiss actions.
-struct FavoriteUpdateEventsSheet: View {
-    let events: [FavoriteUpdateEvent]
-    let onMarkRead: (String) async -> Void
-    let onDismiss: (String) async -> Void
-    let onDismissAll: () async -> Void
-
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        List {
-            if events.isEmpty {
-                ContentUnavailableView(L10n.string("favorites.updates.no_events"), systemImage: "bell")
-            } else {
-                ForEach(events) { event in
-                    FavoriteUpdateEventRow(
-                        event: event,
-                        onMarkRead: {
-                            await onMarkRead(event.id)
-                        },
-                        onDismiss: {
-                            await onDismiss(event.id)
-                        }
-                    )
-                }
-            }
-        }
-        .navigationTitle(L10n.string("favorites.updates.events"))
-        .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button(L10n.string("common.close")) {
-                    dismiss()
-                }
-            }
-            if !events.isEmpty {
-                ToolbarItem(placement: .primaryAction) {
-                    Button(role: .destructive) {
-                        Task { await onDismissAll() }
-                    } label: {
-                        Label(L10n.string("favorites.updates.dismiss_all"), systemImage: "checkmark.circle")
-                    }
-                }
-            }
-        }
-    }
-}
-
-private struct FavoriteUpdateEventRow: View {
+/// One detected favorite update with read and dismiss actions, rendered in
+/// the favorite-updates page.
+struct FavoriteUpdateEventRow: View {
     let event: FavoriteUpdateEvent
     let onMarkRead: () async -> Void
     let onDismiss: () async -> Void

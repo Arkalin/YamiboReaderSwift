@@ -24,7 +24,7 @@ struct LocalFavoritesRootView: View {
         ))
         _remoteSync = StateObject(wrappedValue: FavoriteRemoteSyncSession(
             libraryStore: dependencies.localFavoriteLibraryStore,
-            settingsStore: dependencies.settingsStore,
+            runStore: dependencies.favoriteSyncRunStore,
             contentCoverStore: dependencies.contentCoverStore,
             makeFavoriteRepository: dependencies.makeFavoriteRepository,
             makeForumThreadReaderRepository: dependencies.makeForumThreadReaderRepository,
@@ -33,7 +33,8 @@ struct LocalFavoritesRootView: View {
         _updateMonitor = StateObject(wrappedValue: FavoriteUpdateMonitor(
             updateStore: dependencies.favoriteUpdateStore,
             libraryStore: dependencies.localFavoriteLibraryStore,
-            makeForumThreadReaderRepository: dependencies.makeForumThreadReaderRepository
+            makeForumThreadReaderRepository: dependencies.makeForumThreadReaderRepository,
+            settingsStore: dependencies.settingsStore
         ))
         openTargetResolver = LocalFavoriteOpenTargetResolver(
             libraryStore: dependencies.localFavoriteLibraryStore,
@@ -56,6 +57,9 @@ struct LocalFavoritesRootView: View {
             async let remoteSyncLoad: Void = remoteSync.load()
             async let updateMonitorLoad: Void = updateMonitor.load()
             _ = await (organizerLoad, remoteSyncLoad, updateMonitorLoad)
+            // Foreground catch-up for automatic update checking: background
+            // refresh timing is only best-effort.
+            await updateMonitor.startCheckIfDue()
         }
     }
 

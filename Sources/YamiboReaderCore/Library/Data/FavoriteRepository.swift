@@ -1,5 +1,18 @@
 import Foundation
 
+/// One parsed page of the remote favorite list, with page navigation info.
+public struct FavoriteRemotePage: Sendable {
+    public let favorites: [Favorite]
+    public let currentPage: Int
+    public let totalPages: Int
+
+    public init(favorites: [Favorite], currentPage: Int, totalPages: Int) {
+        self.favorites = favorites
+        self.currentPage = max(1, currentPage)
+        self.totalPages = max(1, totalPages)
+    }
+}
+
 public actor FavoriteRepository {
     private let client: YamiboClient
 
@@ -16,6 +29,15 @@ public actor FavoriteRepository {
         return favorites
     }
 
+    public func fetchFavoritesPage(page: Int = 1) async throws -> FavoriteRemotePage {
+        let parsed = try await fetchFavoritePage(page: page)
+        return FavoriteRemotePage(
+            favorites: parsed.favorites,
+            currentPage: parsed.currentPage,
+            totalPages: parsed.totalPages
+        )
+    }
+
     func fetchFavoritePage(page: Int = 1) async throws -> FavoriteHTMLParser.FavoritePageResult {
         let html = try await client.fetchHTML(for: .favorites(page: page))
         let parsed = FavoriteHTMLParser.parseFavoritePage(from: html)
@@ -25,7 +47,18 @@ public actor FavoriteRepository {
         return parsed
     }
 
-    public func addThreadFavorite(threadID: String, formHash preferredFormHash: String? = nil) async throws -> Favorite? {
+    /// Fetches the session's formHash once so bulk operations (sync upload)
+    /// can reuse it instead of re-fetching the profile per request.
+    public func currentFormHash() async throws -> String {
+        try await ensureFormHash(preferred: nil)
+    }
+
+    @discardableResult
+    public func addThreadFavorite(
+        threadID: String,
+        formHash preferredFormHash: String? = nil,
+        resolveRemoteFavorite: Bool = true
+    ) async throws -> Favorite? {
         guard let tid = threadID.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty else {
             throw YamiboError.missingFavoriteThreadID
         }
@@ -39,6 +72,7 @@ public actor FavoriteRepository {
             throw YamiboError.favoriteAddFailed
         }
 
+        guard resolveRemoteFavorite else { return nil }
         return try? await remoteFavorite(forThreadID: tid)
     }
 

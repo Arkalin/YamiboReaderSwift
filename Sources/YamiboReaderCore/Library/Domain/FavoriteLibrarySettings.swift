@@ -148,10 +148,17 @@ public enum FavoriteRemoteSyncTaskStatus: String, Codable, Hashable, Sendable {
     case interrupted
 }
 
+/// Five-phase Yamibo favorite sync, mirroring the Android reference:
+/// fetch remote pages, import remote-only items, upload local-only items,
+/// then reconcile the remote mapping. The local library is the source of
+/// truth; sync converges both sides to their union and never deletes.
 public enum FavoriteRemoteSyncPhase: String, Codable, Hashable, Sendable {
     case queued
+    case preparing
     case fetching
     case importing
+    case uploading
+    case reconciling
     case completed
     case failed
     case interrupted
@@ -162,23 +169,32 @@ public enum FavoriteRemoteSyncPhase: String, Codable, Hashable, Sendable {
 /// stores display copy.
 public enum FavoriteRemoteSyncLogEntry: Codable, Hashable, Sendable {
     case started(categoryName: String)
-    case fetching
-    case fetched(count: Int)
-    case completed(importedCount: Int)
+    case fetchedPage(page: Int, totalPages: Int, accumulatedCount: Int)
+    case importingItem(index: Int, total: Int, title: String)
+    case skippedSyncedItems(path: String, count: Int)
+    case uploading(targetCount: Int)
+    case uploadedItem(index: Int, total: Int, title: String)
+    case reconciling
+    case completed(importedCount: Int, uploadedCount: Int)
     case failed
     case interrupted
     case taskLost
 }
 
-/// Semantic warnings surfaced by a remote favorite sync run.
+/// Semantic warnings surfaced by a remote favorite sync run. Item-level
+/// failures carry a truncated reason string; run-fatal errors go to
+/// `FavoriteRemoteSyncSnapshot.errorMessages` instead.
 public enum FavoriteRemoteSyncWarning: Codable, Hashable, Sendable {
     case interruptedByUser
     case interrupted
     case taskLost
     case backgroundExpired
     case backgroundUnavailable
-    case failedItems(count: Int)
-    case uploadPending(count: Int)
+    case remotePageCountChanged
+    case duplicateRemoteEntry(title: String)
+    case importFailedItem(title: String, reason: String)
+    case uploadFailedItem(title: String, reason: String)
+    case reconcileFailed(reason: String)
 }
 
 public struct FavoriteRemoteSyncSnapshot: Codable, Hashable, Identifiable, Sendable {
@@ -190,12 +206,18 @@ public struct FavoriteRemoteSyncSnapshot: Codable, Hashable, Identifiable, Senda
     public var startedAt: Date
     public var updatedAt: Date
     public var finishedAt: Date?
-    public var totalRemoteCount: Int?
+    public var currentPage: Int?
+    public var totalPages: Int?
+    /// Remote entries accumulated across fetched pages.
     public var scannedCount: Int
+    /// Newly imported items plus existing items that gained the target
+    /// category location.
     public var importedCount: Int
-    public var failedCount: Int
-    public var markedMissingCount: Int
+    /// Remote entries whose local item was already mapped; nothing to do.
+    public var skippedCount: Int
     public var uploadTargetCount: Int
+    public var uploadedCount: Int
+    public var failedCount: Int
     public var logEntries: [FavoriteRemoteSyncLogEntry]
     public var warnings: [FavoriteRemoteSyncWarning]
     /// Raw error descriptions from failed operations; unlike logs and
@@ -214,12 +236,14 @@ public struct FavoriteRemoteSyncSnapshot: Codable, Hashable, Identifiable, Senda
         startedAt: Date = .now,
         updatedAt: Date = .now,
         finishedAt: Date? = nil,
-        totalRemoteCount: Int? = nil,
+        currentPage: Int? = nil,
+        totalPages: Int? = nil,
         scannedCount: Int = 0,
         importedCount: Int = 0,
-        failedCount: Int = 0,
-        markedMissingCount: Int = 0,
+        skippedCount: Int = 0,
         uploadTargetCount: Int = 0,
+        uploadedCount: Int = 0,
+        failedCount: Int = 0,
         logEntries: [FavoriteRemoteSyncLogEntry] = [],
         warnings: [FavoriteRemoteSyncWarning] = [],
         errorMessages: [String] = [],
@@ -233,16 +257,60 @@ public struct FavoriteRemoteSyncSnapshot: Codable, Hashable, Identifiable, Senda
         self.startedAt = startedAt
         self.updatedAt = updatedAt
         self.finishedAt = finishedAt
-        self.totalRemoteCount = totalRemoteCount
+        self.currentPage = currentPage
+        self.totalPages = totalPages
         self.scannedCount = scannedCount
         self.importedCount = importedCount
-        self.failedCount = failedCount
-        self.markedMissingCount = markedMissingCount
+        self.skippedCount = skippedCount
         self.uploadTargetCount = uploadTargetCount
+        self.uploadedCount = uploadedCount
+        self.failedCount = failedCount
         self.logEntries = logEntries
         self.warnings = warnings
         self.errorMessages = errorMessages
         self.isHiddenFromFavoritePage = isHiddenFromFavoritePage
+    }
+}
+
+/// How often favorite update checks run automatically (BGAppRefreshTask plus
+/// a foreground catch-up). iOS decides the actual background timing; these
+/// are the earliest-run intervals, mirroring the Android options.
+public enum FavoriteUpdateCheckInterval: String, Codable, Hashable, CaseIterable, Identifiable, Sendable {
+    case off
+    case sixHours
+    case twelveHours
+    case day
+    case threeDays
+    case week
+    /// Adaptive: checks twice a day while recent updates keep appearing,
+    /// otherwise backs off to every two days.
+    case smart
+
+    public var id: String { rawValue }
+
+    public var title: String {
+        switch self {
+        case .off: L10n.string("favorites.updates.interval.off")
+        case .sixHours: L10n.string("favorites.updates.interval.six_hours")
+        case .twelveHours: L10n.string("favorites.updates.interval.twelve_hours")
+        case .day: L10n.string("favorites.updates.interval.day")
+        case .threeDays: L10n.string("favorites.updates.interval.three_days")
+        case .week: L10n.string("favorites.updates.interval.week")
+        case .smart: L10n.string("favorites.updates.interval.smart")
+        }
+    }
+
+    /// Seconds until the next automatic check, or nil when disabled.
+    public func nextDelay(hasRecentEvents: Bool) -> TimeInterval? {
+        switch self {
+        case .off: nil
+        case .sixHours: 6 * 3600
+        case .twelveHours: 12 * 3600
+        case .day: 24 * 3600
+        case .threeDays: 3 * 24 * 3600
+        case .week: 7 * 24 * 3600
+        case .smart: hasRecentEvents ? 12 * 3600 : 48 * 3600
+        }
     }
 }
 
@@ -255,8 +323,15 @@ public struct FavoriteLibrarySettings: Codable, Hashable, Sendable {
     public var selectedCategoryID: String?
     public var selectedCollectionID: String?
     public var showsCategoryCounts: Bool
-    public var remoteSyncSnapshot: FavoriteRemoteSyncSnapshot?
     public var collapsesSections: Bool
+    /// Whether adding a favorite asks about pushing it to Yamibo; once the
+    /// user picks "remember", this turns off and `addSyncDefault` applies.
+    public var addSyncPromptEnabled: Bool
+    public var addSyncDefault: Bool
+    /// Same pair for the delete flow's "also remove from Yamibo" question.
+    public var removeRemotePromptEnabled: Bool
+    public var removeRemoteDefault: Bool
+    public var updateCheckInterval: FavoriteUpdateCheckInterval
 
     public init(
         appearance: FavoriteAppearanceSettings = .init(),
@@ -267,8 +342,12 @@ public struct FavoriteLibrarySettings: Codable, Hashable, Sendable {
         selectedCategoryID: String? = nil,
         selectedCollectionID: String? = nil,
         showsCategoryCounts: Bool = true,
-        remoteSyncSnapshot: FavoriteRemoteSyncSnapshot? = nil,
-        collapsesSections: Bool = false
+        collapsesSections: Bool = false,
+        addSyncPromptEnabled: Bool = true,
+        addSyncDefault: Bool = true,
+        removeRemotePromptEnabled: Bool = true,
+        removeRemoteDefault: Bool = false,
+        updateCheckInterval: FavoriteUpdateCheckInterval = .off
     ) {
         self.appearance = appearance
         self.background = background
@@ -278,8 +357,32 @@ public struct FavoriteLibrarySettings: Codable, Hashable, Sendable {
         self.selectedCategoryID = Self.normalizedID(selectedCategoryID)
         self.selectedCollectionID = Self.normalizedID(selectedCollectionID)
         self.showsCategoryCounts = showsCategoryCounts
-        self.remoteSyncSnapshot = remoteSyncSnapshot
         self.collapsesSections = collapsesSections
+        self.addSyncPromptEnabled = addSyncPromptEnabled
+        self.addSyncDefault = addSyncDefault
+        self.removeRemotePromptEnabled = removeRemotePromptEnabled
+        self.removeRemoteDefault = removeRemoteDefault
+        self.updateCheckInterval = updateCheckInterval
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            appearance: try container.decodeIfPresent(FavoriteAppearanceSettings.self, forKey: .appearance) ?? .init(),
+            background: try container.decodeIfPresent(FavoriteBackgroundSettings.self, forKey: .background) ?? .init(),
+            layoutMode: try container.decodeIfPresent(FavoriteLibraryLayoutMode.self, forKey: .layoutMode) ?? .rowCard,
+            sortOrder: try container.decodeIfPresent(LocalFavoriteLibrarySortOrder.self, forKey: .sortOrder) ?? .organization,
+            sortDescending: try container.decodeIfPresent(Bool.self, forKey: .sortDescending) ?? false,
+            selectedCategoryID: try container.decodeIfPresent(String.self, forKey: .selectedCategoryID),
+            selectedCollectionID: try container.decodeIfPresent(String.self, forKey: .selectedCollectionID),
+            showsCategoryCounts: try container.decodeIfPresent(Bool.self, forKey: .showsCategoryCounts) ?? true,
+            collapsesSections: try container.decodeIfPresent(Bool.self, forKey: .collapsesSections) ?? false,
+            addSyncPromptEnabled: try container.decodeIfPresent(Bool.self, forKey: .addSyncPromptEnabled) ?? true,
+            addSyncDefault: try container.decodeIfPresent(Bool.self, forKey: .addSyncDefault) ?? true,
+            removeRemotePromptEnabled: try container.decodeIfPresent(Bool.self, forKey: .removeRemotePromptEnabled) ?? true,
+            removeRemoteDefault: try container.decodeIfPresent(Bool.self, forKey: .removeRemoteDefault) ?? false,
+            updateCheckInterval: try container.decodeIfPresent(FavoriteUpdateCheckInterval.self, forKey: .updateCheckInterval) ?? .off
+        )
     }
 
     private static func normalizedID(_ value: String?) -> String? {

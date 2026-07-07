@@ -1,14 +1,13 @@
 import Foundation
 
-/// Interactive browse session for the favorites screen: multi-selection and
-/// search-mode state. Pure state machine with no persistence dependencies.
+/// Interactive browse session for the favorites screen: multi-selection
+/// state. Pure state machine with no persistence dependencies. (Search is a
+/// plain live filter through `.searchable`, not a session mode.)
 @MainActor
 final class LocalFavoriteBrowseSession: ObservableObject {
     @Published private(set) var isSelectionMode = false
     @Published private(set) var selectedFavoriteIDs: Set<String> = []
     @Published private(set) var selectedCollectionIDs: Set<String> = []
-    @Published private(set) var isSearchMode = false
-    @Published var searchDraftText = ""
 
     var selectedFavoriteCount: Int {
         selectedFavoriteIDs.count
@@ -29,7 +28,6 @@ final class LocalFavoriteBrowseSession: ObservableObject {
     // MARK: - Selection
 
     func enterSelectionMode() {
-        isSearchMode = false
         isSelectionMode = true
     }
 
@@ -44,7 +42,6 @@ final class LocalFavoriteBrowseSession: ObservableObject {
     }
 
     func toggleFavoriteSelection(id: String) {
-        isSearchMode = false
         isSelectionMode = true
         if selectedFavoriteIDs.contains(id) {
             selectedFavoriteIDs.remove(id)
@@ -54,7 +51,6 @@ final class LocalFavoriteBrowseSession: ObservableObject {
     }
 
     func toggleCollectionSelection(id: String) {
-        isSearchMode = false
         isSelectionMode = true
         if selectedCollectionIDs.contains(id) {
             selectedCollectionIDs.remove(id)
@@ -64,14 +60,12 @@ final class LocalFavoriteBrowseSession: ObservableObject {
     }
 
     func selectAll(favoriteIDs: [String], collectionIDs: [String]) {
-        isSearchMode = false
         isSelectionMode = true
         selectedFavoriteIDs.formUnion(favoriteIDs)
         selectedCollectionIDs.formUnion(collectionIDs)
     }
 
     func invertSelection(favoriteIDs: [String], collectionIDs: [String]) {
-        isSearchMode = false
         isSelectionMode = true
         for id in favoriteIDs {
             if selectedFavoriteIDs.contains(id) {
@@ -97,25 +91,5 @@ final class LocalFavoriteBrowseSession: ObservableObject {
         if selectedEntryCount == 0, isSelectionMode {
             isSelectionMode = false
         }
-    }
-
-    // MARK: - Search
-
-    func enterSearchMode(draftText: String) {
-        exitSelectionMode()
-        searchDraftText = draftText
-        isSearchMode = true
-    }
-
-    /// Trims and returns the draft as the submitted search text.
-    func submitSearchDraft() -> String {
-        isSearchMode = true
-        return searchDraftText.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    func exitSearchMode() {
-        isSearchMode = false
-        searchDraftText = ""
-        exitSelectionMode()
     }
 }

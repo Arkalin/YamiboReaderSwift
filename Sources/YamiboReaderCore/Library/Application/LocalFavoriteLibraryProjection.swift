@@ -28,15 +28,77 @@ public enum LocalFavoriteLibrarySortOrder: String, Codable, CaseIterable, Identi
     }
 }
 
-public enum LocalFavoriteLibrarySourceGroupFilter: Hashable, Sendable {
-    case all
-    case group(FavoriteSourceGroup)
+/// One choosable source filter: a forum board, all manga aggregated into a
+/// single entry (mirroring the Android filter's single "標籤" row), or items
+/// with an unknown source. Forum boards compare by id only.
+public enum LocalFavoriteSourceFilter: Hashable, Sendable {
+    case forumBoard(id: String, label: String)
+    case manga
+    case unknown
+
+    public static func == (lhs: LocalFavoriteSourceFilter, rhs: LocalFavoriteSourceFilter) -> Bool {
+        switch (lhs, rhs) {
+        case let (.forumBoard(lhsID, _), .forumBoard(rhsID, _)):
+            lhsID == rhsID
+        case (.manga, .manga), (.unknown, .unknown):
+            true
+        default:
+            false
+        }
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        switch self {
+        case let .forumBoard(id, _):
+            hasher.combine("forumBoard")
+            hasher.combine(id)
+        case .manga:
+            hasher.combine("manga")
+        case .unknown:
+            hasher.combine("unknown")
+        }
+    }
+
+    public var displayLabel: String {
+        switch self {
+        case let .forumBoard(id, label):
+            label.isEmpty ? id : label
+        case .manga:
+            L10n.string("favorites.filter.manga")
+        case .unknown:
+            L10n.string("favorites.source_group.unknown")
+        }
+    }
+
+    /// Canonical filter bucket an item belongs to.
+    public static func key(for item: FavoriteItem) -> LocalFavoriteSourceFilter {
+        if item.target.kind == .mangaTitle {
+            return .manga
+        }
+        if let forumID = item.forumID ?? item.sourceGroup.forumID {
+            return .forumBoard(id: forumID, label: item.forumName ?? item.sourceGroup.forumName ?? forumID)
+        }
+        return .unknown
+    }
+
+    public func matches(_ item: FavoriteItem) -> Bool {
+        switch self {
+        case let .forumBoard(id, _):
+            item.forumID == id || item.sourceGroup.forumID == id
+        case .manga:
+            item.target.kind == .mangaTitle
+        case .unknown:
+            LocalFavoriteSourceFilter.key(for: item) == .unknown
+        }
+    }
 }
 
 public struct LocalFavoriteLibraryQuery: Equatable, Sendable {
     public var categoryID: String?
     public var collectionID: String?
-    public var sourceGroupFilter: LocalFavoriteLibrarySourceGroupFilter
+    /// Source filters to keep; empty means no source filtering (Android's
+    /// forum filter is a multi-select).
+    public var selectedSourceFilters: Set<LocalFavoriteSourceFilter>
     public var selectedTagIDs: Set<String>
     public var sortOrder: LocalFavoriteLibrarySortOrder
     public var sortsDescending: Bool
@@ -45,7 +107,7 @@ public struct LocalFavoriteLibraryQuery: Equatable, Sendable {
     public init(
         categoryID: String? = nil,
         collectionID: String? = nil,
-        sourceGroupFilter: LocalFavoriteLibrarySourceGroupFilter = .all,
+        selectedSourceFilters: Set<LocalFavoriteSourceFilter> = [],
         selectedTagIDs: Set<String> = [],
         sortOrder: LocalFavoriteLibrarySortOrder = .organization,
         sortsDescending: Bool = false,
@@ -53,7 +115,7 @@ public struct LocalFavoriteLibraryQuery: Equatable, Sendable {
     ) {
         self.categoryID = categoryID
         self.collectionID = collectionID
-        self.sourceGroupFilter = sourceGroupFilter
+        self.selectedSourceFilters = selectedSourceFilters
         self.selectedTagIDs = selectedTagIDs
         self.sortOrder = sortOrder
         self.sortsDescending = sortsDescending
@@ -97,12 +159,8 @@ public enum LocalFavoriteLibraryProjection {
                 return item.locations.contains(.category(categoryID))
             }
             .filter { item in
-                switch query.sourceGroupFilter {
-                case .all:
-                    true
-                case let .group(sourceGroup):
-                    matchesSourceGroup(item, filter: sourceGroup)
-                }
+                query.selectedSourceFilters.isEmpty
+                    || query.selectedSourceFilters.contains { $0.matches(item) }
             }
             .filter { item in
                 query.selectedTagIDs.isEmpty || query.selectedTagIDs.isSubset(of: Set(item.tagIDs))
@@ -158,7 +216,7 @@ public enum LocalFavoriteLibraryProjection {
             case .organization:
                 return compareOrganization(lhs, rhs)
             case .contentUpdatedAt:
-                return compareDatesDescending(lhs.lastUpdatedAt, rhs.lastUpdatedAt, lhsID: lhs.id, rhsID: rhs.id)
+                return compareDatesAscending(lhs.lastUpdatedAt, rhs.lastUpdatedAt, lhsID: lhs.id, rhsID: rhs.id)
             case .yamiboRemoteOrder:
                 let lhsOrder = lhs.item.remoteMapping?.yamiboRemoteOrder ?? Int.max
                 let rhsOrder = rhs.item.remoteMapping?.yamiboRemoteOrder ?? Int.max
@@ -173,7 +231,7 @@ public enum LocalFavoriteLibraryProjection {
                 let result = sourceGroupSortKey(for: lhs).localizedCaseInsensitiveCompare(sourceGroupSortKey(for: rhs))
                 return result == .orderedSame ? lhs.id < rhs.id : result == .orderedAscending
             case .lastReadAt:
-                return compareDatesDescending(lhs.recentReadingAt, rhs.recentReadingAt, lhsID: lhs.id, rhsID: rhs.id)
+                return compareDatesAscending(lhs.recentReadingAt, rhs.recentReadingAt, lhsID: lhs.id, rhsID: rhs.id)
             }
         }
         return descending ? sortedCards.reversed() : sortedCards
@@ -197,10 +255,12 @@ public enum LocalFavoriteLibraryProjection {
         }
     }
 
-    private static func compareDatesDescending(_ lhs: Date?, _ rhs: Date?, lhsID: String, rhsID: String) -> Bool {
+    /// Oldest first, undated items last; the descending flag reverses the
+    /// whole order so the sort-direction arrow stays truthful.
+    private static func compareDatesAscending(_ lhs: Date?, _ rhs: Date?, lhsID: String, rhsID: String) -> Bool {
         switch (lhs, rhs) {
         case let (lhs?, rhs?) where lhs != rhs:
-            return lhs > rhs
+            return lhs < rhs
         case (_?, nil):
             return true
         case (nil, _?):
@@ -240,13 +300,6 @@ public enum LocalFavoriteLibraryProjection {
 
     private static func sourceGroupSortKey(for card: FavoriteCardProjection) -> String {
         card.item.forumName ?? card.item.forumID ?? card.sourceGroupLabel
-    }
-
-    private static func matchesSourceGroup(_ item: FavoriteItem, filter: FavoriteSourceGroup) -> Bool {
-        if let filterForumID = filter.forumID {
-            return item.forumID == filterForumID || item.sourceGroup.forumID == filterForumID
-        }
-        return item.sourceGroup == filter
     }
 
     private static func label(for sourceGroup: FavoriteSourceGroup) -> String {

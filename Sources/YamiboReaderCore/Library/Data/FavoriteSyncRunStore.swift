@@ -1,0 +1,116 @@
+import Foundation
+@preconcurrency import GRDB
+
+/// Persists Yamibo favorite sync run snapshots in the shared GRDB database.
+/// Run state is runtime task bookkeeping, deliberately kept out of the app
+/// settings (which sync across devices over WebDAV).
+public actor FavoriteSyncRunStore {
+    private static let keptRunCount = 10
+
+    private let database: DatabasePool
+    private let encoder = JSONEncoder()
+    private let decoder = JSONDecoder()
+
+    public init(databasePool: DatabasePool? = nil) {
+        self.database = databasePool ?? Self.openDatabase()
+    }
+
+    /// Isolated-storage convenience mirroring `FavoriteLibraryStore`: standard
+    /// defaults use the shared database, any other suite gets its own pool in
+    /// a temporary directory (tests and previews).
+    public init(defaults: UserDefaults, key: String = "yamibo.favoriteSyncRuns") {
+        self.database = Self.openDatabase(defaults: defaults, key: key)
+    }
+
+    /// The most recently updated run, regardless of status; callers decide
+    /// whether an old `running` snapshot needs downgrading to interrupted.
+    public func latestSnapshot() async -> FavoriteRemoteSyncSnapshot? {
+        let decoder = decoder
+        return try? await database.read { db in
+            guard let json = try String.fetchOne(
+                db,
+                sql: "SELECT snapshot_json FROM favorite_sync_runs ORDER BY updated_at DESC, run_id DESC LIMIT 1"
+            ), let data = json.data(using: .utf8) else {
+                return nil
+            }
+            return try decoder.decode(FavoriteRemoteSyncSnapshot.self, from: data)
+        }
+    }
+
+    public func save(_ snapshot: FavoriteRemoteSyncSnapshot) async throws {
+        let json: String
+        do {
+            json = String(data: try encoder.encode(snapshot), encoding: .utf8) ?? "{}"
+        } catch {
+            throw YamiboError.persistenceFailed(error.localizedDescription)
+        }
+        do {
+            try await database.write { db in
+                try db.execute(
+                    sql: """
+                    INSERT OR REPLACE INTO favorite_sync_runs
+                    (run_id, status, snapshot_json, started_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?)
+                    """,
+                    arguments: [
+                        snapshot.runID,
+                        snapshot.status.rawValue,
+                        json,
+                        snapshot.startedAt.timeIntervalSince1970,
+                        snapshot.updatedAt.timeIntervalSince1970,
+                    ]
+                )
+                try db.execute(
+                    sql: """
+                    DELETE FROM favorite_sync_runs WHERE run_id NOT IN (
+                        SELECT run_id FROM favorite_sync_runs ORDER BY updated_at DESC, run_id DESC LIMIT ?
+                    )
+                    """,
+                    arguments: [Self.keptRunCount]
+                )
+            }
+        } catch {
+            throw YamiboError.persistenceFailed(error.localizedDescription)
+        }
+    }
+
+    public func clearAll() async throws {
+        do {
+            try await database.write { db in
+                try db.execute(sql: "DELETE FROM favorite_sync_runs")
+            }
+        } catch {
+            throw YamiboError.persistenceFailed(error.localizedDescription)
+        }
+    }
+
+    private static func openDatabase() -> DatabasePool {
+        do {
+            return try YamiboDatabase.openPool()
+        } catch {
+            fatalError("Failed to open FavoriteSyncRunStore database: \(error)")
+        }
+    }
+
+    private static func openDatabase(defaults: UserDefaults, key: String) -> DatabasePool {
+        do {
+            if defaults === UserDefaults.standard {
+                return try YamiboDatabase.openPool()
+            }
+            let idKey = "\(key).grdbDatabaseID"
+            let databaseID: String
+            if let existing = defaults.string(forKey: idKey), !existing.isEmpty {
+                databaseID = existing
+            } else {
+                databaseID = UUID().uuidString
+                defaults.set(databaseID, forKey: idKey)
+            }
+            let root = FileManager.default.temporaryDirectory
+                .appendingPathComponent("YamiboReaderFavoriteSyncRuns", isDirectory: true)
+                .appendingPathComponent(databaseID, isDirectory: true)
+            return try YamiboDatabase.openPool(rootDirectory: root)
+        } catch {
+            fatalError("Failed to open FavoriteSyncRunStore database: \(error)")
+        }
+    }
+}

@@ -70,7 +70,6 @@ enum LibraryDatabaseSchema: DatabaseSchemaModule {
                 table.column("yamibo_favorite_id", .text)
                 table.column("yamibo_remote_order", .integer)
                 table.column("last_seen_at", .double)
-                table.column("is_marked_remote_missing", .boolean).notNull()
             }
         }
 
@@ -87,11 +86,25 @@ enum LibraryDatabaseSchema: DatabaseSchemaModule {
                 table.primaryKey(["target_type", "target_id"], onConflict: .replace)
             }
         }
+
+        migrator.registerMigration("library.v3.sync-runs") { db in
+            // Yamibo sync run snapshots: runtime task state, so it lives in
+            // GRDB rather than app settings (which sync over WebDAV).
+            try db.create(table: "favorite_sync_runs") { table in
+                table.column("run_id", .text).primaryKey(onConflict: .replace)
+                table.column("status", .text).notNull()
+                table.column("snapshot_json", .text).notNull()
+                table.column("started_at", .double).notNull()
+                table.column("updated_at", .double).notNull()
+            }
+            try db.create(index: "favorite_sync_runs_updated_idx", on: "favorite_sync_runs", columns: ["updated_at"])
+        }
     }
 
     static func erase(in db: Database) throws {
         try deleteAllRows(in: db)
         try db.execute(sql: "DELETE FROM content_cover")
+        try db.execute(sql: "DELETE FROM favorite_sync_runs")
         try insertDefaultFavoriteCategory(in: db)
     }
 

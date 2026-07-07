@@ -109,10 +109,16 @@ extension FavoriteRemoteSyncPhase {
         switch self {
         case .queued:
             L10n.string("favorites.sync.phase.queued")
+        case .preparing:
+            L10n.string("favorites.sync.phase.preparing")
         case .fetching:
             L10n.string("favorites.sync.phase.fetching")
         case .importing:
             L10n.string("favorites.sync.phase.importing")
+        case .uploading:
+            L10n.string("favorites.sync.phase.uploading")
+        case .reconciling:
+            L10n.string("favorites.sync.phase.reconciling")
         case .completed:
             L10n.string("favorites.sync.phase.completed")
         case .failed:
@@ -128,12 +134,20 @@ extension FavoriteRemoteSyncLogEntry {
         switch self {
         case let .started(categoryName):
             L10n.string("favorites.sync.log.started", categoryName)
-        case .fetching:
-            L10n.string("favorites.sync.log.fetching")
-        case let .fetched(count):
-            L10n.string("favorites.sync.log.fetched", count)
-        case let .completed(importedCount):
-            L10n.string("favorites.sync.log.completed", importedCount)
+        case let .fetchedPage(page, totalPages, accumulatedCount):
+            L10n.string("favorites.sync.log.fetched_page", page, totalPages, accumulatedCount)
+        case let .importingItem(index, total, title):
+            L10n.string("favorites.sync.log.importing_item", index, total, title)
+        case let .skippedSyncedItems(path, count):
+            L10n.string("favorites.sync.log.skipped_synced", count, path)
+        case let .uploading(targetCount):
+            L10n.string("favorites.sync.log.uploading", targetCount)
+        case let .uploadedItem(index, total, title):
+            L10n.string("favorites.sync.log.uploaded_item", index, total, title)
+        case .reconciling:
+            L10n.string("favorites.sync.log.reconciling")
+        case let .completed(importedCount, uploadedCount):
+            L10n.string("favorites.sync.log.completed", importedCount, uploadedCount)
         case .failed:
             L10n.string("favorites.sync.log.failed")
         case .interrupted:
@@ -157,10 +171,16 @@ extension FavoriteRemoteSyncWarning {
             L10n.string("favorites.sync.warning.background_expired")
         case .backgroundUnavailable:
             L10n.string("favorites.sync.warning.background_unavailable")
-        case let .failedItems(count):
-            L10n.string("favorites.sync.warning.failed_items", count)
-        case let .uploadPending(count):
-            L10n.string("favorites.sync.warning.upload_pending", count)
+        case .remotePageCountChanged:
+            L10n.string("favorites.sync.warning.page_count_changed")
+        case let .duplicateRemoteEntry(title):
+            L10n.string("favorites.sync.warning.duplicate_remote_entry", title)
+        case let .importFailedItem(title, reason):
+            L10n.string("favorites.sync.warning.import_failed_item", title, reason)
+        case let .uploadFailedItem(title, reason):
+            L10n.string("favorites.sync.warning.upload_failed_item", title, reason)
+        case let .reconcileFailed(reason):
+            L10n.string("favorites.sync.warning.reconcile_failed", reason)
         }
     }
 }

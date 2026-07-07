@@ -20,11 +20,18 @@ struct FavoriteRemoteSyncProgressSheet: View {
 
                 Section(L10n.string("favorites.sync.progress.metrics")) {
                     FavoriteRemoteSyncMetricRow(title: L10n.string("favorites.sync.progress.target"), value: snapshot.targetCategoryName)
+                    if let currentPage = snapshot.currentPage, let totalPages = snapshot.totalPages {
+                        FavoriteRemoteSyncMetricRow(
+                            title: L10n.string("favorites.sync.progress.pages"),
+                            value: "\(currentPage)/\(totalPages)"
+                        )
+                    }
                     FavoriteRemoteSyncMetricRow(title: L10n.string("favorites.sync.progress.scanned"), value: "\(snapshot.scannedCount)")
                     FavoriteRemoteSyncMetricRow(title: L10n.string("favorites.sync.progress.imported"), value: "\(snapshot.importedCount)")
+                    FavoriteRemoteSyncMetricRow(title: L10n.string("favorites.sync.progress.skipped"), value: "\(snapshot.skippedCount)")
+                    FavoriteRemoteSyncMetricRow(title: L10n.string("favorites.sync.progress.upload_targets"), value: "\(snapshot.uploadTargetCount)")
+                    FavoriteRemoteSyncMetricRow(title: L10n.string("favorites.sync.progress.uploaded"), value: "\(snapshot.uploadedCount)")
                     FavoriteRemoteSyncMetricRow(title: L10n.string("favorites.sync.progress.failed"), value: "\(snapshot.failedCount)")
-                    FavoriteRemoteSyncMetricRow(title: L10n.string("favorites.sync.progress.marked_missing"), value: "\(snapshot.markedMissingCount)")
-                    FavoriteRemoteSyncMetricRow(title: L10n.string("favorites.sync.progress.upload_pending"), value: "\(snapshot.uploadTargetCount)")
                 }
 
                 FavoriteRemoteSyncMessageSection(
@@ -107,11 +114,29 @@ private struct FavoriteRemoteSyncSummary: View {
             }
             Text(snapshot.phase.displayTitle)
                 .foregroundStyle(.secondary)
-            if let total = snapshot.totalRemoteCount {
-                ProgressView(value: Double(snapshot.scannedCount), total: Double(max(total, 1)))
+            if let progress = phaseProgress {
+                ProgressView(value: progress.completed, total: progress.total)
             }
         }
         .padding(.vertical, 4)
+    }
+
+    /// Progress of the currently running phase; nil when the phase has no
+    /// meaningful denominator yet.
+    private var phaseProgress: (completed: Double, total: Double)? {
+        switch snapshot.phase {
+        case .fetching:
+            guard let currentPage = snapshot.currentPage, let totalPages = snapshot.totalPages else { return nil }
+            return (Double(currentPage), Double(max(totalPages, 1)))
+        case .importing:
+            let handled = snapshot.importedCount + snapshot.skippedCount + snapshot.failedCount
+            return (Double(handled), Double(max(snapshot.scannedCount, 1)))
+        case .uploading, .reconciling:
+            guard snapshot.uploadTargetCount > 0 else { return nil }
+            return (Double(snapshot.uploadedCount), Double(snapshot.uploadTargetCount))
+        case .queued, .preparing, .completed, .failed, .interrupted:
+            return nil
+        }
     }
 
     private var statusTitle: String {
@@ -142,6 +167,8 @@ private struct FavoriteRemoteSyncMetricRow: View {
     }
 }
 
+/// Log/warning/error block rendered as one scrollable text area (Android
+/// SyncMessageBlock parity), not a list of rows.
 private struct FavoriteRemoteSyncMessageSection: View {
     let title: String
     let messages: [String]
@@ -153,9 +180,11 @@ private struct FavoriteRemoteSyncMessageSection: View {
                 Text(fallback)
                     .foregroundStyle(.secondary)
             } else {
-                ForEach(Array(messages.enumerated()), id: \.offset) { _, message in
-                    Text(message)
-                }
+                Text(messages.joined(separator: "\n"))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .textSelection(.enabled)
             }
         }
     }

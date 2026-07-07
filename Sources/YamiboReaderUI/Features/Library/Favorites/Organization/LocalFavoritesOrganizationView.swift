@@ -10,7 +10,6 @@ struct LocalFavoritesOrganizationView: View {
     @ObservedObject var updateMonitor: FavoriteUpdateMonitor
     @ObservedObject private var selection: LocalFavoriteBrowseSession
     @StateObject private var routes = LocalFavoritesRoutes()
-    @FocusState private var searchFieldFocused: Bool
 
     let onOpen: (FavoriteItem, FavoriteLaunchMode) async -> Void
 
@@ -30,23 +29,30 @@ struct LocalFavoritesOrganizationView: View {
     var body: some View {
         NavigationStack {
             content
-                .refreshable {
-                    _ = await remoteSync.start(targetCategoryID: organizer.selectedCategoryID)
-                }
                 .overlay {
                     if organizer.derived.cards.isEmpty, organizer.derived.visibleCollections.isEmpty {
                         if hasSubmittedSearch {
                             ContentUnavailableView(L10n.string("favorites.empty.no_results"), systemImage: "magnifyingglass")
                         } else {
-                            ContentUnavailableView(L10n.string("favorites.empty.favorites"), systemImage: "books.vertical")
+                            ContentUnavailableView {
+                                Label(L10n.string("favorites.empty.favorites"), systemImage: "books.vertical")
+                            } description: {
+                                Text(L10n.string("favorites.empty.sync_hint"))
+                            }
                         }
                     }
                 }
-                .navigationTitle(selection.isSearchMode ? L10n.string("favorites.search.title") : L10n.string("favorites.title"))
+                .navigationTitle(
+                    selection.isSelectionMode
+                        ? L10n.string("favorites.selected_count", selection.selectedEntryCount)
+                        : L10n.string("favorites.title")
+                )
+                .searchable(
+                    text: $organizer.filter.searchText,
+                    prompt: L10n.string("favorites.search.placeholder")
+                )
                 .toolbar { favoriteToolbarContent }
-                .onChange(of: selection.isSearchMode) { _, active in
-                    searchFieldFocused = active
-                }
+                .toolbar(selection.isSelectionMode ? .hidden : .automatic, for: .tabBar)
                 .safeAreaInset(edge: .bottom) {
                     if selection.isSelectionMode {
                         LocalFavoriteSelectionActionBar(
@@ -84,6 +90,128 @@ struct LocalFavoritesOrganizationView: View {
                         routes: routes
                     )
                 }
+                .forumTransientMessage(organizer.transientMessage) {
+                    organizer.transientMessage = nil
+                }
+                .navigationDestination(isPresented: collectionDetailBinding) {
+                    collectionDetail
+                }
+                .navigationDestination(isPresented: $routes.isUpdatesPagePushed) {
+                    FavoriteUpdatesPage(updateMonitor: updateMonitor, routes: routes)
+                        .toolbar(selection.isSelectionMode ? .hidden : .automatic, for: .tabBar)
+                }
+                .navigationDestination(isPresented: $routes.isSyncProgressPushed) {
+                    FavoriteRemoteSyncProgressSheet(
+                        snapshot: remoteSync.snapshot,
+                        onResume: {
+                            await remoteSync.resume()
+                        },
+                        onInterrupt: {
+                            await remoteSync.interrupt()
+                        },
+                        onHide: {
+                            await remoteSync.hideCard()
+                        }
+                    )
+                    .toolbar(selection.isSelectionMode ? .hidden : .automatic, for: .tabBar)
+                }
+        }
+    }
+
+    // MARK: - Collection detail
+
+    /// Opened collections push a detail page (iOS navigation instead of the
+    /// Android in-place switch); the content views scope themselves through
+    /// `organizer.selectedCollection`.
+    private var collectionDetailBinding: Binding<Bool> {
+        Binding(
+            get: { organizer.selectedCollectionID != nil },
+            set: { isPresented in
+                if !isPresented {
+                    organizer.closeCollection()
+                }
+            }
+        )
+    }
+
+    private var collectionDetail: some View {
+        content
+            .searchable(
+                text: $organizer.filter.searchText,
+                prompt: L10n.string("favorites.search.placeholder")
+            )
+            .navigationTitle(
+                selection.isSelectionMode
+                    ? L10n.string("favorites.selected_count", selection.selectedEntryCount)
+                    : (organizer.selectedCollection?.name ?? "")
+            )
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                if selection.isSelectionMode {
+                    selectionToolbarContent
+                } else {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        collectionDetailMenu
+                    }
+                }
+            }
+            .toolbar(selection.isSelectionMode ? .hidden : .automatic, for: .tabBar)
+            .safeAreaInset(edge: .bottom) {
+                if selection.isSelectionMode {
+                    LocalFavoriteSelectionActionBar(
+                        organizer: organizer,
+                        selection: selection,
+                        routes: routes
+                    )
+                }
+            }
+            .forumTransientMessage(organizer.transientMessage) {
+                organizer.transientMessage = nil
+            }
+    }
+
+    /// Collection actions in the detail page's toolbar (the in-content header
+    /// is gone: the navigation bar already shows back and title).
+    @ViewBuilder
+    private var collectionDetailMenu: some View {
+        if let collection = organizer.selectedCollection {
+            Menu {
+                Button {
+                    routes.sheet = .collectionEditor(LocalFavoriteCollectionDraft(collection: collection))
+                } label: {
+                    Label(L10n.string("common.edit"), systemImage: "pencil")
+                }
+                Button {
+                    selection.enterSelectionMode()
+                } label: {
+                    Label(L10n.string("common.select"), systemImage: "checkmark.circle")
+                }
+                Menu {
+                    ForEach(organizer.categories.manualOrderSorted) { category in
+                        Button {
+                            Task { await organizer.moveCollection(id: collection.id, toCategoryID: category.id) }
+                        } label: {
+                            if category.id == collection.categoryID {
+                                Label(category.displayName, systemImage: "checkmark")
+                            } else {
+                                Text(category.displayName)
+                            }
+                        }
+                        .disabled(category.id == collection.categoryID)
+                    }
+                } label: {
+                    Label(L10n.string("favorites.category.select"), systemImage: "folder")
+                }
+                Divider()
+                Button(role: .destructive) {
+                    routes.dialog = .dissolveCollection(collection)
+                } label: {
+                    Label(L10n.string("favorites.dissolve"), systemImage: "folder.badge.minus")
+                }
+            } label: {
+                Image(systemName: "ellipsis.circle")
+            }
+            .accessibilityLabel(L10n.string("common.more"))
         }
     }
 
@@ -130,10 +258,12 @@ struct LocalFavoritesOrganizationView: View {
     // MARK: - Status cards
 
     private var showsTopStatusCards: Bool {
-        if let snapshot = remoteSync.snapshot, !snapshot.isHiddenFromFavoritePage {
-            return true
-        }
-        return updateMonitor.snapshot != nil
+        guard let snapshot = remoteSync.snapshot else { return false }
+        return !snapshot.isHiddenFromFavoritePage
+    }
+
+    private var unreadUpdateCount: Int {
+        updateMonitor.events.filter { $0.readAt == nil }.count
     }
 
     private var statusCards: some View {
@@ -142,12 +272,12 @@ struct LocalFavoritesOrganizationView: View {
                 FavoriteRemoteSyncStatusCard(
                     snapshot: snapshot,
                     onOpen: {
-                        routes.sheet = .remoteSyncProgress
+                        routes.isSyncProgressPushed = true
                     },
                     onResume: {
                         Task {
                             if await remoteSync.resume() != nil {
-                                routes.sheet = .remoteSyncProgress
+                                routes.isSyncProgressPushed = true
                             }
                         }
                     },
@@ -156,20 +286,6 @@ struct LocalFavoritesOrganizationView: View {
                     },
                     onHide: {
                         Task { await remoteSync.hideCard() }
-                    }
-                )
-            }
-            if let snapshot = updateMonitor.snapshot {
-                FavoriteUpdateStatusCard(
-                    snapshot: snapshot,
-                    eventCount: updateMonitor.events.count,
-                    onOpenEvents: { routes.sheet = .updateEvents },
-                    onOpenFilters: { routes.sheet = .updateFilters },
-                    onStart: {
-                        Task { _ = await updateMonitor.startCheck() }
-                    },
-                    onInterrupt: {
-                        Task { await updateMonitor.interrupt() }
                     }
                 )
             }
@@ -183,116 +299,124 @@ struct LocalFavoritesOrganizationView: View {
 
     @ToolbarContentBuilder
     private var favoriteToolbarContent: some ToolbarContent {
-        if selection.isSearchMode {
-            ToolbarItem(placement: .cancellationAction) {
-                Button {
-                    organizer.exitSearchMode()
-                } label: {
-                    Image(systemName: "chevron.left")
-                }
-                .accessibilityLabel(L10n.string("common.back"))
-            }
-            ToolbarItem(placement: .principal) {
-                TextField(L10n.string("favorites.search.placeholder"), text: $selection.searchDraftText)
-                    .textFieldStyle(.roundedBorder)
-                    .submitLabel(.search)
-                    .focused($searchFieldFocused)
-                    .onSubmit { organizer.submitSearch() }
-            }
-            ToolbarItem(placement: .confirmationAction) {
-                Button {
-                    organizer.submitSearch()
-                } label: {
-                    Text(L10n.string("common.search"))
-                }
-            }
+        if selection.isSelectionMode {
+            selectionToolbarContent
         } else {
-            ToolbarItem(placement: .topBarTrailing) {
-                favoriteMoreMenu
-            }
+            normalToolbarContent
         }
     }
 
+    /// Selection mode: one select-all/invert menu on the leading edge and a
+    /// done button on the trailing edge (the bottom bar holds the actions).
+    @ToolbarContentBuilder
+    private var selectionToolbarContent: some ToolbarContent {
+        ToolbarItem(placement: .topBarLeading) {
+            Menu {
+                Button {
+                    organizer.selectAllVisible()
+                } label: {
+                    Label(L10n.string("common.select_all"), systemImage: "checkmark.circle")
+                }
+                Button {
+                    organizer.invertVisibleSelection()
+                } label: {
+                    Label(L10n.string("common.invert_selection"), systemImage: "arrow.triangle.2.circlepath")
+                }
+            } label: {
+                Image(systemName: "checklist")
+            }
+            .accessibilityLabel(L10n.string("common.select_all"))
+        }
+        ToolbarItem(placement: .topBarTrailing) {
+            Button(L10n.string("common.done")) {
+                selection.exitSelectionMode()
+            }
+            .fontWeight(.semibold)
+        }
+    }
+
+    @ToolbarContentBuilder
+    private var normalToolbarContent: some ToolbarContent {
+        ToolbarItem(placement: .topBarTrailing) {
+            Button {
+                routes.isUpdatesPagePushed = true
+            } label: {
+                Image(systemName: "bell")
+                    .overlay(alignment: .topTrailing) {
+                        if unreadUpdateCount > 0 {
+                            Text("\(min(unreadUpdateCount, 99))")
+                                .font(.system(size: 9, weight: .bold))
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 3.5)
+                                .padding(.vertical, 1.5)
+                                .background(.red, in: Capsule())
+                                .offset(x: 8, y: -6)
+                        }
+                    }
+            }
+            .accessibilityLabel(L10n.string("favorites.updates.title"))
+        }
+        ToolbarItem(placement: .topBarTrailing) {
+            Button {
+                routes.sheet = .filters
+            } label: {
+                Image(systemName: organizer.filter.hasActiveFilters
+                    ? "line.3.horizontal.decrease.circle.fill"
+                    : "line.3.horizontal.decrease.circle")
+            }
+            .tint(organizer.filter.hasActiveFilters ? Color.accentColor : nil)
+            .accessibilityLabel(L10n.string("favorites.filter.title"))
+        }
+        ToolbarItem(placement: .topBarTrailing) {
+            favoriteMoreMenu
+        }
+    }
+
+    /// Slim overflow menu: view options, organization management, selection,
+    /// and the Yamibo sync entry (a running sync opens its progress directly).
+    /// The update-check entries stay here until the dedicated updates page
+    /// (bell entry) lands.
     private var favoriteMoreMenu: some View {
         Menu {
-            Button {
-                organizer.enterSearchMode()
-            } label: {
-                Label(L10n.string("common.search"), systemImage: "magnifyingglass")
-            }
-            Picker(L10n.string("favorites.sort"), selection: sortOrderBinding) {
-                ForEach(LocalFavoriteLibrarySortOrder.allCases) { order in
-                    Text(order.title)
-                        .tag(order)
+            Section {
+                Toggle(isOn: showsCategoryCountsBinding) {
+                    Label(L10n.string("favorites.category.show_counts"), systemImage: "number.circle")
                 }
             }
-            Toggle(isOn: sortDescendingBinding) {
-                Label(L10n.string("favorites.sort.descending"), systemImage: "arrow.down")
-            }
-            Picker(L10n.string("favorites.layout"), selection: layoutModeBinding) {
-                ForEach(FavoriteLibraryLayoutMode.allCases) { mode in
-                    Label(mode.title, systemImage: mode.systemImageName)
-                        .tag(mode)
-                }
-            }
-            Toggle(isOn: showsCategoryCountsBinding) {
-                Label(L10n.string("favorites.category.show_counts"), systemImage: "number.circle")
-            }
-            LocalFavoriteSourceGroupPicker(
-                sourceGroupFilter: $organizer.filter.sourceGroupFilter,
-                sourceGroupEntryCounts: organizer.derived.sourceGroupEntryCounts,
-                showsCounts: organizer.display.showsCategoryCounts
-            )
-            LocalFavoriteTagFilterMenu(
-                tags: organizer.tags,
-                selectedTagIDs: $organizer.filter.selectedTagIDs,
-                onManageTags: {
-                    routes.sheet = .tagSelection(.filter(organizer.filter.selectedTagIDs))
-                }
-            )
-            Button {
-                selection.enterSelectionMode()
-            } label: {
-                Label(L10n.string("common.select"), systemImage: "checkmark.circle")
-            }
-            Button {
-                routes.sheet = .collectionEditor(LocalFavoriteCollectionDraft(mode: .create))
-            } label: {
-                Label(L10n.string("favorites.create_collection"), systemImage: "folder.badge.plus")
-            }
-            Button {
-                routes.sheet = .remoteSyncCategory
-            } label: {
-                Label(L10n.string("favorites.sync.start"), systemImage: "arrow.triangle.2.circlepath")
-            }
-            if remoteSync.snapshot != nil {
+            Section {
                 Button {
-                    routes.sheet = .remoteSyncProgress
+                    routes.sheet = .categoryName(LocalFavoriteCategoryNameDraft(mode: .create))
                 } label: {
-                    Label(L10n.string("favorites.sync.progress.open"), systemImage: "list.bullet.rectangle")
-                }
-            }
-            Button {
-                Task { _ = await updateMonitor.startCheck() }
-            } label: {
-                Label(L10n.string("favorites.updates.check"), systemImage: "arrow.clockwise.circle")
-            }
-            if updateMonitor.snapshot != nil {
-                Button {
-                    routes.sheet = .updateEvents
-                } label: {
-                    Label(L10n.string("favorites.updates.events"), systemImage: "bell.badge")
+                    Label(L10n.string("favorites.category.create"), systemImage: "plus")
                 }
                 Button {
-                    routes.sheet = .updateFilters
+                    routes.sheet = .categoryManagement
                 } label: {
-                    Label(L10n.string("favorites.updates.filters"), systemImage: "line.3.horizontal.decrease.circle")
+                    Label(L10n.string("favorites.category.manage"), systemImage: "slider.horizontal.3")
+                }
+                Button {
+                    routes.sheet = .collectionEditor(LocalFavoriteCollectionDraft(mode: .create))
+                } label: {
+                    Label(L10n.string("favorites.create_collection"), systemImage: "folder.badge.plus")
                 }
             }
-            Button {
-                Task { _ = await remoteSync.start(targetCategoryID: organizer.selectedCategoryID) }
-            } label: {
-                Label(L10n.string("common.refresh"), systemImage: "arrow.clockwise")
+            Section {
+                Button {
+                    selection.enterSelectionMode()
+                } label: {
+                    Label(L10n.string("common.select"), systemImage: "checkmark.circle")
+                }
+            }
+            Section {
+                Button {
+                    if remoteSync.snapshot?.status == .running {
+                        routes.isSyncProgressPushed = true
+                    } else {
+                        routes.sheet = .remoteSyncCategory
+                    }
+                } label: {
+                    Label(L10n.string("favorites.sync.start"), systemImage: "arrow.triangle.2.circlepath")
+                }
             }
         } label: {
             Image(systemName: "ellipsis.circle")
@@ -301,27 +425,6 @@ struct LocalFavoritesOrganizationView: View {
     }
 
     // MARK: - Preference bindings
-
-    private var sortOrderBinding: Binding<LocalFavoriteLibrarySortOrder> {
-        Binding(
-            get: { organizer.filter.sortOrder },
-            set: { organizer.updateSortOrder($0) }
-        )
-    }
-
-    private var sortDescendingBinding: Binding<Bool> {
-        Binding(
-            get: { organizer.filter.sortDescending },
-            set: { organizer.updateSortDescending($0) }
-        )
-    }
-
-    private var layoutModeBinding: Binding<FavoriteLibraryLayoutMode> {
-        Binding(
-            get: { organizer.display.layoutMode },
-            set: { organizer.updateLayoutMode($0) }
-        )
-    }
 
     private var showsCategoryCountsBinding: Binding<Bool> {
         Binding(

@@ -1,86 +1,87 @@
 import SwiftUI
 import YamiboReaderCore
 
-/// Bottom action bar shown while multi-selection is active.
+/// Floating bottom action bar shown while multi-selection is active, in a
+/// Liquid Glass container (material fallback below iOS 26). Select-all/invert
+/// live in the top-leading toolbar menu and done in the top-trailing button;
+/// this bar carries the actions, always visible and disabled when the current
+/// selection cannot use them.
 struct LocalFavoriteSelectionActionBar: View {
     @ObservedObject var organizer: FavoriteLibraryOrganizer
     @ObservedObject var selection: LocalFavoriteBrowseSession
     let routes: LocalFavoritesRoutes
 
     var body: some View {
-        VStack(spacing: 8) {
-            HStack {
-                Text(L10n.string("favorites.selected_count", selection.selectedEntryCount))
-                    .font(.subheadline.weight(.semibold))
-                Spacer()
-                Button(L10n.string("common.done")) {
-                    selection.exitSelectionMode()
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 10) {
+                Button {
+                    routes.sheet = .selectionMove
+                } label: {
+                    Label(L10n.string("common.move"), systemImage: "folder")
                 }
-                .buttonStyle(.borderless)
-            }
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 10) {
-                    Button {
-                        organizer.selectAllVisible()
-                    } label: {
-                        Label(L10n.string("common.select_all"), systemImage: "checkmark.circle")
-                    }
-                    Button {
-                        organizer.invertVisibleSelection()
-                    } label: {
-                        Label(L10n.string("common.invert_selection"), systemImage: "arrow.triangle.2.circlepath")
-                    }
-                    Button {
-                        routes.sheet = .selectionMove
-                    } label: {
-                        Label(L10n.string("common.move"), systemImage: "folder")
-                    }
-                    .disabled(selection.selectedEntryCount == 0)
-                    Button {
-                        routes.sheet = .collectionEditor(LocalFavoriteCollectionDraft(mode: .createFromSelection))
-                    } label: {
-                        Label(L10n.string("favorites.create_collection"), systemImage: "folder.badge.plus")
-                    }
-                    .disabled(!selection.canCreateCollectionFromSelection)
-                    Button {
-                        routes.sheet = .tagSelection(.selection(organizer.commonTagIDsForSelection))
-                    } label: {
-                        Label(L10n.string("favorites.tags_action"), systemImage: "tag")
-                    }
-                    .disabled(selection.selectedFavoriteCount == 0)
-                    if let collection = organizer.singleSelectedCollection, selection.selectedFavoriteCount == 0 {
-                        Button {
-                            routes.sheet = .collectionEditor(LocalFavoriteCollectionDraft(collection: collection))
-                        } label: {
-                            Label(L10n.string("common.edit"), systemImage: "pencil")
-                        }
-                    }
-                    Button {
-                        routes.dialog = .dissolveSelectedCollections
-                    } label: {
-                        Label(L10n.string("favorites.dissolve"), systemImage: "folder.badge.minus")
-                    }
-                    .disabled(selection.selectedCollectionCount == 0)
-                    Button(role: .destructive) {
-                        routes.dialog = .deleteSelection
-                    } label: {
-                        Label(L10n.string("common.delete"), systemImage: "trash")
-                    }
-                    .disabled(selection.selectedEntryCount == 0)
-                    Button {
-                        selection.clearSelection()
-                    } label: {
-                        Label(L10n.string("common.clear"), systemImage: "xmark.circle")
-                    }
-                    .disabled(selection.selectedEntryCount == 0)
+                .disabled(selection.selectedFavoriteCount == 0)
+
+                Button {
+                    routes.sheet = .collectionEditor(LocalFavoriteCollectionDraft(mode: .createFromSelection))
+                } label: {
+                    Label(L10n.string("favorites.create_collection"), systemImage: "folder.badge.plus")
                 }
-                .buttonStyle(.bordered)
+                .disabled(!selection.canCreateCollectionFromSelection)
+
+                Button {
+                    routes.sheet = .tagSelection(.selection(organizer.commonTagIDsForSelection))
+                } label: {
+                    Label(L10n.string("favorites.tags_action"), systemImage: "tag")
+                }
+                .disabled(selection.selectedFavoriteCount == 0)
+
+                Button {
+                    if let collection = organizer.singleSelectedCollection {
+                        routes.sheet = .collectionEditor(LocalFavoriteCollectionDraft(collection: collection))
+                    }
+                } label: {
+                    Label(L10n.string("common.edit"), systemImage: "pencil")
+                }
+                .disabled(organizer.singleSelectedCollection == nil || selection.selectedFavoriteCount > 0)
+
+                Button {
+                    routes.dialog = .dissolveSelectedCollections
+                } label: {
+                    Label(L10n.string("favorites.dissolve"), systemImage: "folder.badge.minus")
+                }
+                .disabled(selection.selectedCollectionCount == 0 || selection.selectedFavoriteCount > 0)
+
+                Button(role: .destructive) {
+                    routes.dialog = .deleteSelection
+                } label: {
+                    Label(L10n.string("common.delete"), systemImage: "trash")
+                }
+                .disabled(selection.selectedEntryCount == 0)
             }
+            .buttonStyle(.bordered)
+            .buttonBorderShape(.capsule)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
         }
-        .padding(.horizontal)
-        .padding(.top, 10)
-        .padding(.bottom, 8)
-        .background(.bar)
+        .modifier(LocalFavoriteGlassBarBackground())
+        .padding(.horizontal, 12)
+        .padding(.bottom, 4)
+    }
+}
+
+/// Liquid Glass container with a material fallback for pre-iOS-26 systems.
+private struct LocalFavoriteGlassBarBackground: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(iOS 26.0, *) {
+            content.glassEffect(.regular, in: .capsule)
+        } else {
+            content
+                .background(.regularMaterial, in: Capsule())
+                .overlay {
+                    Capsule()
+                        .stroke(.quaternary, lineWidth: 0.5)
+                }
+        }
     }
 }
 

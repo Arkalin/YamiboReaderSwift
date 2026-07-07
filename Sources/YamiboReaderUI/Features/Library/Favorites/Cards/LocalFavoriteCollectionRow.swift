@@ -1,11 +1,13 @@
 import SwiftUI
 import YamiboReaderCore
 
-/// One collection row in the list layouts.
+/// One collection row in the list layouts, mixed into the same section as
+/// the favorite item rows.
 struct LocalFavoriteCollectionRow: View {
     let collection: LocalFavoriteCollection
     let itemCount: Int
     let categories: [FavoriteCategory]
+    let showsCover: Bool
     let isSelectionMode: Bool
     let isSelected: Bool
     let previewCoverURLs: [URL]
@@ -17,13 +19,45 @@ struct LocalFavoriteCollectionRow: View {
     let onMoveToCategory: (String) async -> Void
 
     var body: some View {
+        Button {
+            if isSelectionMode {
+                onToggleSelection()
+            } else {
+                onOpen()
+            }
+        } label: {
+            rowContent
+        }
+        .buttonStyle(.plain)
+        .contextMenu {
+            if !isSelectionMode {
+                LocalFavoriteCollectionContextMenu(
+                    collection: collection,
+                    categories: categories,
+                    onSelect: onToggleSelection,
+                    onEdit: onEdit,
+                    onDissolve: onDissolve,
+                    onMove: onMove,
+                    onMoveToCategory: onMoveToCategory
+                )
+            }
+        }
+    }
+
+    private var rowContent: some View {
         HStack(spacing: 12) {
-            LocalFavoriteCollectionCoverPreview(
-                color: collection.color.swiftUIColor,
-                coverURLs: previewCoverURLs
-            )
             if isSelectionMode {
                 LocalFavoriteSelectionIndicator(isSelected: isSelected)
+            }
+            if showsCover {
+                // Matches the item row's cover box so collection and
+                // favorite rows come out the same height.
+                LocalFavoriteCollectionCoverPreview(
+                    color: collection.color.swiftUIColor,
+                    title: collection.name,
+                    coverURLs: previewCoverURLs
+                )
+                .frame(width: 92, height: 128)
             }
             VStack(alignment: .leading, spacing: 4) {
                 Text(collection.name)
@@ -34,30 +68,19 @@ struct LocalFavoriteCollectionRow: View {
                     .foregroundStyle(.secondary)
             }
             Spacer(minLength: 8)
-            if !isSelectionMode {
-                LocalFavoriteCollectionMenu(
-                    collection: collection,
-                    categories: categories,
-                    onEdit: onEdit,
-                    onDissolve: onDissolve,
-                    onMove: onMove,
-                    onMoveToCategory: onMoveToCategory
-                )
-            }
+            Image(systemName: "chevron.right")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.tertiary)
         }
         .contentShape(Rectangle())
-        .onTapGesture {
-            if isSelectionMode {
-                onToggleSelection()
-            } else {
-                onOpen()
-            }
-        }
+        .padding(.vertical, 4)
     }
 }
 
-/// One collection card in the grid layouts.
-struct LocalFavoriteCollectionCard: View {
+/// One collection cell in the grid layouts: mixed into the same grid as item
+/// cards (collections first), with the width-filling 2x2 mosaic on top and
+/// the collection color as border tint (Android CollectionCardUi parity).
+struct LocalFavoriteCollectionGridCard: View {
     let collection: LocalFavoriteCollection
     let itemCount: Int
     let categories: [FavoriteCategory]
@@ -73,38 +96,29 @@ struct LocalFavoriteCollectionCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .top, spacing: 10) {
-                LocalFavoriteCollectionCoverPreview(
-                    color: collection.color.swiftUIColor,
-                    coverURLs: previewCoverURLs
-                )
-                if isSelectionMode {
-                    LocalFavoriteSelectionIndicator(isSelected: isSelected)
-                }
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(collection.name)
-                        .font(.subheadline.weight(.semibold))
-                        .lineLimit(2)
-                    Text(L10n.string("favorites.collection_summary", itemCount))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                Spacer(minLength: 0)
-                if !isSelectionMode {
-                    LocalFavoriteCollectionMenu(
-                        collection: collection,
-                        categories: categories,
-                        onEdit: onEdit,
-                        onDissolve: onDissolve,
-                        onMove: onMove,
-                        onMoveToCategory: onMoveToCategory
-                    )
-                }
+            if isSelectionMode {
+                LocalFavoriteSelectionIndicator(isSelected: isSelected)
             }
+            LocalFavoriteCollectionMosaic(
+                color: collection.color.swiftUIColor,
+                title: collection.name,
+                coverURLs: previewCoverURLs
+            )
+            Text(collection.name)
+                .font(.subheadline.weight(.semibold))
+                .lineLimit(1)
+            Text(L10n.string("favorites.collection_summary", itemCount))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Spacer(minLength: 0)
         }
         .padding(10)
-        .frame(maxWidth: .infinity, minHeight: 84, alignment: .topLeading)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
         .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(collection.color.swiftUIColor.opacity(0.45), lineWidth: 1.5)
+        }
         .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         .onTapGesture {
             if isSelectionMode {
@@ -113,56 +127,68 @@ struct LocalFavoriteCollectionCard: View {
                 onOpen()
             }
         }
+        .contextMenu {
+            if !isSelectionMode {
+                LocalFavoriteCollectionContextMenu(
+                    collection: collection,
+                    categories: categories,
+                    onSelect: onToggleSelection,
+                    onEdit: onEdit,
+                    onDissolve: onDissolve,
+                    onMove: onMove,
+                    onMoveToCategory: onMoveToCategory
+                )
+            }
+        }
     }
 }
 
-/// Shared context menu for collection rows and cards.
-struct LocalFavoriteCollectionMenu: View {
+/// Shared context-menu content for collection rows and cards.
+struct LocalFavoriteCollectionContextMenu: View {
     let collection: LocalFavoriteCollection
     let categories: [FavoriteCategory]
+    let onSelect: () -> Void
     let onEdit: () -> Void
     let onDissolve: () -> Void
     let onMove: (CategoryMoveDirection) async -> Void
     let onMoveToCategory: (String) async -> Void
 
     var body: some View {
+        Button(action: onEdit) {
+            Label(L10n.string("common.edit"), systemImage: "pencil")
+        }
+        Button(action: onSelect) {
+            Label(L10n.string("common.select"), systemImage: "checkmark.circle")
+        }
+        Button {
+            Task { await onMove(.up) }
+        } label: {
+            Label(L10n.string("favorites.category.move_up"), systemImage: "arrow.up")
+        }
+        Button {
+            Task { await onMove(.down) }
+        } label: {
+            Label(L10n.string("favorites.category.move_down"), systemImage: "arrow.down")
+        }
         Menu {
-            Button(action: onEdit) {
-                Label(L10n.string("common.edit"), systemImage: "pencil")
-            }
-            Button {
-                Task { await onMove(.up) }
-            } label: {
-                Label(L10n.string("favorites.category.move_up"), systemImage: "arrow.up")
-            }
-            Button {
-                Task { await onMove(.down) }
-            } label: {
-                Label(L10n.string("favorites.category.move_down"), systemImage: "arrow.down")
-            }
-            Menu {
-                ForEach(categories.manualOrderSorted) { category in
-                    Button {
-                        Task { await onMoveToCategory(category.id) }
-                    } label: {
-                        if category.id == collection.categoryID {
-                            Label(category.displayName, systemImage: "checkmark")
-                        } else {
-                            Text(category.displayName)
-                        }
+            ForEach(categories.manualOrderSorted) { category in
+                Button {
+                    Task { await onMoveToCategory(category.id) }
+                } label: {
+                    if category.id == collection.categoryID {
+                        Label(category.displayName, systemImage: "checkmark")
+                    } else {
+                        Text(category.displayName)
                     }
-                    .disabled(category.id == collection.categoryID)
                 }
-            } label: {
-                Label(L10n.string("favorites.category.select"), systemImage: "folder")
-            }
-            Button(role: .destructive, action: onDissolve) {
-                Label(L10n.string("favorites.dissolve"), systemImage: "folder.badge.minus")
+                .disabled(category.id == collection.categoryID)
             }
         } label: {
-            Image(systemName: "ellipsis")
-                .frame(width: 32, height: 32)
+            Label(L10n.string("favorites.category.select"), systemImage: "folder")
         }
-        .accessibilityLabel(L10n.string("common.more"))
+        Divider()
+        Button(role: .destructive, action: onDissolve) {
+            Label(L10n.string("favorites.dissolve"), systemImage: "folder.badge.minus")
+        }
     }
 }

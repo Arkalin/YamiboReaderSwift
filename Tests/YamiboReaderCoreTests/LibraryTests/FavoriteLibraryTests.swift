@@ -96,23 +96,25 @@ import Testing
     #expect(loadedItem.tagIDs == [tag.id])
 }
 
-@Test func remoteFavoriteMappingDoesNotDecideLocalItemExistence() throws {
+@Test func updateRemoteMappingRefreshesKnownValuesAndKeepsPreviousOnNil() throws {
     let target = FavoriteContentTarget(kind: .normalThread, threadID: "324")
     var document = FavoriteLibraryDocument()
     let item = try FavoriteItem(
         target: target,
         title: "本地收藏",
-        remoteMapping: FavoriteRemoteMapping(yamiboFavoriteID: "remote-324"),
+        remoteMapping: FavoriteRemoteMapping(yamiboFavoriteID: "remote-324", yamiboRemoteOrder: 5),
         locations: [.category(document.defaultCategory.id)]
     )
     document.addItem(item)
 
-    document.markRemoteMappingMissing(for: target, date: Date(timeIntervalSince1970: 200))
+    let date = Date(timeIntervalSince1970: 200)
+    document.updateRemoteMapping(for: target, yamiboFavoriteID: nil, yamiboRemoteOrder: 7, date: date)
 
     let remaining = try #require(document.items.first)
     #expect(remaining.id == target.id)
     #expect(remaining.remoteMapping?.yamiboFavoriteID == "remote-324")
-    #expect(remaining.remoteMapping?.isMarkedRemoteMissing == true)
+    #expect(remaining.remoteMapping?.yamiboRemoteOrder == 7)
+    #expect(remaining.remoteMapping?.lastSeenAt == date)
 }
 
 @Test func grdbFavoriteLibraryPersistsStructuredTidFirstLibraryAndIgnoresLegacyJSON() async throws {

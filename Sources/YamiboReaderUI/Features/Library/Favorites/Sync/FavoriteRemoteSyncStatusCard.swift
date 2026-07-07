@@ -61,11 +61,28 @@ struct FavoriteRemoteSyncStatusCard: View {
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 
+    /// Coarse overall progress across the five phases: fetch 5–35%,
+    /// import 35–75%, upload 75–95%, reconcile 95%.
     private var progressValue: Double {
-        guard let total = snapshot.totalRemoteCount, total > 0 else {
-            return snapshot.status == .running ? 0.1 : 1
+        func fraction(_ completed: Int, _ total: Int) -> Double {
+            total > 0 ? min(1, Double(completed) / Double(total)) : 0
         }
-        return min(1, Double(snapshot.scannedCount) / Double(total))
+        switch snapshot.phase {
+        case .queued, .preparing:
+            return 0.05
+        case .fetching:
+            let pages = fraction(snapshot.currentPage ?? 0, snapshot.totalPages ?? 0)
+            return 0.05 + 0.3 * pages
+        case .importing:
+            let handled = snapshot.importedCount + snapshot.skippedCount + snapshot.failedCount
+            return 0.35 + 0.4 * fraction(handled, snapshot.scannedCount)
+        case .uploading:
+            return 0.75 + 0.2 * fraction(snapshot.uploadedCount, snapshot.uploadTargetCount)
+        case .reconciling:
+            return 0.95
+        case .completed, .failed, .interrupted:
+            return 1
+        }
     }
 
     private var statusTitle: String {

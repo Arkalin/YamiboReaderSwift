@@ -32,10 +32,12 @@
 	<key>BGTaskSchedulerPermittedIdentifiers</key>
 	<array>
 		<string>com.arkalin.YamiboReader.mangaOfflineCache.continuedProcessing.*</string>
+		<string>com.arkalin.YamiboReader.favoriteUpdates.refresh</string>
 	</array>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>processing</string>
+		<string>fetch</string>
 	</array>
 	<key>UIApplicationSceneManifest</key>
 	<dict>

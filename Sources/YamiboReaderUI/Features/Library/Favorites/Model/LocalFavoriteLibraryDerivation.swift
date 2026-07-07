@@ -4,7 +4,7 @@ import YamiboReaderCore
 /// Filter and sort inputs for the favorites library. Any change to this value
 /// triggers one full re-derivation of `LocalFavoriteDerivedState`.
 struct LocalFavoriteFilterState: Equatable {
-    var sourceGroupFilter: LocalFavoriteLibrarySourceGroupFilter = .all
+    var selectedSourceFilters: Set<LocalFavoriteSourceFilter> = []
     var selectedTagIDs: Set<String> = []
     var sortOrder: LocalFavoriteLibrarySortOrder = .organization
     var sortDescending = false
@@ -12,8 +12,7 @@ struct LocalFavoriteFilterState: Equatable {
 
     /// Whether a source-group or tag filter is narrowing the library view.
     var hasActiveFilters: Bool {
-        if case .group = sourceGroupFilter { return true }
-        return !selectedTagIDs.isEmpty
+        !selectedSourceFilters.isEmpty || !selectedTagIDs.isEmpty
     }
 }
 
@@ -30,7 +29,10 @@ struct LocalFavoriteDerivedState: Equatable {
     var visibleCollections: [LocalFavoriteCollection] = []
     var categoryEntryCounts: [String: Int] = [:]
     var collectionEntryCounts: [String: Int] = [:]
-    var sourceGroupEntryCounts: [FavoriteSourceGroup: Int] = [:]
+    var sourceFilterEntryCounts: [LocalFavoriteSourceFilter: Int] = [:]
+    /// Up to four cover URLs per visible collection for the preview mosaic,
+    /// resolved from the collection's own members (not the filtered cards).
+    var collectionPreviewCoverURLs: [String: [URL]] = [:]
 }
 
 /// Pure computation: (document, navigation, filter, progress, covers) -> derived state.
@@ -52,7 +54,7 @@ enum LocalFavoriteLibraryDerivation {
             query: LocalFavoriteLibraryQuery(
                 categoryID: inputs.selectedCategoryID,
                 collectionID: inputs.selectedCollectionID,
-                sourceGroupFilter: inputs.filter.sourceGroupFilter,
+                selectedSourceFilters: inputs.filter.selectedSourceFilters,
                 selectedTagIDs: inputs.filter.selectedTagIDs,
                 sortOrder: inputs.filter.sortOrder,
                 sortsDescending: inputs.filter.sortDescending,
@@ -60,17 +62,19 @@ enum LocalFavoriteLibraryDerivation {
             ),
             inputs: inputs
         )
+        let collectionCounts = collectionEntryCounts(inputs)
         return LocalFavoriteDerivedState(
             cards: cards,
             visibleCollections: visibleCollections(
                 in: inputs.document,
                 categoryID: inputs.selectedCategoryID,
                 filter: inputs.filter,
-                filteredCards: cards
+                collectionEntryCounts: collectionCounts
             ),
-            categoryEntryCounts: categoryEntryCounts(inputs),
-            collectionEntryCounts: collectionEntryCounts(inputs),
-            sourceGroupEntryCounts: sourceGroupEntryCounts(inputs)
+            categoryEntryCounts: categoryEntryCounts(inputs, collectionEntryCounts: collectionCounts),
+            collectionEntryCounts: collectionCounts,
+            sourceFilterEntryCounts: sourceFilterEntryCounts(inputs),
+            collectionPreviewCoverURLs: collectionPreviewCoverURLs(inputs)
         )
     }
 
@@ -95,13 +99,16 @@ enum LocalFavoriteLibraryDerivation {
 
     // MARK: - Counts
 
-    private static func categoryEntryCounts(_ inputs: Inputs) -> [String: Int] {
+    private static func categoryEntryCounts(
+        _ inputs: Inputs,
+        collectionEntryCounts: [String: Int]
+    ) -> [String: Int] {
         Dictionary(uniqueKeysWithValues: inputs.document.categories.map { category in
             let cards = resolvedCards(
                 in: inputs.document,
                 query: LocalFavoriteLibraryQuery(
                     categoryID: category.id,
-                    sourceGroupFilter: inputs.filter.sourceGroupFilter,
+                    selectedSourceFilters: inputs.filter.selectedSourceFilters,
                     selectedTagIDs: inputs.filter.selectedTagIDs,
                     sortOrder: .organization,
                     searchText: inputs.filter.searchText
@@ -112,7 +119,7 @@ enum LocalFavoriteLibraryDerivation {
                 in: inputs.document,
                 categoryID: category.id,
                 filter: inputs.filter,
-                filteredCards: cards
+                collectionEntryCounts: collectionEntryCounts
             )
             return (category.id, cards.count + collections.count)
         })
@@ -125,7 +132,7 @@ enum LocalFavoriteLibraryDerivation {
                 query: LocalFavoriteLibraryQuery(
                     categoryID: collection.categoryID,
                     collectionID: collection.id,
-                    sourceGroupFilter: inputs.filter.sourceGroupFilter,
+                    selectedSourceFilters: inputs.filter.selectedSourceFilters,
                     selectedTagIDs: inputs.filter.selectedTagIDs,
                     sortOrder: .organization,
                     searchText: inputs.filter.searchText
@@ -136,13 +143,25 @@ enum LocalFavoriteLibraryDerivation {
         })
     }
 
-    private static func sourceGroupEntryCounts(_ inputs: Inputs) -> [FavoriteSourceGroup: Int] {
+    private static func collectionPreviewCoverURLs(_ inputs: Inputs) -> [String: [URL]] {
+        Dictionary(uniqueKeysWithValues: inputs.document.collections.map { collection in
+            let location = FavoriteLocation.collection(categoryID: collection.categoryID, collectionID: collection.id)
+            let urls = inputs.document.items
+                .filter { $0.locations.contains(location) }
+                .sorted { $0.updatedAt > $1.updatedAt }
+                .compactMap { inputs.contentCoverURLsByTargetID[$0.target.id] }
+                .prefix(4)
+            return (collection.id, Array(urls))
+        })
+    }
+
+    private static func sourceFilterEntryCounts(_ inputs: Inputs) -> [LocalFavoriteSourceFilter: Int] {
         let allCards = resolvedCards(
             in: inputs.document,
             query: LocalFavoriteLibraryQuery(
                 categoryID: inputs.selectedCategoryID,
                 collectionID: inputs.selectedCollectionID,
-                sourceGroupFilter: .all,
+                selectedSourceFilters: [],
                 selectedTagIDs: inputs.filter.selectedTagIDs,
                 sortOrder: .organization,
                 searchText: inputs.filter.searchText
@@ -150,16 +169,9 @@ enum LocalFavoriteLibraryDerivation {
             inputs: inputs
         )
         return Dictionary(grouping: allCards) { card in
-            canonicalSourceGroup(for: card.item)
+            LocalFavoriteSourceFilter.key(for: card.item)
         }
         .mapValues(\.count)
-    }
-
-    private static func canonicalSourceGroup(for item: FavoriteItem) -> FavoriteSourceGroup {
-        guard let forumID = item.forumID ?? item.sourceGroup.forumID else {
-            return item.sourceGroup
-        }
-        return .forumBoard(id: forumID, label: item.forumName ?? item.sourceGroup.forumName ?? forumID)
     }
 
     // MARK: - Collections
@@ -168,25 +180,24 @@ enum LocalFavoriteLibraryDerivation {
         in document: FavoriteLibraryDocument,
         categoryID: String,
         filter: LocalFavoriteFilterState,
-        filteredCards: [FavoriteCardProjection]
+        collectionEntryCounts: [String: Int]
     ) -> [LocalFavoriteCollection] {
         let trimmedSearch = filter.searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        let nonSearchFiltersAreActive = filter.sourceGroupFilter != .all || !filter.selectedTagIDs.isEmpty
+        let nonSearchFiltersAreActive = !filter.selectedSourceFilters.isEmpty || !filter.selectedTagIDs.isEmpty
         let filtersAreActive = nonSearchFiltersAreActive || !trimmedSearch.isEmpty
         return document.collections
             .filter { collection in
                 guard collection.categoryID == categoryID else { return false }
                 guard filtersAreActive else { return true }
-                let hasMatchingFilteredCard = filteredCards.contains { card in
-                    card.item.locations.contains(
-                        .collection(categoryID: collection.categoryID, collectionID: collection.id)
-                    )
-                }
+                // Filter match judged in the collection's own scope: members
+                // usually carry only the collection location, so the
+                // category-scope card list cannot see them.
+                let hasMatchingMember = (collectionEntryCounts[collection.id] ?? 0) > 0
                 if !trimmedSearch.isEmpty,
                    collection.name.localizedCaseInsensitiveContains(trimmedSearch) {
-                    return !nonSearchFiltersAreActive || hasMatchingFilteredCard
+                    return !nonSearchFiltersAreActive || hasMatchingMember
                 }
-                return hasMatchingFilteredCard
+                return hasMatchingMember
             }
             .sorted { lhs, rhs in
                 if lhs.manualOrder != rhs.manualOrder {

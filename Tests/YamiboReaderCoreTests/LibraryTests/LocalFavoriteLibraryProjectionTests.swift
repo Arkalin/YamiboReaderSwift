@@ -7,20 +7,28 @@ import Testing
 
     let forumCards = LocalFavoriteLibraryProjection.cards(
         in: document,
-        query: LocalFavoriteLibraryQuery(sourceGroupFilter: .group(.forumBoard(id: "fid-1", label: "版块A")))
+        query: LocalFavoriteLibraryQuery(selectedSourceFilters: [.forumBoard(id: "fid-1", label: "版块A")])
     )
     let mangaCards = LocalFavoriteLibraryProjection.cards(
         in: document,
-        query: LocalFavoriteLibraryQuery(sourceGroupFilter: .group(.mangaTitle(cleanBookName: "漫画A")))
+        query: LocalFavoriteLibraryQuery(selectedSourceFilters: [.manga])
     )
     let unknownCards = LocalFavoriteLibraryProjection.cards(
         in: document,
-        query: LocalFavoriteLibraryQuery(sourceGroupFilter: .group(.unknown))
+        query: LocalFavoriteLibraryQuery(selectedSourceFilters: [.unknown])
+    )
+    let combinedCards = LocalFavoriteLibraryProjection.cards(
+        in: document,
+        query: LocalFavoriteLibraryQuery(selectedSourceFilters: [
+            .forumBoard(id: "fid-1", label: "版块A"),
+            .manga,
+        ])
     )
 
     #expect(Set(forumCards.map(\.id)) == [items.normal.id, items.novel.id])
     #expect(mangaCards.map(\.id) == [items.manga.id])
     #expect(unknownCards.map(\.id) == [items.unknown.id])
+    #expect(Set(combinedCards.map(\.id)) == [items.normal.id, items.novel.id, items.manga.id])
 }
 
 @Test func localFavoriteProjectionSortsForumGroupsByExplicitForumName() throws {
@@ -72,7 +80,7 @@ import Testing
 
     let cards = LocalFavoriteLibraryProjection.cards(
         in: document,
-        query: LocalFavoriteLibraryQuery(sourceGroupFilter: .group(.forumBoard(id: "30", label: "新版名")))
+        query: LocalFavoriteLibraryQuery(selectedSourceFilters: [.forumBoard(id: "30", label: "新版名")])
     )
 
     #expect(Set(cards.map(\.id)) == [current.id, legacy.id])
@@ -119,11 +127,11 @@ import Testing
 
     #expect(LocalFavoriteLibraryProjection.supportedSortOrders == [.organization, .contentUpdatedAt, .yamiboRemoteOrder, .displayTitle, .sourceGroup, .lastReadAt])
     #expect(LocalFavoriteLibraryProjection.cards(in: document, query: LocalFavoriteLibraryQuery(sortOrder: .organization)).map(\.id).prefix(2) == [items.novel.id, items.normal.id])
-    #expect(LocalFavoriteLibraryProjection.cards(in: document, query: LocalFavoriteLibraryQuery(sortOrder: .contentUpdatedAt)).map(\.id).prefix(3) == [items.manga.id, items.novel.id, items.normal.id])
+    #expect(LocalFavoriteLibraryProjection.cards(in: document, query: LocalFavoriteLibraryQuery(sortOrder: .contentUpdatedAt)).map(\.id).prefix(3) == [items.normal.id, items.novel.id, items.manga.id])
     #expect(LocalFavoriteLibraryProjection.cards(in: document, query: LocalFavoriteLibraryQuery(sortOrder: .yamiboRemoteOrder)).map(\.id).prefix(2) == [items.novel.id, items.normal.id])
     #expect(LocalFavoriteLibraryProjection.cards(in: document, query: LocalFavoriteLibraryQuery(sortOrder: .displayTitle, sortsDescending: true)).map(\.id).first == items.novel.id)
-    #expect(LocalFavoriteLibraryProjection.cards(in: document, query: LocalFavoriteLibraryQuery(sortOrder: .lastReadAt), readingProgress: progress).map(\.id).prefix(2) == [items.normal.id, items.novel.id])
-    #expect(LocalFavoriteLibraryProjection.cards(in: document, query: LocalFavoriteLibraryQuery(sortOrder: .lastReadAt, sortsDescending: true), readingProgress: progress).map(\.id).suffix(2) == [items.novel.id, items.normal.id])
+    #expect(LocalFavoriteLibraryProjection.cards(in: document, query: LocalFavoriteLibraryQuery(sortOrder: .lastReadAt), readingProgress: progress).map(\.id).prefix(2) == [items.novel.id, items.normal.id])
+    #expect(LocalFavoriteLibraryProjection.cards(in: document, query: LocalFavoriteLibraryQuery(sortOrder: .lastReadAt, sortsDescending: true), readingProgress: progress).map(\.id).suffix(2) == [items.normal.id, items.novel.id])
 }
 
 @Test func localFavoriteProjectionBuildsCardMetadataFromReadingProgressWithoutMutatingItems() throws {

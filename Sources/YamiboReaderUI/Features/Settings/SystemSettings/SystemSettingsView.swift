@@ -30,7 +30,7 @@ public struct SystemSettingsView: View {
         _viewModel = StateObject(wrappedValue: SystemSettingsViewModel(dependencies: dependencies))
         _favoriteRemoteSync = StateObject(wrappedValue: FavoriteRemoteSyncSession(
             libraryStore: dependencies.library.localFavoriteLibraryStore,
-            settingsStore: dependencies.library.settingsStore,
+            runStore: dependencies.library.favoriteSyncRunStore,
             contentCoverStore: dependencies.library.contentCoverStore,
             makeFavoriteRepository: dependencies.library.makeFavoriteRepository,
             makeForumThreadReaderRepository: dependencies.library.makeForumThreadReaderRepository,

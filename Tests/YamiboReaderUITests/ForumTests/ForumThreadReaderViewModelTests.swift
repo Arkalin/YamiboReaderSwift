@@ -28,7 +28,10 @@ import Testing
     await model.load()
     #expect(!model.isFavorited)
 
+    // Default settings ask about the Yamibo push before adding.
     await model.toggleFavorite()
+    #expect(model.favoriteAddPromptPresented)
+    await model.confirmFavoriteAdd(syncToRemote: true, remember: false)
 
     let added = try #require(await fixture.localFavoriteItem())
     #expect(model.isFavorited)
@@ -43,11 +46,61 @@ import Testing
     ))
     #expect(await fixture.favoriteRepository.addedThreadIDs == ["704"])
 
+    // Removing a mapped favorite asks about the remote delete.
     await model.toggleFavorite()
+    let removePrompt = try #require(model.favoriteRemovePrompt)
+    await model.confirmFavoriteRemoval(removePrompt.favorite, removeRemote: true, remember: false)
 
     #expect(!model.isFavorited)
     #expect(await fixture.localFavoriteItem() == nil)
     #expect(await fixture.favoriteRepository.deletedRemoteFavoriteIDs == ["8801"])
+}
+
+@MainActor
+@Test func forumThreadReaderLocalOnlyAddSkipsRemotePushAndRemovesWithoutPrompt() async throws {
+    let fixture = try ForumThreadReaderViewModelFixture()
+    let model = fixture.makeModel()
+
+    await model.load()
+    await model.toggleFavorite()
+    #expect(model.favoriteAddPromptPresented)
+    await model.confirmFavoriteAdd(syncToRemote: false, remember: false)
+
+    let added = try #require(await fixture.localFavoriteItem())
+    #expect(model.isFavorited)
+    #expect(added.remoteMapping?.yamiboFavoriteID == nil)
+    #expect(await fixture.favoriteRepository.addedThreadIDs.isEmpty)
+
+    // Unmapped favorites delete locally without the remote question.
+    await model.toggleFavorite()
+    #expect(model.favoriteRemovePrompt == nil)
+    #expect(!model.isFavorited)
+    #expect(await fixture.localFavoriteItem() == nil)
+    #expect(await fixture.favoriteRepository.deletedRemoteFavoriteIDs.isEmpty)
+}
+
+@MainActor
+@Test func forumThreadReaderRememberedAddChoiceSkipsPrompt() async throws {
+    let fixture = try ForumThreadReaderViewModelFixture()
+    let model = fixture.makeModel()
+
+    await model.load()
+    await model.toggleFavorite()
+    #expect(model.favoriteAddPromptPresented)
+    await model.confirmFavoriteAdd(syncToRemote: true, remember: true)
+    let settings = await fixture.settingsStore.load().favorites
+    #expect(!settings.addSyncPromptEnabled)
+    #expect(settings.addSyncDefault)
+
+    // Remove (prompted), then add again: the remembered choice syncs silently.
+    await model.toggleFavorite()
+    let removePrompt = try #require(model.favoriteRemovePrompt)
+    await model.confirmFavoriteRemoval(removePrompt.favorite, removeRemote: false, remember: false)
+
+    await model.toggleFavorite()
+    #expect(!model.favoriteAddPromptPresented)
+    #expect(model.isFavorited)
+    #expect(await fixture.favoriteRepository.addedThreadIDs == ["704", "704"])
 }
 
 @MainActor
@@ -56,6 +109,8 @@ import Testing
     let model = fixture.makeModel()
 
     await model.toggleFavorite()
+    #expect(model.favoriteAddPromptPresented)
+    await model.confirmFavoriteAdd(syncToRemote: false, remember: false)
 
     let added = try #require(await fixture.localFavoriteItem())
     #expect(added.title == "上下文标题")
@@ -306,6 +361,7 @@ private struct ForumThreadReaderViewModelFixture {
     let suiteName: String
     let threadURL: URL
     let localFavoriteLibraryStore: FavoriteLibraryStore
+    let settingsStore: SettingsStore
     let repository: FakeForumThreadPageLoader
     let favoriteRepository: FakeThreadFavoriteRepository
 
@@ -317,6 +373,10 @@ private struct ForumThreadReaderViewModelFixture {
         localFavoriteLibraryStore = FavoriteLibraryStore(
             defaults: try #require(UserDefaults(suiteName: suiteName)),
             key: "local-favorites"
+        )
+        settingsStore = SettingsStore(
+            defaults: try #require(UserDefaults(suiteName: suiteName)),
+            key: "settings"
         )
         repository = FakeForumThreadPageLoader(
             threadURL: threadURL,
@@ -343,7 +403,8 @@ private struct ForumThreadReaderViewModelFixture {
             ),
             repository: repository,
             localFavoriteLibraryStore: localFavoriteLibraryStore,
-            favoriteRepository: favoriteRepository
+            favoriteRepository: favoriteRepository,
+            settingsStore: settingsStore
         )
     }
 }
@@ -448,7 +509,7 @@ private actor FakeThreadFavoriteRepository: ForumThreadFavoriteRemoteOperating {
         self.threadID = YamiboThreadURLCanonicalizer.threadID(from: threadURL) ?? "704"
     }
 
-    func addThreadFavorite(threadID: String, formHash: String?) async throws -> Favorite? {
+    func addThreadFavorite(threadID: String, formHash: String?, resolveRemoteFavorite: Bool) async throws -> Favorite? {
         addedThreadIDs.append(threadID)
         return Favorite(title: "远端标题", threadID: threadID, remoteFavoriteID: "8801")
     }

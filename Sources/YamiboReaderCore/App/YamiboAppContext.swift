@@ -27,6 +27,7 @@ public final class YamiboAppContext: Sendable {
     /// Public for change-ID observation in the app-entry layer.
     public let localFavoriteLibraryStore: FavoriteLibraryStore
     let favoriteUpdateStore: FavoriteUpdateStore
+    let favoriteSyncRunStore: FavoriteSyncRunStore
     /// Public for change-ID observation in the app-entry layer.
     public let readingProgressStore: ReadingProgressStore
     let contentCoverStore: ContentCoverStore
@@ -56,6 +57,7 @@ public final class YamiboAppContext: Sendable {
         readerResumeRouteStore: ReaderResumeRouteStore = ReaderResumeRouteStore(),
         localFavoriteLibraryStore: FavoriteLibraryStore? = nil,
         favoriteUpdateStore: FavoriteUpdateStore = FavoriteUpdateStore(),
+        favoriteSyncRunStore: FavoriteSyncRunStore? = nil,
         readingProgressStore: ReadingProgressStore? = nil,
         contentCoverStore: ContentCoverStore? = nil,
         novelReaderCacheStore: NovelReaderProjectionStore? = nil,
@@ -95,6 +97,7 @@ public final class YamiboAppContext: Sendable {
         )
         self.localFavoriteLibraryStore = localFavoriteLibraryStore ?? FavoriteLibraryStore(databasePool: resolvedGRDBDatabasePool)
         self.favoriteUpdateStore = favoriteUpdateStore
+        self.favoriteSyncRunStore = favoriteSyncRunStore ?? FavoriteSyncRunStore(databasePool: resolvedGRDBDatabasePool)
         self.readingProgressStore = readingProgressStore ?? ReadingProgressStore(databasePool: resolvedGRDBDatabasePool)
         self.contentCoverStore = contentCoverStore ?? ContentCoverStore(databasePool: resolvedGRDBDatabasePool)
         self.novelReaderCacheStore = novelReaderCacheStore ?? NovelReaderProjectionStore(
@@ -145,6 +148,7 @@ public final class YamiboAppContext: Sendable {
         LibraryDependencies(
             localFavoriteLibraryStore: localFavoriteLibraryStore,
             favoriteUpdateStore: favoriteUpdateStore,
+            favoriteSyncRunStore: favoriteSyncRunStore,
             readingProgressStore: readingProgressStore,
             settingsStore: settingsStore,
             contentCoverStore: contentCoverStore,

@@ -353,18 +353,15 @@ public struct FavoriteRemoteMapping: Codable, Hashable, Sendable {
     public var yamiboFavoriteID: String?
     public var yamiboRemoteOrder: Int?
     public var lastSeenAt: Date?
-    public var isMarkedRemoteMissing: Bool
 
     public init(
         yamiboFavoriteID: String? = nil,
         yamiboRemoteOrder: Int? = nil,
-        lastSeenAt: Date? = nil,
-        isMarkedRemoteMissing: Bool = false
+        lastSeenAt: Date? = nil
     ) {
         self.yamiboFavoriteID = yamiboFavoriteID
         self.yamiboRemoteOrder = yamiboRemoteOrder
         self.lastSeenAt = lastSeenAt
-        self.isMarkedRemoteMissing = isMarkedRemoteMissing
     }
 }
 
@@ -806,10 +803,18 @@ public struct FavoriteLibraryDocument: Codable, Equatable, Sendable {
         items.removeAll { $0.target.id == target.id }
     }
 
-    public mutating func markRemoteMappingMissing(for target: FavoriteContentTarget, date: Date = .now) {
+    /// Refreshes the Yamibo remote mapping after a sync run saw the item on
+    /// the website. Passing nil keeps the previously known value.
+    public mutating func updateRemoteMapping(
+        for target: FavoriteContentTarget,
+        yamiboFavoriteID: String?,
+        yamiboRemoteOrder: Int?,
+        date: Date = .now
+    ) {
         guard let index = items.firstIndex(where: { $0.target.id == target.id }) else { return }
         var mapping = items[index].remoteMapping ?? FavoriteRemoteMapping()
-        mapping.isMarkedRemoteMissing = true
+        mapping.yamiboFavoriteID = yamiboFavoriteID ?? mapping.yamiboFavoriteID
+        mapping.yamiboRemoteOrder = yamiboRemoteOrder ?? mapping.yamiboRemoteOrder
         mapping.lastSeenAt = date
         items[index].remoteMapping = mapping
         items[index].updatedAt = date

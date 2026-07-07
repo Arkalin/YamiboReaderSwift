@@ -46,7 +46,7 @@ import YamiboReaderTestSupport
     )
     let remoteSync = FavoriteRemoteSyncSession(
         libraryStore: libraryStore,
-        settingsStore: settingsStore,
+        runStore: FavoriteSyncRunStore(defaults: defaults, key: "sync-runs"),
         contentCoverStore: contentCoverStore,
         makeFavoriteRepository: { FavoriteRepository(client: await makeClient()) },
         makeForumThreadReaderRepository: { ForumThreadReaderRepository(client: await makeClient(), cacheStore: forumCacheStore) },

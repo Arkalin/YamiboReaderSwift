@@ -7,11 +7,8 @@ import YamiboReaderTestSupport
 final class FavoriteRemoteSyncSessionTests: XCTestCase {
     func testSnapshotLoadsInterruptsRunningTaskAndPersistsHiddenCard() async throws {
         let suiteName = YamiboTestDefaults.suiteName(prefix: "local-favorites-sync-snapshot")
-        _ = try YamiboTestDefaults.make(suiteName: suiteName)
-        let settingsStore = SettingsStore(
-            defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
-            key: "settings"
-        )
+        let defaults = try YamiboTestDefaults.make(suiteName: suiteName)
+        let runStore = FavoriteSyncRunStore(defaults: defaults, key: "sync-runs")
         let runningSnapshot = FavoriteRemoteSyncSnapshot(
             runID: "sync-run",
             status: .running,
@@ -23,40 +20,42 @@ final class FavoriteRemoteSyncSessionTests: XCTestCase {
             scannedCount: 2,
             importedCount: 1
         )
-        try await settingsStore.save(AppSettings(favorites: FavoriteLibrarySettings(remoteSyncSnapshot: runningSnapshot)))
+        try await runStore.save(runningSnapshot)
 
-        let session = try makeSyncSession(settingsStore: settingsStore)
+        let session = try makeSyncSession(runStore: runStore)
         await session.load()
 
         XCTAssertEqual(session.snapshot?.runID, "sync-run")
         XCTAssertEqual(session.snapshot?.status, .interrupted)
         XCTAssertEqual(session.snapshot?.warnings, [.taskLost])
-        let interruptedSettings = await settingsStore.load()
-        XCTAssertEqual(interruptedSettings.favorites.remoteSyncSnapshot?.status, .interrupted)
+        let interrupted = await runStore.latestSnapshot()
+        XCTAssertEqual(interrupted?.status, .interrupted)
 
         await session.hideCard()
-        let hiddenSettings = await settingsStore.load()
-        XCTAssertTrue(hiddenSettings.favorites.remoteSyncSnapshot?.isHiddenFromFavoritePage == true)
+        let hidden = await runStore.latestSnapshot()
+        XCTAssertTrue(hidden?.isHiddenFromFavoritePage == true)
     }
 
     func testStartCompletesAndResumeUsesPersistedTargetCategory() async throws {
         let suiteName = YamiboTestDefaults.suiteName(prefix: "local-favorites-sync-complete")
-        _ = try YamiboTestDefaults.make(suiteName: suiteName)
-        let settingsStore = SettingsStore(
-            defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
-            key: "settings"
-        )
+        let defaults = try YamiboTestDefaults.make(suiteName: suiteName)
+        let runStore = FavoriteSyncRunStore(defaults: defaults, key: "sync-runs")
         let recorder = FavoriteRemoteSyncTestRecorder()
         let session = try makeSyncSession(
-            settingsStore: settingsStore,
-            executor: { _, categoryID in
-                await recorder.record(categoryID)
-                return YamiboFavoriteSyncReport(
-                    importedTargetIDs: ["imported-a", "imported-b"],
-                    failedRemoteFavoriteIDs: ["remote-failed"],
-                    markedMissingTargetIDs: ["missing-a"],
-                    uploadTargetIDs: ["upload-a"]
-                )
+            runStore: runStore,
+            runnerOverride: { snapshot, _, persist in
+                await recorder.record(snapshot.targetCategoryID)
+                var final = snapshot
+                final.status = .completed
+                final.phase = .completed
+                final.importedCount = 2
+                final.skippedCount = 1
+                final.uploadTargetCount = 1
+                final.uploadedCount = 1
+                final.failedCount = 1
+                final.finishedAt = .now
+                await persist(final)
+                return final
             }
         )
         await session.load()
@@ -65,38 +64,42 @@ final class FavoriteRemoteSyncSessionTests: XCTestCase {
         try await waitForStatus(.completed, in: session)
         XCTAssertEqual(session.snapshot?.runID, firstRunID)
         XCTAssertEqual(session.snapshot?.importedCount, 2)
+        XCTAssertEqual(session.snapshot?.skippedCount, 1)
+        XCTAssertEqual(session.snapshot?.uploadedCount, 1)
         XCTAssertEqual(session.snapshot?.failedCount, 1)
-        XCTAssertEqual(session.snapshot?.markedMissingCount, 1)
-        XCTAssertEqual(session.snapshot?.uploadTargetCount, 1)
-        // `.backgroundUnavailable` is environment-dependent: the test host's
-        // `beginBackgroundTask` may return `.invalid`, in which case the
-        // session appends it. Ignore it and assert the sync-outcome warnings.
-        XCTAssertEqual(
-            session.snapshot?.warnings.filter { $0 != .backgroundUnavailable },
-            [.failedItems(count: 1), .uploadPending(count: 1)]
-        )
 
         let secondRunID = await session.resume()
         try await waitForStatus(.completed, in: session)
         XCTAssertNotEqual(secondRunID, firstRunID)
         let recordedCategoryIDs = await recorder.recordedCategoryIDs()
         XCTAssertEqual(recordedCategoryIDs, [FavoriteCategory.defaultID, FavoriteCategory.defaultID])
-        let savedStatus = await settingsStore.load().favorites.remoteSyncSnapshot?.status
+        let savedStatus = await runStore.latestSnapshot()?.status
         XCTAssertEqual(savedStatus, .completed)
     }
 
     func testInterruptCancelsRunningTaskAndPersistsInterruptedStatus() async throws {
         let suiteName = YamiboTestDefaults.suiteName(prefix: "local-favorites-sync-interrupt")
-        _ = try YamiboTestDefaults.make(suiteName: suiteName)
-        let settingsStore = SettingsStore(
-            defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
-            key: "settings"
-        )
+        let defaults = try YamiboTestDefaults.make(suiteName: suiteName)
+        let runStore = FavoriteSyncRunStore(defaults: defaults, key: "sync-runs")
         let session = try makeSyncSession(
-            settingsStore: settingsStore,
-            executor: { _, _ in
-                try await Task.sleep(nanoseconds: 2_000_000_000)
-                return YamiboFavoriteSyncReport(importedTargetIDs: ["late"])
+            runStore: runStore,
+            runnerOverride: { snapshot, interruptionReason, persist in
+                // Emulates the engine's cancellation handling: a cooperative
+                // cancellation ends the run as interrupted with the session's
+                // provided reason.
+                var final = snapshot
+                do {
+                    try await Task.sleep(nanoseconds: 2_000_000_000)
+                    final.status = .completed
+                    final.phase = .completed
+                } catch {
+                    final.status = .interrupted
+                    final.phase = .interrupted
+                    final.warnings.append(interruptionReason() ?? .interrupted)
+                }
+                final.finishedAt = .now
+                await persist(final)
+                return final
             }
         )
         await session.load()
@@ -106,9 +109,12 @@ final class FavoriteRemoteSyncSessionTests: XCTestCase {
         await session.interrupt()
         try await waitForStatus(.interrupted, in: session)
 
-        let saved = await settingsStore.load()
-        XCTAssertEqual(saved.favorites.remoteSyncSnapshot?.status, .interrupted)
-        XCTAssertEqual(saved.favorites.remoteSyncSnapshot?.warnings.isEmpty, false)
+        XCTAssertEqual(session.snapshot?.warnings.contains(.interruptedByUser), true)
+        XCTAssertNil(session.errorMessage)
+        let saved = await runStore.latestSnapshot()
+        XCTAssertEqual(saved?.runID, session.snapshot?.runID)
+        XCTAssertEqual(saved?.status, .interrupted)
+        XCTAssertEqual(saved?.warnings.isEmpty, false)
     }
 
     private func waitForStatus(
@@ -141,8 +147,8 @@ private actor FavoriteRemoteSyncTestRecorder {
 @MainActor
 private func makeSyncSession(
     libraryStore: FavoriteLibraryStore? = nil,
-    settingsStore: SettingsStore? = nil,
-    executor: ((String, String) async throws -> YamiboFavoriteSyncReport)? = nil
+    runStore: FavoriteSyncRunStore? = nil,
+    runnerOverride: FavoriteRemoteSyncSession.EngineRunner? = nil
 ) throws -> FavoriteRemoteSyncSession {
     let suiteName = YamiboTestDefaults.suiteName(prefix: "favorite-sync-session-deps")
     let defaults = try YamiboTestDefaults.make(suiteName: suiteName)
@@ -162,11 +168,11 @@ private func makeSyncSession(
     }
     return FavoriteRemoteSyncSession(
         libraryStore: libraryStore ?? FavoriteLibraryStore(defaults: defaults, key: "local-favorites"),
-        settingsStore: settingsStore ?? SettingsStore(defaults: defaults, key: "settings"),
+        runStore: runStore ?? FavoriteSyncRunStore(defaults: defaults, key: "sync-runs"),
         contentCoverStore: ContentCoverStore(defaults: defaults, key: "content-covers"),
         makeFavoriteRepository: { FavoriteRepository(client: await makeClient()) },
         makeForumThreadReaderRepository: { ForumThreadReaderRepository(client: await makeClient(), cacheStore: forumCacheStore) },
         makeThreadRouteResolver: { YamiboThreadRouteResolver(client: await makeClient()) },
-        executor: executor
+        runnerOverride: runnerOverride
     )
 }

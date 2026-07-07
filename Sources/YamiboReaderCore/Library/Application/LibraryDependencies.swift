@@ -9,6 +9,7 @@ import Foundation
 public struct LibraryDependencies: Sendable {
     public let localFavoriteLibraryStore: FavoriteLibraryStore
     public let favoriteUpdateStore: FavoriteUpdateStore
+    public let favoriteSyncRunStore: FavoriteSyncRunStore
     public let readingProgressStore: ReadingProgressStore
     public let settingsStore: SettingsStore
     public let contentCoverStore: ContentCoverStore
@@ -20,6 +21,7 @@ public struct LibraryDependencies: Sendable {
     public init(
         localFavoriteLibraryStore: FavoriteLibraryStore,
         favoriteUpdateStore: FavoriteUpdateStore,
+        favoriteSyncRunStore: FavoriteSyncRunStore,
         readingProgressStore: ReadingProgressStore,
         settingsStore: SettingsStore,
         contentCoverStore: ContentCoverStore,
@@ -30,6 +32,7 @@ public struct LibraryDependencies: Sendable {
     ) {
         self.localFavoriteLibraryStore = localFavoriteLibraryStore
         self.favoriteUpdateStore = favoriteUpdateStore
+        self.favoriteSyncRunStore = favoriteSyncRunStore
         self.readingProgressStore = readingProgressStore
         self.settingsStore = settingsStore
         self.contentCoverStore = contentCoverStore

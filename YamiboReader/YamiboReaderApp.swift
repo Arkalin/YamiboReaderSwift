@@ -24,6 +24,9 @@ struct YamiboReaderApp: App {
         YamiboAppDelegate.appContext = appContext
         #endif
         Self.registerMangaOfflineCacheBackgroundTasks(appContext: appContext)
+        #if os(iOS) && canImport(BackgroundTasks)
+        FavoriteUpdateBackgroundScheduler.register(appContext: appContext)
+        #endif
         _appModel = State(initialValue: YamiboAppModel(appContext: appContext, initialTab: initialTab))
         #if canImport(AppIntents)
         YamiboAppShortcutsProvider.updateAppShortcutParameters()

@@ -32,6 +32,8 @@ final class ForumThreadReaderViewModel {
     var transientMessage: String?
     var isFavorited = false
     var favoriteErrorMessage: String?
+    var favoriteAddPromptPresented = false
+    var favoriteRemovePrompt: FavoriteRemovePrompt?
 
     let context: ThreadNovelLaunchContext
 
@@ -41,6 +43,7 @@ final class ForumThreadReaderViewModel {
     @ObservationIgnored private let favoriteRepositoryProvider: @Sendable () async -> (any ForumThreadFavoriteRemoteOperating)?
     @ObservationIgnored private let contentCoverStoreProvider: @Sendable () async -> ContentCoverStore?
     @ObservationIgnored private let mangaDirectoryStoreProvider: @Sendable () async -> (any MangaDirectoryPersisting)?
+    @ObservationIgnored private let settingsStoreProvider: @Sendable () async -> SettingsStore?
 
     init(context: ThreadNovelLaunchContext, dependencies: ForumDependencies) {
         self.context = context
@@ -62,6 +65,9 @@ final class ForumThreadReaderViewModel {
         mangaDirectoryStoreProvider = {
             dependencies.mangaDirectoryStore
         }
+        settingsStoreProvider = {
+            dependencies.settingsStore
+        }
     }
 
     init(
@@ -71,7 +77,8 @@ final class ForumThreadReaderViewModel {
         readingProgressStore: ReadingProgressStore? = nil,
         favoriteRepository: (any ForumThreadFavoriteRemoteOperating)? = nil,
         contentCoverStore: ContentCoverStore? = nil,
-        mangaDirectoryStore: (any MangaDirectoryPersisting)? = nil
+        mangaDirectoryStore: (any MangaDirectoryPersisting)? = nil,
+        settingsStore: SettingsStore? = nil
     ) {
         self.context = context
         repositoryProvider = {
@@ -91,6 +98,9 @@ final class ForumThreadReaderViewModel {
         }
         mangaDirectoryStoreProvider = {
             mangaDirectoryStore
+        }
+        settingsStoreProvider = {
+            settingsStore
         }
     }
 
@@ -151,23 +161,54 @@ final class ForumThreadReaderViewModel {
         transientMessage = nil
     }
 
+    /// Routes the star button through the remembered add/remove sync choices:
+    /// either performs the action silently or raises the matching prompt.
     func toggleFavorite() async {
+        let settings = await favoriteSettings()
+        if let favoriteItem = await localFavoriteItem(forThreadID: context.thread.tid) {
+            let favorite = favoriteItem.favorite(type: .other)
+            let canRemoveRemote = await favoriteRepositoryProvider() != nil
+                && favorite.remoteFavoriteID?.isEmpty == false
+            switch FavoriteRemoveRemoteDecision.resolve(settings: settings, canRemoveRemote: canRemoveRemote) {
+            case .prompt:
+                favoriteRemovePrompt = FavoriteRemovePrompt(favorite: favorite)
+            case let .silent(removeRemote):
+                await performFavoriteRemoval(favorite, removeRemote: removeRemote)
+            }
+            return
+        }
+
+        let canSyncRemote = await favoriteRepositoryProvider() != nil
+        switch FavoriteAddSyncDecision.resolve(settings: settings, canSyncRemote: canSyncRemote) {
+        case .prompt:
+            favoriteAddPromptPresented = true
+        case let .silent(syncToRemote):
+            await performFavoriteAdd(syncToRemote: syncToRemote)
+        }
+    }
+
+    func confirmFavoriteAdd(syncToRemote: Bool, remember: Bool) async {
+        favoriteAddPromptPresented = false
+        if remember {
+            await rememberAddSyncChoice(syncToRemote)
+        }
+        await performFavoriteAdd(syncToRemote: syncToRemote)
+    }
+
+    func confirmFavoriteRemoval(_ favorite: Favorite, removeRemote: Bool, remember: Bool) async {
+        favoriteRemovePrompt = nil
+        if remember {
+            await rememberRemoveRemoteChoice(removeRemote)
+        }
+        await performFavoriteRemoval(favorite, removeRemote: removeRemote)
+    }
+
+    private func performFavoriteAdd(syncToRemote: Bool) async {
         do {
             guard let localFavoriteLibraryStore = await localFavoriteLibraryStoreProvider() else {
                 throw YamiboError.persistenceFailed("Local favorite library store is unavailable")
             }
-            if let favoriteItem = await localFavoriteItem(forThreadID: context.thread.tid) {
-                try await ForumThreadFavoriteSync.removeFavorite(
-                    favoriteItem.favorite(type: .other),
-                    localFavoriteLibraryStore: localFavoriteLibraryStore,
-                    readingProgressStore: await readingProgressStoreProvider(),
-                    remoteRepository: await favoriteRepositoryProvider()
-                )
-                isFavorited = false
-                return
-            }
-
-            _ = try await ForumThreadFavoriteSync.addFavorite(
+            let result = try await FavoriteQuickActions.addFavorite(
                 threadID: context.thread.tid,
                 title: favoriteTitle,
                 type: .other,
@@ -176,6 +217,7 @@ final class ForumThreadReaderViewModel {
                 forumName: page?.forumName,
                 contentUpdatedAt: Self.contentUpdatedAt(from: page),
                 formHash: page?.formHash,
+                syncToRemote: syncToRemote,
                 localFavoriteLibraryStore: localFavoriteLibraryStore,
                 remoteRepository: await favoriteRepositoryProvider()
             )
@@ -184,10 +226,55 @@ final class ForumThreadReaderViewModel {
                 _ = try? await coverStore.setAutomaticCover(coverCandidate, for: .thread(tid: context.thread.tid))
             }
             isFavorited = true
+            transientMessage = result.remote.addFeedbackMessage
         } catch {
             favoriteErrorMessage = error.localizedDescription
             await refreshFavoriteState()
         }
+    }
+
+    private func performFavoriteRemoval(_ favorite: Favorite, removeRemote: Bool) async {
+        do {
+            guard let localFavoriteLibraryStore = await localFavoriteLibraryStoreProvider() else {
+                throw YamiboError.persistenceFailed("Local favorite library store is unavailable")
+            }
+            try await FavoriteQuickActions.removeFavorite(
+                favorite,
+                removeRemote: removeRemote,
+                localFavoriteLibraryStore: localFavoriteLibraryStore,
+                remoteRepository: await favoriteRepositoryProvider()
+            )
+            isFavorited = false
+            transientMessage = removeRemote
+                ? L10n.string("favorites.quick.removed_with_remote")
+                : L10n.string("favorites.quick.removed")
+        } catch {
+            favoriteErrorMessage = error.localizedDescription
+            await refreshFavoriteState()
+        }
+    }
+
+    private func favoriteSettings() async -> FavoriteLibrarySettings {
+        guard let settingsStore = await settingsStoreProvider() else {
+            return FavoriteLibrarySettings()
+        }
+        return await settingsStore.load().favorites
+    }
+
+    private func rememberAddSyncChoice(_ syncToRemote: Bool) async {
+        guard let settingsStore = await settingsStoreProvider() else { return }
+        var settings = await settingsStore.load()
+        settings.favorites.addSyncPromptEnabled = false
+        settings.favorites.addSyncDefault = syncToRemote
+        try? await settingsStore.save(settings)
+    }
+
+    private func rememberRemoveRemoteChoice(_ removeRemote: Bool) async {
+        guard let settingsStore = await settingsStoreProvider() else { return }
+        var settings = await settingsStore.load()
+        settings.favorites.removeRemotePromptEnabled = false
+        settings.favorites.removeRemoteDefault = removeRemote
+        try? await settingsStore.save(settings)
     }
 
     func loadRatingResults(postID: String) async throws -> ForumThreadRatingResultsPage {

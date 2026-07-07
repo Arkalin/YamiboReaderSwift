@@ -48,6 +48,8 @@ final class FavoriteLibraryOrganizer: ObservableObject {
     @Published private(set) var derived = LocalFavoriteDerivedState()
     @Published private(set) var display = FavoriteLibraryDisplayState()
     @Published var errorMessage: String?
+    /// Short-lived toast feedback (single-item sync results and similar).
+    @Published var transientMessage: String?
 
     /// Selection and search-mode session shared with the views.
     let selection = LocalFavoriteBrowseSession()
@@ -58,6 +60,7 @@ final class FavoriteLibraryOrganizer: ObservableObject {
     private let contentCoverStore: ContentCoverStore
     private let mangaDirectoryStore: MangaDirectoryStore?
     private let makeForumThreadReaderRepository: (@Sendable () async -> ForumThreadReaderRepository)?
+    private let makeFavoriteRepository: @Sendable () async -> FavoriteRepository
     private let remoteDeleter: YamiboRemoteFavoriteDeleter
 
     private var readingProgress: [ReadingProgressRecord] = []
@@ -83,6 +86,7 @@ final class FavoriteLibraryOrganizer: ObservableObject {
         self.contentCoverStore = contentCoverStore
         self.mangaDirectoryStore = mangaDirectoryStore
         self.makeForumThreadReaderRepository = makeForumThreadReaderRepository
+        self.makeFavoriteRepository = makeFavoriteRepository
         remoteDeleter = YamiboRemoteFavoriteDeleter(
             makeFavoriteRepository: makeFavoriteRepository,
             overrideHandler: remoteFavoriteDeleteHandler
@@ -225,6 +229,12 @@ final class FavoriteLibraryOrganizer: ObservableObject {
            !loadedDocument.collections.contains(where: { $0.id == selectedCollectionID && $0.categoryID == selectedCategoryID }) {
             self.selectedCollectionID = nil
         }
+        // Tags removed by another device (WebDAV) must not linger as an
+        // invisible active filter.
+        let validTagIDs = Set(loadedDocument.tags.map(\.id))
+        if !filter.selectedTagIDs.isSubset(of: validTagIDs) {
+            filter.selectedTagIDs.formIntersection(validTagIDs)
+        }
         scheduleMangaCoverBackfill(for: loadedDocument.items)
     }
 
@@ -236,6 +246,28 @@ final class FavoriteLibraryOrganizer: ObservableObject {
     // MARK: - Categories
 
     @discardableResult
+    /// Pushes one favorite item to Yamibo (card context menu action).
+    func syncItemToYamibo(_ item: FavoriteItem) async {
+        do {
+            let repository = await makeFavoriteRepository()
+            let result = try await FavoriteQuickActions.syncFavoriteItemToRemote(
+                item,
+                localFavoriteLibraryStore: libraryStore,
+                remoteRepository: repository
+            )
+            switch result {
+            case .synced:
+                transientMessage = L10n.string("favorites.quick.sync_item.synced")
+            case .syncedWithoutMapping:
+                transientMessage = L10n.string("favorites.quick.sync_item.pending")
+            case .notAttempted, .failed:
+                break
+            }
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
     func createCategory(name: String) async -> FavoriteCategory? {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
@@ -390,14 +422,14 @@ final class FavoriteLibraryOrganizer: ObservableObject {
     func selectAllVisible() {
         selection.selectAll(
             favoriteIDs: derived.cards.map(\.id),
-            collectionIDs: selectedCollectionID == nil ? currentCategoryCollections.map(\.id) : []
+            collectionIDs: selectedCollectionID == nil ? derived.visibleCollections.map(\.id) : []
         )
     }
 
     func invertVisibleSelection() {
         selection.invertSelection(
             favoriteIDs: derived.cards.map(\.id),
-            collectionIDs: selectedCollectionID == nil ? currentCategoryCollections.map(\.id) : []
+            collectionIDs: selectedCollectionID == nil ? derived.visibleCollections.map(\.id) : []
         )
     }
 
@@ -482,6 +514,32 @@ final class FavoriteLibraryOrganizer: ObservableObject {
         selection.exitSelectionMode()
     }
 
+    /// Whether all, some, or none of the selected items carry `location` —
+    /// drives the tri-state boxes in the move sheet.
+    func selectionLocationState(_ location: FavoriteLocation) -> LocalFavoriteLocationTriState {
+        let ids = selection.selectedFavoriteIDs
+        guard !ids.isEmpty else { return .none }
+        let selectedItems = document.items.filter { ids.contains($0.id) }
+        guard !selectedItems.isEmpty else { return .none }
+        let count = selectedItems.filter { $0.locations.contains(location) }.count
+        if count == 0 { return .none }
+        return count == selectedItems.count ? .all : .some
+    }
+
+    /// Adds or removes one location on every selected item. Removal skips
+    /// items whose last location it would be (an item always lives somewhere).
+    func setSelectionLocation(_ location: FavoriteLocation, included: Bool) async {
+        let ids = selection.selectedFavoriteIDs
+        guard !ids.isEmpty else { return }
+        _ = await commit { document in
+            if included {
+                document.moveItems(ids: ids, to: location, removing: nil)
+            } else {
+                document.removeItems(ids: ids, from: location)
+            }
+        }
+    }
+
     func removeSelectionFromCurrentLocation() async {
         let favoriteIDs = selection.selectedFavoriteIDs
         let source = selectionSourceLocation
@@ -548,26 +606,6 @@ final class FavoriteLibraryOrganizer: ObservableObject {
                 try await deleter.deleteRemoteFavorites(for: [latestItem])
                 document.removeItem(target: latestItem.target)
             }
-        }
-    }
-
-    // MARK: - Search
-
-    func enterSearchMode() {
-        selection.enterSearchMode(draftText: filter.searchText)
-    }
-
-    func submitSearch() {
-        let submittedText = selection.submitSearchDraft()
-        if filter.searchText != submittedText {
-            filter.searchText = submittedText
-        }
-    }
-
-    func exitSearchMode() {
-        selection.exitSearchMode()
-        if !filter.searchText.isEmpty {
-            filter.searchText = ""
         }
     }
 

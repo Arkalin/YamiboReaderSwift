@@ -14,110 +14,416 @@ public struct YamiboRemoteFavoriteEntry: Hashable, Sendable {
     }
 }
 
-public struct YamiboFavoriteSyncReport: Equatable, Sendable {
-    public var importedTargetIDs: [String]
-    public var failedRemoteFavoriteIDs: [String]
-    public var markedMissingTargetIDs: [String]
-    public var uploadTargetIDs: [String]
+/// One page of the Yamibo remote favorite list.
+public struct FavoriteYamiboRemotePage: Sendable {
+    public var entries: [YamiboRemoteFavoriteEntry]
+    public var currentPage: Int
+    public var totalPages: Int
+
+    public init(entries: [YamiboRemoteFavoriteEntry], currentPage: Int, totalPages: Int) {
+        self.entries = entries
+        self.currentPage = max(1, currentPage)
+        self.totalPages = max(1, totalPages)
+    }
+}
+
+/// Network operations the sync engine needs, injected as closures so the UI
+/// layer can compose them from its repositories and tests can fake them.
+public struct FavoriteYamiboSyncClient: Sendable {
+    /// Fetches one page of the remote favorite list.
+    public var fetchPage: @Sendable (_ page: Int) async throws -> FavoriteYamiboRemotePage
+    /// Resolves a remote entry's thread into a favorite target with metadata
+    /// (the entry carries the remote title as a resolution hint).
+    /// Implementations are expected to record covers as a side effect.
+    public var probe: @Sendable (_ entry: YamiboRemoteFavoriteEntry) async throws -> FavoriteThreadProbeResult
+    /// Adds one thread to the Yamibo remote favorites.
+    public var addFavorite: @Sendable (_ threadID: String) async throws -> Void
 
     public init(
-        importedTargetIDs: [String] = [],
-        failedRemoteFavoriteIDs: [String] = [],
-        markedMissingTargetIDs: [String] = [],
-        uploadTargetIDs: [String] = []
+        fetchPage: @escaping @Sendable (_ page: Int) async throws -> FavoriteYamiboRemotePage,
+        probe: @escaping @Sendable (_ entry: YamiboRemoteFavoriteEntry) async throws -> FavoriteThreadProbeResult,
+        addFavorite: @escaping @Sendable (_ threadID: String) async throws -> Void
     ) {
-        self.importedTargetIDs = importedTargetIDs
-        self.failedRemoteFavoriteIDs = failedRemoteFavoriteIDs
-        self.markedMissingTargetIDs = markedMissingTargetIDs
-        self.uploadTargetIDs = uploadTargetIDs
+        self.fetchPage = fetchPage
+        self.probe = probe
+        self.addFavorite = addFavorite
     }
 }
 
-public extension FavoriteLibraryDocument {
-    @discardableResult
-    mutating func syncYamiboRemoteFavorites(
-        into categoryID: String,
-        remoteEntries: [YamiboRemoteFavoriteEntry],
+/// Five-phase Yamibo favorite sync engine (Android-parity semantics):
+///
+/// 1. preparing — validate the target category.
+/// 2. fetching — page through the remote favorite list.
+/// 3. importing — import remote-only threads; existing unmapped items gain the
+///    target category location; already-mapped items only refresh the mapping.
+/// 4. uploading — push every thread item of the target category that the
+///    remote list lacks, including items the website side deleted: the local
+///    library is the source of truth and sync converges to the union.
+/// 5. reconciling — if anything uploaded, re-fetch the remote list and backfill
+///    favorite IDs and ordering.
+///
+/// Sync never deletes on either side; deletions propagate only through the
+/// explicit delete actions. Cancellation is cooperative: the engine finishes
+/// the current network call, persists partial progress, and records the run as
+/// interrupted.
+public struct FavoriteYamiboSyncEngine: Sendable {
+    private let libraryStore: FavoriteLibraryStore
+    private let client: FavoriteYamiboSyncClient
+
+    public init(libraryStore: FavoriteLibraryStore, client: FavoriteYamiboSyncClient) {
+        self.libraryStore = libraryStore
+        self.client = client
+    }
+
+    /// Runs the five phases starting from `initial` (typically phase .queued).
+    /// Every snapshot mutation is pushed through `persist`; the returned
+    /// snapshot is terminal (completed, failed, or interrupted).
+    public func run(
+        snapshot initial: FavoriteRemoteSyncSnapshot,
         directories: [MangaDirectory] = [],
-        fallbackMangaCleanBookName: @Sendable (YamiboRemoteFavoriteEntry) -> String? = { _ in nil },
-        date: Date = .now,
-        probe: @Sendable (String) async throws -> FavoriteThreadProbeResult
-    ) async -> YamiboFavoriteSyncReport {
-        let location = FavoriteLocation.category(categoryID)
-        var importedTargetIDs: [String] = []
-        var failedRemoteFavoriteIDs: [String] = []
-        var seenRemoteTargetIDs: Set<String> = []
-        var seenRemoteFavoriteIDs: Set<String> = []
+        interruptionReason: @escaping @Sendable () -> FavoriteRemoteSyncWarning? = { nil },
+        persist: @escaping @Sendable (FavoriteRemoteSyncSnapshot) async -> Void
+    ) async -> FavoriteRemoteSyncSnapshot {
+        var snapshot = initial
+        var document: FavoriteLibraryDocument?
+        var documentDirty = false
 
-        for remoteEntry in remoteEntries {
-            do {
-                let probeResult = try await probe(remoteEntry.threadID)
-                let remoteMapping = FavoriteRemoteMapping(
-                    yamiboFavoriteID: remoteEntry.remoteFavoriteID,
-                    yamiboRemoteOrder: remoteEntry.remoteOrder,
-                    lastSeenAt: date,
-                    isMarkedRemoteMissing: false
-                )
-                let item: FavoriteItem
-                if case let .mangaTitle(_, cleanBookName) = probeResult.target {
-                    item = try importMangaChapterFavorite(
-                        chapterTID: remoteEntry.threadID,
-                        chapterTitle: remoteEntry.title ?? probeResult.title,
-                        directories: directories,
-                        fallbackCleanBookName: cleanBookName.nilIfEmpty ?? fallbackMangaCleanBookName(remoteEntry),
-                        location: location,
-                        remoteMapping: remoteMapping,
-                        date: date
-                    )
-                } else {
-                    item = try importThreadFavorite(
-                        probeResult: probeResult,
-                        location: location,
-                        remoteMapping: remoteMapping,
-                        date: date
-                    )
+        func commit(_ mutate: (inout FavoriteRemoteSyncSnapshot) -> Void) async {
+            mutate(&snapshot)
+            snapshot.updatedAt = .now
+            await persist(snapshot)
+        }
+
+        func saveDocumentIfDirty() async throws {
+            guard documentDirty, let current = document else { return }
+            // Unstructured task: interruption persists partial progress from
+            // the cancelled task, and GRDB's async accesses honor Task
+            // cancellation — the write must not inherit it.
+            let libraryStore = libraryStore
+            try await Task {
+                try await libraryStore.save(current)
+            }.value
+            documentDirty = false
+        }
+
+        do {
+            // Phase 1: preparing
+            try Task.checkCancellation()
+            await commit { $0.phase = .preparing }
+            var workingDocument = await libraryStore.load()
+            guard workingDocument.categories.contains(where: { $0.id == snapshot.targetCategoryID }) else {
+                throw YamiboError.persistenceFailed(L10n.string("favorites.sync.error.category_missing"))
+            }
+            let targetLocation = FavoriteLocation.category(snapshot.targetCategoryID)
+
+            // Phase 2: fetching
+            await commit { $0.phase = .fetching }
+            var remoteEntries: [YamiboRemoteFavoriteEntry] = []
+            var remoteThreadIDs: Set<String> = []
+            var reportedPageCountChange = false
+            var page = 1
+            var totalPages: Int?
+            while true {
+                try Task.checkCancellation()
+                let result = try await client.fetchPage(page)
+                if let known = totalPages, known != result.totalPages, !reportedPageCountChange {
+                    reportedPageCountChange = true
+                    await commit { $0.warnings.append(.remotePageCountChanged) }
                 }
-                seenRemoteTargetIDs.insert(item.target.id)
-                seenRemoteFavoriteIDs.insert(remoteEntry.remoteFavoriteID)
-                importedTargetIDs.append(item.target.id)
+                totalPages = result.totalPages
+                var duplicateTitles: [String] = []
+                for entry in result.entries {
+                    guard remoteThreadIDs.insert(entry.threadID).inserted else {
+                        duplicateTitles.append(Self.postLabel(threadID: entry.threadID, title: entry.title))
+                        continue
+                    }
+                    var ordered = entry
+                    ordered.remoteOrder = remoteEntries.count
+                    remoteEntries.append(ordered)
+                }
+                let accumulated = remoteEntries.count
+                let resolvedTotal = totalPages ?? page
+                await commit { snapshot in
+                    snapshot.currentPage = page
+                    snapshot.totalPages = resolvedTotal
+                    snapshot.scannedCount = accumulated
+                    snapshot.logEntries.append(.fetchedPage(page: page, totalPages: resolvedTotal, accumulatedCount: accumulated))
+                    for title in duplicateTitles {
+                        snapshot.warnings.append(.duplicateRemoteEntry(title: title))
+                    }
+                }
+                if page >= resolvedTotal || result.entries.isEmpty {
+                    break
+                }
+                page += 1
+            }
+
+            // Phase 3: importing
+            document = workingDocument
+            await commit { $0.phase = .importing }
+            var skippedPathCounts: [(path: String, count: Int)] = []
+            let importTotal = remoteEntries.count
+            for (offset, entry) in remoteEntries.enumerated() {
+                try Task.checkCancellation()
+                let label = Self.postLabel(threadID: entry.threadID, title: entry.title)
+                await commit { $0.logEntries.append(.importingItem(index: offset + 1, total: importTotal, title: label)) }
+
+                if let existing = workingDocument.items.first(where: { $0.target.threadID == entry.threadID }) {
+                    let alreadyMapped = existing.remoteMapping?.yamiboFavoriteID != nil
+                    if !alreadyMapped {
+                        workingDocument.addLocation(targetLocation, to: existing.target)
+                    }
+                    workingDocument.updateRemoteMapping(
+                        for: existing.target,
+                        yamiboFavoriteID: entry.remoteFavoriteID,
+                        yamiboRemoteOrder: entry.remoteOrder
+                    )
+                    document = workingDocument
+                    documentDirty = true
+                    if alreadyMapped {
+                        let path = Self.pathDescription(for: existing, in: workingDocument)
+                        if let index = skippedPathCounts.firstIndex(where: { $0.path == path }) {
+                            skippedPathCounts[index].count += 1
+                        } else {
+                            skippedPathCounts.append((path, 1))
+                        }
+                        await commit { $0.skippedCount += 1 }
+                    } else {
+                        await commit { $0.importedCount += 1 }
+                    }
+                    continue
+                }
+
+                do {
+                    let probeResult = try await Self.probeWithRetry(entry, client: client)
+                    let mapping = FavoriteRemoteMapping(
+                        yamiboFavoriteID: entry.remoteFavoriteID,
+                        yamiboRemoteOrder: entry.remoteOrder,
+                        lastSeenAt: .now
+                    )
+                    if case let .mangaTitle(_, cleanBookName) = probeResult.target {
+                        _ = try workingDocument.importMangaChapterFavorite(
+                            chapterTID: entry.threadID,
+                            chapterTitle: entry.title ?? probeResult.title,
+                            directories: directories,
+                            fallbackCleanBookName: cleanBookName,
+                            location: targetLocation,
+                            remoteMapping: mapping
+                        )
+                    } else {
+                        _ = try workingDocument.importThreadFavorite(
+                            probeResult: probeResult,
+                            location: targetLocation,
+                            remoteMapping: mapping
+                        )
+                    }
+                    document = workingDocument
+                    documentDirty = true
+                    await commit { $0.importedCount += 1 }
+                } catch is CancellationError {
+                    throw CancellationError()
+                } catch let error where Self.isRunFatal(error) {
+                    throw error
+                } catch {
+                    let reason = Self.truncatedReason(from: error)
+                    await commit { snapshot in
+                        snapshot.failedCount += 1
+                        snapshot.warnings.append(.importFailedItem(title: label, reason: reason))
+                    }
+                }
+            }
+            await commit { snapshot in
+                for entry in skippedPathCounts {
+                    snapshot.logEntries.append(.skippedSyncedItems(path: entry.path, count: entry.count))
+                }
+            }
+            try await saveDocumentIfDirty()
+
+            // Phase 4: uploading
+            let uploadCandidates = workingDocument.items.filter { item in
+                item.locations.contains { $0.categoryID == snapshot.targetCategoryID }
+                    && item.target.threadID.map { !remoteThreadIDs.contains($0) } == true
+            }
+            await commit { snapshot in
+                snapshot.phase = .uploading
+                snapshot.uploadTargetCount = uploadCandidates.count
+                snapshot.logEntries.append(.uploading(targetCount: uploadCandidates.count))
+            }
+            for (offset, item) in uploadCandidates.enumerated() {
+                try Task.checkCancellation()
+                guard let threadID = item.target.threadID else { continue }
+                let label = Self.postLabel(threadID: threadID, title: item.resolvedDisplayTitle)
+                do {
+                    try await client.addFavorite(threadID)
+                    await commit { snapshot in
+                        snapshot.uploadedCount += 1
+                        snapshot.logEntries.append(.uploadedItem(index: offset + 1, total: uploadCandidates.count, title: label))
+                    }
+                } catch is CancellationError {
+                    throw CancellationError()
+                } catch let error where Self.isRunFatal(error) {
+                    throw error
+                } catch {
+                    let reason = Self.truncatedReason(from: error)
+                    await commit { snapshot in
+                        snapshot.failedCount += 1
+                        snapshot.warnings.append(.uploadFailedItem(title: label, reason: reason))
+                    }
+                }
+            }
+
+            // Phase 5: reconciling
+            if snapshot.uploadedCount > 0 {
+                await commit { snapshot in
+                    snapshot.phase = .reconciling
+                    snapshot.logEntries.append(.reconciling)
+                }
+                do {
+                    let allEntries = try await Self.fetchAllPages(client: client)
+                    for entry in allEntries {
+                        guard let target = workingDocument.items.first(where: { $0.target.threadID == entry.threadID })?.target else {
+                            continue
+                        }
+                        workingDocument.updateRemoteMapping(
+                            for: target,
+                            yamiboFavoriteID: entry.remoteFavoriteID,
+                            yamiboRemoteOrder: entry.remoteOrder
+                        )
+                    }
+                    document = workingDocument
+                    documentDirty = true
+                    try await saveDocumentIfDirty()
+                } catch is CancellationError {
+                    throw CancellationError()
+                } catch {
+                    let reason = Self.truncatedReason(from: error)
+                    await commit { $0.warnings.append(.reconcileFailed(reason: reason)) }
+                }
+            }
+
+            let importedCount = snapshot.importedCount
+            let uploadedCount = snapshot.uploadedCount
+            await commit { snapshot in
+                snapshot.status = .completed
+                snapshot.phase = .completed
+                snapshot.finishedAt = .now
+                snapshot.logEntries.append(.completed(importedCount: importedCount, uploadedCount: uploadedCount))
+            }
+        } catch let error where error.isTaskCancellation {
+            try? await saveDocumentIfDirty()
+            let reason = interruptionReason() ?? .interrupted
+            await commit { snapshot in
+                snapshot.status = .interrupted
+                snapshot.phase = .interrupted
+                snapshot.finishedAt = .now
+                snapshot.warnings.append(reason)
+                snapshot.logEntries.append(.interrupted)
+            }
+        } catch {
+            try? await saveDocumentIfDirty()
+            let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            await commit { snapshot in
+                snapshot.status = .failed
+                snapshot.phase = .failed
+                snapshot.finishedAt = .now
+                snapshot.errorMessages.append(message)
+                snapshot.logEntries.append(.failed)
+            }
+        }
+        return snapshot
+    }
+
+    // MARK: - Helpers
+
+    private static func probeWithRetry(
+        _ entry: YamiboRemoteFavoriteEntry,
+        client: FavoriteYamiboSyncClient,
+        attempts: Int = 3
+    ) async throws -> FavoriteThreadProbeResult {
+        var lastError: any Error = YamiboError.parsingFailed(context: entry.threadID)
+        for attempt in 1 ... max(1, attempts) {
+            do {
+                return try await client.probe(entry)
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch let error where isRunFatal(error) {
+                throw error
             } catch {
-                failedRemoteFavoriteIDs.append(remoteEntry.remoteFavoriteID)
+                lastError = error
+                if attempt < attempts {
+                    try Task.checkCancellation()
+                }
             }
         }
+        throw lastError
+    }
 
-        var markedMissingTargetIDs: [String] = []
-        for item in items where item.locations.contains(where: { $0.categoryID == categoryID }) {
-            guard let mapping = item.remoteMapping,
-                  let remoteID = mapping.yamiboFavoriteID,
-                  !seenRemoteFavoriteIDs.contains(remoteID),
-                  !seenRemoteTargetIDs.contains(item.target.id) else {
-                continue
+    private static func fetchAllPages(client: FavoriteYamiboSyncClient) async throws -> [YamiboRemoteFavoriteEntry] {
+        var entries: [YamiboRemoteFavoriteEntry] = []
+        var seenThreadIDs: Set<String> = []
+        var page = 1
+        while true {
+            try Task.checkCancellation()
+            let result = try await client.fetchPage(page)
+            for entry in result.entries where seenThreadIDs.insert(entry.threadID).inserted {
+                var ordered = entry
+                ordered.remoteOrder = entries.count
+                entries.append(ordered)
             }
-            markRemoteMappingMissing(for: item.target, date: date)
-            markedMissingTargetIDs.append(item.target.id)
+            if page >= result.totalPages || result.entries.isEmpty {
+                return entries
+            }
+            page += 1
         }
+    }
 
-        let uploadTargetIDs = items
-            .filter { item in
-                item.locations.contains(where: { $0.categoryID == categoryID })
-                    && item.target.threadID != nil
-                    && item.remoteMapping?.yamiboFavoriteID == nil
-            }
-            .map(\.target.id)
-            .sorted()
+    /// Errors that abort the whole run instead of failing one item, matching
+    /// the Android reference (not logged in / site maintenance).
+    private static func isRunFatal(_ error: any Error) -> Bool {
+        guard let yamiboError = error as? YamiboError else { return false }
+        switch yamiboError {
+        case .notAuthenticated, .floodControl, .missingFavoriteAddToken:
+            return true
+        default:
+            return false
+        }
+    }
 
-        return YamiboFavoriteSyncReport(
-            importedTargetIDs: importedTargetIDs,
-            failedRemoteFavoriteIDs: failedRemoteFavoriteIDs,
-            markedMissingTargetIDs: markedMissingTargetIDs.sorted(),
-            uploadTargetIDs: uploadTargetIDs
-        )
+    private static func postLabel(threadID: String, title: String?) -> String {
+        let trimmed = title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? "#\(threadID)" : "#\(threadID) \(trimmed)"
+    }
+
+    /// Primary organization path of an item, for the "already synced at" log.
+    private static func pathDescription(for item: FavoriteItem, in document: FavoriteLibraryDocument) -> String {
+        guard let location = item.locations.first else { return "" }
+        let categoryName = document.categories.first { $0.id == location.categoryID }?.displayName ?? location.categoryID
+        guard let collectionID = location.collectionID else { return categoryName }
+        let collectionName = document.collections.first { $0.id == collectionID }?.name ?? collectionID
+        return "\(categoryName)/\(collectionName)"
+    }
+
+    private static func truncatedReason(from error: any Error, maxCharacters: Int = 100) -> String {
+        let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+        let normalized = message
+            .components(separatedBy: .whitespacesAndNewlines)
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+        guard normalized.count > maxCharacters else { return normalized }
+        return String(normalized.prefix(maxCharacters)) + "…"
     }
 }
 
-private extension String {
-    var nilIfEmpty: String? {
-        let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? nil : trimmed
+/// Shared cancellation detection for favorite background sessions.
+public extension Error {
+    var isTaskCancellation: Bool {
+        if self is CancellationError {
+            return true
+        }
+        if let urlError = self as? URLError, urlError.code == .cancelled {
+            return true
+        }
+        let nsError = self as NSError
+        return nsError.domain == NSURLErrorDomain && nsError.code == NSURLErrorCancelled
     }
 }

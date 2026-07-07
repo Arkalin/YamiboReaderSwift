@@ -1,108 +1,62 @@
 import SwiftUI
 import YamiboReaderCore
 
-/// Sheet for moving or adding the current selection into categories and
-/// collections, or removing it from the current location.
-struct LocalFavoriteSelectionMoveSheet: View {
-    @Environment(\.dismiss) private var dismiss
+/// Tri-state per-item location membership (all / some / none of the selected
+/// items carry a location).
+enum LocalFavoriteLocationTriState {
+    case none
+    case some
+    case all
+}
 
+/// Category → collection tree with tri-state boxes for the selected items'
+/// locations, mirroring the Android collection picker. Items can live in
+/// multiple locations; toggling a partially-selected location includes it
+/// everywhere, toggling a full one removes it (keeping each item's last
+/// location intact).
+struct LocalFavoriteSelectionMoveSheet: View {
     @ObservedObject var organizer: FavoriteLibraryOrganizer
     @ObservedObject var selection: LocalFavoriteBrowseSession
+
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         NavigationStack {
             List {
-                Section(L10n.string("favorites.location.move_to_category")) {
-                    ForEach(organizer.categories.manualOrderSorted) { category in
-                        Button {
-                            Task {
-                                await organizer.moveSelectionToCategory(id: category.id)
-                                dismiss()
-                            }
-                        } label: {
-                            HStack {
-                                Text(category.displayName)
-                                Spacer()
-                                if category.id == organizer.selectedCategoryID && organizer.selectedCollection == nil {
-                                    Image(systemName: "checkmark")
-                                }
-                            }
+                Section {
+                    Text(L10n.string("favorites.location.selected_items", selection.selectedFavoriteCount))
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+                ForEach(organizer.categories.manualOrderSorted) { category in
+                    Section(category.displayName) {
+                        locationRow(
+                            title: category.displayName,
+                            systemImage: "square.grid.2x2",
+                            location: .category(category.id)
+                        )
+                        ForEach(collections(in: category.id)) { collection in
+                            locationRow(
+                                title: collection.name,
+                                systemImage: "folder",
+                                tint: collection.color.swiftUIColor,
+                                location: .collection(categoryID: category.id, collectionID: collection.id)
+                            )
+                            .padding(.leading, 16)
                         }
                     }
                 }
-                if selection.selectedFavoriteCount > 0 && selection.selectedCollectionCount == 0 {
-                    Section(L10n.string("favorites.location.move_to_collection")) {
-                        ForEach(sortedCollections) { collection in
-                            Button {
-                                Task {
-                                    await organizer.moveSelectionToCollection(id: collection.id)
-                                    dismiss()
-                                }
-                            } label: {
-                                HStack {
-                                    LocalFavoriteCollectionCoverPreview(
-                                        color: collection.color.swiftUIColor,
-                                        coverURLs: []
-                                    )
-                                    .frame(width: 32, height: 32)
-                                    Text(collection.name)
-                                    Spacer()
-                                    if collection.id == organizer.selectedCollection?.id {
-                                        Image(systemName: "checkmark")
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                if selection.selectedFavoriteCount > 0 {
-                    Section(L10n.string("favorites.location.add_to_category")) {
-                        ForEach(organizer.categories.manualOrderSorted) { category in
-                            Button {
-                                Task {
-                                    await organizer.addSelectionToCategory(id: category.id)
-                                    dismiss()
-                                }
-                            } label: {
-                                Text(category.displayName)
-                            }
-                        }
-                    }
-                    Section(L10n.string("favorites.location.add_to_collection")) {
-                        ForEach(sortedCollections) { collection in
-                            Button {
-                                Task {
-                                    await organizer.addSelectionToCollection(id: collection.id)
-                                    dismiss()
-                                }
-                            } label: {
-                                HStack {
-                                    LocalFavoriteCollectionCoverPreview(
-                                        color: collection.color.swiftUIColor,
-                                        coverURLs: []
-                                    )
-                                    .frame(width: 32, height: 32)
-                                    Text(collection.name)
-                                }
-                            }
-                        }
-                    }
-                    Section {
-                        Button(role: .destructive) {
-                            Task {
-                                await organizer.removeSelectionFromCurrentLocation()
-                                dismiss()
-                            }
-                        } label: {
-                            Label(L10n.string("favorites.location.remove_current"), systemImage: "minus.circle")
-                        }
-                    }
+                Section {
+                    Text(L10n.string("favorites.location.keep_one_hint"))
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
                 }
             }
-            .navigationTitle(L10n.string("favorites.location.manage"))
+            .navigationTitle(L10n.string("common.move"))
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button(L10n.string("common.cancel")) {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(L10n.string("common.done")) {
                         dismiss()
                     }
                 }
@@ -110,15 +64,49 @@ struct LocalFavoriteSelectionMoveSheet: View {
         }
     }
 
-    private var sortedCollections: [LocalFavoriteCollection] {
-        organizer.collections.sorted { lhs, rhs in
-            if lhs.categoryID != rhs.categoryID {
-                return lhs.categoryID < rhs.categoryID
+    private func collections(in categoryID: String) -> [LocalFavoriteCollection] {
+        organizer.collections
+            .filter { $0.categoryID == categoryID }
+            .sorted { lhs, rhs in
+                lhs.manualOrder == rhs.manualOrder ? lhs.id < rhs.id : lhs.manualOrder < rhs.manualOrder
             }
-            if lhs.manualOrder != rhs.manualOrder {
-                return lhs.manualOrder < rhs.manualOrder
+    }
+
+    private func locationRow(
+        title: String,
+        systemImage: String,
+        tint: Color = .accentColor,
+        location: FavoriteLocation
+    ) -> some View {
+        let state = organizer.selectionLocationState(location)
+        return Button {
+            Task {
+                await organizer.setSelectionLocation(location, included: state != .all)
             }
-            return lhs.id < rhs.id
+        } label: {
+            HStack {
+                Label {
+                    Text(title)
+                        .foregroundStyle(.primary)
+                } icon: {
+                    Image(systemName: systemImage)
+                        .foregroundStyle(tint)
+                }
+                Spacer()
+                Image(systemName: stateImageName(state))
+                    .foregroundStyle(state == .none ? Color.secondary : Color.accentColor)
+            }
+        }
+    }
+
+    private func stateImageName(_ state: LocalFavoriteLocationTriState) -> String {
+        switch state {
+        case .none:
+            "circle"
+        case .some:
+            "minus.circle.fill"
+        case .all:
+            "checkmark.circle.fill"
         }
     }
 }

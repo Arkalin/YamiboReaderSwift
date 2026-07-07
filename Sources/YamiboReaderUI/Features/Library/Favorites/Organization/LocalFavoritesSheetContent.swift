@@ -52,6 +52,9 @@ struct LocalFavoritesSheetContent: View {
             LocalFavoriteTagSelectionSheet(organizer: organizer, draft: draft)
         case .selectionMove:
             LocalFavoriteSelectionMoveSheet(organizer: organizer, selection: organizer.selection)
+        case .filters:
+            LocalFavoriteFilterSheet(organizer: organizer, routes: routes)
+                .presentationDetents([.medium, .large])
         case .remoteSyncCategory:
             FavoriteRemoteSyncCategorySheet(
                 categories: organizer.categories,
@@ -60,43 +63,12 @@ struct LocalFavoritesSheetContent: View {
                     routes.sheet = nil
                 },
                 onStart: { categoryID in
+                    routes.sheet = nil
                     if await remoteSync.start(targetCategoryID: categoryID) != nil {
-                        routes.sheet = .remoteSyncProgress
-                    } else {
-                        routes.sheet = nil
+                        routes.isSyncProgressPushed = true
                     }
                 }
             )
-        case .remoteSyncProgress:
-            NavigationStack {
-                FavoriteRemoteSyncProgressSheet(
-                    snapshot: remoteSync.snapshot,
-                    onResume: {
-                        await remoteSync.resume()
-                    },
-                    onInterrupt: {
-                        await remoteSync.interrupt()
-                    },
-                    onHide: {
-                        await remoteSync.hideCard()
-                    }
-                )
-            }
-        case .updateEvents:
-            NavigationStack {
-                FavoriteUpdateEventsSheet(
-                    events: updateMonitor.events,
-                    onMarkRead: { eventID in
-                        await updateMonitor.markEventRead(eventID)
-                    },
-                    onDismiss: { eventID in
-                        await updateMonitor.dismissEvent(eventID)
-                    },
-                    onDismissAll: {
-                        await updateMonitor.dismissAllEvents()
-                    }
-                )
-            }
         case .updateFilters:
             NavigationStack {
                 FavoriteUpdateFilterSheet(
