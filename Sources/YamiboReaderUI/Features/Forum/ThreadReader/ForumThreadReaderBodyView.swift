@@ -1,8 +1,10 @@
 import SwiftUI
+import UIKit
 import YamiboReaderCore
 
 struct ForumThreadReaderBodyView: View {
     @State private var imageBrowserRequest: ForumThreadImageBrowserRequest?
+    @State private var imageBrowserBackgroundSnapshot: UIImage?
     @State private var ratingResultsRequest: ForumThreadRatingResultsRequest?
     @State private var pollVotersRequest: ForumThreadPollVotersRequest?
 
@@ -36,6 +38,7 @@ struct ForumThreadReaderBodyView: View {
                     initialItemID: request.initialItemID,
                     mode: .multiple,
                     coverActionsProvider: imageBrowserCoverActionsProvider,
+                    backgroundRevealImage: imageBrowserBackgroundSnapshot,
                     onDismiss: {
                         imageBrowserRequest = nil
                     }
@@ -159,6 +162,7 @@ struct ForumThreadReaderBodyView: View {
 
     private func openImageBrowser(_ imageID: String, _ url: URL, _ title: String?, _ refererURL: URL) {
         if let request = makeImageBrowserRequest(imageID, url, title, refererURL) {
+            imageBrowserBackgroundSnapshot = ImageBrowserBackgroundSnapshot.capture()
             imageBrowserRequest = request
         } else {
             onURLTap(url)

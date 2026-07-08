@@ -19,6 +19,10 @@ struct ImageBrowserView: View {
     let items: [ImageBrowserItem]
     let mode: ImageBrowserMode
     let coverActionsProvider: ImageBrowserCoverActionsProvider?
+    /// A frozen snapshot of the presenting screen, taken right before this view was shown.
+    /// Revealed behind the black scrim as the user swipes down to dismiss, so the interactive
+    /// dismiss gesture appears to peel away to the page underneath instead of fading to black.
+    let backgroundRevealImage: UIImage?
     let onDismiss: () -> Void
 
     @State private var selectedItemID: String
@@ -34,17 +38,31 @@ struct ImageBrowserView: View {
         initialItemID: String?,
         mode: ImageBrowserMode,
         coverActionsProvider: ImageBrowserCoverActionsProvider? = nil,
+        backgroundRevealImage: UIImage? = nil,
         onDismiss: @escaping () -> Void
     ) {
         self.items = items
         self.mode = mode
         self.coverActionsProvider = coverActionsProvider
+        self.backgroundRevealImage = backgroundRevealImage
         self.onDismiss = onDismiss
         _selectedItemID = State(initialValue: Self.initialSelection(in: items, initialItemID: initialItemID))
     }
 
     var body: some View {
         ZStack {
+            if let backgroundRevealImage {
+                GeometryReader { geometry in
+                    Image(uiImage: backgroundRevealImage)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: geometry.size.width, height: geometry.size.height)
+                        .clipped()
+                }
+                .ignoresSafeArea()
+                .accessibilityHidden(true)
+            }
+
             Color.black
                 .opacity(isSwipeDismissCommitted ? 0 : ImageBrowserSwipeDismissGesture.backgroundOpacity(for: swipeDismissProgress))
                 .ignoresSafeArea()
@@ -91,7 +109,7 @@ struct ImageBrowserView: View {
                 onDismiss: onDismiss
             )
         }
-        .background(Color.clear)
+        .background(Color.black)
         .task {
             await reloadCoverActions()
         }
@@ -484,7 +502,14 @@ private struct ImageBrowserZoomableImageView: View {
                 .contentShape(Rectangle())
                 .simultaneousGesture(doubleTapGesture(containerSize: containerSize))
                 .simultaneousGesture(magnifyGesture(containerSize: containerSize))
-                .simultaneousGesture(dragGesture(containerSize: containerSize))
+                .simultaneousGesture(
+                    zoomPanGesture(containerSize: containerSize),
+                    including: zoomPanGestureMask
+                )
+                .simultaneousGesture(
+                    swipeDismissDragGesture(containerSize: containerSize),
+                    including: swipeDismissGestureMask
+                )
                 .onChange(of: containerSize) { _, newValue in
                     clampSteadyOffset(containerSize: newValue)
                 }
@@ -493,6 +518,24 @@ private struct ImageBrowserZoomableImageView: View {
 
     private var zoomScale: CGFloat {
         clampedScale(steadyScale * gestureScale)
+    }
+
+    /// Whether the image is zoomed enough that a one-finger drag should pan the zoomed
+    /// content instead of paging between images or swiping down to dismiss.
+    private var isZoomPanActive: Bool {
+        zoomScale > 1.01
+    }
+
+    /// Detaches the pan gesture entirely (rather than letting it no-op) while unzoomed so it
+    /// never competes with `TabView(.page)`'s own horizontal swipe for the same touch.
+    private var zoomPanGestureMask: GestureMask {
+        isZoomPanActive ? .gesture : .subviews
+    }
+
+    /// Detaches the swipe-to-dismiss gesture entirely while zoomed, since panning takes over
+    /// at that point; see `zoomPanGestureMask` for the complementary case.
+    private var swipeDismissGestureMask: GestureMask {
+        isZoomPanActive ? .subviews : .gesture
     }
 
     private var displayScale: CGFloat {
@@ -544,23 +587,27 @@ private struct ImageBrowserZoomableImageView: View {
             }
     }
 
-    private func dragGesture(containerSize: CGSize) -> some Gesture {
+    private func zoomPanGesture(containerSize: CGSize) -> some Gesture {
         DragGesture()
             .onChanged { value in
-                guard !isSwipeDismissCommitted else { return }
-                if zoomScale > 1.01 {
-                    updateZoomDrag(value.translation, containerSize: containerSize)
-                } else {
-                    updateSwipeDismissDrag(value.translation)
-                }
+                guard !isSwipeDismissCommitted, isZoomPanActive else { return }
+                updateZoomDrag(value.translation, containerSize: containerSize)
             }
             .onEnded { value in
-                guard !isSwipeDismissCommitted else { return }
-                if zoomScale > 1.01 {
-                    endZoomDrag(value.translation, containerSize: containerSize)
-                } else {
-                    endSwipeDismissDrag(value, containerSize: containerSize)
-                }
+                guard !isSwipeDismissCommitted, isZoomPanActive else { return }
+                endZoomDrag(value.translation, containerSize: containerSize)
+            }
+    }
+
+    private func swipeDismissDragGesture(containerSize: CGSize) -> some Gesture {
+        DragGesture(minimumDistance: ImageBrowserSwipeDismissGesture.minimumRecognitionDistance)
+            .onChanged { value in
+                guard !isSwipeDismissCommitted, !isZoomPanActive else { return }
+                updateSwipeDismissDrag(value.translation)
+            }
+            .onEnded { value in
+                guard !isSwipeDismissCommitted, !isZoomPanActive else { return }
+                endSwipeDismissDrag(value, containerSize: containerSize)
             }
     }
 
