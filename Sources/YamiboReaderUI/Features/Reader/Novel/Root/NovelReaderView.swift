@@ -12,6 +12,7 @@ public struct NovelReaderView: View {
     @State private var showingChapterSheet = false
     @State private var showingChapterComments = false
     @State private var imageBrowserItem: ImageBrowserItem?
+    @State private var imageBrowserBackgroundSnapshot: UIImage?
     @State private var chapterCommentsTarget: ReaderChapterCommentTarget?
     @State private var chromeState = NovelReaderChromeState()
     @State private var verticalScrollRequest: NovelReaderVerticalScrollRequest?
@@ -246,6 +247,7 @@ public struct NovelReaderView: View {
             showingChapterComments: $showingChapterComments,
             showingLikes: $showingLikes,
             imageBrowserItem: $imageBrowserItem,
+            imageBrowserBackgroundSnapshot: imageBrowserBackgroundSnapshot,
             chapterCommentsTarget: chapterCommentsTarget,
             likeDependencies: dependencies.like,
             onJumpToChapterDirectoryChapter: { chapter in
@@ -712,6 +714,7 @@ public struct NovelReaderView: View {
     }
 
     private func openImageBrowser(url: URL, title: String?) {
+        imageBrowserBackgroundSnapshot = ImageBrowserBackgroundSnapshot.capture()
         imageBrowserItem = ImageBrowserItem(
             id: url.absoluteString,
             source: YamiboImageSource(
@@ -1450,6 +1453,7 @@ private struct NovelReaderPresentationModifier: ViewModifier {
     @Binding var showingLikes: Bool
     @Binding var imageBrowserItem: ImageBrowserItem?
 
+    let imageBrowserBackgroundSnapshot: UIImage?
     let chapterCommentsTarget: ReaderChapterCommentTarget?
     let likeDependencies: LikeDependencies
     let onJumpToChapterDirectoryChapter: (NovelReaderChapter) -> Void
@@ -1508,7 +1512,8 @@ private struct NovelReaderPresentationModifier: ViewModifier {
                     items: [item],
                     initialItemID: item.id,
                     mode: .single,
-                    coverActionsProvider: model.imageBrowserCoverActionsProvider
+                    coverActionsProvider: model.imageBrowserCoverActionsProvider,
+                    backgroundRevealImage: imageBrowserBackgroundSnapshot
                 ) {
                     imageBrowserItem = nil
                 }
