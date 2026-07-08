@@ -35,6 +35,11 @@ struct LocalFavoriteCollectionPreviewTile: Equatable {
 struct LocalFavoriteDerivedState: Equatable {
     var cards: [FavoriteCardProjection] = []
     var visibleCollections: [LocalFavoriteCollection] = []
+    /// Collections and cards merged into the order the list/grid renders —
+    /// collections pinned first only in manual sort order, interleaved with
+    /// cards under every other sort order (see
+    /// `LocalFavoriteLibraryProjection.mixedEntries`).
+    var mixedEntries: [FavoriteMixedEntry] = []
     var categoryEntryCounts: [String: Int] = [:]
     var collectionEntryCounts: [String: Int] = [:]
     var sourceFilterEntryCounts: [LocalFavoriteSourceFilter: Int] = [:]
@@ -71,14 +76,25 @@ enum LocalFavoriteLibraryDerivation {
             ),
             inputs: inputs
         )
-        let collectionCounts = collectionEntryCounts(inputs)
+        let aggregates = collectionAggregates(inputs)
+        let collectionCounts = aggregates.mapValues(\.entryCount)
+        let collections = visibleCollections(
+            in: inputs.document,
+            categoryID: inputs.selectedCategoryID,
+            filter: inputs.filter,
+            collectionEntryCounts: collectionCounts
+        )
         return LocalFavoriteDerivedState(
             cards: cards,
-            visibleCollections: visibleCollections(
-                in: inputs.document,
-                categoryID: inputs.selectedCategoryID,
-                filter: inputs.filter,
-                collectionEntryCounts: collectionCounts
+            visibleCollections: collections,
+            mixedEntries: LocalFavoriteLibraryProjection.mixedEntries(
+                cards: cards,
+                // No nested collections in the domain model: a collection's
+                // own detail page never shows sibling collections.
+                collections: inputs.selectedCollectionID == nil ? collections : [],
+                collectionSummaries: aggregates.mapValues(\.sortSummary),
+                sortOrder: inputs.filter.sortOrder,
+                descending: inputs.filter.sortDescending
             ),
             categoryEntryCounts: categoryEntryCounts(inputs, collectionEntryCounts: collectionCounts),
             collectionEntryCounts: collectionCounts,
@@ -134,7 +150,12 @@ enum LocalFavoriteLibraryDerivation {
         })
     }
 
-    private static func collectionEntryCounts(_ inputs: Inputs) -> [String: Int] {
+    private struct CollectionAggregate {
+        var entryCount: Int
+        var sortSummary: FavoriteCollectionSortSummary
+    }
+
+    private static func collectionAggregates(_ inputs: Inputs) -> [String: CollectionAggregate] {
         Dictionary(uniqueKeysWithValues: inputs.document.collections.map { collection in
             let cards = resolvedCards(
                 in: inputs.document,
@@ -148,7 +169,7 @@ enum LocalFavoriteLibraryDerivation {
                 ),
                 inputs: inputs
             )
-            return (collection.id, cards.count)
+            return (collection.id, CollectionAggregate(entryCount: cards.count, sortSummary: .summarizing(cards)))
         })
     }
 

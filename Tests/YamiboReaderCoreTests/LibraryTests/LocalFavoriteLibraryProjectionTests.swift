@@ -164,6 +164,158 @@ import Testing
     #expect(document.items.first { $0.id == items.manga.id }?.mangaChapterMetadata == items.manga.mangaChapterMetadata)
 }
 
+@Test func localFavoriteMixedEntriesKeepsCollectionsPinnedInOrganizationOrder() throws {
+    let (document, _, collection) = try makeMixedEntryDocument()
+    let cards = LocalFavoriteLibraryProjection.cards(in: document, query: LocalFavoriteLibraryQuery(sortOrder: .organization))
+
+    let entries = LocalFavoriteLibraryProjection.mixedEntries(
+        cards: cards,
+        collections: [collection],
+        // A summary that would sort the collection dead last under any of
+        // the auto criteria — proves organization mode ignores it entirely.
+        collectionSummaries: [collection.id: FavoriteCollectionSortSummary(minRemoteOrder: 999)],
+        sortOrder: .organization,
+        descending: false
+    )
+
+    #expect(entries.first?.id == "collection-\(collection.id)")
+    #expect(Array(entries.dropFirst()).map(\.id) == cards.map { "item-\($0.id)" })
+}
+
+@Test func localFavoriteMixedEntriesInterleavesCollectionsWithCardsOutsideOrganizationOrder() throws {
+    let (document, items, collection) = try makeMixedEntryDocument()
+    let cards = LocalFavoriteLibraryProjection.cards(in: document, query: LocalFavoriteLibraryQuery(sortOrder: .displayTitle))
+
+    let entries = LocalFavoriteLibraryProjection.mixedEntries(
+        cards: cards,
+        collections: [collection],
+        collectionSummaries: [:],
+        sortOrder: .displayTitle,
+        descending: false
+    )
+
+    // Collection name "条目M" sorts between item titles "条目A" and "条目Z" —
+    // it is not pinned ahead of every card.
+    #expect(entries.map(\.id) == ["item-\(items.first.id)", "collection-\(collection.id)", "item-\(items.second.id)"])
+}
+
+@Test func localFavoriteMixedEntriesUsesLatestMemberUpdateAsCollectionProxyForUpdatedAtSort() throws {
+    let (document, items, collection) = try makeMixedEntryDocument()
+    let cards = LocalFavoriteLibraryProjection.cards(in: document, query: LocalFavoriteLibraryQuery(sortOrder: .contentUpdatedAt))
+
+    // Collection's proxy update time sits strictly between the two cards'.
+    let entries = LocalFavoriteLibraryProjection.mixedEntries(
+        cards: cards,
+        collections: [collection],
+        collectionSummaries: [collection.id: FavoriteCollectionSortSummary(latestUpdatedAt: Date(timeIntervalSince1970: 150))],
+        sortOrder: .contentUpdatedAt,
+        descending: false
+    )
+
+    #expect(entries.map(\.id) == ["item-\(items.first.id)", "collection-\(collection.id)", "item-\(items.second.id)"])
+}
+
+@Test func localFavoriteMixedEntriesUsesLatestMemberReadAsCollectionProxyForLastReadAtSort() throws {
+    let (document, items, collection) = try makeMixedEntryDocument()
+    let progress = [
+        ReadingProgressRecord(
+            contentTarget: items.first.target,
+            threadID: "801",
+            kind: .novel,
+            updatedAt: Date(timeIntervalSince1970: 10),
+            lastReadAt: Date(timeIntervalSince1970: 50),
+            novel: NovelReadingProgressRecord(novelDocumentSurfaceProgressPercent: 10)
+        ),
+        ReadingProgressRecord(
+            contentTarget: items.second.target,
+            threadID: "802",
+            kind: .novel,
+            updatedAt: Date(timeIntervalSince1970: 20),
+            lastReadAt: Date(timeIntervalSince1970: 250),
+            novel: NovelReadingProgressRecord(novelDocumentSurfaceProgressPercent: 20)
+        )
+    ]
+    let cards = LocalFavoriteLibraryProjection.cards(
+        in: document,
+        query: LocalFavoriteLibraryQuery(sortOrder: .lastReadAt),
+        readingProgress: progress
+    )
+
+    // Collection's proxy read time (150) sits strictly between the two
+    // cards' recentReadingAt (50 and 250).
+    let entries = LocalFavoriteLibraryProjection.mixedEntries(
+        cards: cards,
+        collections: [collection],
+        collectionSummaries: [collection.id: FavoriteCollectionSortSummary(latestReadAt: Date(timeIntervalSince1970: 150))],
+        sortOrder: .lastReadAt,
+        descending: false
+    )
+
+    #expect(entries.map(\.id) == ["item-\(items.first.id)", "collection-\(collection.id)", "item-\(items.second.id)"])
+}
+
+@Test func localFavoriteMixedEntriesPutsNeverReadEntriesFirstWhenLastReadAtSortsDescending() throws {
+    let (document, items, collection) = try makeMixedEntryDocument()
+    // Only the first item has ever been read; the second item and the
+    // collection (no collectionSummaries entry) have no read history.
+    let progress = [
+        ReadingProgressRecord(
+            contentTarget: items.first.target,
+            threadID: "801",
+            kind: .novel,
+            updatedAt: Date(timeIntervalSince1970: 10),
+            lastReadAt: Date(timeIntervalSince1970: 50),
+            novel: NovelReadingProgressRecord(novelDocumentSurfaceProgressPercent: 10)
+        )
+    ]
+    let cards = LocalFavoriteLibraryProjection.cards(
+        in: document,
+        query: LocalFavoriteLibraryQuery(sortOrder: .lastReadAt),
+        readingProgress: progress
+    )
+
+    let entries = LocalFavoriteLibraryProjection.mixedEntries(
+        cards: cards,
+        collections: [collection],
+        collectionSummaries: [:],
+        sortOrder: .lastReadAt,
+        descending: true
+    )
+
+    // Pins down a known, deliberately-kept quirk (see
+    // favorites-collection-sort-mixing memory): undated entries sort last
+    // ascending, and descending reverses the WHOLE list, so the never-read
+    // collection and never-read card land ahead of the card that was
+    // actually read. This is intentionally NOT "fixed" here.
+    #expect(entries.map(\.id) == ["item-\(items.second.id)", "collection-\(collection.id)", "item-\(items.first.id)"])
+}
+
+private func makeMixedEntryDocument() throws -> (FavoriteLibraryDocument, MixedEntryItems, LocalFavoriteCollection) {
+    var document = FavoriteLibraryDocument()
+    let categoryID = document.defaultCategory.id
+    let collection = document.createCollection(categoryID: categoryID, name: "条目M")
+    let first = try FavoriteItem(
+        target: FavoriteContentTarget(kind: .normalThread, threadID: "801"),
+        title: "条目A",
+        contentUpdatedAt: Date(timeIntervalSince1970: 100),
+        locations: [.category(categoryID)]
+    )
+    let second = try FavoriteItem(
+        target: FavoriteContentTarget(kind: .normalThread, threadID: "802"),
+        title: "条目Z",
+        contentUpdatedAt: Date(timeIntervalSince1970: 200),
+        locations: [.category(categoryID)]
+    )
+    document.addItem(first)
+    document.addItem(second)
+    return (document, MixedEntryItems(first: first, second: second), collection)
+}
+
+private struct MixedEntryItems {
+    var first: FavoriteItem
+    var second: FavoriteItem
+}
+
 private func makeProjectionDocument() throws -> (FavoriteLibraryDocument, ProjectionItems) {
     var document = FavoriteLibraryDocument()
     let categoryID = document.defaultCategory.id
