@@ -24,6 +24,7 @@ struct NovelReaderPagedCollectionViewport: UIViewRepresentable {
     let onScrollAnimationRequestConsumed: (ReaderPagedScrollAnimationRequest) -> Void
     let onChromeVisibleImageTap: () -> Void
     let onImageTap: (URL, String?) -> Void
+    let onImageLongPress: (NovelImageLikeAnchor, URL) -> Void
 
     private var contentIdentity: NovelReaderPagedViewportContentIdentity {
         NovelReaderPagedViewportContentIdentity(
@@ -57,6 +58,14 @@ struct NovelReaderPagedCollectionViewport: UIViewRepresentable {
         tapRecognizer.cancelsTouchesInView = false
         tapRecognizer.delegate = context.coordinator
         collectionView.addGestureRecognizer(tapRecognizer)
+        let longPressRecognizer = UILongPressGestureRecognizer(
+            target: context.coordinator,
+            action: #selector(Coordinator.handleLongPress(_:))
+        )
+        longPressRecognizer.minimumPressDuration = 0.45
+        longPressRecognizer.cancelsTouchesInView = false
+        longPressRecognizer.delegate = context.coordinator
+        collectionView.addGestureRecognizer(longPressRecognizer)
         let quickFadePanRecognizer = UIPanGestureRecognizer(
             target: context.coordinator,
             action: #selector(Coordinator.handleQuickFadePan(_:))
@@ -276,6 +285,27 @@ struct NovelReaderPagedCollectionViewport: UIViewRepresentable {
             let onImageTap = parent.onImageTap
             callbackScheduler.publish {
                 onImageTap(payload.url, payload.title)
+            }
+        }
+
+        @objc
+        func handleLongPress(_ recognizer: UILongPressGestureRecognizer) {
+            guard recognizer.state == .began,
+                  let collectionView = recognizer.view as? UICollectionView else {
+                return
+            }
+            let location = recognizer.location(in: collectionView)
+            guard let imageView = collectionView.firstDescendant(
+                ofType: NovelReaderVerticalViewportImageView.self,
+                containing: location
+            ), let payload = imageView.imageTapPayloadIfHit(
+                at: collectionView.convert(location, to: imageView)
+            ), let anchor = novelImageLikeAnchor(forImageURL: payload.url, in: parent.surfaces) else {
+                return
+            }
+            let onImageLongPress = parent.onImageLongPress
+            callbackScheduler.publish {
+                onImageLongPress(anchor, payload.url)
             }
         }
 

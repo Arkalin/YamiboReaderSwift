@@ -26,6 +26,7 @@ struct MangaReaderChromeControls: View {
     let onShowComments: () -> Void
     let onShowSettings: () -> Void
     let onShowCache: () -> Void
+    let onShowLikes: () -> Void
     let onOpenOriginalPost: () -> Void
     let onJumpToLocalPage: (Int) -> Void
 
@@ -58,6 +59,7 @@ struct MangaReaderChromeControls: View {
                 onShowComments: onShowComments,
                 onShowSettings: onShowSettings,
                 onShowCache: onShowCache,
+                onShowLikes: onShowLikes,
                 onOpenOriginalPost: onOpenOriginalPost,
                 onJumpToLocalPage: onJumpToLocalPage
             )

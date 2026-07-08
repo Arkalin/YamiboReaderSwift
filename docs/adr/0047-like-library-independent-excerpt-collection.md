@@ -1,0 +1,3 @@
+# Like Library Is an Independent Excerpt Collection
+
+The Like Library stores liked text excerpts and images captured in the novel and manga readers as a local-first collection owned by content target identity (novel thread `tid`, manga title `cleanBookName`), independent of the Favorite Library, mirroring how the Reading Progress Store stays independent of favorites. Liking never requires or creates a favorite, and deleting a favorite never cascades into likes, because coupling excerpt capture to favorite membership would make capture conditional on library organization. Normal forum threads are not capture sources.

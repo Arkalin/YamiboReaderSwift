@@ -151,6 +151,7 @@ struct NovelReaderPagedPageCurlViewport: UIViewControllerRepresentable {
     let onScrollAnimationRequestConsumed: (ReaderPagedScrollAnimationRequest) -> Void
     let onChromeVisibleImageTap: () -> Void
     let onImageTap: (URL, String?) -> Void
+    let onImageLongPress: (NovelImageLikeAnchor, URL) -> Void
 
     @Environment(\.colorScheme) private var colorScheme
 
@@ -203,6 +204,15 @@ struct NovelReaderPagedPageCurlViewport: UIViewControllerRepresentable {
         tapRecognizer.cancelsTouchesInView = false
         tapRecognizer.delegate = context.coordinator
         pageViewController.view.addGestureRecognizer(tapRecognizer)
+
+        let longPressRecognizer = UILongPressGestureRecognizer(
+            target: context.coordinator,
+            action: #selector(Coordinator.handleLongPress(_:))
+        )
+        longPressRecognizer.minimumPressDuration = 0.45
+        longPressRecognizer.cancelsTouchesInView = false
+        longPressRecognizer.delegate = context.coordinator
+        pageViewController.view.addGestureRecognizer(longPressRecognizer)
 
         let boundaryPageTurnPanRecognizer = UIPanGestureRecognizer(
             target: context.coordinator,
@@ -346,6 +356,27 @@ struct NovelReaderPagedPageCurlViewport: UIViewControllerRepresentable {
             let onPageTapZone = parent.onPageTapZone
             callbackScheduler.publish {
                 onPageTapZone(directionalZone)
+            }
+        }
+
+        @objc
+        func handleLongPress(_ recognizer: UILongPressGestureRecognizer) {
+            guard recognizer.state == .began,
+                  let containerView = recognizer.view else {
+                return
+            }
+            let location = recognizer.location(in: containerView)
+            guard let imageView = containerView.firstDescendant(
+                ofType: NovelReaderVerticalViewportImageView.self,
+                containing: location
+            ), let payload = imageView.imageTapPayloadIfHit(
+                at: containerView.convert(location, to: imageView)
+            ), let anchor = novelImageLikeAnchor(forImageURL: payload.url, in: parent.surfaces) else {
+                return
+            }
+            let onImageLongPress = parent.onImageLongPress
+            callbackScheduler.publish {
+                onImageLongPress(anchor, payload.url)
             }
         }
 

@@ -33,6 +33,7 @@ package struct NovelTextViewportIdentity: Hashable, Sendable {
 
 package struct NovelTextViewportExternalBlock: Hashable, Sendable {
     public var chapterIdentity: NovelChapterIdentity?
+    public var imageSegmentIdentity: NovelTextSegmentIdentity?
     public var url: URL
     public var chapterOrdinal: Int?
     public var chapterTitle: String?
@@ -41,6 +42,7 @@ package struct NovelTextViewportExternalBlock: Hashable, Sendable {
 
     public init(
         chapterIdentity: NovelChapterIdentity?,
+        imageSegmentIdentity: NovelTextSegmentIdentity? = nil,
         url: URL,
         chapterOrdinal: Int?,
         chapterTitle: String?,
@@ -48,6 +50,7 @@ package struct NovelTextViewportExternalBlock: Hashable, Sendable {
         chapterCommentTarget: ReaderChapterCommentTarget? = nil
     ) {
         self.chapterIdentity = chapterIdentity
+        self.imageSegmentIdentity = imageSegmentIdentity
         self.url = url
         self.chapterOrdinal = chapterOrdinal
         self.chapterTitle = chapterTitle

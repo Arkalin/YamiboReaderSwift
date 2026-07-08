@@ -244,6 +244,7 @@ public enum NovelTextLayout {
             case let .image(url, chapterTitle):
                 let externalBlock = NovelTextViewportExternalBlock(
                     chapterIdentity: annotatedSegment.semantics?.chapterIdentity,
+                    imageSegmentIdentity: annotatedSegment.semantics?.textSegmentIdentity,
                     url: url,
                     chapterOrdinal: annotatedSegment.chapterOrdinal,
                     chapterTitle: annotatedSegment.chapterTitle,
@@ -549,6 +550,7 @@ public enum NovelTextLayout {
                 externalBlocks.append(
                     NovelTextViewportExternalBlock(
                         chapterIdentity: annotatedSegment.semantics?.chapterIdentity,
+                        imageSegmentIdentity: annotatedSegment.semantics?.textSegmentIdentity,
                         url: url,
                         chapterOrdinal: annotatedSegment.chapterOrdinal,
                         chapterTitle: annotatedSegment.chapterTitle,

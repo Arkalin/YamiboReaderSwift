@@ -16,6 +16,7 @@ struct MangaReaderBottomChrome: View {
     let onShowComments: () -> Void
     let onShowSettings: () -> Void
     let onShowCache: () -> Void
+    let onShowLikes: () -> Void
     let onOpenOriginalPost: () -> Void
     let onJumpToLocalPage: (Int) -> Void
 
@@ -56,12 +57,13 @@ struct MangaReaderBottomChrome: View {
                         originalPostTitle: L10n.string("common.original_post"),
                         commentsTitle: L10n.string("reader.comments"),
                         settingsTitle: L10n.string("settings.title"),
-                        bookmarkTitle: "书签",
+                        bookmarkTitle: L10n.string("mine.my_likes"),
                         cacheTitle: L10n.string("reader.cache"),
                         onOpenOriginalPost: onOpenOriginalPost,
                         onShowComments: onShowComments,
                         onShowSettings: onShowSettings,
-                        onShowCache: onShowCache
+                        onShowCache: onShowCache,
+                        onShowLikes: onShowLikes
                     )
                     .opacity(staticControlVisibility.opacity)
                     .allowsHitTesting(staticControlVisibility.allowsHitTesting)
@@ -371,6 +373,7 @@ private struct MangaReaderStaticActionControls: View {
     let onShowComments: () -> Void
     let onShowSettings: () -> Void
     let onShowCache: () -> Void
+    let onShowLikes: () -> Void
 
     var body: some View {
         let layout = ReaderBottomChromeLayoutPresentation()
@@ -396,9 +399,8 @@ private struct MangaReaderStaticActionControls: View {
             Spacer(minLength: layout.actionButtonSpacing)
             bottomActionButton(
                 title: bookmarkTitle,
-                isEnabled: false,
                 systemName: "heart",
-                handler: {}
+                handler: onShowLikes
             )
             Spacer(minLength: layout.actionButtonSpacing)
             bottomActionButton(

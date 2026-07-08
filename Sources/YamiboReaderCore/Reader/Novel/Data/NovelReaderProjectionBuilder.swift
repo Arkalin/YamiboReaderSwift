@@ -72,6 +72,7 @@ public enum NovelReaderProjectionBuilder {
     ) throws -> NovelReaderParsedContent {
         var result = NovelReaderParsedContent()
         var textOccurrenceByChapter: [NovelChapterIdentity: Int] = [:]
+        var imageOccurrenceByChapter: [NovelChapterIdentity: Int] = [:]
 
         for post in page.posts {
             let projected = try projectedPost(for: post)
@@ -98,7 +99,8 @@ public enum NovelReaderProjectionBuilder {
                         chapterIdentity: chapterIdentity,
                         inlineTextStyles: projected.inlineTextStyles[index],
                         blockTextStyles: projected.blockTextStyles[index],
-                        textOccurrenceByChapter: &textOccurrenceByChapter
+                        textOccurrenceByChapter: &textOccurrenceByChapter,
+                        imageOccurrenceByChapter: &imageOccurrenceByChapter
                     )
                 }
             )
@@ -176,7 +178,8 @@ public enum NovelReaderProjectionBuilder {
         chapterIdentity: NovelChapterIdentity?,
         inlineTextStyles: [NovelInlineTextStyleRange],
         blockTextStyles: [NovelBlockTextStyleRange],
-        textOccurrenceByChapter: inout [NovelChapterIdentity: Int]
+        textOccurrenceByChapter: inout [NovelChapterIdentity: Int],
+        imageOccurrenceByChapter: inout [NovelChapterIdentity: Int]
     ) -> NovelReaderSegmentSemantics? {
         guard let chapterIdentity else { return nil }
         switch segment {
@@ -192,7 +195,12 @@ public enum NovelReaderProjectionBuilder {
             )
 
         case .image:
-            return NovelReaderSegmentSemantics(chapterIdentity: chapterIdentity)
+            let occurrence = imageOccurrenceByChapter[chapterIdentity] ?? 0
+            imageOccurrenceByChapter[chapterIdentity] = occurrence + 1
+            return NovelReaderSegmentSemantics(
+                chapterIdentity: chapterIdentity,
+                textSegmentIdentity: NovelTextSegmentIdentity(rawValue: "\(chapterIdentity.rawValue)#image:\(occurrence)")
+            )
         }
     }
 

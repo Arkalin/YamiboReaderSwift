@@ -114,15 +114,25 @@ final class NovelTextViewportReferenceUIView: UIView, @preconcurrency UIEditMenu
         suggestedActions: [UIMenuElement]
     ) -> UIMenu? {
         guard selectionController?.hasSelection == true else { return nil }
+        let likeAction = makeLikeAction()
         if !suggestedActions.isEmpty {
-            return UIMenu(children: suggestedActions)
+            return UIMenu(children: likeAction.map { suggestedActions + [$0] } ?? suggestedActions)
         }
         let copyAction = UIAction(
             title: L10n.string("reader.copy")
         ) { [weak self] _ in
             self?.selectionController?.copySelection()
         }
-        return UIMenu(children: [copyAction])
+        return UIMenu(children: [copyAction] + (likeAction.map { [$0] } ?? []))
+    }
+
+    // A3: the edit menu simply omits "add to likes" when the selection can't
+    // resolve to a semantic position (no chapter title on that content).
+    private func makeLikeAction() -> UIAction? {
+        guard selectionController?.canLike == true else { return nil }
+        return UIAction(title: L10n.string("likes.add_to_likes")) { [weak self] _ in
+            self?.selectionController?.likeSelection()
+        }
     }
 
     func editMenuInteraction(

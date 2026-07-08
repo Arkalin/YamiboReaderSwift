@@ -212,6 +212,7 @@ public actor MangaDirectoryStore: MangaDirectoryPersisting, MangaDirectoryRenami
         try renameFavoriteMangaTargets(from: oldName, to: newName, in: db)
         try renameReadingProgressMangaTargets(from: oldName, to: newName, in: db)
         try ContentCoverStore.renameMangaTitleCover(from: oldName, to: newName, in: db)
+        try LikeStore.renameMangaTitleLikes(from: oldName, to: newName, in: db)
     }
 
     private static func renameFavoriteMangaTargets(from oldName: String, to newName: String, in db: Database) throws {

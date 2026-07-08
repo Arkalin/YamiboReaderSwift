@@ -34,6 +34,7 @@ struct NovelReaderVerticalViewportScrollView: UIViewRepresentable {
     let onTap: () -> Void
     let onChromeVisibleImageTap: () -> Void
     let onImageTap: (URL, String?) -> Void
+    let onImageLongPress: (NovelImageLikeAnchor, URL) -> Void
 
     private var contentIdentity: NovelReaderVerticalViewportContentIdentity {
         NovelReaderVerticalViewportContentIdentity(
@@ -72,6 +73,10 @@ struct NovelReaderVerticalViewportScrollView: UIViewRepresentable {
         context.coordinator.tapGesture.cancelsTouchesInView = false
         context.coordinator.tapGesture.delegate = context.coordinator
         collectionView.addGestureRecognizer(context.coordinator.tapGesture)
+        context.coordinator.longPressGesture.minimumPressDuration = 0.45
+        context.coordinator.longPressGesture.cancelsTouchesInView = false
+        context.coordinator.longPressGesture.delegate = context.coordinator
+        collectionView.addGestureRecognizer(context.coordinator.longPressGesture)
         onScrollViewReady(collectionView)
         selectionController?.configure(mode: .vertical)
         selectionController?.attachVerticalScrollView(collectionView)
@@ -105,6 +110,7 @@ struct NovelReaderVerticalViewportScrollView: UIViewRepresentable {
         private var isImmediateVisibleTextRedrawScheduled = false
         private var isDelayedVisibleTextRedrawScheduled = false
         lazy var tapGesture = UITapGestureRecognizer(target: self, action: #selector(handleTap(_:)))
+        lazy var longPressGesture = UILongPressGestureRecognizer(target: self, action: #selector(handleLongPress(_:)))
 
         init(parent: NovelReaderVerticalViewportScrollView) {
             self.parent = parent
@@ -335,6 +341,26 @@ struct NovelReaderVerticalViewportScrollView: UIViewRepresentable {
             let onImageTap = parent.onImageTap
             callbackScheduler.publish {
                 onImageTap(payload.url, payload.title)
+            }
+        }
+
+        @objc private func handleLongPress(_ recognizer: UILongPressGestureRecognizer) {
+            guard recognizer.state == .began,
+                  let collectionView = recognizer.view as? UICollectionView else {
+                return
+            }
+            let location = recognizer.location(in: collectionView)
+            guard let imageView = collectionView.firstDescendant(
+                ofType: NovelReaderVerticalViewportImageView.self,
+                containing: location
+            ), let payload = imageView.imageTapPayloadIfHit(
+                at: collectionView.convert(location, to: imageView)
+            ), let anchor = novelImageLikeAnchor(forImageURL: payload.url, in: parent.surfaces) else {
+                return
+            }
+            let onImageLongPress = parent.onImageLongPress
+            callbackScheduler.publish {
+                onImageLongPress(anchor, payload.url)
             }
         }
 

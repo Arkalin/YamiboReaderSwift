@@ -33,6 +33,8 @@ public final class YamiboAppContext: Sendable {
     let contentCoverStore: ContentCoverStore
     let novelReaderCacheStore: NovelReaderProjectionStore
     let favoriteBackgroundImageStore: FavoriteBackgroundImageStore
+    private let likeStore: LikeStore
+    private let likeImageStore: LikeImageStore
     let mangaDirectoryStore: MangaDirectoryStore
     let mangaDirectorySearchCooldownState: MangaDirectorySearchCooldownState
     let mangaReaderProjectionStore: MangaReaderProjectionStore
@@ -62,6 +64,8 @@ public final class YamiboAppContext: Sendable {
         contentCoverStore: ContentCoverStore? = nil,
         novelReaderCacheStore: NovelReaderProjectionStore? = nil,
         favoriteBackgroundImageStore: FavoriteBackgroundImageStore? = nil,
+        likeStore: LikeStore? = nil,
+        likeImageStore: LikeImageStore? = nil,
         mangaDirectoryStore: MangaDirectoryStore? = nil,
         mangaDirectorySearchCooldownState: MangaDirectorySearchCooldownState = MangaDirectorySearchCooldownState(),
         mangaReaderProjectionStore: MangaReaderProjectionStore? = nil,
@@ -105,6 +109,10 @@ public final class YamiboAppContext: Sendable {
         )
         self.favoriteBackgroundImageStore = favoriteBackgroundImageStore ?? FavoriteBackgroundImageStore(
             baseDirectory: Self.favoriteBackgroundDirectory(rootDirectory: resolvedGRDBRootDirectory)
+        )
+        self.likeStore = likeStore ?? LikeStore(databasePool: resolvedGRDBDatabasePool)
+        self.likeImageStore = likeImageStore ?? LikeImageStore(
+            baseDirectory: Self.likeImagesDirectory(rootDirectory: resolvedGRDBRootDirectory)
         )
         self.mangaDirectoryStore = mangaDirectoryStore ?? MangaDirectoryStore(databasePool: resolvedGRDBDatabasePool)
         self.mangaDirectorySearchCooldownState = mangaDirectorySearchCooldownState
@@ -172,7 +180,8 @@ public final class YamiboAppContext: Sendable {
             makeDirectoryRepository: { [self] in await makeMangaDirectoryRepository() },
             makeChapterCommentsRepository: { [self] in await makeReaderChapterCommentsRepository() },
             makeOfflineCacheQueueExecutor: { [self] in await makeOfflineCacheQueueExecutor() },
-            account: accountDependencies
+            account: accountDependencies,
+            like: likeLibraryDependencies
         )
     }
 
@@ -186,7 +195,8 @@ public final class YamiboAppContext: Sendable {
             makeNovelReaderRepository: { [self] in await makeNovelReaderRepository() },
             makeChapterCommentsRepository: { [self] in await makeReaderChapterCommentsRepository() },
             makeOfflineCacheQueueExecutor: { [self] in await makeOfflineCacheQueueExecutor() },
-            account: accountDependencies
+            account: accountDependencies,
+            like: likeLibraryDependencies
         )
     }
 
@@ -223,6 +233,16 @@ public final class YamiboAppContext: Sendable {
         WebDAVSyncDependencies(
             settingsStore: webDAVSyncSettingsStore,
             makeSyncService: { [self] in makeWebDAVSyncService() }
+        )
+    }
+
+    /// Shared by Mine's My Likes feature and both readers' capture services,
+    /// so there's a single package shape instead of one per consumer.
+    public var likeLibraryDependencies: LikeDependencies {
+        LikeDependencies(
+            likeStore: likeStore,
+            likeImageStore: likeImageStore,
+            mangaDirectoryStore: mangaDirectoryStore
         )
     }
 
@@ -375,6 +395,8 @@ public final class YamiboAppContext: Sendable {
         if clearsWebDataOnReset {
             await clearWebData()
         }
+        try await likeStore.clearAll()
+        try await likeImageStore.deleteAll()
     }
 
     private func clearLocalUIState() {
@@ -391,6 +413,10 @@ public final class YamiboAppContext: Sendable {
 
     private static func favoriteBackgroundDirectory(rootDirectory: URL) -> URL {
         rootDirectory.appendingPathComponent("favorite-background", isDirectory: true)
+    }
+
+    private static func likeImagesDirectory(rootDirectory: URL) -> URL {
+        rootDirectory.appendingPathComponent("like-images", isDirectory: true)
     }
 
     private static func offlineCacheDirectory(rootDirectory: URL) -> URL {

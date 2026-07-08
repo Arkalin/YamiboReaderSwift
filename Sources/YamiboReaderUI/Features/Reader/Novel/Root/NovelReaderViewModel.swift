@@ -926,7 +926,10 @@ public final class NovelReaderViewModel: ObservableObject {
         currentStableResumePoint = readingWorkflow?.captureNovelReadingPosition()
     }
 
-    private func restoreResumePoint(_ resumePoint: NovelResumePoint) async -> Bool {
+    // Internal (not private): the Like sheet's `onOpenAnchor` jump path in
+    // `NovelReaderView` restores a synthesized resume point from a liked
+    // anchor while the reader for that work is already open.
+    func restoreResumePoint(_ resumePoint: NovelResumePoint) async -> Bool {
         if resumePoint.view == currentView,
            let state = readingWorkflow?.restoreResumePointInCurrentDocument(resumePoint) {
             syncFromWorkflowState(state)

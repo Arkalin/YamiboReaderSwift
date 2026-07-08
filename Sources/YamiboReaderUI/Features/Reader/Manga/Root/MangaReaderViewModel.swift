@@ -10,6 +10,7 @@ struct MangaReaderViewModelDependencies {
     var makeDirectorySearchCooldownState: @Sendable () -> MangaDirectorySearchCooldownState
     var makeChapterCommentsRepository: (@Sendable () async -> ReaderChapterCommentsRepository)?
     var makeContentCoverStore: @Sendable () -> ContentCoverStore?
+    var makeLikeDependencies: @Sendable () -> LikeDependencies?
     var directoryWorkflowConfiguration: MangaDirectoryWorkflowConfiguration
     var progressSync: ProgressSyncModule
     /// Migrates the favorite item's target and reading-progress records to a
@@ -28,6 +29,7 @@ struct MangaReaderViewModelDependencies {
         },
         makeChapterCommentsRepository: (@Sendable () async -> ReaderChapterCommentsRepository)? = nil,
         makeContentCoverStore: @escaping @Sendable () -> ContentCoverStore? = { nil },
+        makeLikeDependencies: @escaping @Sendable () -> LikeDependencies? = { nil },
         directoryWorkflowConfiguration: MangaDirectoryWorkflowConfiguration = MangaDirectoryWorkflowConfiguration(),
         progressSync: ProgressSyncModule,
         migrateMangaTitleReferences: @escaping @Sendable (_ oldCleanBookName: String, _ newCleanBookName: String) async -> Void = { _, _ in }
@@ -40,6 +42,7 @@ struct MangaReaderViewModelDependencies {
         self.makeDirectorySearchCooldownState = makeDirectorySearchCooldownState
         self.makeChapterCommentsRepository = makeChapterCommentsRepository
         self.makeContentCoverStore = makeContentCoverStore
+        self.makeLikeDependencies = makeLikeDependencies
         self.directoryWorkflowConfiguration = directoryWorkflowConfiguration
         self.progressSync = progressSync
         self.migrateMangaTitleReferences = migrateMangaTitleReferences
@@ -55,6 +58,7 @@ struct MangaReaderViewModelDependencies {
             makeDirectorySearchCooldownState: { dependencies.mangaDirectorySearchCooldownState },
             makeChapterCommentsRepository: { await dependencies.makeChapterCommentsRepository() },
             makeContentCoverStore: { dependencies.contentCoverStore },
+            makeLikeDependencies: { dependencies.like },
             progressSync: ProgressSyncModule(
                 adapter: FavoriteLibraryProgressSyncAdapter(
                     readingProgressStore: dependencies.readingProgressStore
@@ -385,6 +389,55 @@ public final class MangaReaderViewModel: ObservableObject {
     func restoreAutomaticMangaCover() async -> Bool {
         guard let key = mangaCoverKey, let store = dependencies.makeContentCoverStore() else { return false }
         return (try? await store.clearManualCover(for: key)) ?? false
+    }
+
+    // MARK: - Like
+
+    private var likeWorkKey: LikeWorkKey? {
+        guard let cleanBookName = workflow?.currentDirectoryCleanBookName()?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+            !cleanBookName.isEmpty else {
+            return nil
+        }
+        return .mangaTitle(cleanBookName: cleanBookName)
+    }
+
+    var canShowLikes: Bool {
+        likeWorkKey != nil && dependencies.makeLikeDependencies() != nil
+    }
+
+    var likeSheetContext: (workKey: LikeWorkKey, like: LikeDependencies)? {
+        guard let workKey = likeWorkKey, let like = dependencies.makeLikeDependencies() else { return nil }
+        return (workKey, like)
+    }
+
+    func likePage(_ page: MangaReaderPageProjection) async -> LikeCaptureOutcome? {
+        guard let workKey = likeWorkKey, let like = dependencies.makeLikeDependencies() else { return nil }
+        let anchor = MangaImageLikeAnchor(chapterTID: page.tid, pageLocalIndex: page.localIndex)
+        let source = imageSource(for: page)
+        let service = MangaImageLikeCaptureService(likeStore: like.likeStore, likeImageStore: like.likeImageStore)
+        return try? await service.like(
+            workKey: workKey,
+            anchor: anchor,
+            sourceImageURL: source.url,
+            imageData: { try await YamiboImagePipeline.shared.data(for: source) }
+        )
+    }
+
+    // Returns false when there's no prepared workflow, so the caller can fall back to presenting a fresh reader.
+    func jumpToLikedMangaPage(tid: String, localIndex: Int) async -> Bool {
+        guard let workflow else { return false }
+        adjacentPrefetchTask?.cancel()
+        readerContentGeneration += 1
+        let previousProgressSnapshot = progressSnapshot(from: presentation)
+        do {
+            let nextPresentation = try await workflow.jumpToPosition(MangaReadingPosition(tid: tid, localIndex: localIndex))
+            publishPresentation(nextPresentation, previousProgressSnapshot: previousProgressSnapshot)
+            scheduleAdjacentPrefetch(around: currentPageIndex(in: nextPresentation) ?? 0)
+            return true
+        } catch {
+            return false
+        }
     }
 
     public func loadChapterComments(for target: ReaderChapterCommentTarget?) async {
