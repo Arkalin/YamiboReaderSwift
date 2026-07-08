@@ -77,6 +77,12 @@ enum LocalFavoriteRelativeDate {
     static func string(from date: Date, now: Date = .now, calendar: Calendar = .current) -> String {
         let weekAgo = now.addingTimeInterval(-7 * 24 * 3600)
         if date > weekAgo, date <= now {
+            // Collapse the whole sub-minute range to "刚刚" instead of
+            // letting RelativeDateTimeFormatter spell out seconds (and,
+            // right at zero difference, misfire as "0秒后").
+            guard now.timeIntervalSince(date) >= 60 else {
+                return L10n.string("common.just_now")
+            }
             return relativeFormatter.localizedString(for: date, relativeTo: now)
         }
         if calendar.isDate(date, equalTo: now, toGranularity: .year) {

@@ -62,6 +62,7 @@
 "common.expand" = "展开";
 "common.hidden" = "已隐藏";
 "common.hide" = "隐藏";
+"common.just_now" = "刚刚";
 "common.load_failed" = "加载失败";
 "common.loading" = "加载中…";
 "common.move" = "移动";
