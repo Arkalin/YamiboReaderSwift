@@ -194,6 +194,10 @@ extension FavoriteRemoteSyncWarning {
             L10n.string("favorites.sync.warning.upload_failed_item", title, reason)
         case let .reconcileFailed(reason):
             L10n.string("favorites.sync.warning.reconcile_failed", reason)
+        case let .remoteFavoritesEmptyBeforeBulkUpload(count):
+            L10n.string("favorites.sync.warning.remote_favorites_empty_before_upload", count)
+        case let .importedWithUnresolvedSource(title):
+            L10n.string("favorites.sync.warning.imported_with_unresolved_source", title)
         }
     }
 }

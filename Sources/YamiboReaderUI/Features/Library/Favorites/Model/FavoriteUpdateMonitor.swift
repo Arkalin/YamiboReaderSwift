@@ -456,12 +456,16 @@ final class FavoriteUpdateMonitor: ObservableObject {
             return .skipped
         }
 
-        guard let page = await threadPage(for: item, knownPageCount: target.knownPageCount) else {
+        let page: ForumThreadPage
+        do {
+            page = try await threadPage(for: item, knownPageCount: target.knownPageCount)
+        } catch {
+            YamiboLog.sync.warning("Failed to fetch thread page for favorite update check on \(item.target.id): \(error.localizedDescription)")
             target.consecutiveFailures += 1
-            target.lastError = "thread fetch failed"
+            target.lastError = error.localizedDescription
             target.lastCheckedAt = .now
             try? await updateStore.upsertTrackedTarget(target)
-            return .skipped
+            return .failed(error.localizedDescription)
         }
 
         await healUnknownSourceGroupIfNeeded(item: item, page: page)
@@ -558,29 +562,24 @@ final class FavoriteUpdateMonitor: ObservableObject {
         try? await libraryStore.save(document)
     }
 
-    private func threadPage(for item: FavoriteItem, knownPageCount: Int?) async -> ForumThreadPage? {
-        do {
-            if let pageFetcher {
-                return try await pageFetcher(item)
-            }
-            guard let tid = item.target.threadID else {
-                return nil
-            }
-            let repository = await makeForumThreadReaderRepository()
-            let fid: String? = if case let .forumBoard(id, _) = item.sourceGroup { id } else { nil }
-            let thread = ThreadIdentity(tid: tid, fid: fid)
-            let context = ThreadNovelLaunchContext(thread: thread, title: item.resolvedDisplayTitle)
-            // New replies land on the last page — fetching the previously
-            // known last page (falling back to page 1 for a first-ever
-            // check) is what lets latestPostID track the thread's actual
-            // newest content instead of freezing at whatever was on page 1
-            // forever once the thread grows past one page.
-            let page = max(1, knownPageCount ?? 1)
-            return try await repository.fetchThreadPage(context: context, page: page)
-        } catch {
-            YamiboLog.sync.warning("Failed to fetch thread page for favorite update check on \(item.target.id): \(error.localizedDescription)")
-            return nil
+    private func threadPage(for item: FavoriteItem, knownPageCount: Int?) async throws -> ForumThreadPage {
+        if let pageFetcher {
+            return try await pageFetcher(item)
         }
+        guard let tid = item.target.threadID else {
+            throw YamiboError.missingFavoriteThreadID
+        }
+        let repository = await makeForumThreadReaderRepository()
+        let fid: String? = if case let .forumBoard(id, _) = item.sourceGroup { id } else { nil }
+        let thread = ThreadIdentity(tid: tid, fid: fid)
+        let context = ThreadNovelLaunchContext(thread: thread, title: item.resolvedDisplayTitle)
+        // New replies land on the last page — fetching the previously
+        // known last page (falling back to page 1 for a first-ever
+        // check) is what lets latestPostID track the thread's actual
+        // newest content instead of freezing at whatever was on page 1
+        // forever once the thread grows past one page.
+        let page = max(1, knownPageCount ?? 1)
+        return try await repository.fetchThreadPage(context: context, page: page)
     }
 }
 

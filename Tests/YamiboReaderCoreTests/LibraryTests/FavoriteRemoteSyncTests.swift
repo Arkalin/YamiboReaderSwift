@@ -227,6 +227,36 @@ private func runEngine(
     #expect(probed.filter { $0 == "111" }.count == 3)
 }
 
+@Test func engineImportsItemWithUnresolvedSourceMetadataAndWarns() async throws {
+    let store = makeLibraryStore()
+    let document = try await store.load()
+    let categoryID = document.defaultCategory.id
+
+    let recorder = SyncCallRecorder()
+    let client = singlePageClient(
+        entries: [YamiboRemoteFavoriteEntry(remoteFavoriteID: "r-906", threadID: "906", title: "来源未知")],
+        recorder: recorder,
+        probe: { entry in
+            FavoriteThreadProbeResult(
+                target: FavoriteContentTarget(kind: .normalThread, threadID: entry.threadID),
+                title: "来源未知",
+                sourceGroup: .unknown,
+                sourceMetadataFetchFailed: true
+            )
+        }
+    )
+    let final = await runEngine(store: store, client: client, snapshot: makeSnapshot(categoryID: categoryID))
+
+    #expect(final.status == .completed)
+    #expect(final.importedCount == 1)
+    #expect(final.warnings.contains { warning in
+        if case .importedWithUnresolvedSource = warning { return true }
+        return false
+    })
+    let saved = try await store.load()
+    #expect(saved.items.count == 1)
+}
+
 // MARK: - Uploading & reconciling
 
 @Test func engineUploadsLocalOnlyThreadsIncludingRemoteDeletedAndReconciles() async throws {
@@ -295,6 +325,42 @@ private func runEngine(
     #expect(savedRemoteDeleted.remoteMapping?.yamiboFavoriteID == "r-302")
 }
 
+@Test func engineWarnsWhenRemoteFavoritesEmptyBeforeBulkUpload() async throws {
+    let store = makeLibraryStore()
+    var document = try await store.load()
+    let categoryID = document.defaultCategory.id
+    let localOnly = try FavoriteItem(
+        target: FavoriteContentTarget(kind: .normalThread, threadID: "401"),
+        title: "本地专属",
+        locations: [.category(categoryID)]
+    )
+    document.addItem(localOnly)
+    try await store.save(document)
+
+    let recorder = SyncCallRecorder()
+    let client = FavoriteYamiboSyncClient(
+        fetchPage: { _ in
+            _ = await recorder.recordFetch()
+            return FavoriteYamiboRemotePage(entries: [], currentPage: 1, totalPages: 1)
+        },
+        probe: { entry in threadProbe(entry.threadID) },
+        addFavorite: { threadID in await recorder.recordAdd(threadID) }
+    )
+    let final = await runEngine(store: store, client: client, snapshot: makeSnapshot(categoryID: categoryID))
+
+    #expect(final.status == .completed)
+    #expect(final.uploadedCount == 1)
+    let hasWarning = final.warnings.contains { warning in
+        if case let .remoteFavoritesEmptyBeforeBulkUpload(count) = warning {
+            return count == 1
+        }
+        return false
+    }
+    #expect(hasWarning)
+    let added = await recorder.addedThreadIDs
+    #expect(added == ["401"])
+}
+
 // MARK: - Fetching
 
 @Test func enginePaginatesAndRecordsProgress() async throws {
@@ -346,6 +412,49 @@ private func runEngine(
     #expect(final.status == .failed)
     #expect(final.phase == .failed)
     #expect(!final.errorMessages.isEmpty)
+}
+
+@Test func engineFailsRunWhenPageOneFetchNeverParses() async throws {
+    let store = makeLibraryStore()
+    let document = try await store.load()
+    let categoryID = document.defaultCategory.id
+
+    let client = FavoriteYamiboSyncClient(
+        fetchPage: { _ in throw YamiboError.parsingFailed(context: "boom") },
+        probe: { entry in threadProbe(entry.threadID) },
+        addFavorite: { _ in }
+    )
+    let final = await runEngine(store: store, client: client, snapshot: makeSnapshot(categoryID: categoryID))
+
+    // Previously a parsingFailed error on page 1 was silently reinterpreted
+    // as "confirmed empty account"; it must now fail the whole run like any
+    // other page.
+    #expect(final.status == .failed)
+    #expect(final.phase == .failed)
+}
+
+@Test func engineRetriesTransientFetchPageFailureThenSucceeds() async throws {
+    let store = makeLibraryStore()
+    let document = try await store.load()
+    let categoryID = document.defaultCategory.id
+
+    let recorder = SyncCallRecorder()
+    let client = FavoriteYamiboSyncClient(
+        fetchPage: { _ in
+            let call = await recorder.recordFetch()
+            if call < 3 {
+                throw YamiboError.parsingFailed(context: "boom")
+            }
+            return FavoriteYamiboRemotePage(entries: [], currentPage: 1, totalPages: 1)
+        },
+        probe: { entry in threadProbe(entry.threadID) },
+        addFavorite: { _ in }
+    )
+    let final = await runEngine(store: store, client: client, snapshot: makeSnapshot(categoryID: categoryID))
+
+    #expect(final.status == .completed)
+    let fetches = await recorder.fetchPageCalls
+    #expect(fetches == 3)
 }
 
 @Test func engineFailsWhenTargetCategoryMissing() async throws {

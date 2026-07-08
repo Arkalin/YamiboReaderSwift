@@ -200,6 +200,8 @@ public enum FavoriteRemoteSyncWarning: Codable, Hashable, Sendable {
     case importFailedItem(title: String, reason: String)
     case uploadFailedItem(title: String, reason: String)
     case reconcileFailed(reason: String)
+    case remoteFavoritesEmptyBeforeBulkUpload(count: Int)
+    case importedWithUnresolvedSource(title: String)
 }
 
 public struct FavoriteRemoteSyncSnapshot: Codable, Hashable, Identifiable, Sendable {

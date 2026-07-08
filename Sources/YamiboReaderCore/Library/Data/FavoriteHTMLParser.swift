@@ -5,11 +5,13 @@ enum FavoriteHTMLParser {
         var favorites: [Favorite]
         var currentPage: Int
         var totalPages: Int
+        var documentParsed: Bool
 
-        init(favorites: [Favorite], currentPage: Int = 1, totalPages: Int = 1) {
+        init(favorites: [Favorite], currentPage: Int = 1, totalPages: Int = 1, documentParsed: Bool = true) {
             self.favorites = favorites
             self.currentPage = max(1, currentPage)
             self.totalPages = max(1, totalPages)
+            self.documentParsed = documentParsed
         }
     }
 
@@ -19,7 +21,7 @@ enum FavoriteHTMLParser {
 
     static func parseFavoritePage(from html: String) -> FavoritePageResult {
         guard let document = try? KannaSoup.parse(html) else {
-            return FavoritePageResult(favorites: [])
+            return FavoritePageResult(favorites: [], documentParsed: false)
         }
         var favorites: [Favorite] = []
         var seen = Set<String>()

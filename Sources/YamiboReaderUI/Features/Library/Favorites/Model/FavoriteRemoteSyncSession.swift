@@ -311,7 +311,8 @@ final class FavoriteRemoteSyncSession: ObservableObject {
                 sourceGroup: metadata.sourceGroup,
                 coverURL: metadata.coverURL,
                 contentUpdatedAt: metadata.contentUpdatedAt,
-                authorID: payload.authorID
+                authorID: payload.authorID,
+                sourceMetadataFetchFailed: metadata.fetchFailed
             )
         case let .manga(payload):
             let cleanBookName = MangaTitleCleaner.cleanBookName(payload.title)
@@ -332,7 +333,8 @@ final class FavoriteRemoteSyncSession: ObservableObject {
                 title: payload.title,
                 sourceGroup: metadata.sourceGroup,
                 coverURL: metadata.coverURL,
-                contentUpdatedAt: metadata.contentUpdatedAt
+                contentUpdatedAt: metadata.contentUpdatedAt,
+                sourceMetadataFetchFailed: metadata.fetchFailed
             )
         case let .webFallback(url):
             let canonicalURL = YamiboThreadURLCanonicalizer.canonicalThreadURL(from: url) ?? url
@@ -357,7 +359,8 @@ final class FavoriteRemoteSyncSession: ObservableObject {
                 title: payload.title,
                 sourceGroup: metadata.sourceGroup,
                 coverURL: metadata.coverURL,
-                contentUpdatedAt: metadata.contentUpdatedAt
+                contentUpdatedAt: metadata.contentUpdatedAt,
+                sourceMetadataFetchFailed: metadata.fetchFailed
             )
         }
     }
@@ -366,18 +369,15 @@ final class FavoriteRemoteSyncSession: ObservableObject {
         thread: ThreadIdentity,
         title: String,
         repository: ForumThreadReaderRepository
-    ) async -> (coverURL: URL?, sourceGroup: FavoriteSourceGroup, contentUpdatedAt: Date?) {
+    ) async -> (coverURL: URL?, sourceGroup: FavoriteSourceGroup, contentUpdatedAt: Date?, fetchFailed: Bool) {
         let cachedFirstPage = await repository.cachedThreadPage(thread: thread, title: title, authorID: nil, page: 1)
         let firstPage: ForumThreadPage?
+        var fetchFailed = false
         if let cachedFirstPage {
             firstPage = cachedFirstPage
         } else {
-            do {
-                firstPage = try await repository.fetchThreadPage(thread: thread, title: title, authorID: nil, page: 1)
-            } catch {
-                YamiboLog.sync.warning("Failed to fetch thread page for \(thread.tid) during sync probe, defaulting sourceGroup/contentUpdatedAt: \(error.localizedDescription)")
-                firstPage = nil
-            }
+            firstPage = await fetchThreadPageWithRetry(thread: thread, title: title, repository: repository)
+            fetchFailed = firstPage == nil
         }
         let sourceGroup = sourceGroup(from: firstPage)
         let contentUpdatedAt = contentUpdatedAt(from: firstPage)
@@ -386,7 +386,25 @@ final class FavoriteRemoteSyncSession: ObservableObject {
             title: title,
             repository: repository
         )
-        return (coverURL, sourceGroup, contentUpdatedAt)
+        return (coverURL, sourceGroup, contentUpdatedAt, fetchFailed)
+    }
+
+    private static func fetchThreadPageWithRetry(
+        thread: ThreadIdentity,
+        title: String,
+        repository: ForumThreadReaderRepository,
+        attempts: Int = 2
+    ) async -> ForumThreadPage? {
+        for attempt in 1 ... max(1, attempts) {
+            do {
+                return try await repository.fetchThreadPage(thread: thread, title: title, authorID: nil, page: 1)
+            } catch {
+                if attempt == attempts {
+                    YamiboLog.sync.warning("Failed to fetch thread page for \(thread.tid) during sync probe after \(attempts) attempts, defaulting sourceGroup/contentUpdatedAt: \(error.localizedDescription)")
+                }
+            }
+        }
+        return nil
     }
 
     private static func contentUpdatedAt(from page: ForumThreadPage?) -> Date? {

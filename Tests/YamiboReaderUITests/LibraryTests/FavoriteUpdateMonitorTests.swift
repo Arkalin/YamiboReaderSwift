@@ -73,6 +73,42 @@ final class FavoriteUpdateMonitorTests: XCTestCase {
         XCTAssertEqual(monitor.snapshot?.totalCount, 0)
     }
 
+    func testUpdateCheckReportsFetchFailureAsFailedNotSkipped() async throws {
+        let suiteName = YamiboTestDefaults.suiteName(prefix: "local-favorites-updates-failure")
+        _ = try YamiboTestDefaults.make(suiteName: suiteName)
+        let localFavoriteLibraryStore = FavoriteLibraryStore(
+            defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
+            key: "local-favorites"
+        )
+        let favoriteUpdateStore = FavoriteUpdateStore(
+            defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
+            key: "favorite-updates"
+        )
+        let target = FavoriteContentTarget(kind: .normalThread, threadID: "961")
+        var document = FavoriteLibraryDocument()
+        let category = document.createCategory(name: "更新检测失败")
+        document.addItem(try FavoriteItem(
+            target: target,
+            title: "失败主题",
+            sourceGroup: .forumBoard(id: "51", label: "测试板块"),
+            locations: [.category(category.id)]
+        ))
+        try await localFavoriteLibraryStore.save(document)
+
+        let monitor = try makeUpdateMonitor(
+            updateStore: favoriteUpdateStore,
+            libraryStore: localFavoriteLibraryStore,
+            pageFetcher: { _ in throw YamiboError.offline }
+        )
+        await monitor.load()
+
+        _ = await monitor.startCheck()
+        try await waitForStatus(.completed, in: monitor)
+
+        XCTAssertEqual(monitor.snapshot?.failedCount, 1)
+        XCTAssertEqual(monitor.snapshot?.skippedCount, 0)
+    }
+
     private func waitForStatus(
         _ status: FavoriteUpdateRunStatus,
         in monitor: FavoriteUpdateMonitor
