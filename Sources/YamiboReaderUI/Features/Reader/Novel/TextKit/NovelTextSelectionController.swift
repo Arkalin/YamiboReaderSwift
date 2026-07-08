@@ -169,11 +169,26 @@ final class NovelTextSelectionController {
         }
     }
 
+    /// `registeredViews` commonly holds more than one live view at once
+    /// (adjacent prefetched pages in paged mode, multiple visible surfaces in
+    /// vertical mode), all sharing the same `generation` — it only changes on
+    /// content reload, not per page. Matching on `generation` alone and
+    /// taking the hash table's (unordered) first hit can resolve to a
+    /// different on-screen surface than the one the selection actually lives
+    /// on. `selectionRects`/`viewportSample` are per-surface windowed
+    /// queries, so querying the wrong surface silently returns empty rects —
+    /// this is why `canLike` used to fail even for an ordinary, single-
+    /// segment selection. Prefer the exact surface the selection started on.
     private func firstCurrentDisplayReference() -> NovelTextViewportDisplayReference? {
-        registeredViews
+        let candidates = registeredViews
             .allObjects
             .compactMap(\.displayReference)
-            .first { !$0.isStale && $0.generation == selectionRangeValue?.generation }
+            .filter { !$0.isStale && $0.generation == selectionRangeValue?.generation }
+        if let activeSurfaceIdentity,
+           let active = candidates.first(where: { $0.surfaceIdentity == activeSurfaceIdentity }) {
+            return active
+        }
+        return candidates.first
     }
 
     /// There is no forwarding API that converts a raw document offset to a
