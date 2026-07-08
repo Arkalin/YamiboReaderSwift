@@ -67,8 +67,8 @@ struct LikeWorkListView: View {
 
     private func load() async {
         async let fetchedSummaries = likeDependencies.likeStore.workSummaries()
-        async let favoriteDocument = favoriteLibraryStore.load()
-        let (summaries, document) = await (fetchedSummaries, favoriteDocument)
+        async let favoriteDocument = try? favoriteLibraryStore.load()
+        let (summaries, document) = await (fetchedSummaries, favoriteDocument ?? FavoriteLibraryDocument())
         self.summaries = summaries
 
         var titles: [LikeWorkKey: String] = [:]
