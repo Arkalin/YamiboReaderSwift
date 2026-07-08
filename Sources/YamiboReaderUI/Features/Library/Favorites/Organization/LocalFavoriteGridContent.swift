@@ -2,9 +2,10 @@ import SwiftUI
 import YamiboReaderCore
 
 /// Fixed-grid and staggered layouts for the favorites screen. Collections
-/// and favorite items share one grid — collections as a contiguous block
-/// first (Android parity). Column counts adapt to the available width with
-/// two columns on iPhone.
+/// and favorite items share one grid, merged into the sort order the user
+/// picked (collections stay a pinned leading block only in manual sort
+/// order — see `LocalFavoriteLibraryProjection.mixedEntries`). Column counts
+/// adapt to the available width with two columns on iPhone.
 struct LocalFavoriteGridContent: View {
     @ObservedObject var organizer: FavoriteLibraryOrganizer
     @ObservedObject var selection: LocalFavoriteBrowseSession
@@ -51,14 +52,8 @@ struct LocalFavoriteGridContent: View {
         }
     }
 
-    /// Collections first, then items — one grid (Android gridEntries parity).
-    private var gridEntries: [LocalFavoriteGridEntry] {
-        var entries: [LocalFavoriteGridEntry] = []
-        if organizer.selectedCollection == nil {
-            entries.append(contentsOf: organizer.derived.visibleCollections.map(LocalFavoriteGridEntry.collection))
-        }
-        entries.append(contentsOf: organizer.derived.cards.map(LocalFavoriteGridEntry.item))
-        return entries
+    private var gridEntries: [FavoriteMixedEntry] {
+        organizer.derived.mixedEntries
     }
 
     /// Two waterfall columns on iPhone widths, more as the width grows.
@@ -71,24 +66,9 @@ struct LocalFavoriteGridContent: View {
     }
 }
 
-/// One entry of the mixed favorites grid.
-enum LocalFavoriteGridEntry: Identifiable {
-    case collection(LocalFavoriteCollection)
-    case item(FavoriteCardProjection)
-
-    var id: String {
-        switch self {
-        case let .collection(collection):
-            "collection-\(collection.id)"
-        case let .item(card):
-            "item-\(card.id)"
-        }
-    }
-}
-
 /// Renders one mixed-grid entry as either a collection cell or an item card.
 struct LocalFavoriteGridEntryCell: View {
-    let entry: LocalFavoriteGridEntry
+    let entry: FavoriteMixedEntry
     @ObservedObject var organizer: FavoriteLibraryOrganizer
     @ObservedObject var selection: LocalFavoriteBrowseSession
     let routes: LocalFavoritesRoutes
@@ -115,7 +95,7 @@ struct LocalFavoriteGridEntryCell: View {
                     await organizer.moveCollection(id: collection.id, toCategoryID: categoryID)
                 }
             )
-        case let .item(card):
+        case let .card(card):
             LocalFavoriteGridCard(
                 card: card,
                 selection: selection,
@@ -127,7 +107,7 @@ struct LocalFavoriteGridEntryCell: View {
 
 /// Waterfall arrangement distributing mixed entries round-robin per column.
 struct LocalFavoriteStaggeredCards: View {
-    let entries: [LocalFavoriteGridEntry]
+    let entries: [FavoriteMixedEntry]
     let columnCount: Int
     @ObservedObject var organizer: FavoriteLibraryOrganizer
     @ObservedObject var selection: LocalFavoriteBrowseSession
@@ -153,7 +133,7 @@ struct LocalFavoriteStaggeredCards: View {
         }
     }
 
-    private func columnEntries(_ column: Int) -> [LocalFavoriteGridEntry] {
+    private func columnEntries(_ column: Int) -> [FavoriteMixedEntry] {
         entries.enumerated().compactMap { index, entry in
             index % max(1, columnCount) == column ? entry : nil
         }

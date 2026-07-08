@@ -2,8 +2,9 @@ import SwiftUI
 import YamiboReaderCore
 
 /// Row-card layout for the favorites screen. Collections and favorite items
-/// share one list section — collections as a contiguous block first
-/// (Android parity).
+/// share one list section, merged into the sort order the user picked
+/// (collections stay a pinned leading block only in manual sort order — see
+/// `LocalFavoriteLibraryProjection.mixedEntries`).
 struct LocalFavoriteListContent: View {
     @ObservedObject var organizer: FavoriteLibraryOrganizer
     @ObservedObject var selection: LocalFavoriteBrowseSession
@@ -24,8 +25,9 @@ struct LocalFavoriteListContent: View {
                     .listSectionSeparator(.hidden)
             }
             Section {
-                if organizer.selectedCollection == nil {
-                    ForEach(organizer.derived.visibleCollections) { collection in
+                ForEach(organizer.derived.mixedEntries) { entry in
+                    switch entry {
+                    case let .collection(collection):
                         LocalFavoriteCollectionRow(
                             collection: collection,
                             itemCount: organizer.derived.collectionEntryCounts[collection.id] ?? 0,
@@ -45,17 +47,16 @@ struct LocalFavoriteListContent: View {
                                 await organizer.moveCollection(id: collection.id, toCategoryID: categoryID)
                             }
                         )
+                    case let .card(card):
+                        LocalFavoriteItemRow(
+                            card: card,
+                            showsCover: showsCover,
+                            isSelectionMode: selection.isSelectionMode,
+                            isSelected: selection.selectedFavoriteIDs.contains(card.id),
+                            onToggleSelection: { selection.toggleFavoriteSelection(id: card.id) },
+                            actions: .standard(organizer: organizer, selection: selection, routes: routes, onOpen: onOpen)
+                        )
                     }
-                }
-                ForEach(organizer.derived.cards) { card in
-                    LocalFavoriteItemRow(
-                        card: card,
-                        showsCover: showsCover,
-                        isSelectionMode: selection.isSelectionMode,
-                        isSelected: selection.selectedFavoriteIDs.contains(card.id),
-                        onToggleSelection: { selection.toggleFavoriteSelection(id: card.id) },
-                        actions: .standard(organizer: organizer, selection: selection, routes: routes, onOpen: onOpen)
-                    )
                 }
             }
         }

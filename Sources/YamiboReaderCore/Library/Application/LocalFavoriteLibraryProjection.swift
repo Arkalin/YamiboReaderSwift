@@ -123,6 +123,45 @@ public struct LocalFavoriteLibraryQuery: Equatable, Sendable {
     }
 }
 
+/// Aggregate stand-ins for the sort fields a collection has no value of its
+/// own for, derived from its (filtered) member cards so a collection can be
+/// merged into the same ordering as individual favorites.
+public struct FavoriteCollectionSortSummary: Equatable, Sendable {
+    public var latestUpdatedAt: Date?
+    public var latestReadAt: Date?
+    public var minRemoteOrder: Int?
+
+    public init(latestUpdatedAt: Date? = nil, latestReadAt: Date? = nil, minRemoteOrder: Int? = nil) {
+        self.latestUpdatedAt = latestUpdatedAt
+        self.latestReadAt = latestReadAt
+        self.minRemoteOrder = minRemoteOrder
+    }
+
+    public static func summarizing(_ cards: [FavoriteCardProjection]) -> FavoriteCollectionSortSummary {
+        FavoriteCollectionSortSummary(
+            latestUpdatedAt: cards.compactMap(\.lastUpdatedAt).max(),
+            latestReadAt: cards.compactMap(\.recentReadingAt).max(),
+            minRemoteOrder: cards.compactMap { $0.item.remoteMapping?.yamiboRemoteOrder }.min()
+        )
+    }
+}
+
+/// One row of the favorites list/grid once collections and individual
+/// favorites are merged into a single ordering.
+public enum FavoriteMixedEntry: Equatable, Identifiable, Sendable {
+    case collection(LocalFavoriteCollection)
+    case card(FavoriteCardProjection)
+
+    public var id: String {
+        switch self {
+        case let .collection(collection):
+            "collection-\(collection.id)"
+        case let .card(card):
+            "item-\(card.id)"
+        }
+    }
+}
+
 public struct FavoriteCardProjection: Equatable, Identifiable, Sendable {
     public var item: FavoriteItem
     public var sourceGroupLabel: String
@@ -179,6 +218,28 @@ public enum LocalFavoriteLibraryProjection {
             }
 
         return sorted(cards, by: query.sortOrder, descending: query.sortsDescending)
+    }
+
+    /// Merges collections and cards into one ordering. `.organization` is
+    /// each side's own manual/remote order — a collection's `manualOrder`
+    /// (set via the up/down arrows) and a card's remote/creation order live
+    /// on unrelated scales, so that's the one mode where collections stay a
+    /// pinned block ahead of the cards rather than interleaving.
+    public static func mixedEntries(
+        cards: [FavoriteCardProjection],
+        collections: [LocalFavoriteCollection],
+        collectionSummaries: [String: FavoriteCollectionSortSummary],
+        sortOrder: LocalFavoriteLibrarySortOrder,
+        descending: Bool
+    ) -> [FavoriteMixedEntry] {
+        let entries = collections.map(FavoriteMixedEntry.collection) + cards.map(FavoriteMixedEntry.card)
+        guard sortOrder != .organization else {
+            return entries
+        }
+        let sortedEntries = entries.sorted { lhs, rhs in
+            compareMixed(lhs, rhs, by: sortOrder, collectionSummaries: collectionSummaries)
+        }
+        return descending ? sortedEntries.reversed() : sortedEntries
     }
 
     public static func displayedEntryCount(
@@ -238,6 +299,89 @@ public enum LocalFavoriteLibraryProjection {
             }
         }
         return descending ? sortedCards.reversed() : sortedCards
+    }
+
+    private static func compareMixed(
+        _ lhs: FavoriteMixedEntry,
+        _ rhs: FavoriteMixedEntry,
+        by sortOrder: LocalFavoriteLibrarySortOrder,
+        collectionSummaries: [String: FavoriteCollectionSortSummary]
+    ) -> Bool {
+        switch sortOrder {
+        case .organization:
+            return false
+        case .contentUpdatedAt:
+            return compareDatesAscending(
+                mixedUpdatedAt(lhs, collectionSummaries), mixedUpdatedAt(rhs, collectionSummaries),
+                lhsID: lhs.id, rhsID: rhs.id
+            )
+        case .yamiboRemoteOrder:
+            let lhsOrder = mixedRemoteOrder(lhs, collectionSummaries) ?? Int.max
+            let rhsOrder = mixedRemoteOrder(rhs, collectionSummaries) ?? Int.max
+            if lhsOrder != rhsOrder {
+                return lhsOrder < rhsOrder
+            }
+            return lhs.id < rhs.id
+        case .displayTitle:
+            let result = mixedTitle(lhs).localizedCaseInsensitiveCompare(mixedTitle(rhs))
+            return result == .orderedSame ? lhs.id < rhs.id : result == .orderedAscending
+        case .sourceGroup:
+            let result = mixedSourceGroupKey(lhs).localizedCaseInsensitiveCompare(mixedSourceGroupKey(rhs))
+            return result == .orderedSame ? lhs.id < rhs.id : result == .orderedAscending
+        case .lastReadAt:
+            return compareDatesAscending(
+                mixedReadAt(lhs, collectionSummaries), mixedReadAt(rhs, collectionSummaries),
+                lhsID: lhs.id, rhsID: rhs.id
+            )
+        }
+    }
+
+    private static func mixedUpdatedAt(_ entry: FavoriteMixedEntry, _ summaries: [String: FavoriteCollectionSortSummary]) -> Date? {
+        switch entry {
+        case let .card(card):
+            card.lastUpdatedAt
+        case let .collection(collection):
+            summaries[collection.id]?.latestUpdatedAt
+        }
+    }
+
+    private static func mixedReadAt(_ entry: FavoriteMixedEntry, _ summaries: [String: FavoriteCollectionSortSummary]) -> Date? {
+        switch entry {
+        case let .card(card):
+            card.recentReadingAt
+        case let .collection(collection):
+            summaries[collection.id]?.latestReadAt
+        }
+    }
+
+    private static func mixedRemoteOrder(_ entry: FavoriteMixedEntry, _ summaries: [String: FavoriteCollectionSortSummary]) -> Int? {
+        switch entry {
+        case let .card(card):
+            card.item.remoteMapping?.yamiboRemoteOrder
+        case let .collection(collection):
+            summaries[collection.id]?.minRemoteOrder
+        }
+    }
+
+    /// A collection has no single title/source group of its own — its name
+    /// stands in for both, so it sorts alongside cards' titles/source groups
+    /// as its own pseudo-entry rather than always leading or trailing them.
+    private static func mixedTitle(_ entry: FavoriteMixedEntry) -> String {
+        switch entry {
+        case let .card(card):
+            card.item.resolvedDisplayTitle
+        case let .collection(collection):
+            collection.name
+        }
+    }
+
+    private static func mixedSourceGroupKey(_ entry: FavoriteMixedEntry) -> String {
+        switch entry {
+        case let .card(card):
+            sourceGroupSortKey(for: card)
+        case let .collection(collection):
+            collection.name
+        }
     }
 
     private static func compareOrganization(_ lhs: FavoriteCardProjection, _ rhs: FavoriteCardProjection) -> Bool {
