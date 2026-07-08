@@ -237,9 +237,17 @@ public enum LocalFavoriteLibraryProjection {
             return entries
         }
         let sortedEntries = entries.sorted { lhs, rhs in
-            compareMixed(lhs, rhs, by: sortOrder, collectionSummaries: collectionSummaries)
+            compareMixed(lhs, rhs, by: sortOrder, descending: descending, collectionSummaries: collectionSummaries)
         }
-        return descending ? sortedEntries.reversed() : sortedEntries
+        // See the matching switch in `sorted(_:by:descending:)`: date modes
+        // bake `descending` into the comparator so undated entries stay
+        // last regardless of direction; other modes reverse as a whole.
+        switch sortOrder {
+        case .contentUpdatedAt, .lastReadAt:
+            return sortedEntries
+        default:
+            return descending ? sortedEntries.reversed() : sortedEntries
+        }
     }
 
     public static func displayedEntryCount(
@@ -280,7 +288,7 @@ public enum LocalFavoriteLibraryProjection {
             case .organization:
                 return compareOrganization(lhs, rhs)
             case .contentUpdatedAt:
-                return compareDatesAscending(lhs.lastUpdatedAt, rhs.lastUpdatedAt, lhsID: lhs.id, rhsID: rhs.id)
+                return compareDates(lhs.lastUpdatedAt, rhs.lastUpdatedAt, lhsID: lhs.id, rhsID: rhs.id, descending: descending)
             case .yamiboRemoteOrder:
                 let lhsOrder = lhs.item.remoteMapping?.yamiboRemoteOrder ?? Int.max
                 let rhsOrder = rhs.item.remoteMapping?.yamiboRemoteOrder ?? Int.max
@@ -295,25 +303,36 @@ public enum LocalFavoriteLibraryProjection {
                 let result = sourceGroupSortKey(for: lhs).localizedCaseInsensitiveCompare(sourceGroupSortKey(for: rhs))
                 return result == .orderedSame ? lhs.id < rhs.id : result == .orderedAscending
             case .lastReadAt:
-                return compareDatesAscending(lhs.recentReadingAt, rhs.recentReadingAt, lhsID: lhs.id, rhsID: rhs.id)
+                return compareDates(lhs.recentReadingAt, rhs.recentReadingAt, lhsID: lhs.id, rhsID: rhs.id, descending: descending)
             }
         }
-        return descending ? sortedCards.reversed() : sortedCards
+        // .contentUpdatedAt/.lastReadAt already bake `descending` into the
+        // comparator above so undated items stay last regardless of
+        // direction; every other mode sorts ascending here and is reversed
+        // as a whole, which is safe because those modes have no "missing
+        // value" sentinel that would otherwise jump to the wrong end.
+        switch sortOrder {
+        case .contentUpdatedAt, .lastReadAt:
+            return sortedCards
+        default:
+            return descending ? sortedCards.reversed() : sortedCards
+        }
     }
 
     private static func compareMixed(
         _ lhs: FavoriteMixedEntry,
         _ rhs: FavoriteMixedEntry,
         by sortOrder: LocalFavoriteLibrarySortOrder,
+        descending: Bool,
         collectionSummaries: [String: FavoriteCollectionSortSummary]
     ) -> Bool {
         switch sortOrder {
         case .organization:
             return false
         case .contentUpdatedAt:
-            return compareDatesAscending(
+            return compareDates(
                 mixedUpdatedAt(lhs, collectionSummaries), mixedUpdatedAt(rhs, collectionSummaries),
-                lhsID: lhs.id, rhsID: rhs.id
+                lhsID: lhs.id, rhsID: rhs.id, descending: descending
             )
         case .yamiboRemoteOrder:
             let lhsOrder = mixedRemoteOrder(lhs, collectionSummaries) ?? Int.max
@@ -329,9 +348,9 @@ public enum LocalFavoriteLibraryProjection {
             let result = mixedSourceGroupKey(lhs).localizedCaseInsensitiveCompare(mixedSourceGroupKey(rhs))
             return result == .orderedSame ? lhs.id < rhs.id : result == .orderedAscending
         case .lastReadAt:
-            return compareDatesAscending(
+            return compareDates(
                 mixedReadAt(lhs, collectionSummaries), mixedReadAt(rhs, collectionSummaries),
-                lhsID: lhs.id, rhsID: rhs.id
+                lhsID: lhs.id, rhsID: rhs.id, descending: descending
             )
         }
     }
@@ -402,12 +421,14 @@ public enum LocalFavoriteLibraryProjection {
         }
     }
 
-    /// Oldest first, undated items last; the descending flag reverses the
-    /// whole order so the sort-direction arrow stays truthful.
-    private static func compareDatesAscending(_ lhs: Date?, _ rhs: Date?, lhsID: String, rhsID: String) -> Bool {
+    /// Dated items compare by date, oldest/most-recent-first per
+    /// `descending`; undated items always sort last, in both directions,
+    /// so switching direction can't fast-forward "never read"/"never
+    /// updated" entries to the very top ahead of real recent activity.
+    private static func compareDates(_ lhs: Date?, _ rhs: Date?, lhsID: String, rhsID: String, descending: Bool) -> Bool {
         switch (lhs, rhs) {
         case let (lhs?, rhs?) where lhs != rhs:
-            return lhs < rhs
+            return descending ? lhs > rhs : lhs < rhs
         case (_?, nil):
             return true
         case (nil, _?):

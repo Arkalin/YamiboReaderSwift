@@ -131,7 +131,10 @@ import Testing
     #expect(LocalFavoriteLibraryProjection.cards(in: document, query: LocalFavoriteLibraryQuery(sortOrder: .yamiboRemoteOrder)).map(\.id).prefix(2) == [items.novel.id, items.normal.id])
     #expect(LocalFavoriteLibraryProjection.cards(in: document, query: LocalFavoriteLibraryQuery(sortOrder: .displayTitle, sortsDescending: true)).map(\.id).first == items.novel.id)
     #expect(LocalFavoriteLibraryProjection.cards(in: document, query: LocalFavoriteLibraryQuery(sortOrder: .lastReadAt), readingProgress: progress).map(\.id).prefix(2) == [items.novel.id, items.normal.id])
-    #expect(LocalFavoriteLibraryProjection.cards(in: document, query: LocalFavoriteLibraryQuery(sortOrder: .lastReadAt, sortsDescending: true), readingProgress: progress).map(\.id).suffix(2) == [items.normal.id, items.novel.id])
+    // Undated items (manga/unknown, no progress record) stay last even in
+    // descending order; the two read items keep the correct most-recent-first
+    // relative order (normal@30 before novel@20) at the front.
+    #expect(LocalFavoriteLibraryProjection.cards(in: document, query: LocalFavoriteLibraryQuery(sortOrder: .lastReadAt, sortsDescending: true), readingProgress: progress).map(\.id).prefix(2) == [items.normal.id, items.novel.id])
 }
 
 @Test func localFavoriteProjectionBuildsCardMetadataFromReadingProgressWithoutMutatingItems() throws {
@@ -254,7 +257,7 @@ import Testing
     #expect(entries.map(\.id) == ["item-\(items.first.id)", "collection-\(collection.id)", "item-\(items.second.id)"])
 }
 
-@Test func localFavoriteMixedEntriesPutsNeverReadEntriesFirstWhenLastReadAtSortsDescending() throws {
+@Test func localFavoriteMixedEntriesPutsNeverReadEntriesLastRegardlessOfSortDirection() throws {
     let (document, items, collection) = try makeMixedEntryDocument()
     // Only the first item has ever been read; the second item and the
     // collection (no collectionSummaries entry) have no read history.
@@ -282,12 +285,11 @@ import Testing
         descending: true
     )
 
-    // Pins down a known, deliberately-kept quirk (see
-    // favorites-collection-sort-mixing memory): undated entries sort last
-    // ascending, and descending reverses the WHOLE list, so the never-read
-    // collection and never-read card land ahead of the card that was
-    // actually read. This is intentionally NOT "fixed" here.
-    #expect(entries.map(\.id) == ["item-\(items.second.id)", "collection-\(collection.id)", "item-\(items.first.id)"])
+    // The never-read collection and never-read card stay behind the card
+    // that was actually read even in descending ("most recently read
+    // first") order — switching direction no longer fast-forwards undated
+    // entries to the top ahead of real read history.
+    #expect(entries.map(\.id) == ["item-\(items.first.id)", "collection-\(collection.id)", "item-\(items.second.id)"])
 }
 
 private func makeMixedEntryDocument() throws -> (FavoriteLibraryDocument, MixedEntryItems, LocalFavoriteCollection) {
