@@ -20,6 +20,15 @@ enum LikeDatabaseSchema: DatabaseSchemaModule {
             try db.create(index: "like_items_work_idx", on: "like_items", columns: ["work_kind", "work_id"])
             try db.create(index: "like_items_updated_at_idx", on: "like_items", columns: ["updated_at"])
         }
+
+        // Soft-delete tombstone for WebDAV sync (ADR-0049): deleting a Like Item locally
+        // must not physically remove its row, or merging with a stale remote snapshot
+        // would resurrect it.
+        migrator.registerMigration("like.v2.tombstones") { db in
+            try db.alter(table: "like_items") { table in
+                table.add(column: "deleted_at", .double)
+            }
+        }
     }
 
     static func erase(in db: Database) throws {

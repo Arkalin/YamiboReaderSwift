@@ -132,9 +132,37 @@ public actor LikeStore {
         }
     }
 
-    public func delete(id: String) async throws {
+    /// Soft-deletes an item (WebDAV tombstone, ADR-0049): the row stays, marked
+    /// `deleted_at`, so it disappears from every read below but a stale remote
+    /// snapshot can't resurrect it on merge.
+    public func delete(id: String, date: Date = .now) async throws {
         do {
-            try await database.write { db in try Self.deleteRow(id: id, in: db) }
+            try await database.write { db in try Self.softDeleteRow(id: id, date: date, in: db) }
+            postChangeNotification()
+        } catch let error as YamiboError {
+            throw error
+        } catch {
+            throw YamiboError.persistenceFailed(error.localizedDescription)
+        }
+    }
+
+    /// Every Like Item including soft-deleted rows, for WebDAV export.
+    public func allIncludingDeleted() async -> [LikeItem] {
+        (try? await database.read { db in try Self.fetchAllIncludingDeleted(in: db) }) ?? []
+    }
+
+    /// Replaces the entire local Like Library with a WebDAV-merged snapshot.
+    /// Items may carry `deletedAt` to persist a tombstone alongside its known
+    /// data; the merge/export logic that builds this array lives in
+    /// `LikeLibraryWebDAVParticipant`, not here.
+    public func replaceAll(_ items: [LikeItem]) async throws {
+        do {
+            try await database.write { db in
+                try db.execute(sql: "DELETE FROM like_items")
+                for item in items {
+                    try Self.upsertRow(item, in: db)
+                }
+            }
             postChangeNotification()
         } catch let error as YamiboError {
             throw error
@@ -179,7 +207,11 @@ public actor LikeStore {
     }
 
     private static func fetchLike(id: String, in db: Database) throws -> LikeItem? {
-        guard let row = try Row.fetchOne(db, sql: Self.selectColumns + " WHERE id = ?", arguments: [id]) else {
+        guard let row = try Row.fetchOne(
+            db,
+            sql: Self.selectColumns + " WHERE id = ? AND deleted_at IS NULL",
+            arguments: [id]
+        ) else {
             return nil
         }
         return try Self.item(from: row)
@@ -188,7 +220,8 @@ public actor LikeStore {
     private static func fetchLikes(workKey: LikeWorkKey, in db: Database) throws -> [LikeItem] {
         try Row.fetchAll(
             db,
-            sql: Self.selectColumns + " WHERE work_kind = ? AND work_id = ? ORDER BY created_at ASC, id ASC",
+            sql: Self.selectColumns
+                + " WHERE work_kind = ? AND work_id = ? AND deleted_at IS NULL ORDER BY created_at ASC, id ASC",
             arguments: [workKey.kind.rawValue, workKey.id]
         ).compactMap { try Self.item(from: $0) }
     }
@@ -196,8 +229,16 @@ public actor LikeStore {
     private static func fetchLikes(workKey: LikeWorkKey, kind: LikeItemKind, in db: Database) throws -> [LikeItem] {
         try Row.fetchAll(
             db,
-            sql: Self.selectColumns + " WHERE work_kind = ? AND work_id = ? AND kind = ? ORDER BY created_at ASC, id ASC",
+            sql: Self.selectColumns
+                + " WHERE work_kind = ? AND work_id = ? AND kind = ? AND deleted_at IS NULL ORDER BY created_at ASC, id ASC",
             arguments: [workKey.kind.rawValue, workKey.id, kind.rawValue]
+        ).compactMap { try Self.item(from: $0) }
+    }
+
+    private static func fetchAllIncludingDeleted(in db: Database) throws -> [LikeItem] {
+        try Row.fetchAll(
+            db,
+            sql: Self.selectColumns + " ORDER BY created_at ASC, id ASC"
         ).compactMap { try Self.item(from: $0) }
     }
 
@@ -207,6 +248,7 @@ public actor LikeStore {
             sql: """
             SELECT work_kind, work_id, COUNT(*) AS item_count, MAX(updated_at) AS last_liked_at
             FROM like_items
+            WHERE deleted_at IS NULL
             GROUP BY work_kind, work_id
             ORDER BY last_liked_at DESC
             """
@@ -228,8 +270,8 @@ public actor LikeStore {
         try db.execute(
             sql: """
             INSERT OR REPLACE INTO like_items
-            (id, work_kind, work_id, kind, excerpt_text, source_image_url, anchor_json, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (id, work_kind, work_id, kind, excerpt_text, source_image_url, anchor_json, created_at, updated_at, deleted_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             arguments: [
                 item.id,
@@ -241,12 +283,20 @@ public actor LikeStore {
                 anchorJSON,
                 item.createdAt.timeIntervalSince1970,
                 item.updatedAt.timeIntervalSince1970,
+                item.deletedAt?.timeIntervalSince1970,
             ]
         )
     }
 
     private static func deleteRow(id: String, in db: Database) throws {
         try db.execute(sql: "DELETE FROM like_items WHERE id = ?", arguments: [id])
+    }
+
+    private static func softDeleteRow(id: String, date: Date, in db: Database) throws {
+        try db.execute(
+            sql: "UPDATE like_items SET deleted_at = ?, updated_at = ? WHERE id = ?",
+            arguments: [date.timeIntervalSince1970, date.timeIntervalSince1970, id]
+        )
     }
 
     static func renameMangaTitleLikes(from oldName: String, to newName: String, in db: Database) throws {
@@ -272,12 +322,13 @@ public actor LikeStore {
             sourceImageURL: (row["source_image_url"] as String?).flatMap(URL.init(string:)),
             anchor: anchor,
             createdAt: Date(timeIntervalSince1970: row["created_at"]),
-            updatedAt: Date(timeIntervalSince1970: row["updated_at"])
+            updatedAt: Date(timeIntervalSince1970: row["updated_at"]),
+            deletedAt: (row["deleted_at"] as Double?).map(Date.init(timeIntervalSince1970:))
         )
     }
 
     private static let selectColumns = """
-    SELECT id, work_kind, work_id, kind, excerpt_text, source_image_url, anchor_json, created_at, updated_at
+    SELECT id, work_kind, work_id, kind, excerpt_text, source_image_url, anchor_json, created_at, updated_at, deleted_at
     FROM like_items
     """
 

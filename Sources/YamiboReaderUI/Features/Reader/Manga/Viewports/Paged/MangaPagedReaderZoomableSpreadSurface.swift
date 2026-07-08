@@ -14,6 +14,7 @@ struct MangaPagedReaderZoomableSpreadSurface: View {
     let isChromeVisible: Bool
     let isZoomInteractionEnabled: Bool
     let spreadSurfaceInteraction: MangaPagedReaderPageSurfaceInteraction
+    let likedPageIDs: Set<String>
 
     @State private var steadyScale: CGFloat = 1
     @State private var gestureScale: CGFloat = 1
@@ -41,7 +42,8 @@ struct MangaPagedReaderZoomableSpreadSurface: View {
                         isChromeVisible: isChromeVisible,
                         zoomEnabled: false,
                         allowsUnzoomedSurfacePan: false,
-                        isPageZoomEnabled: false
+                        isPageZoomEnabled: false,
+                        likedPageIDs: likedPageIDs
                     )
                     MangaPagedReaderPageSlot(
                         surface: rightPageSurface,
@@ -51,7 +53,8 @@ struct MangaPagedReaderZoomableSpreadSurface: View {
                         isChromeVisible: isChromeVisible,
                         zoomEnabled: false,
                         allowsUnzoomedSurfacePan: false,
-                        isPageZoomEnabled: false
+                        isPageZoomEnabled: false,
+                        likedPageIDs: likedPageIDs
                     )
                 }
                 .frame(width: containerSize.width, height: containerSize.height)

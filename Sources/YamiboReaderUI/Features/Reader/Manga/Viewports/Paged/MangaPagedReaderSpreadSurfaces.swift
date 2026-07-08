@@ -17,6 +17,7 @@ extension ReaderPagedPageTurnCell {
         zoomEnabled: Bool,
         allowsUnzoomedSurfacePan: Bool,
         spreadSurfaceInteraction: MangaPagedReaderPageSurfaceInteraction,
+        likedPageIDs: Set<String>,
         colorScheme: ColorScheme
     ) {
         let pageEdgeFillColor = pageEdgeFillStyle.uiColor(for: colorScheme)
@@ -34,7 +35,8 @@ extension ReaderPagedPageTurnCell {
                 isChromeVisible: isChromeVisible,
                 zoomEnabled: zoomEnabled,
                 allowsUnzoomedSurfacePan: allowsUnzoomedSurfacePan,
-                spreadSurfaceInteraction: spreadSurfaceInteraction
+                spreadSurfaceInteraction: spreadSurfaceInteraction,
+                likedPageIDs: likedPageIDs
             )
             .ignoresSafeArea(
                 .container,
@@ -57,6 +59,7 @@ private struct MangaPagedReaderSpreadSurface: View {
     let zoomEnabled: Bool
     let allowsUnzoomedSurfacePan: Bool
     let spreadSurfaceInteraction: MangaPagedReaderPageSurfaceInteraction
+    let likedPageIDs: Set<String>
 
     var body: some View {
         ZStack {
@@ -72,7 +75,8 @@ private struct MangaPagedReaderSpreadSurface: View {
                     pageEdgeFillStyle: pageEdgeFillStyle,
                     isChromeVisible: isChromeVisible,
                     isZoomInteractionEnabled: !isChromeVisible && zoomEnabled,
-                    spreadSurfaceInteraction: spreadSurfaceInteraction
+                    spreadSurfaceInteraction: spreadSurfaceInteraction,
+                    likedPageIDs: likedPageIDs
                 )
             } else {
                 MangaPagedReaderPageSlot(
@@ -83,7 +87,8 @@ private struct MangaPagedReaderSpreadSurface: View {
                     isChromeVisible: isChromeVisible,
                     zoomEnabled: zoomEnabled,
                     allowsUnzoomedSurfacePan: allowsUnzoomedSurfacePan,
-                    isPageZoomEnabled: true
+                    isPageZoomEnabled: true,
+                    likedPageIDs: likedPageIDs
                 )
             }
         }
@@ -102,6 +107,7 @@ struct MangaPagedReaderPageSlot: View {
     let zoomEnabled: Bool
     let allowsUnzoomedSurfacePan: Bool
     let isPageZoomEnabled: Bool
+    let likedPageIDs: Set<String>
 
     var body: some View {
         ZStack {
@@ -118,6 +124,7 @@ struct MangaPagedReaderPageSlot: View {
                     zoomEnabled: zoomEnabled && isPageZoomEnabled,
                     allowsUnzoomedSurfacePan: allowsUnzoomedSurfacePan && isPageZoomEnabled,
                     surfaceInteraction: surface.surfaceInteraction,
+                    likedPageIDs: likedPageIDs,
                     onLongPress: surface.onLongPress
                 )
             }

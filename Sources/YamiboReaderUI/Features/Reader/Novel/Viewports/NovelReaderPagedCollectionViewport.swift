@@ -16,6 +16,8 @@ struct NovelReaderPagedCollectionViewport: UIViewRepresentable {
     let scrollAnimationRequest: ReaderPagedScrollAnimationRequest?
     let displayReferenceProvider: @MainActor (NovelReaderSurfaceIdentity) -> NovelTextViewportDisplayReference?
     let selectionController: NovelTextSelectionController?
+    let likeHighlightController: NovelLikeHighlightController?
+    let likedImageAnchors: Set<NovelImageLikeAnchor>
     let isChromeVisible: Bool
     let canBoundaryPageTurn: (Int) -> Bool
     let onSelectionChange: (Int) -> Void
@@ -173,6 +175,8 @@ struct NovelReaderPagedCollectionViewport: UIViewRepresentable {
                         surface: surface,
                         displayReference: displayReference,
                         selectionController: parent.selectionController,
+                        likeHighlightController: parent.likeHighlightController,
+                        likedImageAnchors: parent.likedImageAnchors,
                         fallbackDocumentView: surface?.documentView,
                         fallbackSurfaceIndex: surfaceIndex,
                         settings: parent.settings,

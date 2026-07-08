@@ -15,6 +15,7 @@ final class MangaPagedPageCurlCoordinator: NSObject, UIPageViewControllerDataSou
     private(set) var pageSurfaceInteractions: [String: MangaPagedReaderPageSurfaceInteraction] = [:]
     private var pageCurlSurfaceInteractionIdentity: MangaPagedReaderSurfaceInteractionIdentity?
     private var pageCurlPageAppearanceGenerations: [String: Int] = [:]
+    private var lastAppliedLikedPageIDs: Set<String> = []
     weak var activeContainerViewController: MangaPagedPageCurlContainerViewController?
     weak var activePageViewController: UIPageViewController?
     private weak var pageCurlBackColorPageViewController: UIPageViewController?
@@ -76,8 +77,10 @@ final class MangaPagedPageCurlCoordinator: NSObject, UIPageViewControllerDataSou
             isChromeVisible: parent.isChromeVisible,
             zoomEnabled: parent.zoomEnabled
         )
-        guard nextIdentity != pageCurlSurfaceInteractionIdentity else { return }
+        let likedPageIDsChanged = parent.likedPageIDs != lastAppliedLikedPageIDs
+        guard nextIdentity != pageCurlSurfaceInteractionIdentity || likedPageIDsChanged else { return }
         pageCurlSurfaceInteractionIdentity = nextIdentity
+        lastAppliedLikedPageIDs = parent.likedPageIDs
 
         for case let controller as MangaPagedPageCurlHostingController in pageViewController.viewControllers ?? [] {
             controller.updateRootView(rootView(for: controller.leaf), pageBackgroundColor: parent.pageEdgeFillColor)
@@ -258,7 +261,8 @@ final class MangaPagedPageCurlCoordinator: NSObject, UIPageViewControllerDataSou
             pageEdgeFillStyle: parent.settings.pageEdgeFillStyle,
             isChromeVisible: parent.isChromeVisible,
             zoomEnabled: parent.zoomEnabled,
-            isPageZoomEnabled: !parent.sequence.usesTwoPageSpread
+            isPageZoomEnabled: !parent.sequence.usesTwoPageSpread,
+            likedPageIDs: parent.likedPageIDs
         )
     }
 

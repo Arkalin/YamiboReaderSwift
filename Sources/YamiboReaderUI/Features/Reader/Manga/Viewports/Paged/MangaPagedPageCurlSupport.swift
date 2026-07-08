@@ -76,6 +76,7 @@ struct MangaPagedPageCurlLeafView: View {
     let isChromeVisible: Bool
     let zoomEnabled: Bool
     let isPageZoomEnabled: Bool
+    let likedPageIDs: Set<String>
 
     var body: some View {
         MangaPagedReaderPageSlot(
@@ -86,7 +87,8 @@ struct MangaPagedPageCurlLeafView: View {
             isChromeVisible: isChromeVisible,
             zoomEnabled: zoomEnabled,
             allowsUnzoomedSurfacePan: true,
-            isPageZoomEnabled: isPageZoomEnabled
+            isPageZoomEnabled: isPageZoomEnabled,
+            likedPageIDs: likedPageIDs
         )
         .ignoresSafeArea(
             .container,

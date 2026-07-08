@@ -44,6 +44,22 @@ final class WebDAVSyncSettingsViewModelTests: XCTestCase {
         let encodedRemotePayload = try JSONEncoder().encode(remotePayload)
         WebDAVSettingsTestURLProtocol.setHandler(for: host) { request in
             XCTAssertEqual(request.httpMethod, "GET")
+            // Only the favorite-library dataset has remote data in this
+            // fixture; every other participant's file (readingProgress,
+            // appSettings, likeLibrary, ...) must 404 rather than receive
+            // this payload verbatim, or their own version/shape checks throw
+            // and mask the account-mismatch error this test is exercising.
+            guard request.url?.lastPathComponent == "yamibo-favorite-library-v1.json" else {
+                return (
+                    Data(),
+                    HTTPURLResponse(
+                        url: try XCTUnwrap(request.url),
+                        statusCode: 404,
+                        httpVersion: nil,
+                        headerFields: nil
+                    )!
+                )
+            }
             return (
                 encodedRemotePayload,
                 HTTPURLResponse(
@@ -118,6 +134,22 @@ final class WebDAVSyncSettingsViewModelTests: XCTestCase {
         let encodedRemotePayload = try JSONEncoder().encode(remotePayload)
         WebDAVSettingsTestURLProtocol.setHandler(for: host) { request in
             XCTAssertEqual(request.httpMethod, "GET")
+            // Only the favorite-library dataset has remote data in this
+            // fixture; every other participant's file (readingProgress,
+            // appSettings, likeLibrary, ...) must 404 rather than receive
+            // this payload verbatim, or their own version/shape checks throw
+            // and mask the account-mismatch error this test is exercising.
+            guard request.url?.lastPathComponent == "yamibo-favorite-library-v1.json" else {
+                return (
+                    Data(),
+                    HTTPURLResponse(
+                        url: try XCTUnwrap(request.url),
+                        statusCode: 404,
+                        httpVersion: nil,
+                        headerFields: nil
+                    )!
+                )
+            }
             return (
                 encodedRemotePayload,
                 HTTPURLResponse(

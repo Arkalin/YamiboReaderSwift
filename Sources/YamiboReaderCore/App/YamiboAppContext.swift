@@ -356,6 +356,7 @@ public final class YamiboAppContext: Sendable {
                 FavoriteLibraryWebDAVParticipant(store: localFavoriteLibraryStore),
                 ReadingProgressWebDAVParticipant(store: readingProgressStore),
                 AppSettingsWebDAVParticipant(store: settingsStore),
+                LikeLibraryWebDAVParticipant(store: likeStore),
             ],
             client: WebDAVClient(session: session)
         )

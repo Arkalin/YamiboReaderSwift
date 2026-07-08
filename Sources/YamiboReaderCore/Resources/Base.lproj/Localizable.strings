@@ -577,6 +577,7 @@
 "likes.add_to_likes" = "加入喜欢";
 "likes.already_liked" = "已加入喜欢";
 "likes.empty_state" = "还没有喜欢的内容";
+"likes.remove_like" = "取消喜欢";
 "manga.brightness" = "亮度";
 "manga.chapter.final" = "终";
 "manga.chapter_list" = "目录";

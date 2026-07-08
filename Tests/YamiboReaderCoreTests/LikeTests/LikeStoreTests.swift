@@ -187,6 +187,25 @@ import Testing
     #expect(await store.likes(for: keyB).count == 1)
 }
 
+@Test func likeStoreDeleteSoftDeletesAndHidesFromReadsButKeepsInAllIncludingDeleted() async throws {
+    let store = LikeStore(databasePool: try makeLikeStoreTestDatabasePool(prefix: "like-store-soft-delete"))
+    let workKey = LikeWorkKey.mangaTitle(cleanBookName: "软删除测试")
+    let anchor = LikeAnchorPayload.mangaImage(MangaImageLikeAnchor(chapterTID: "1", pageLocalIndex: 0))
+
+    let item = try await store.upsertImageLike(workKey: workKey, anchor: anchor, sourceImageURL: nil)
+    let deletedAt = Date(timeIntervalSince1970: 5_000)
+    try await store.delete(id: item.id, date: deletedAt)
+
+    #expect(await store.likes(for: workKey).isEmpty)
+    #expect(await store.workSummaries().isEmpty)
+    #expect(await store.like(id: item.id) == nil)
+
+    let allIncludingDeleted = await store.allIncludingDeleted()
+    let deletedItem = try #require(allIncludingDeleted.first { $0.id == item.id })
+    #expect(deletedItem.deletedAt == deletedAt)
+    #expect(deletedItem.updatedAt == deletedAt)
+}
+
 private func makeLikeStoreTestDatabasePool(prefix: String) throws -> DatabasePool {
     let root = FileManager.default.temporaryDirectory
         .appendingPathComponent("\(prefix)-\(UUID().uuidString)", isDirectory: true)

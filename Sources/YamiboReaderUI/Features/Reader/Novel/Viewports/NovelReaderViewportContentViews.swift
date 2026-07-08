@@ -37,6 +37,8 @@ struct NovelReaderPresentationSpreadContent: View {
     let bottomInset: CGFloat
     let displayReferenceProvider: @MainActor (NovelReaderSurfaceIdentity) -> NovelTextViewportDisplayReference?
     let selectionController: NovelTextSelectionController?
+    let likeHighlightController: NovelLikeHighlightController?
+    let likedImageAnchors: Set<NovelImageLikeAnchor>
     let onImageTap: (URL, String?) -> Void
 
     var body: some View {
@@ -58,6 +60,8 @@ struct NovelReaderPresentationSpreadContent: View {
                     surface: surface,
                     displayReference: surface.flatMap { displayReferenceProvider($0.identity) },
                     selectionController: selectionController,
+                    likeHighlightController: likeHighlightController,
+                    likedImageAnchors: likedImageAnchors,
                     fallbackDocumentView: surface?.documentView,
                     fallbackSurfaceIndex: surfaceIndex,
                     settings: settings,
@@ -82,6 +86,8 @@ struct NovelReaderViewportSurfaceContent: View {
     let surface: NovelReaderSurface?
     let displayReference: NovelTextViewportDisplayReference?
     let selectionController: NovelTextSelectionController?
+    let likeHighlightController: NovelLikeHighlightController?
+    let likedImageAnchors: Set<NovelImageLikeAnchor>
     let fallbackDocumentView: Int?
     let fallbackSurfaceIndex: Int?
     let settings: NovelReaderAppearanceSettings
@@ -93,6 +99,8 @@ struct NovelReaderViewportSurfaceContent: View {
         surface: NovelReaderSurface?,
         displayReference: NovelTextViewportDisplayReference? = nil,
         selectionController: NovelTextSelectionController? = nil,
+        likeHighlightController: NovelLikeHighlightController? = nil,
+        likedImageAnchors: Set<NovelImageLikeAnchor> = [],
         fallbackDocumentView: Int?,
         fallbackSurfaceIndex: Int?,
         settings: NovelReaderAppearanceSettings,
@@ -103,6 +111,8 @@ struct NovelReaderViewportSurfaceContent: View {
         self.surface = surface
         self.displayReference = displayReference
         self.selectionController = selectionController
+        self.likeHighlightController = likeHighlightController
+        self.likedImageAnchors = likedImageAnchors
         self.fallbackDocumentView = fallbackDocumentView
         self.fallbackSurfaceIndex = fallbackSurfaceIndex
         self.settings = settings
@@ -131,6 +141,8 @@ struct NovelReaderViewportSurfaceContent: View {
                     block: block,
                     displayReference: displayReference,
                     selectionController: selectionController,
+                    likeHighlightController: likeHighlightController,
+                    isLiked: isImageBlockLiked(block),
                     refererURL: refererURL,
                     offlineScope: offlineScope,
                     title: surface?.chapterTitle,
@@ -150,6 +162,8 @@ struct NovelReaderViewportSurfaceContent: View {
                     block: block,
                     displayReference: displayReference,
                     selectionController: selectionController,
+                    likeHighlightController: likeHighlightController,
+                    isLiked: isImageBlockLiked(block),
                     refererURL: refererURL,
                     offlineScope: offlineScope,
                     title: surface?.chapterTitle,
@@ -159,6 +173,11 @@ struct NovelReaderViewportSurfaceContent: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+    }
+
+    private func isImageBlockLiked(_ block: NovelReaderViewportDisplayBlock) -> Bool {
+        guard case let .image(url) = block else { return false }
+        return isNovelImageLiked(url, surface: surface, likedAnchors: likedImageAnchors)
     }
 
     private var viewportBlocks: [NovelReaderViewportDisplayBlock] {
@@ -202,6 +221,8 @@ private struct NovelReaderViewportBlockView: View {
     let block: NovelReaderViewportDisplayBlock
     let displayReference: NovelTextViewportDisplayReference?
     let selectionController: NovelTextSelectionController?
+    let likeHighlightController: NovelLikeHighlightController?
+    let isLiked: Bool
     let refererURL: URL
     let offlineScope: YamiboImageOfflineScope?
     let title: String?
@@ -213,7 +234,8 @@ private struct NovelReaderViewportBlockView: View {
             if let displayReference, !displayReference.isStale {
                 NativeNovelTextViewportReferenceView(
                     displayReference: displayReference,
-                    selectionController: selectionController
+                    selectionController: selectionController,
+                    likeHighlightController: likeHighlightController
                 )
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             } else {
@@ -225,6 +247,7 @@ private struct NovelReaderViewportBlockView: View {
                 refererURL: refererURL,
                 offlineScope: offlineScope,
                 title: title,
+                isLiked: isLiked,
                 onTap: onImageTap
             )
         case let .footer(text):

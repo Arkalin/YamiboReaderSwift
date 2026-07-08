@@ -133,4 +133,20 @@ func novelImageLikeAnchor(forImageURL url: URL, in surfaces: [NovelReaderSurface
     }
     return NovelImageLikeAnchor(chapterIdentity: chapterIdentity, imageSegmentIdentity: imageSegmentIdentity.rawValue)
 }
+
+/// Single-surface convenience for block-level "is this image liked" lookups
+/// (each viewport already has the one `NovelReaderSurface` it's rendering).
+func novelImageLikeAnchor(forImageURL url: URL, in surface: NovelReaderSurface?) -> NovelImageLikeAnchor? {
+    guard let surface else { return nil }
+    return novelImageLikeAnchor(forImageURL: url, in: [surface])
+}
+
+func isNovelImageLiked(
+    _ url: URL,
+    surface: NovelReaderSurface?,
+    likedAnchors: Set<NovelImageLikeAnchor>
+) -> Bool {
+    guard let anchor = novelImageLikeAnchor(forImageURL: url, in: surface) else { return false }
+    return likedAnchors.contains(anchor)
+}
 #endif

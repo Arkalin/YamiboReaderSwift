@@ -125,6 +125,9 @@ public struct LikeItem: Codable, Hashable, Identifiable, Sendable {
     public var anchor: LikeAnchorPayload
     public var createdAt: Date
     public var updatedAt: Date
+    /// Soft-delete marker (WebDAV tombstone). `nil` for a live item; set when
+    /// the item was deleted locally or by a merged remote snapshot.
+    public var deletedAt: Date?
 
     public init(
         id: String = UUID().uuidString,
@@ -134,7 +137,8 @@ public struct LikeItem: Codable, Hashable, Identifiable, Sendable {
         sourceImageURL: URL? = nil,
         anchor: LikeAnchorPayload,
         createdAt: Date = .now,
-        updatedAt: Date = .now
+        updatedAt: Date = .now,
+        deletedAt: Date? = nil
     ) {
         self.id = id
         self.workKey = workKey
@@ -144,6 +148,7 @@ public struct LikeItem: Codable, Hashable, Identifiable, Sendable {
         self.anchor = anchor
         self.createdAt = createdAt
         self.updatedAt = updatedAt
+        self.deletedAt = deletedAt
     }
 }
 

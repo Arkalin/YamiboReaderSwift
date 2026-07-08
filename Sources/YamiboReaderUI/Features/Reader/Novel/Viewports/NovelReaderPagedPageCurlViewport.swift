@@ -143,6 +143,8 @@ struct NovelReaderPagedPageCurlViewport: UIViewControllerRepresentable {
     let scrollAnimationRequest: ReaderPagedScrollAnimationRequest?
     let displayReferenceProvider: @MainActor (NovelReaderSurfaceIdentity) -> NovelTextViewportDisplayReference?
     let selectionController: NovelTextSelectionController?
+    let likeHighlightController: NovelLikeHighlightController?
+    let likedImageAnchors: Set<NovelImageLikeAnchor>
     let isChromeVisible: Bool
     let canBoundaryPageTurn: (Int) -> Bool
     let onSelectionChange: (Int) -> Void
@@ -512,6 +514,8 @@ struct NovelReaderPagedPageCurlViewport: UIViewControllerRepresentable {
                     bottomInset: parent.bottomInset,
                     displayReferenceProvider: parent.displayReferenceProvider,
                     selectionController: parent.selectionController,
+                    likeHighlightController: parent.likeHighlightController,
+                    likedImageAnchors: parent.likedImageAnchors,
                     onImageTap: parent.onImageTap
                 ),
                 pageBackgroundColor: parent.pageBackgroundColor
@@ -695,6 +699,8 @@ private struct NovelReaderPagedPageCurlLeafView: View {
     let bottomInset: CGFloat
     let displayReferenceProvider: @MainActor (NovelReaderSurfaceIdentity) -> NovelTextViewportDisplayReference?
     let selectionController: NovelTextSelectionController?
+    let likeHighlightController: NovelLikeHighlightController?
+    let likedImageAnchors: Set<NovelImageLikeAnchor>
     let onImageTap: (URL, String?) -> Void
 
     var body: some View {
@@ -705,6 +711,8 @@ private struct NovelReaderPagedPageCurlLeafView: View {
                     surface: surface,
                     displayReference: surface.flatMap { displayReferenceProvider($0.identity) },
                     selectionController: selectionController,
+                    likeHighlightController: likeHighlightController,
+                    likedImageAnchors: likedImageAnchors,
                     fallbackDocumentView: surface?.documentView,
                     fallbackSurfaceIndex: surfaceIndex,
                     settings: settings,

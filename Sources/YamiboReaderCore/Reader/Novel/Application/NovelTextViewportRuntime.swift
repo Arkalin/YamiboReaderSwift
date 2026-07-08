@@ -600,6 +600,35 @@ package final class NovelTextViewportRuntimeOwner {
         return String(text[start..<end])
     }
 
+    /// Converts a persisted Like highlight's start/end into a selection range
+    /// in the active generation's document-offset space, reusing the same
+    /// geometry `selectionRects(for:surfaceIdentity:)` already draws with. A
+    /// persisted Like anchor never carries which forum page (`view`) it came
+    /// from, so both endpoints' `view` are overridden to the active
+    /// document's own `view` before lookup; content that isn't part of the
+    /// active document simply fails the segment-identity lookup inside
+    /// `documentOffset(for:in:)`, which is the desired "not on this page,
+    /// don't render" behavior rather than an error.
+    package func documentSelectionRange(
+        from start: NovelResumePoint,
+        to end: NovelResumePoint
+    ) -> NovelTextSelectionRange? {
+        guard let document, let result else { return nil }
+        var start = start
+        var end = end
+        start.view = document.view
+        end.view = document.view
+        guard let startOffset = result.viewportContext.document.documentOffset(for: start, in: document),
+              let endOffset = result.viewportContext.document.documentOffset(for: end, in: document) else {
+            return nil
+        }
+        return NovelTextSelectionRange(
+            generation: activeGeneration,
+            lowerBound: min(startOffset, endOffset),
+            upperBound: max(startOffset, endOffset)
+        )
+    }
+
     package func drawBlockBackgrounds(
         surfaceIdentity: NovelReaderSurfaceIdentity,
         in context: CGContext,
