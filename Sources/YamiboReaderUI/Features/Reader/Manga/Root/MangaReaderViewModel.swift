@@ -10,6 +10,7 @@ struct MangaReaderViewModelDependencies {
     var makeDirectorySearchCooldownState: @Sendable () -> MangaDirectorySearchCooldownState
     var makeChapterCommentsRepository: (@Sendable () async -> ReaderChapterCommentsRepository)?
     var makeContentCoverStore: @Sendable () -> ContentCoverStore?
+    var makeLikeDependencies: @Sendable () -> LikeDependencies?
     var directoryWorkflowConfiguration: MangaDirectoryWorkflowConfiguration
     var progressSync: ProgressSyncModule
     /// Migrates the favorite item's target and reading-progress records to a
@@ -28,6 +29,7 @@ struct MangaReaderViewModelDependencies {
         },
         makeChapterCommentsRepository: (@Sendable () async -> ReaderChapterCommentsRepository)? = nil,
         makeContentCoverStore: @escaping @Sendable () -> ContentCoverStore? = { nil },
+        makeLikeDependencies: @escaping @Sendable () -> LikeDependencies? = { nil },
         directoryWorkflowConfiguration: MangaDirectoryWorkflowConfiguration = MangaDirectoryWorkflowConfiguration(),
         progressSync: ProgressSyncModule,
         migrateMangaTitleReferences: @escaping @Sendable (_ oldCleanBookName: String, _ newCleanBookName: String) async -> Void = { _, _ in }
@@ -40,6 +42,7 @@ struct MangaReaderViewModelDependencies {
         self.makeDirectorySearchCooldownState = makeDirectorySearchCooldownState
         self.makeChapterCommentsRepository = makeChapterCommentsRepository
         self.makeContentCoverStore = makeContentCoverStore
+        self.makeLikeDependencies = makeLikeDependencies
         self.directoryWorkflowConfiguration = directoryWorkflowConfiguration
         self.progressSync = progressSync
         self.migrateMangaTitleReferences = migrateMangaTitleReferences
@@ -55,6 +58,7 @@ struct MangaReaderViewModelDependencies {
             makeDirectorySearchCooldownState: { dependencies.mangaDirectorySearchCooldownState },
             makeChapterCommentsRepository: { await dependencies.makeChapterCommentsRepository() },
             makeContentCoverStore: { dependencies.contentCoverStore },
+            makeLikeDependencies: { dependencies.like },
             progressSync: ProgressSyncModule(
                 adapter: FavoriteLibraryProgressSyncAdapter(
                     readingProgressStore: dependencies.readingProgressStore
@@ -86,6 +90,7 @@ public final class MangaReaderViewModel: ObservableObject {
     @Published public private(set) var isLoadingMoreChapterComments = false
     @Published public private(set) var chapterCommentsLoadMoreError: String?
     @Published public private(set) var chapterCommentsRefreshError: String?
+    @Published public private(set) var likedPageIDs: Set<String> = []
     @Published private var navigationHistory = ReaderNavigationHistory<MangaReadingPosition>()
     private var linearReadingHistoryExpiration = ReaderNavigationLinearReadingExpiration<MangaReadingPosition>()
 
@@ -112,6 +117,7 @@ public final class MangaReaderViewModel: ObservableObject {
     private var directoryMutationGeneration = 0
     private var chapterJumpGeneration = 0
     private var offlineCacheOwnerName: String?
+    private var likeChangeObservationTask: Task<Void, Never>?
     private lazy var chapterCommentsModule = ReaderChapterCommentsModule(
         adapter: ReaderChapterCommentsModule.Adapter(
             loadInitial: { [weak self] target in
@@ -144,6 +150,7 @@ public final class MangaReaderViewModel: ObservableObject {
         automaticDirectoryUpdateTask?.cancel()
         chapterJumpTask?.cancel()
         adjacentPrefetchTask?.cancel()
+        likeChangeObservationTask?.cancel()
     }
 
     public convenience init(
@@ -207,6 +214,8 @@ public final class MangaReaderViewModel: ObservableObject {
         if workflow.shouldAutoUpdateDirectoryAfterPrepare {
             startAutomaticDirectoryUpdate()
         }
+        await refreshLikedPageIDs()
+        observeLikeChangesIfNeeded()
     }
 
     public func retryInitialLoad() async {
@@ -403,6 +412,110 @@ public final class MangaReaderViewModel: ObservableObject {
             return true
         } catch {
             YamiboLog.library.error("Failed to clear manual manga cover: \(error.localizedDescription)")
+            return false
+        }
+    }
+
+    // MARK: - Like
+
+    private var likeWorkKey: LikeWorkKey? {
+        guard let cleanBookName = workflow?.currentDirectoryCleanBookName()?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+            !cleanBookName.isEmpty else {
+            return nil
+        }
+        return .mangaTitle(cleanBookName: cleanBookName)
+    }
+
+    var canShowLikes: Bool {
+        likeWorkKey != nil && dependencies.makeLikeDependencies() != nil
+    }
+
+    var likeSheetContext: (workKey: LikeWorkKey, like: LikeDependencies)? {
+        guard let workKey = likeWorkKey, let like = dependencies.makeLikeDependencies() else { return nil }
+        return (workKey, like)
+    }
+
+    func likePage(_ page: MangaReaderPageProjection) async -> LikeCaptureOutcome? {
+        guard let workKey = likeWorkKey, let like = dependencies.makeLikeDependencies() else { return nil }
+        let anchor = MangaImageLikeAnchor(chapterTID: page.tid, pageLocalIndex: page.localIndex)
+        let source = imageSource(for: page)
+        let service = MangaImageLikeCaptureService(likeStore: like.likeStore, likeImageStore: like.likeImageStore)
+        let outcome = try? await service.like(
+            workKey: workKey,
+            anchor: anchor,
+            sourceImageURL: source.url,
+            imageData: { try await YamiboImagePipeline.shared.data(for: source) }
+        )
+        await refreshLikedPageIDs()
+        return outcome
+    }
+
+    // Returns the existing Like Item for this page, if any, so the long-press
+    // action sheet can offer "remove like" instead of "add to likes".
+    func isPageLiked(_ page: MangaReaderPageProjection) async -> LikeItem? {
+        guard let workKey = likeWorkKey, let like = dependencies.makeLikeDependencies() else { return nil }
+        let items = await like.likeStore.likes(for: workKey)
+        return items.first { item in
+            guard case let .mangaImage(anchor) = item.anchor else { return false }
+            return anchor.chapterTID == page.tid && anchor.pageLocalIndex == page.localIndex
+        }
+    }
+
+    func unlikePage(_ item: LikeItem) async -> Bool {
+        guard let like = dependencies.makeLikeDependencies() else { return false }
+        do {
+            // Terminal write: shield against the long-press confirmation dialog's
+            // Task being cancelled mid-delete (e.g. the user closes the reader).
+            try await Task {
+                try await like.likeStore.delete(id: item.id)
+                try await like.likeImageStore.delete(id: item.id)
+            }.value
+        } catch {
+            return false
+        }
+        await refreshLikedPageIDs()
+        return true
+    }
+
+    private func refreshLikedPageIDs() async {
+        guard let workKey = likeWorkKey, let like = dependencies.makeLikeDependencies() else {
+            likedPageIDs = []
+            return
+        }
+        let items = await like.likeStore.likes(for: workKey)
+        likedPageIDs = Set(items.compactMap { item -> String? in
+            guard case let .mangaImage(anchor) = item.anchor else { return nil }
+            return "\(anchor.chapterTID)#\(anchor.pageLocalIndex)"
+        })
+    }
+
+    private func observeLikeChangesIfNeeded() {
+        guard likeChangeObservationTask == nil, let like = dependencies.makeLikeDependencies() else { return }
+        let changeID = like.likeStore.changeID
+        likeChangeObservationTask = Task { [weak self] in
+            for await notification in NotificationCenter.default.notifications(named: LikeStore.didChangeNotification) {
+                guard let receivedChangeID = notification.userInfo?[LikeStore.changeIDUserInfoKey] as? String,
+                      receivedChangeID == changeID else {
+                    continue
+                }
+                await self?.refreshLikedPageIDs()
+            }
+        }
+    }
+
+    // Returns false when there's no prepared workflow, so the caller can fall back to presenting a fresh reader.
+    func jumpToLikedMangaPage(tid: String, localIndex: Int) async -> Bool {
+        guard let workflow else { return false }
+        adjacentPrefetchTask?.cancel()
+        readerContentGeneration += 1
+        let previousProgressSnapshot = progressSnapshot(from: presentation)
+        do {
+            let nextPresentation = try await workflow.jumpToPosition(MangaReadingPosition(tid: tid, localIndex: localIndex))
+            publishPresentation(nextPresentation, previousProgressSnapshot: previousProgressSnapshot)
+            scheduleAdjacentPrefetch(around: currentPageIndex(in: nextPresentation) ?? 0)
+            return true
+        } catch {
             return false
         }
     }
@@ -834,6 +947,8 @@ public final class MangaReaderViewModel: ObservableObject {
         chapterJumpTask = nil
         adjacentPrefetchTask?.cancel()
         adjacentPrefetchTask = nil
+        likeChangeObservationTask?.cancel()
+        likeChangeObservationTask = nil
         readerContentGeneration += 1
     }
 

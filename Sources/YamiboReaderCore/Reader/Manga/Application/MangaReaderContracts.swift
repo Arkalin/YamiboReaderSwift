@@ -4,6 +4,7 @@ public enum MangaLaunchSource: String, Codable, Hashable, Sendable {
     case forum
     case favorites
     case resume
+    case like
 }
 
 public struct MangaLaunchContext: Hashable, Identifiable, Sendable {

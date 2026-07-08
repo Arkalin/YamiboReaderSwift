@@ -16,6 +16,7 @@ public struct MangaReaderDependencies: Sendable {
     public let makeOfflineCacheQueueExecutor: @Sendable () async -> OfflineCacheQueueExecutor
     /// The cache sheet embeds the account feature's offline queue view model.
     public let account: AccountDependencies
+    public let like: LikeDependencies
 
     public init(
         settingsStore: SettingsStore,
@@ -29,7 +30,8 @@ public struct MangaReaderDependencies: Sendable {
         makeDirectoryRepository: @escaping @Sendable () async -> any MangaDirectoryRepository,
         makeChapterCommentsRepository: @escaping @Sendable () async -> ReaderChapterCommentsRepository,
         makeOfflineCacheQueueExecutor: @escaping @Sendable () async -> OfflineCacheQueueExecutor,
-        account: AccountDependencies
+        account: AccountDependencies,
+        like: LikeDependencies
     ) {
         self.settingsStore = settingsStore
         self.readingProgressStore = readingProgressStore
@@ -43,5 +45,6 @@ public struct MangaReaderDependencies: Sendable {
         self.makeChapterCommentsRepository = makeChapterCommentsRepository
         self.makeOfflineCacheQueueExecutor = makeOfflineCacheQueueExecutor
         self.account = account
+        self.like = like
     }
 }

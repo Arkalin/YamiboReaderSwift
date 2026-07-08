@@ -75,6 +75,13 @@ public final class NovelTextViewportDisplayReference {
         runtimeOwner?.selectedText(for: selectionRange)
     }
 
+    func highlightRange(
+        from start: NovelResumePoint,
+        to end: NovelResumePoint
+    ) -> NovelTextSelectionRange? {
+        runtimeOwner?.documentSelectionRange(from: start, to: end)
+    }
+
     public func draw(in context: CGContext, bounds: CGRect) {
         drawBlockBackgrounds(in: context, bounds: bounds)
         drawText(in: context, bounds: bounds)

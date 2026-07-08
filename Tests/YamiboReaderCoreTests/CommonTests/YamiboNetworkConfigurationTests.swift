@@ -24,7 +24,9 @@ import Testing
 }
 
 @Test func defaultAppContextSessionUsesNetworkTimeouts() {
-    let appContext = YamiboAppContext()
+    let root = FileManager.default.temporaryDirectory
+        .appendingPathComponent("app-context-network-config-\(UUID().uuidString)", isDirectory: true)
+    let appContext = YamiboAppContext(grdbRootDirectory: root)
     let configuration = appContext.session.configuration
 
     #expect(configuration.timeoutIntervalForRequest == 15)

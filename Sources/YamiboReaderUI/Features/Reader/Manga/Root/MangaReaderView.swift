@@ -15,6 +15,8 @@ public struct MangaReaderView: View {
     @State private var isChapterCommentsPresented = false
     @State private var isSettingsPresented = false
     @State private var isCachePresented = false
+    @State private var isLikesPresented = false
+    @State private var likedItemForActionTarget: LikeItem?
     @State private var imageSavePresentation = MangaImageSavePresentationState()
     @State private var canRestoreMangaCover = false
     @State private var isSavingImage = false
@@ -48,6 +50,7 @@ public struct MangaReaderView: View {
                 presentation: model.presentation,
                 imageLoader: model.imageLoader,
                 isChromeVisible: isChromeVisible,
+                likedPageIDs: model.likedPageIDs,
                 onRetryInitialLoad: {
                     Task { await model.retryInitialLoad() }
                 },
@@ -64,6 +67,7 @@ public struct MangaReaderView: View {
                     guard !isSavingImage else { return }
                     Task {
                         canRestoreMangaCover = await model.hasManualMangaCover()
+                        likedItemForActionTarget = await model.isPageLiked(page)
                         imageSavePresentation.presentActions(for: page)
                     }
                 },
@@ -113,6 +117,10 @@ public struct MangaReaderView: View {
                     },
                     onShowCache: {
                         isCachePresented = true
+                    },
+                    onShowLikes: {
+                        guard model.canShowLikes else { return }
+                        isLikesPresented = true
                     },
                     onOpenOriginalPost: openOriginalPost,
                     onJumpToLocalPage: { targetIndex in
@@ -185,6 +193,22 @@ public struct MangaReaderView: View {
                 MangaDirectoryUnavailableSheet()
             }
         }
+        .sheet(isPresented: $isLikesPresented) {
+            if let likeSheetContext = model.likeSheetContext {
+                LikeWorkItemsView(
+                    work: likeSheetContext.workKey,
+                    workTitle: context.displayTitle,
+                    like: likeSheetContext.like,
+                    onOpenAnchor: { anchor in
+                        isLikesPresented = false
+                        Task {
+                            await openLikedAnchor(anchor)
+                        }
+                    },
+                    onDismiss: { isLikesPresented = false }
+                )
+            }
+        }
         .confirmationDialog(
             L10n.string("image.actions.title"),
             isPresented: Binding(
@@ -215,10 +239,25 @@ public struct MangaReaderView: View {
                         }
                     }
                 }
+
+                if let likedItem = likedItemForActionTarget {
+                    Button(L10n.string("likes.remove_like"), role: .destructive) {
+                        Task {
+                            await unlikePage(likedItem)
+                        }
+                    }
+                } else {
+                    Button(L10n.string("likes.add_to_likes")) {
+                        Task {
+                            await likePage(target.page)
+                        }
+                    }
+                }
             }
 
             Button(L10n.string("common.cancel"), role: .cancel) {
                 imageSavePresentation.clearActionTarget()
+                likedItemForActionTarget = nil
             }
         }
         .overlay(alignment: .bottom) {
@@ -342,6 +381,51 @@ public struct MangaReaderView: View {
                 message: L10n.string("cover.restore_success_message")
             )
             : .failure(message: L10n.string("image.action_failed")))
+    }
+
+    @MainActor
+    private func likePage(_ page: MangaReaderPageProjection) async {
+        imageSavePresentation.clearActionTarget()
+        likedItemForActionTarget = nil
+        guard let outcome = await model.likePage(page) else {
+            imageSavePresentation.finishSave(with: .failure(message: L10n.string("image.action_failed")))
+            return
+        }
+        switch outcome {
+        case .added, .merged, .alreadyLiked:
+            imageSavePresentation.finishSave(with: .custom(
+                title: L10n.string("likes.already_liked"),
+                message: ""
+            ))
+        }
+    }
+
+    @MainActor
+    private func unlikePage(_ item: LikeItem) async {
+        imageSavePresentation.clearActionTarget()
+        likedItemForActionTarget = nil
+        let succeeded = await model.unlikePage(item)
+        imageSavePresentation.finishSave(with: succeeded
+            ? .custom(title: L10n.string("likes.remove_like"), message: "")
+            : .failure(message: L10n.string("image.action_failed")))
+    }
+
+    private func openLikedAnchor(_ anchor: LikeAnchorPayload) async {
+        guard case let .mangaImage(mangaAnchor) = anchor else { return }
+        if await model.jumpToLikedMangaPage(tid: mangaAnchor.chapterTID, localIndex: mangaAnchor.pageLocalIndex) {
+            return
+        }
+        appModel.presentMangaReader(
+            MangaLaunchContext(
+                originalThreadID: context.originalThreadID,
+                chapterTID: mangaAnchor.chapterTID,
+                displayTitle: context.displayTitle,
+                source: .like,
+                initialPage: mangaAnchor.pageLocalIndex,
+                directoryName: context.directoryName,
+                offlineCacheFavoriteID: context.offlineCacheFavoriteID
+            )
+        )
     }
 
     private var windowSafeAreaInsets: UIEdgeInsets {

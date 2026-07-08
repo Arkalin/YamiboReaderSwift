@@ -546,7 +546,7 @@ private final class StubURLProtocol: URLProtocol {
     #expect(firstText.textSegmentIdentity?.rawValue == "post:101#chapter:0#text:0")
     #expect(firstText.chapterTitleRange == NovelCharacterRange(location: 0, length: "第一章".count))
     #expect(image.chapterIdentity == firstText.chapterIdentity)
-    #expect(image.textSegmentIdentity == nil)
+    #expect(image.textSegmentIdentity?.rawValue == "post:101#chapter:0#image:0")
     #expect(secondTextInFirstChapter.chapterIdentity == firstText.chapterIdentity)
     #expect(secondTextInFirstChapter.textSegmentIdentity?.rawValue == "post:101#chapter:0#text:1")
     #expect(repeatedTitleText.chapterIdentity?.rawValue == "post:102#chapter:0")
@@ -668,8 +668,8 @@ private final class StubURLProtocol: URLProtocol {
     #expect(textSemantics.textSegmentIdentity?.rawValue == "post:41142124#chapter:0#text:0")
     #expect(firstImageSemantics.chapterIdentity == textSemantics.chapterIdentity)
     #expect(secondImageSemantics.chapterIdentity == textSemantics.chapterIdentity)
-    #expect(firstImageSemantics.textSegmentIdentity == nil)
-    #expect(secondImageSemantics.textSegmentIdentity == nil)
+    #expect(firstImageSemantics.textSegmentIdentity?.rawValue == "post:41142124#chapter:0#image:0")
+    #expect(secondImageSemantics.textSegmentIdentity?.rawValue == "post:41142124#chapter:0#image:1")
     #expect(document.segmentSources == [
         NovelReaderSegmentSource(ownerPostID: "41142124"),
         NovelReaderSegmentSource(ownerPostID: "41142124"),

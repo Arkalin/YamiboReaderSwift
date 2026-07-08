@@ -31,7 +31,12 @@ public struct NovelReaderView: View {
     @State private var bottomChromeHeight: CGFloat = 0
     @State private var pagedScrollAnimationRequest: ReaderPagedScrollAnimationRequest?
     @State private var novelTextSelectionController = NovelTextSelectionController()
+    @State private var likeHighlightController = NovelLikeHighlightController()
+    @State private var likedNovelImageAnchors: Set<NovelImageLikeAnchor> = []
+    @State private var showingLikes = false
+    @State private var likeFeedbackGenerator = UINotificationFeedbackGenerator()
     private let appModel: YamiboAppModel
+    private let dependencies: NovelReaderDependencies
 
     public init(context: NovelLaunchContext, dependencies: NovelReaderDependencies, appModel: YamiboAppModel) {
         let initialSettings = appModel.bootstrapState?.settings.novelReader
@@ -47,6 +52,7 @@ public struct NovelReaderView: View {
             showsChrome: initialSettings?.readingMode != .vertical
         ))
         self.appModel = appModel
+        self.dependencies = dependencies
     }
 
     private var isPadDevice: Bool {
@@ -135,6 +141,7 @@ public struct NovelReaderView: View {
                         onShowCache: openCachePanel,
                         onShowComments: openChapterComments,
                         onOpenForum: openInForum,
+                        onShowLikes: openLikes,
                         onJumpChapter: { delta in
                             jumpAdjacentChapter(delta)
                         },
@@ -178,6 +185,13 @@ public struct NovelReaderView: View {
             .onChange(of: model.settings.readingMode) { _, _ in
                 novelTextSelectionController.clearSelection()
             }
+            .onReceive(NotificationCenter.default.publisher(for: LikeStore.didChangeNotification)) { notification in
+                guard let changeID = notification.userInfo?[LikeStore.changeIDUserInfoKey] as? String,
+                      changeID == dependencies.like.likeStore.changeID else {
+                    return
+                }
+                Task { await loadLikedNovelImageAnchors() }
+            }
         }
     }
 
@@ -185,6 +199,12 @@ public struct NovelReaderView: View {
         NovelReaderLifecycleModifier(
             currentLayout: currentLayout,
             onInitialTask: {
+                configureLikeCapture()
+                likeHighlightController.configure(
+                    workKey: .novel(threadID: model.context.threadID),
+                    likeStore: dependencies.like.likeStore
+                )
+                Task { await loadLikedNovelImageAnchors() }
                 await model.commitNovelTextPresentationEnvironment(isPad: isPadDevice)
                 await model.prepare(layout: currentLayout)
                 updateChromeForContentState()
@@ -224,8 +244,10 @@ public struct NovelReaderView: View {
             showingCacheProgress: $showingCacheProgress,
             showingChapterSheet: $showingChapterSheet,
             showingChapterComments: $showingChapterComments,
+            showingLikes: $showingLikes,
             imageBrowserItem: $imageBrowserItem,
             chapterCommentsTarget: chapterCommentsTarget,
+            likeDependencies: dependencies.like,
             onJumpToChapterDirectoryChapter: { chapter in
                 Task { await jumpToChapterDirectoryChapter(chapter) }
             },
@@ -234,6 +256,9 @@ public struct NovelReaderView: View {
             },
             onOpenOriginalPostFromComments: { url in
                 openOriginalPostFromComments(url)
+            },
+            onOpenLikeAnchor: { payload in
+                handleLikeAnchorOpen(payload)
             }
         )
     }
@@ -246,6 +271,7 @@ public struct NovelReaderView: View {
             showingCacheProgress: $showingCacheProgress,
             showingChapterSheet: $showingChapterSheet,
             showingChapterComments: $showingChapterComments,
+            showingLikes: $showingLikes,
             imageBrowserItem: $imageBrowserItem,
             isStatusBarHidden: chromeState.mode == .immersiveHidden,
             onUpdateChromeForContentState: {
@@ -317,6 +343,8 @@ public struct NovelReaderView: View {
                         model.novelTextViewportDisplayReference(for: surfaceIdentity)
                     },
                     selectionController: novelTextSelectionController,
+                    likeHighlightController: likeHighlightController,
+                    likedImageAnchors: likedNovelImageAnchors,
                     isChromeVisible: chromeState.showsChrome,
                     canBoundaryPageTurn: { delta in
                         canNavigatePagedBoundary(delta: delta)
@@ -338,6 +366,9 @@ public struct NovelReaderView: View {
                     },
                     onImageTap: { url, title in
                         handleImageTap(url: url, title: title)
+                    },
+                    onImageLongPress: { anchor, imageURL in
+                        handleImageLongPress(anchor, imageURL: imageURL)
                     }
                 )
             } else if model.isTwoPageSpreadActive {
@@ -356,6 +387,8 @@ public struct NovelReaderView: View {
                         model.novelTextViewportDisplayReference(for: surfaceIdentity)
                     },
                     selectionController: novelTextSelectionController,
+                    likeHighlightController: likeHighlightController,
+                    likedImageAnchors: likedNovelImageAnchors,
                     isChromeVisible: chromeState.showsChrome,
                     canBoundaryPageTurn: { delta in
                         canNavigatePagedBoundary(delta: delta)
@@ -377,6 +410,9 @@ public struct NovelReaderView: View {
                     },
                     onImageTap: { url, title in
                         handleImageTap(url: url, title: title)
+                    },
+                    onImageLongPress: { anchor, imageURL in
+                        handleImageLongPress(anchor, imageURL: imageURL)
                     }
                 )
             } else {
@@ -394,6 +430,8 @@ public struct NovelReaderView: View {
                         model.novelTextViewportDisplayReference(for: surfaceIdentity)
                     },
                     selectionController: novelTextSelectionController,
+                    likeHighlightController: likeHighlightController,
+                    likedImageAnchors: likedNovelImageAnchors,
                     isChromeVisible: chromeState.showsChrome,
                     canBoundaryPageTurn: { delta in
                         canNavigatePagedBoundary(delta: delta)
@@ -415,6 +453,9 @@ public struct NovelReaderView: View {
                     },
                     onImageTap: { url, title in
                         handleImageTap(url: url, title: title)
+                    },
+                    onImageLongPress: { anchor, imageURL in
+                        handleImageLongPress(anchor, imageURL: imageURL)
                     }
                 )
             }
@@ -436,6 +477,8 @@ public struct NovelReaderView: View {
                 model.novelTextViewportDisplayReference(for: surfaceIdentity)
             },
             selectionController: novelTextSelectionController,
+            likeHighlightController: likeHighlightController,
+            likedImageAnchors: likedNovelImageAnchors,
             isChromeVisible: chromeState.showsChrome,
             onVisibleSurfaceIdentitiesChange: { surfaceIdentities in
                 model.updateNovelTextViewportVisibleSurfaceIdentities(surfaceIdentities)
@@ -500,6 +543,9 @@ public struct NovelReaderView: View {
             },
             onImageTap: { url, title in
                 handleImageTap(url: url, title: title)
+            },
+            onImageLongPress: { anchor, imageURL in
+                handleImageLongPress(anchor, imageURL: imageURL)
             }
         )
         .contentShape(Rectangle())
@@ -810,6 +856,104 @@ public struct NovelReaderView: View {
         }
     }
 
+    private func openLikes() {
+        showingLikes = true
+    }
+
+    private func configureLikeCapture() {
+        novelTextSelectionController.configureLikeCapture(
+            workKey: .novel(threadID: model.context.threadID),
+            service: NovelTextLikeCaptureService(likeStore: dependencies.like.likeStore),
+            onCaptured: { _ in
+                likeFeedbackGenerator.notificationOccurred(.success)
+            }
+        )
+    }
+
+    private func handleImageLongPress(_ anchor: NovelImageLikeAnchor, imageURL: URL) {
+        let workKey = LikeWorkKey.novel(threadID: model.context.threadID)
+        let likeStore = dependencies.like.likeStore
+        let likeImageStore = dependencies.like.likeImageStore
+        let refererURL = model.forumURL
+        let offlineScope = model.inlineImageOfflineScope
+        Task {
+            let existing = await likeStore.likes(for: workKey)
+            if let liked = existing.first(where: { $0.kind == .image && $0.anchor == .novelImage(anchor) }) {
+                try? await likeStore.delete(id: liked.id)
+                try? await likeImageStore.delete(id: liked.id)
+                likeFeedbackGenerator.notificationOccurred(.success)
+                return
+            }
+            let service = NovelImageLikeCaptureService(likeStore: likeStore, likeImageStore: likeImageStore)
+            guard (try? await service.like(
+                workKey: workKey,
+                anchor: anchor,
+                sourceImageURL: imageURL,
+                imageData: {
+                    try await YamiboImagePipeline.shared.data(for: YamiboImageSource(
+                        url: imageURL,
+                        refererPageURL: refererURL,
+                        offlineScope: offlineScope
+                    ))
+                }
+            )) != nil else {
+                return
+            }
+            likeFeedbackGenerator.notificationOccurred(.success)
+        }
+    }
+
+    private func loadLikedNovelImageAnchors() async {
+        let workKey = LikeWorkKey.novel(threadID: model.context.threadID)
+        let items = await dependencies.like.likeStore.likes(for: workKey)
+        likedNovelImageAnchors = Set(items.compactMap { item -> NovelImageLikeAnchor? in
+            guard item.kind == .image, case let .novelImage(anchor) = item.anchor else { return nil }
+            return anchor
+        })
+    }
+
+    private func handleLikeAnchorOpen(_ payload: LikeAnchorPayload) {
+        showingLikes = false
+        switch payload {
+        case let .novelText(anchor):
+            Task { await model.restoreResumePoint(resumePoint(forTextLikeAnchor: anchor)) }
+        case let .novelImage(anchor):
+            Task { await model.restoreResumePoint(resumePoint(forImageLikeAnchor: anchor)) }
+        case .mangaImage:
+            break
+        }
+    }
+
+    // NovelTextLikeAnchor/NovelImageLikeAnchor don't carry `view` (the forum
+    // page the excerpt/image came from) or the other cosmetic resume-point
+    // fields (chapterOrdinal/segmentProgress/readingModeHint); this
+    // synthesizes a best-effort resume point from what the anchor does carry,
+    // falling back to the reader's current view when it can't be recovered
+    // from the chapter identity (see `NovelChapterIdentity.embeddedDocumentView`).
+    private func resumePoint(forTextLikeAnchor anchor: NovelTextLikeAnchor) -> NovelResumePoint {
+        NovelResumePoint(
+            view: anchor.chapterIdentity.embeddedDocumentView ?? model.visibleView,
+            chapterIdentity: anchor.chapterIdentity,
+            textSegmentIdentity: anchor.textSegmentIdentity,
+            displayedTextOffset: anchor.range.location,
+            chapterOrdinal: 0,
+            segmentProgress: 0,
+            readingModeHint: model.settings.readingMode
+        )
+    }
+
+    private func resumePoint(forImageLikeAnchor anchor: NovelImageLikeAnchor) -> NovelResumePoint {
+        NovelResumePoint(
+            view: anchor.chapterIdentity.embeddedDocumentView ?? model.visibleView,
+            chapterIdentity: anchor.chapterIdentity,
+            textSegmentIdentity: NovelTextSegmentIdentity(rawValue: anchor.imageSegmentIdentity),
+            displayedTextOffset: 0,
+            chapterOrdinal: 0,
+            segmentProgress: 0,
+            readingModeHint: model.settings.readingMode
+        )
+    }
+
     private func updateChromeForContentState() {
         let previousState = chromeState
         var nextState = chromeState
@@ -1017,6 +1161,7 @@ public struct NovelReaderView: View {
             showingCacheProgress ||
             showingChapterSheet ||
             showingChapterComments ||
+            showingLikes ||
             imageBrowserItem != nil
     }
 
@@ -1025,7 +1170,8 @@ public struct NovelReaderView: View {
             showingCachePanel ||
             showingCacheProgress ||
             showingChapterSheet ||
-            showingChapterComments
+            showingChapterComments ||
+            showingLikes
     }
 
     private var canReceiveApplePencilPageTurn: Bool {
@@ -1301,12 +1447,15 @@ private struct NovelReaderPresentationModifier: ViewModifier {
     @Binding var showingCacheProgress: Bool
     @Binding var showingChapterSheet: Bool
     @Binding var showingChapterComments: Bool
+    @Binding var showingLikes: Bool
     @Binding var imageBrowserItem: ImageBrowserItem?
 
     let chapterCommentsTarget: ReaderChapterCommentTarget?
+    let likeDependencies: LikeDependencies
     let onJumpToChapterDirectoryChapter: (NovelReaderChapter) -> Void
     let onPreviewChapterDirectoryWebView: (Int) -> Void
     let onOpenOriginalPostFromComments: (URL) -> Void
+    let onOpenLikeAnchor: (LikeAnchorPayload) -> Void
 
     func body(content: Content) -> some View {
         content
@@ -1365,6 +1514,17 @@ private struct NovelReaderPresentationModifier: ViewModifier {
                 }
                 .presentationBackground(.clear)
             }
+            .sheet(isPresented: $showingLikes) {
+                NavigationStack {
+                    LikeWorkItemsView(
+                        work: .novel(threadID: model.context.threadID),
+                        workTitle: model.title,
+                        like: likeDependencies,
+                        onOpenAnchor: onOpenLikeAnchor,
+                        onDismiss: { showingLikes = false }
+                    )
+                }
+            }
     }
 }
 
@@ -1375,6 +1535,7 @@ private struct NovelReaderStateObserverModifier: ViewModifier {
     @Binding var showingCacheProgress: Bool
     @Binding var showingChapterSheet: Bool
     @Binding var showingChapterComments: Bool
+    @Binding var showingLikes: Bool
     @Binding var imageBrowserItem: ImageBrowserItem?
 
     let isStatusBarHidden: Bool
@@ -1414,6 +1575,9 @@ private struct NovelReaderStateObserverModifier: ViewModifier {
                 onUpdateChromeForContentState()
             }
             .onChange(of: showingChapterComments) { _, _ in
+                onUpdateChromeForContentState()
+            }
+            .onChange(of: showingLikes) { _, _ in
                 onUpdateChromeForContentState()
             }
             .onChange(of: imageBrowserItem) { _, _ in

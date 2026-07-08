@@ -8,6 +8,7 @@ struct MangaReaderPresentationContent: View {
     let presentation: MangaReaderPresentation
     let imageLoader: MangaReaderPageImageLoader?
     let isChromeVisible: Bool
+    let likedPageIDs: Set<String>
     let onRetryInitialLoad: () -> Void
     let onCurrentPageChange: (Int) -> Void
     let canBoundaryPageTurn: (Int, Bool) -> Bool
@@ -28,6 +29,7 @@ struct MangaReaderPresentationContent: View {
                     settings: presentation.settings,
                     imageLoader: imageLoader,
                     isChromeVisible: isChromeVisible,
+                    likedPageIDs: likedPageIDs,
                     onCurrentPageChange: onCurrentPageChange,
                     canBoundaryPageTurn: canBoundaryPageTurn,
                     onBoundaryPageTurn: onBoundaryPageTurn,
@@ -68,6 +70,7 @@ private struct MangaReaderLoadedContent: View {
     let settings: MangaReaderSettings
     let imageLoader: MangaReaderPageImageLoader?
     let isChromeVisible: Bool
+    let likedPageIDs: Set<String>
     let onCurrentPageChange: (Int) -> Void
     let canBoundaryPageTurn: (Int, Bool) -> Bool
     let onBoundaryPageTurn: (Int, Bool) -> Void
@@ -87,6 +90,7 @@ private struct MangaReaderLoadedContent: View {
                     imageLoader: imageLoader,
                     isChromeVisible: isChromeVisible,
                     zoomEnabled: settings.zoomEnabled,
+                    likedPageIDs: likedPageIDs,
                     onCurrentPageChange: onCurrentPageChange,
                     onPageLongPress: onPageLongPress,
                     onTap: onTap
@@ -113,6 +117,7 @@ private struct MangaReaderLoadedContent: View {
                             imageLoader: imageLoader,
                             isChromeVisible: isChromeVisible,
                             zoomEnabled: settings.zoomEnabled,
+                            likedPageIDs: likedPageIDs,
                             onCurrentPageChange: onCurrentPageChange,
                             canBoundaryPageTurn: { delta in
                                 canBoundaryPageTurn(delta, usesTwoPageSpread)
@@ -133,6 +138,7 @@ private struct MangaReaderLoadedContent: View {
                             imageLoader: imageLoader,
                             isChromeVisible: isChromeVisible,
                             zoomEnabled: settings.zoomEnabled,
+                            likedPageIDs: likedPageIDs,
                             onCurrentPageChange: onCurrentPageChange,
                             canBoundaryPageTurn: { delta in
                                 canBoundaryPageTurn(delta, usesTwoPageSpread)

@@ -680,6 +680,10 @@ private func persistedResumeRoute(_ route: ReaderResumeRoute) throws -> ReaderRe
     let favoriteBackgroundImageStore = FavoriteBackgroundImageStore(
         baseDirectory: rootDirectory.appendingPathComponent("favorite-background", isDirectory: true)
     )
+    let likeStore = LikeStore(defaults: try #require(UserDefaults(suiteName: suiteName)), key: "like-store")
+    let likeImageStore = LikeImageStore(
+        baseDirectory: rootDirectory.appendingPathComponent("like-images", isDirectory: true)
+    )
     let mangaDirectoryStore = try makeTestMangaDirectoryStore(rootDirectory: rootDirectory)
     let mangaReaderProjectionStore = try makeTestMangaReaderProjectionStore(rootDirectory: rootDirectory)
     let offlineCacheStore = try makeTestOfflineCacheStore(rootDirectory: rootDirectory)
@@ -691,6 +695,8 @@ private func persistedResumeRoute(_ route: ReaderResumeRoute) throws -> ReaderRe
         contentCoverStore: contentCoverStore,
         novelReaderCacheStore: novelReaderCacheStore,
         favoriteBackgroundImageStore: favoriteBackgroundImageStore,
+        likeStore: likeStore,
+        likeImageStore: likeImageStore,
         mangaDirectoryStore: mangaDirectoryStore,
         mangaReaderProjectionStore: mangaReaderProjectionStore,
         offlineCacheStore: offlineCacheStore
@@ -804,6 +810,13 @@ private func persistedResumeRoute(_ route: ReaderResumeRoute) throws -> ReaderRe
         try #require(URL(string: "https://img.example.com/reset-cover.jpg")),
         for: coverKey
     )
+    let likeWorkKey = LikeWorkKey.mangaTitle(cleanBookName: "测试漫画")
+    try await likeStore.upsertImageLike(
+        workKey: likeWorkKey,
+        anchor: .mangaImage(MangaImageLikeAnchor(chapterTID: "700", pageLocalIndex: 0)),
+        sourceImageURL: try #require(URL(string: "https://img.example.com/like-reset.jpg"))
+    )
+    try await likeImageStore.save(Data(repeating: 9, count: 32), id: "like-reset-image", sourceURL: nil)
 
     try await appContext.resetApplicationData()
 
@@ -822,6 +835,8 @@ private func persistedResumeRoute(_ route: ReaderResumeRoute) throws -> ReaderRe
     let novelOfflineEntries = await offlineCacheStore.allNovelOfflineCacheEntries()
     let offlineQueueWorks = await offlineCacheStore.offlineCacheQueueWorks()
     let mangaOfflineQueueState = await offlineCacheStore.offlineCacheQueueRunState()
+    let likeItems = await likeStore.likes(for: likeWorkKey)
+    let likeImageData = await likeImageStore.loadData(id: "like-reset-image")
 
     #expect(session == SessionState())
     #expect(settings == AppSettings())
@@ -839,6 +854,8 @@ private func persistedResumeRoute(_ route: ReaderResumeRoute) throws -> ReaderRe
     #expect(novelOfflineEntries.isEmpty)
     #expect(offlineQueueWorks.isEmpty)
     #expect(mangaOfflineQueueState == .paused)
+    #expect(likeItems.isEmpty)
+    #expect(likeImageData == nil)
 }
 
 @Test func contentCoverStoreNormalizesAndFiltersAutomaticCoverURLs() async throws {

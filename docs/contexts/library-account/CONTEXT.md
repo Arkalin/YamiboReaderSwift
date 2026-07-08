@@ -56,6 +56,22 @@ _Avoid_: image cache, cover bytes, background image
 The separately synchronized source of truth for per-thread novel and manga reading position, independent from whether the thread is currently visible in the **Favorite Library**.
 _Avoid_: favorite progress, archive progress, recent route
 
+**Like Library**:
+The user's local-first collection of liked excerpts -- text passages and images captured from supported readers -- grouped by the owning content target.
+_Avoid_: likes list, highlight store, excerpt store, bookmark list
+
+**Like Item**:
+One liked excerpt in the **Like Library**: a text excerpt or an image captured from one owning content target.
+_Avoid_: highlight, clipping, bookmark, favorite row
+
+**Like Anchor**:
+The persisted in-work location of a **Like Item** used to jump back to its original reading position.
+_Avoid_: selection range, runtime generation offset, TextKit position
+
+**Like Highlight**:
+The persistent in-reader decoration that marks an existing text **Like Item** in novel reader content and offers view or remove actions when tapped.
+_Avoid_: text selection, temporary highlight, annotation
+
 **Yamibo Account**:
 The authenticated Yamibo forum identity represented by UID, display name, profile, user group, and forum credit totals.
 _Avoid_: app account, local user, session
@@ -157,6 +173,21 @@ _Avoid_: app sync, startup restore, lifecycle handler
 - The **Reading Progress Store** syncs separately from the **Favorite Library** so reading position can move across devices without making favorites own reader state.
 - A **Favorite Library** persists a novel's **Novel Reading Position** through its semantic resume point and reader page document view; it never stores a novel runtime surface ordinal or displayed page number.
 - Manga page persistence uses the manga-specific `mangaPageIndex` Interface. The historical JSON key `lastPage` may remain as a schema compatibility key, but it is not a Swift Interface and is never written from novel reading.
+- The **Like Library** is local-first and independent of the **Favorite Library**: liking never requires favoriting, and deleting a **Favorite Item** never deletes **Like Items** for the same content target.
+- A **Like Item** is owned by a **Favorite Content Target** identity: novel threads use Yamibo thread `tid`, manga titles use the owning **Manga Directory** `cleanBookName`; normal forum threads are not capture sources.
+- Novel content targets may own text and image **Like Items** (novel illustrations); manga titles own image **Like Items** only.
+- Renaming a **Manga Directory** migrates matching manga title **Like Items** together with manga reading positions.
+- A text **Like Item** stores its excerpt snapshot as displayed text after translation-mode transformation, and its **Like Anchor** uses the persisted **Novel Reading Position** coordinate space: chapter identity, segment identity, and displayed-text Character offsets.
+- A manga image **Like Item** anchors by chapter `tid` and page `localIndex`; a novel image **Like Item** anchors by its image segment identity.
+- Text **Like Item** ranges never overlap within one content target: adding a range that overlaps or touches existing text **Like Items** merges them into one item whose excerpt snapshot is re-captured over the union range.
+- Adding a **Like Item** with a **Like Anchor** identical to an existing item is idempotent.
+- An image **Like Item** captures its image bytes into user-retained storage at like time; the bytes are user-retained content rather than transparent cache, and deleting the **Like Item** deletes the bytes.
+- WebDAV sync carries **Like Item** metadata -- excerpt snapshots, image URLs, **Like Anchors**, and timestamps -- with removal metadata so deleted **Like Items** are not recreated by stale devices; image bytes stay device-local, and other devices re-capture bytes by URL with a placeholder on failure.
+- Jumping to a **Like Item** is an ordinary non-linear reader jump: reading progress updates normally and a return anchor is offered, following reader-navigation semantics.
+- A **Like Item** is never deleted because its **Like Anchor** fails to resolve; jumping falls back to the owning chapter start, and a missing **Like Highlight** does not remove the list entry.
+- The **Mine Home** My Likes entry presents two levels: a works list with covers and like counts ordered by most recent like activity, then the owning work's **Like Items** ordered by in-work position.
+- The reader bottom chrome like button presents the current work's **Like Items** and reuses the second-level likes surface.
+- **Like Highlights** render persistently in novel reader content in both paged and vertical reading modes and open a view, copy, or remove menu when tapped; liked images show a heart badge instead of a text highlight.
 - **Mine Home** presents the current **Yamibo Account** through its **Yamibo Profile**.
 - **Mine Home** exposes the **Download Queue** while each offline-cache work item remains owned by its reader context.
 - **Download Queue** may contain manga and novel offline-cache work together, with row type and grouping making the reader context explicit.

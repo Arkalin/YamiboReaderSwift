@@ -7,13 +7,16 @@ import UIKit
 struct NativeNovelTextViewportReferenceView: UIViewRepresentable {
     let displayReference: NovelTextViewportDisplayReference
     let selectionController: NovelTextSelectionController?
+    let likeHighlightController: NovelLikeHighlightController?
 
     init(
         displayReference: NovelTextViewportDisplayReference,
-        selectionController: NovelTextSelectionController? = nil
+        selectionController: NovelTextSelectionController? = nil,
+        likeHighlightController: NovelLikeHighlightController? = nil
     ) {
         self.displayReference = displayReference
         self.selectionController = selectionController
+        self.likeHighlightController = likeHighlightController
     }
 
     func makeUIView(context: Context) -> NovelTextViewportReferenceUIView {
@@ -23,6 +26,7 @@ struct NativeNovelTextViewportReferenceView: UIViewRepresentable {
     func updateUIView(_ uiView: NovelTextViewportReferenceUIView, context: Context) {
         uiView.displayReference = displayReference
         uiView.selectionController = selectionController
+        uiView.likeHighlightController = likeHighlightController
     }
 }
 
@@ -39,7 +43,7 @@ struct NativeNovelTextSettingsPreviewView: UIViewRepresentable {
 }
 
 @MainActor
-final class NovelTextViewportReferenceUIView: UIView, @preconcurrency UIEditMenuInteractionDelegate {
+final class NovelTextViewportReferenceUIView: UIView, @preconcurrency UIEditMenuInteractionDelegate, UIGestureRecognizerDelegate {
     var displayReference: NovelTextViewportDisplayReference? {
         didSet {
             guard oldValue !== displayReference else { return }
@@ -57,8 +61,21 @@ final class NovelTextViewportReferenceUIView: UIView, @preconcurrency UIEditMenu
         }
     }
 
+    weak var likeHighlightController: NovelLikeHighlightController? {
+        didSet {
+            guard oldValue !== likeHighlightController else { return }
+            oldValue?.unregister(self)
+            likeHighlightController?.register(self)
+            setNeedsDisplay()
+        }
+    }
+
     private var lastDrawBounds: CGRect = .zero
     private lazy var editMenuInteraction = UIEditMenuInteraction(delegate: self)
+    private lazy var likeHighlightTapRecognizer = UITapGestureRecognizer(
+        target: self,
+        action: #selector(handleLikeHighlightTap(_:))
+    )
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -85,6 +102,10 @@ final class NovelTextViewportReferenceUIView: UIView, @preconcurrency UIEditMenu
             return
         }
         displayReference.drawBlockBackgrounds(in: context, bounds: self.bounds)
+        drawLikeHighlights(
+            displayReference: displayReference,
+            in: context
+        )
         drawSelectionHighlight(
             displayReference: displayReference,
             in: context
@@ -114,15 +135,25 @@ final class NovelTextViewportReferenceUIView: UIView, @preconcurrency UIEditMenu
         suggestedActions: [UIMenuElement]
     ) -> UIMenu? {
         guard selectionController?.hasSelection == true else { return nil }
+        let likeAction = makeLikeAction()
         if !suggestedActions.isEmpty {
-            return UIMenu(children: suggestedActions)
+            return UIMenu(children: likeAction.map { suggestedActions + [$0] } ?? suggestedActions)
         }
         let copyAction = UIAction(
             title: L10n.string("reader.copy")
         ) { [weak self] _ in
             self?.selectionController?.copySelection()
         }
-        return UIMenu(children: [copyAction])
+        return UIMenu(children: [copyAction] + (likeAction.map { [$0] } ?? []))
+    }
+
+    // A3: the edit menu simply omits "add to likes" when the selection can't
+    // resolve to a semantic position (no chapter title on that content).
+    private func makeLikeAction() -> UIAction? {
+        guard selectionController?.canLike == true else { return nil }
+        return UIAction(title: L10n.string("likes.add_to_likes")) { [weak self] _ in
+            self?.selectionController?.likeSelection()
+        }
     }
 
     func editMenuInteraction(
@@ -158,6 +189,70 @@ final class NovelTextViewportReferenceUIView: UIView, @preconcurrency UIEditMenu
         longPressRecognizer.minimumPressDuration = 0.35
         addGestureRecognizer(longPressRecognizer)
         addInteraction(editMenuInteraction)
+        likeHighlightTapRecognizer.delegate = self
+        addGestureRecognizer(likeHighlightTapRecognizer)
+    }
+
+    // Only recognized when the tap actually lands on a highlight rect; every
+    // other single tap fails immediately and falls through untouched to the
+    // viewport-level tap gesture (chrome toggle, page turn, etc.).
+    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+        guard gestureRecognizer === likeHighlightTapRecognizer else { return true }
+        return likeHighlightController?.item(at: touch.location(in: self), in: self) != nil
+    }
+
+    @objc private func handleLikeHighlightTap(_ recognizer: UITapGestureRecognizer) {
+        let location = recognizer.location(in: self)
+        guard let likeHighlightController,
+              let item = likeHighlightController.item(at: location, in: self) else {
+            return
+        }
+        presentLikeHighlightMenu(for: item, controller: likeHighlightController, at: location)
+    }
+
+    // Takes `controller` explicitly rather than reading `self.likeHighlightController`
+    // from inside the action closures, so the "remove" action doesn't need to
+    // capture `self` across the async `Task` boundary.
+    private func presentLikeHighlightMenu(
+        for item: LikeItem,
+        controller: NovelLikeHighlightController,
+        at location: CGPoint
+    ) {
+        guard let presenter = nearestViewController else { return }
+        let alert = UIAlertController(title: nil, message: nil, preferredStyle: .actionSheet)
+        alert.addAction(UIAlertAction(title: L10n.string("reader.copy"), style: .default) { _ in
+            UIPasteboard.general.string = item.excerptText
+        })
+        alert.addAction(UIAlertAction(title: L10n.string("likes.remove_like"), style: .destructive) { _ in
+            Task { await controller.remove(item) }
+        })
+        alert.addAction(UIAlertAction(title: L10n.string("common.cancel"), style: .cancel))
+        if let popover = alert.popoverPresentationController {
+            popover.sourceView = self
+            popover.sourceRect = CGRect(origin: location, size: .zero).insetBy(dx: -8, dy: -8)
+        }
+        presenter.present(alert, animated: true)
+    }
+
+    private var nearestViewController: UIViewController? {
+        sequence(first: next) { $0?.next }.compactMap { $0 as? UIViewController }.first
+    }
+
+    private func drawLikeHighlights(
+        displayReference: NovelTextViewportDisplayReference,
+        in context: CGContext
+    ) {
+        guard let likeHighlightController else { return }
+        let highlights = likeHighlightController.highlights(for: displayReference)
+        guard !highlights.isEmpty else { return }
+        context.saveGState()
+        context.setFillColor(UIColor.systemYellow.withAlphaComponent(0.28).cgColor)
+        for entry in highlights {
+            for rect in entry.rects {
+                context.fill(rect.insetBy(dx: -1, dy: -1))
+            }
+        }
+        context.restoreGState()
     }
 
     @objc private func handleLongPress(_ recognizer: UILongPressGestureRecognizer) {

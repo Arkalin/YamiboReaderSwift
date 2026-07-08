@@ -15,6 +15,7 @@ struct MangaPagedReaderPageSurface: View {
     let zoomEnabled: Bool
     let allowsUnzoomedSurfacePan: Bool
     let surfaceInteraction: MangaPagedReaderPageSurfaceInteraction
+    let likedPageIDs: Set<String>
     let onLongPress: (MangaReaderPageProjection) -> Void
 
     @State private var loadedImage: UIImage?
@@ -64,6 +65,14 @@ struct MangaPagedReaderPageSurface: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .clipped()
+        .overlay(alignment: .topTrailing) {
+            if likedPageIDs.contains(page.id) {
+                Image(systemName: "heart.fill")
+                    .foregroundStyle(.pink)
+                    .padding(8)
+                    .allowsHitTesting(false)
+            }
+        }
         .task(id: page.id) { @MainActor in
             await loadImage()
         }

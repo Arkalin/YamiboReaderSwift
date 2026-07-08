@@ -16,9 +16,19 @@ final class NovelTextSelectionController {
     private var activeSurfaceIdentity: NovelReaderSurfaceIdentity?
     private weak var verticalScrollView: UIScrollView?
     private var mode = SelectionMode.paged
+    private var likeWorkKey: LikeWorkKey?
+    private var likeCaptureService: NovelTextLikeCaptureService?
+    private var onLikeCaptured: ((LikeCaptureOutcome) -> Void)?
 
     var hasSelection: Bool {
         selectionRangeValue != nil
+    }
+
+    /// Whether the current selection resolves to a single-segment semantic
+    /// position the Like capture service can anchor (A3: no chapter title ->
+    /// no chapter identity -> nothing to anchor to).
+    var canLike: Bool {
+        likeWorkKey != nil && likeCaptureService != nil && likeAnchorEndpoints() != nil
     }
 
     func configure(mode: SelectionMode) {
@@ -125,6 +135,34 @@ final class NovelTextSelectionController {
         UIPasteboard.general.string = text
     }
 
+    func configureLikeCapture(
+        workKey: LikeWorkKey,
+        service: NovelTextLikeCaptureService,
+        onCaptured: @escaping (LikeCaptureOutcome) -> Void
+    ) {
+        likeWorkKey = workKey
+        likeCaptureService = service
+        onLikeCaptured = onCaptured
+    }
+
+    func likeSelection() {
+        guard let likeWorkKey, let likeCaptureService,
+              let endpoints = likeAnchorEndpoints() else {
+            return
+        }
+        let request = NovelTextLikeCaptureRequest(
+            workKey: likeWorkKey,
+            start: endpoints.start,
+            end: endpoints.end,
+            excerptText: endpoints.excerptText
+        )
+        let onLikeCaptured = onLikeCaptured
+        Task {
+            guard let outcome = try? await likeCaptureService.like(request) else { return }
+            onLikeCaptured?(outcome)
+        }
+    }
+
     func refreshSelectionDisplay() {
         for view in registeredViews.allObjects {
             view.setNeedsDisplay()
@@ -136,6 +174,51 @@ final class NovelTextSelectionController {
             .allObjects
             .compactMap(\.displayReference)
             .first { !$0.isStale && $0.generation == selectionRangeValue?.generation }
+    }
+
+    /// There is no forwarding API that converts a raw document offset to a
+    /// semantic position directly, only point-based ones (`viewportSample`).
+    /// This recovers character-precise positions for both selection
+    /// endpoints by hit-testing the exact rects `selectionRects(for:)`
+    /// already computes for drawing the selection highlight.
+    private func likeAnchorEndpoints() -> (
+        start: NovelTextViewportSemanticTextPosition,
+        end: NovelTextViewportSemanticTextPosition,
+        excerptText: String
+    )? {
+        guard let selectionRangeValue,
+              let displayReference = firstCurrentDisplayReference(),
+              let excerptText = displayReference.selectedText(for: selectionRangeValue),
+              !excerptText.isEmpty else {
+            return nil
+        }
+        let rects = displayReference.selectionRects(for: selectionRangeValue)
+        guard let firstRect = rects.first, let lastRect = rects.last,
+              let start = displayReference.viewportSample(
+                  referencePoint: CGPoint(x: firstRect.minX + 1, y: firstRect.midY)
+              ),
+              let end = displayReference.viewportSample(
+                  referencePoint: CGPoint(x: lastRect.maxX - 1, y: lastRect.midY)
+              ),
+              start.textSegmentIdentity == end.textSegmentIdentity,
+              let chapterIdentity = start.textSegmentIdentity.chapterIdentity else {
+            return nil
+        }
+        return (
+            NovelTextViewportSemanticTextPosition(
+                chapterIdentity: chapterIdentity,
+                textSegmentIdentity: start.textSegmentIdentity,
+                displayedTextOffset: start.displayedTextOffset,
+                progressInTextRange: 0
+            ),
+            NovelTextViewportSemanticTextPosition(
+                chapterIdentity: chapterIdentity,
+                textSegmentIdentity: end.textSegmentIdentity,
+                displayedTextOffset: end.displayedTextOffset,
+                progressInTextRange: 0
+            ),
+            excerptText
+        )
     }
 
     private func selectionTarget(

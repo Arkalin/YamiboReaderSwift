@@ -23,6 +23,8 @@ struct NovelReaderVerticalViewportScrollView: UIViewRepresentable {
     let scrollRequest: NovelReaderVerticalScrollRequest?
     let displayReferenceProvider: @MainActor (NovelReaderSurfaceIdentity) -> NovelTextViewportDisplayReference?
     let selectionController: NovelTextSelectionController?
+    let likeHighlightController: NovelLikeHighlightController?
+    let likedImageAnchors: Set<NovelImageLikeAnchor>
     let isChromeVisible: Bool
     let onVisibleSurfaceIdentitiesChange: ([NovelReaderSurfaceIdentity]) -> Void
     let onScrollRequestHandled: (NovelReaderVerticalScrollRequest) -> Void
@@ -34,6 +36,7 @@ struct NovelReaderVerticalViewportScrollView: UIViewRepresentable {
     let onTap: () -> Void
     let onChromeVisibleImageTap: () -> Void
     let onImageTap: (URL, String?) -> Void
+    let onImageLongPress: (NovelImageLikeAnchor, URL) -> Void
 
     private var contentIdentity: NovelReaderVerticalViewportContentIdentity {
         NovelReaderVerticalViewportContentIdentity(
@@ -72,6 +75,10 @@ struct NovelReaderVerticalViewportScrollView: UIViewRepresentable {
         context.coordinator.tapGesture.cancelsTouchesInView = false
         context.coordinator.tapGesture.delegate = context.coordinator
         collectionView.addGestureRecognizer(context.coordinator.tapGesture)
+        context.coordinator.longPressGesture.minimumPressDuration = 0.45
+        context.coordinator.longPressGesture.cancelsTouchesInView = false
+        context.coordinator.longPressGesture.delegate = context.coordinator
+        collectionView.addGestureRecognizer(context.coordinator.longPressGesture)
         onScrollViewReady(collectionView)
         selectionController?.configure(mode: .vertical)
         selectionController?.attachVerticalScrollView(collectionView)
@@ -105,6 +112,7 @@ struct NovelReaderVerticalViewportScrollView: UIViewRepresentable {
         private var isImmediateVisibleTextRedrawScheduled = false
         private var isDelayedVisibleTextRedrawScheduled = false
         lazy var tapGesture = UITapGestureRecognizer(target: self, action: #selector(handleTap(_:)))
+        lazy var longPressGesture = UILongPressGestureRecognizer(target: self, action: #selector(handleLongPress(_:)))
 
         init(parent: NovelReaderVerticalViewportScrollView) {
             self.parent = parent
@@ -189,6 +197,9 @@ struct NovelReaderVerticalViewportScrollView: UIViewRepresentable {
                 page: displaySurface,
                 displayReference: displayReference,
                 selectionController: parent.selectionController,
+                likeHighlightController: parent.likeHighlightController,
+                likedImageAnchors: parent.likedImageAnchors,
+                surface: verticalSurface(for: indexPath.item),
                 textHeight: displaySurface.presentationHeight,
                 settings: parent.settings,
                 refererURL: parent.refererURL,
@@ -335,6 +346,26 @@ struct NovelReaderVerticalViewportScrollView: UIViewRepresentable {
             let onImageTap = parent.onImageTap
             callbackScheduler.publish {
                 onImageTap(payload.url, payload.title)
+            }
+        }
+
+        @objc private func handleLongPress(_ recognizer: UILongPressGestureRecognizer) {
+            guard recognizer.state == .began,
+                  let collectionView = recognizer.view as? UICollectionView else {
+                return
+            }
+            let location = recognizer.location(in: collectionView)
+            guard let imageView = collectionView.firstDescendant(
+                ofType: NovelReaderVerticalViewportImageView.self,
+                containing: location
+            ), let payload = imageView.imageTapPayloadIfHit(
+                at: collectionView.convert(location, to: imageView)
+            ), let anchor = novelImageLikeAnchor(forImageURL: payload.url, in: parent.surfaces) else {
+                return
+            }
+            let onImageLongPress = parent.onImageLongPress
+            callbackScheduler.publish {
+                onImageLongPress(anchor, payload.url)
             }
         }
 
@@ -636,6 +667,9 @@ private final class NovelReaderVerticalViewportCell: UICollectionViewCell {
     private var currentTopPadding: CGFloat = 0
     private var currentDisplayReference: NovelTextViewportDisplayReference?
     private weak var currentSelectionController: NovelTextSelectionController?
+    private weak var currentLikeHighlightController: NovelLikeHighlightController?
+    private var currentLikedImageAnchors: Set<NovelImageLikeAnchor> = []
+    private var currentSurface: NovelReaderSurface?
     private var currentTextHeight: CGFloat?
     private var currentOnImageTap: (URL, String?) -> Void = { _, _ in }
     private var lastAppliedLayoutSize = CGSize.zero
@@ -660,6 +694,9 @@ private final class NovelReaderVerticalViewportCell: UICollectionViewCell {
         currentPage = nil
         currentDisplayReference = nil
         currentSelectionController = nil
+        currentLikeHighlightController = nil
+        currentLikedImageAnchors = []
+        currentSurface = nil
         currentTextHeight = nil
         currentOnImageTap = { _, _ in }
         lastAppliedLayoutSize = .zero
@@ -692,6 +729,9 @@ private final class NovelReaderVerticalViewportCell: UICollectionViewCell {
             page: currentPage,
             displayReference: currentDisplayReference,
             selectionController: currentSelectionController,
+            likeHighlightController: currentLikeHighlightController,
+            likedImageAnchors: currentLikedImageAnchors,
+            surface: currentSurface,
             textHeight: currentTextHeight,
             settings: currentSettings,
             refererURL: currentRefererURL,
@@ -706,6 +746,9 @@ private final class NovelReaderVerticalViewportCell: UICollectionViewCell {
         page: NovelReaderVerticalViewportDisplaySurface,
         displayReference: NovelTextViewportDisplayReference?,
         selectionController: NovelTextSelectionController?,
+        likeHighlightController: NovelLikeHighlightController?,
+        likedImageAnchors: Set<NovelImageLikeAnchor>,
+        surface: NovelReaderSurface?,
         textHeight: CGFloat?,
         settings: NovelReaderAppearanceSettings,
         refererURL: URL,
@@ -717,6 +760,9 @@ private final class NovelReaderVerticalViewportCell: UICollectionViewCell {
         currentPage = page
         currentDisplayReference = displayReference
         currentSelectionController = selectionController
+        currentLikeHighlightController = likeHighlightController
+        currentLikedImageAnchors = likedImageAnchors
+        currentSurface = surface
         currentTextHeight = textHeight
         currentSettings = settings
         currentRefererURL = refererURL
@@ -737,6 +783,11 @@ private final class NovelReaderVerticalViewportCell: UICollectionViewCell {
                 offlineScope: offlineScope,
                 displayReference: displayReference,
                 selectionController: selectionController,
+                likeHighlightController: likeHighlightController,
+                isLiked: {
+                    guard case let .image(url) = block else { return false }
+                    return isNovelImageLiked(url, surface: surface, likedAnchors: likedImageAnchors)
+                }(),
                 textHeight: textHeight,
                 onImageTap: onImageTap
             )
@@ -820,6 +871,8 @@ private final class NovelReaderVerticalViewportCell: UICollectionViewCell {
         offlineScope: YamiboImageOfflineScope?,
         displayReference: NovelTextViewportDisplayReference?,
         selectionController: NovelTextSelectionController?,
+        likeHighlightController: NovelLikeHighlightController?,
+        isLiked: Bool,
         textHeight: CGFloat?,
         onImageTap: @escaping (URL, String?) -> Void
     ) -> BlockView {
@@ -829,6 +882,7 @@ private final class NovelReaderVerticalViewportCell: UICollectionViewCell {
                 contentWidth: contentWidth,
                 displayReference: displayReference,
                 selectionController: selectionController,
+                likeHighlightController: likeHighlightController,
                 textHeight: textHeight
             )
         case let .image(url):
@@ -838,6 +892,7 @@ private final class NovelReaderVerticalViewportCell: UICollectionViewCell {
                 offlineScope: offlineScope,
                 preferredHeight: textHeight,
                 title: page.chapterTitle,
+                isLiked: isLiked,
                 onImageTap: onImageTap
             )
         case let .footer(text):
@@ -849,11 +904,13 @@ private final class NovelReaderVerticalViewportCell: UICollectionViewCell {
         contentWidth: CGFloat,
         displayReference: NovelTextViewportDisplayReference?,
         selectionController: NovelTextSelectionController?,
+        likeHighlightController: NovelLikeHighlightController?,
         textHeight: CGFloat?
     ) -> BlockView {
         let surface = NovelTextViewportReferenceUIView()
         surface.displayReference = displayReference
         surface.selectionController = selectionController
+        surface.likeHighlightController = likeHighlightController
         return BlockView(
             view: surface,
             height: max(textHeight ?? bounds.height, 1),
@@ -867,6 +924,7 @@ private final class NovelReaderVerticalViewportCell: UICollectionViewCell {
         offlineScope: YamiboImageOfflineScope?,
         preferredHeight: CGFloat?,
         title: String?,
+        isLiked: Bool,
         onImageTap: @escaping (URL, String?) -> Void
     ) -> BlockView {
         let height = max(preferredHeight ?? bounds.height, 1)
@@ -874,6 +932,7 @@ private final class NovelReaderVerticalViewportCell: UICollectionViewCell {
         imageView.configure(
             source: YamiboImageSource(url: url, refererPageURL: refererURL, offlineScope: offlineScope),
             title: title,
+            isLiked: isLiked,
             onTap: onImageTap
         )
         return BlockView(view: imageView, height: height, displayReference: nil)
@@ -929,6 +988,7 @@ private final class NovelReaderVerticalViewportCell: UICollectionViewCell {
         for blockView in blockViews {
             if let textView = blockView.view as? NovelTextViewportReferenceUIView {
                 textView.selectionController = nil
+                textView.likeHighlightController = nil
             }
             blockView.view.removeFromSuperview()
         }
@@ -940,6 +1000,17 @@ final class NovelReaderVerticalViewportImageView: UIView {
     private let imageView = UIImageView()
     private let activityIndicator = UIActivityIndicatorView(style: .medium)
     private let failureLabel = UILabel()
+    private let likedBadgeView: UIImageView = {
+        let badge = UIImageView(image: UIImage(systemName: "heart.fill"))
+        badge.tintColor = .systemPink
+        badge.contentMode = .scaleAspectFit
+        badge.isHidden = true
+        badge.layer.shadowColor = UIColor.black.cgColor
+        badge.layer.shadowOpacity = 0.35
+        badge.layer.shadowRadius = 2
+        badge.layer.shadowOffset = CGSize(width: 0, height: 1)
+        return badge
+    }()
     private var task: Task<Void, Never>?
     private var url: URL?
     private var title: String?
@@ -963,6 +1034,15 @@ final class NovelReaderVerticalViewportImageView: UIView {
         super.layoutSubviews()
         imageView.frame = bounds
         activityIndicator.center = CGPoint(x: bounds.midX, y: bounds.midY)
+
+        let badgeSize: CGFloat = 22
+        let badgeInset: CGFloat = 8
+        likedBadgeView.frame = CGRect(
+            x: bounds.maxX - badgeSize - badgeInset,
+            y: bounds.minY + badgeInset,
+            width: badgeSize,
+            height: badgeSize
+        )
 
         let horizontalInset: CGFloat = bounds.width >= 24 ? 12 : 0
         let availableWidth = max(bounds.width - horizontalInset * 2, 0)
@@ -994,10 +1074,12 @@ final class NovelReaderVerticalViewportImageView: UIView {
     func configure(
         source: YamiboImageSource,
         title: String?,
+        isLiked: Bool,
         onTap: @escaping (URL, String?) -> Void
     ) {
         self.url = source.url
         self.title = title
+        likedBadgeView.isHidden = !isLiked
         guard sourceIdentity != source else { return }
         sourceIdentity = source
         task?.cancel()
@@ -1037,6 +1119,8 @@ final class NovelReaderVerticalViewportImageView: UIView {
         failureLabel.textAlignment = .center
         failureLabel.isHidden = true
         addSubview(failureLabel)
+
+        addSubview(likedBadgeView)
     }
 
     func imageTapPayloadIfHit(at point: CGPoint) -> (url: URL, title: String?)? {
@@ -1072,7 +1156,24 @@ struct NovelReaderInlineViewportImage: UIViewRepresentable {
     let refererURL: URL
     let offlineScope: YamiboImageOfflineScope?
     let title: String?
+    let isLiked: Bool
     let onTap: (URL, String?) -> Void
+
+    init(
+        url: URL,
+        refererURL: URL,
+        offlineScope: YamiboImageOfflineScope?,
+        title: String?,
+        isLiked: Bool = false,
+        onTap: @escaping (URL, String?) -> Void
+    ) {
+        self.url = url
+        self.refererURL = refererURL
+        self.offlineScope = offlineScope
+        self.title = title
+        self.isLiked = isLiked
+        self.onTap = onTap
+    }
 
     func makeUIView(context: Context) -> NovelReaderVerticalViewportImageView {
         NovelReaderVerticalViewportImageView()
@@ -1082,6 +1183,7 @@ struct NovelReaderInlineViewportImage: UIViewRepresentable {
         uiView.configure(
             source: YamiboImageSource(url: url, refererPageURL: refererURL, offlineScope: offlineScope),
             title: title,
+            isLiked: isLiked,
             onTap: onTap
         )
     }

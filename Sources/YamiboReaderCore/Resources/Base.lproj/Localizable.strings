@@ -574,6 +574,11 @@
 "image.save_success_message" = "图片已保存到系统相册。";
 "image.save_success_title" = "保存成功";
 "image.save_to_photos" = "保存图片";
+"likes.section_title" = "喜欢";
+"likes.add_to_likes" = "加入喜欢";
+"likes.already_liked" = "已加入喜欢";
+"likes.empty_state" = "还没有喜欢的内容";
+"likes.remove_like" = "取消喜欢";
 "manga.brightness" = "亮度";
 "manga.chapter.final" = "终";
 "manga.chapter_list" = "目录";

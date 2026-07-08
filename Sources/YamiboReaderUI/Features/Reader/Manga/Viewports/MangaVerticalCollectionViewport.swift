@@ -11,6 +11,7 @@ struct MangaVerticalCollectionViewport: UIViewRepresentable {
     let imageLoader: MangaReaderPageImageLoader
     let isChromeVisible: Bool
     let zoomEnabled: Bool
+    let likedPageIDs: Set<String>
     let onCurrentPageChange: (Int) -> Void
     let onPageLongPress: (MangaReaderPageProjection) -> Void
     let onTap: () -> Void
@@ -95,6 +96,7 @@ struct MangaVerticalCollectionViewport: UIViewRepresentable {
         let callbackScheduler = SwiftUIViewUpdateCallbackScheduler()
         private var contentIdentity: [String] = []
         private var heightToWidthRatios: [String: CGFloat] = [:]
+        private var lastAppliedLikedPageIDs: Set<String> = []
         private var pendingInitialPageIndex: Int?
         private var lastReportedGlobalIndex: Int?
         private var pendingReportedGlobalIndex: Int?
@@ -116,6 +118,12 @@ struct MangaVerticalCollectionViewport: UIViewRepresentable {
 
         func updateContentIfNeeded(in collectionView: UICollectionView) {
             resetVerticalZoomIfUnavailable(in: collectionView)
+            if parent.likedPageIDs != lastAppliedLikedPageIDs {
+                lastAppliedLikedPageIDs = parent.likedPageIDs
+                for case let cell as MangaVerticalCollectionPageCell in collectionView.visibleCells {
+                    cell.refreshLiked(using: parent.likedPageIDs)
+                }
+            }
             let nextIdentity = parent.pages.map(\.id)
             guard nextIdentity != contentIdentity else {
                 applyInitialPlacementIfNeeded(in: collectionView)
@@ -170,6 +178,7 @@ struct MangaVerticalCollectionViewport: UIViewRepresentable {
                 page: page,
                 imageLoader: parent.imageLoader,
                 knownHeightToWidthRatio: heightToWidthRatios[page.id],
+                isLiked: parent.likedPageIDs.contains(page.id),
                 onHeightToWidthRatioChange: { [weak self, weak collectionView] ratio in
                     self?.heightToWidthRatios[page.id] = ratio
                     collectionView?.collectionViewLayout.invalidateLayout()
@@ -519,6 +528,13 @@ private final class MangaVerticalCollectionPageCell: UICollectionViewCell {
 
     private let imageView = UIImageView()
     private let loadStateOverlay = ReaderLoadStateOverlayView()
+    private let likeBadgeImageView: UIImageView = {
+        let imageView = UIImageView(image: UIImage(systemName: "heart.fill"))
+        imageView.tintColor = .systemPink
+        imageView.contentMode = .scaleAspectFit
+        imageView.isHidden = true
+        return imageView
+    }()
     private var task: Task<Void, Never>?
     private var page: MangaReaderPageProjection?
     private var imageLoader: MangaReaderPageImageLoader?
@@ -555,6 +571,7 @@ private final class MangaVerticalCollectionPageCell: UICollectionViewCell {
         imageView.image = nil
         imageView.isHidden = false
         loadStateOverlay.hide()
+        likeBadgeImageView.isHidden = true
     }
 
     override func layoutSubviews() {
@@ -575,6 +592,7 @@ private final class MangaVerticalCollectionPageCell: UICollectionViewCell {
         page: MangaReaderPageProjection,
         imageLoader: MangaReaderPageImageLoader,
         knownHeightToWidthRatio: CGFloat?,
+        isLiked: Bool,
         onHeightToWidthRatioChange: @escaping (CGFloat) -> Void,
         onLongPress: @escaping (MangaReaderPageProjection) -> Void
     ) {
@@ -585,6 +603,7 @@ private final class MangaVerticalCollectionPageCell: UICollectionViewCell {
         if let knownHeightToWidthRatio {
             heightToWidthRatio = knownHeightToWidthRatio
         }
+        likeBadgeImageView.isHidden = !isLiked
 
         let isSamePage = currentPageID == page.id
         currentPageID = page.id
@@ -618,9 +637,26 @@ private final class MangaVerticalCollectionPageCell: UICollectionViewCell {
             loadStateOverlay.bottomAnchor.constraint(equalTo: contentView.bottomAnchor)
         ])
 
+        likeBadgeImageView.translatesAutoresizingMaskIntoConstraints = false
+        contentView.addSubview(likeBadgeImageView)
+        NSLayoutConstraint.activate([
+            likeBadgeImageView.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 8),
+            likeBadgeImageView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -8),
+            likeBadgeImageView.widthAnchor.constraint(equalToConstant: 22),
+            likeBadgeImageView.heightAnchor.constraint(equalToConstant: 22)
+        ])
+
         longPressGesture.minimumPressDuration = 0.45
         longPressGesture.cancelsTouchesInView = false
         contentView.addGestureRecognizer(longPressGesture)
+    }
+
+    // Called when the liked-page set changes independently of page content
+    // (e.g. a like/unlike from this same reader or the Like list sheet), so
+    // already-visible cells don't need a full `configure(...)`/image reload.
+    func refreshLiked(using likedPageIDs: Set<String>) {
+        guard let currentPageID else { return }
+        likeBadgeImageView.isHidden = !likedPageIDs.contains(currentPageID)
     }
 
     private func startLoad() {

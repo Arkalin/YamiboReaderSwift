@@ -19,10 +19,22 @@ public enum NovelReaderSurfaceKind: Hashable, Sendable {
 public struct NovelReaderExternalBlock: Hashable, Sendable {
     public var url: URL
     public var frame: CGRect?
+    public var chapterIdentity: NovelChapterIdentity?
+    public var imageSegmentIdentity: NovelTextSegmentIdentity?
+    public var chapterOrdinal: Int?
 
-    public init(url: URL, frame: CGRect?) {
+    public init(
+        url: URL,
+        frame: CGRect?,
+        chapterIdentity: NovelChapterIdentity? = nil,
+        imageSegmentIdentity: NovelTextSegmentIdentity? = nil,
+        chapterOrdinal: Int? = nil
+    ) {
         self.url = url
         self.frame = frame
+        self.chapterIdentity = chapterIdentity
+        self.imageSegmentIdentity = imageSegmentIdentity
+        self.chapterOrdinal = chapterOrdinal
     }
 }
 

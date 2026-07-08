@@ -12,6 +12,7 @@ public struct NovelReaderDependencies: Sendable {
     public let makeOfflineCacheQueueExecutor: @Sendable () async -> OfflineCacheQueueExecutor
     /// The cache panel embeds the account feature's offline queue view model.
     public let account: AccountDependencies
+    public let like: LikeDependencies
 
     public init(
         sessionStore: SessionStore,
@@ -22,7 +23,8 @@ public struct NovelReaderDependencies: Sendable {
         makeNovelReaderRepository: @escaping @Sendable () async -> NovelReaderRepository,
         makeChapterCommentsRepository: @escaping @Sendable () async -> ReaderChapterCommentsRepository,
         makeOfflineCacheQueueExecutor: @escaping @Sendable () async -> OfflineCacheQueueExecutor,
-        account: AccountDependencies
+        account: AccountDependencies,
+        like: LikeDependencies
     ) {
         self.sessionStore = sessionStore
         self.settingsStore = settingsStore
@@ -32,6 +34,7 @@ public struct NovelReaderDependencies: Sendable {
         self.makeNovelReaderRepository = makeNovelReaderRepository
         self.makeOfflineCacheQueueExecutor = makeOfflineCacheQueueExecutor
         self.account = account
+        self.like = like
         makeChapterCommentsModule = { onChange in
             ReaderChapterCommentsModule(
                 adapter: ReaderChapterCommentsModule.Adapter(

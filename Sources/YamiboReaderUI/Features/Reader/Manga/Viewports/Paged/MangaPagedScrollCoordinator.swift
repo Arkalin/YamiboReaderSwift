@@ -15,6 +15,7 @@ final class MangaPagedScrollCoordinator: NSObject, UICollectionViewDataSource, U
     private(set) var pageSurfaceInteractions: [String: MangaPagedReaderPageSurfaceInteraction] = [:]
     private(set) var spreadSurfaceInteractions: [String: MangaPagedReaderPageSurfaceInteraction] = [:]
     private var pageSurfaceInitialHorizontalAlignments: [String: MangaPagedImageSurfaceInitialHorizontalAlignment] = [:]
+    private var lastAppliedLikedPageIDs: Set<String> = []
     private var pendingInitialSpreadIndex: Int?
     private var lastReportedGlobalIndex: Int?
     private var lastAppliedPlacementRevision: Int?
@@ -275,8 +276,10 @@ final class MangaPagedScrollCoordinator: NSObject, UICollectionViewDataSource, U
             isChromeVisible: parent.isChromeVisible,
             zoomEnabled: parent.zoomEnabled
         )
-        guard nextIdentity != surfaceInteractionIdentity else { return }
+        let likedPageIDsChanged = parent.likedPageIDs != lastAppliedLikedPageIDs
+        guard nextIdentity != surfaceInteractionIdentity || likedPageIDsChanged else { return }
         surfaceInteractionIdentity = nextIdentity
+        lastAppliedLikedPageIDs = parent.likedPageIDs
 
         for case let cell as ReaderPagedPageTurnCell in collectionView.visibleCells {
             guard let indexPath = collectionView.indexPath(for: cell) else { continue }
@@ -316,6 +319,7 @@ final class MangaPagedScrollCoordinator: NSObject, UICollectionViewDataSource, U
             zoomEnabled: parent.zoomEnabled,
             allowsUnzoomedSurfacePan: true,
             spreadSurfaceInteraction: spreadSurfaceInteraction(for: spread),
+            likedPageIDs: parent.likedPageIDs,
             colorScheme: parent.colorScheme
         )
         cell.resetPageTurnVisuals()

@@ -7,18 +7,22 @@ public struct MineHomeView: View {
     @State private var showingSettingsSheet = false
     @State private var showingSignOutConfirmation = false
     @State private var showingOfflineCacheQueueSheet = false
+    @State private var isMyLikesPushed = false
 
     private let settingsDependencies: SettingsDependencies
     private let appModel: YamiboAppModel
+    private let likeDependencies: LikeDependencies
 
     public init(
         dependencies: AccountDependencies,
         settingsDependencies: SettingsDependencies,
-        appModel: YamiboAppModel
+        appModel: YamiboAppModel,
+        likeDependencies: LikeDependencies
     ) {
         _viewModel = State(initialValue: MineHomeViewModel(dependencies: dependencies))
         self.settingsDependencies = settingsDependencies
         self.appModel = appModel
+        self.likeDependencies = likeDependencies
     }
 
     public var body: some View {
@@ -60,6 +64,9 @@ public struct MineHomeView: View {
                     offlineCacheQueueCount: viewModel.offlineCacheQueueEntryCount,
                     showOfflineCacheQueue: {
                         showingOfflineCacheQueueSheet = true
+                    },
+                    showMyLikes: {
+                        isMyLikesPushed = true
                     }
                 )
                 MineSettingsSection(
@@ -125,6 +132,14 @@ public struct MineHomeView: View {
             }
             .sheet(isPresented: $showingOfflineCacheQueueSheet) {
                 MineOfflineCacheQueueSheet(viewModel: viewModel)
+            }
+            .navigationDestination(isPresented: $isMyLikesPushed) {
+                LikeWorkListView(
+                    likeDependencies: likeDependencies,
+                    contentCoverStore: settingsDependencies.library.contentCoverStore,
+                    favoriteLibraryStore: settingsDependencies.library.localFavoriteLibraryStore,
+                    appModel: appModel
+                )
             }
         }
     }

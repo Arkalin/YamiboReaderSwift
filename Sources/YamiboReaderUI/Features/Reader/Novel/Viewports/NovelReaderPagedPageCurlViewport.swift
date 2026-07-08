@@ -143,6 +143,8 @@ struct NovelReaderPagedPageCurlViewport: UIViewControllerRepresentable {
     let scrollAnimationRequest: ReaderPagedScrollAnimationRequest?
     let displayReferenceProvider: @MainActor (NovelReaderSurfaceIdentity) -> NovelTextViewportDisplayReference?
     let selectionController: NovelTextSelectionController?
+    let likeHighlightController: NovelLikeHighlightController?
+    let likedImageAnchors: Set<NovelImageLikeAnchor>
     let isChromeVisible: Bool
     let canBoundaryPageTurn: (Int) -> Bool
     let onSelectionChange: (Int) -> Void
@@ -151,6 +153,7 @@ struct NovelReaderPagedPageCurlViewport: UIViewControllerRepresentable {
     let onScrollAnimationRequestConsumed: (ReaderPagedScrollAnimationRequest) -> Void
     let onChromeVisibleImageTap: () -> Void
     let onImageTap: (URL, String?) -> Void
+    let onImageLongPress: (NovelImageLikeAnchor, URL) -> Void
 
     @Environment(\.colorScheme) private var colorScheme
 
@@ -203,6 +206,15 @@ struct NovelReaderPagedPageCurlViewport: UIViewControllerRepresentable {
         tapRecognizer.cancelsTouchesInView = false
         tapRecognizer.delegate = context.coordinator
         pageViewController.view.addGestureRecognizer(tapRecognizer)
+
+        let longPressRecognizer = UILongPressGestureRecognizer(
+            target: context.coordinator,
+            action: #selector(Coordinator.handleLongPress(_:))
+        )
+        longPressRecognizer.minimumPressDuration = 0.45
+        longPressRecognizer.cancelsTouchesInView = false
+        longPressRecognizer.delegate = context.coordinator
+        pageViewController.view.addGestureRecognizer(longPressRecognizer)
 
         let boundaryPageTurnPanRecognizer = UIPanGestureRecognizer(
             target: context.coordinator,
@@ -350,6 +362,27 @@ struct NovelReaderPagedPageCurlViewport: UIViewControllerRepresentable {
         }
 
         @objc
+        func handleLongPress(_ recognizer: UILongPressGestureRecognizer) {
+            guard recognizer.state == .began,
+                  let containerView = recognizer.view else {
+                return
+            }
+            let location = recognizer.location(in: containerView)
+            guard let imageView = containerView.firstDescendant(
+                ofType: NovelReaderVerticalViewportImageView.self,
+                containing: location
+            ), let payload = imageView.imageTapPayloadIfHit(
+                at: containerView.convert(location, to: imageView)
+            ), let anchor = novelImageLikeAnchor(forImageURL: payload.url, in: parent.surfaces) else {
+                return
+            }
+            let onImageLongPress = parent.onImageLongPress
+            callbackScheduler.publish {
+                onImageLongPress(anchor, payload.url)
+            }
+        }
+
+        @objc
         func handleBoundaryPageTurnPan(_ recognizer: UIPanGestureRecognizer) {
             guard recognizer.state == .ended,
                   !parent.isChromeVisible,
@@ -481,6 +514,8 @@ struct NovelReaderPagedPageCurlViewport: UIViewControllerRepresentable {
                     bottomInset: parent.bottomInset,
                     displayReferenceProvider: parent.displayReferenceProvider,
                     selectionController: parent.selectionController,
+                    likeHighlightController: parent.likeHighlightController,
+                    likedImageAnchors: parent.likedImageAnchors,
                     onImageTap: parent.onImageTap
                 ),
                 pageBackgroundColor: parent.pageBackgroundColor
@@ -664,6 +699,8 @@ private struct NovelReaderPagedPageCurlLeafView: View {
     let bottomInset: CGFloat
     let displayReferenceProvider: @MainActor (NovelReaderSurfaceIdentity) -> NovelTextViewportDisplayReference?
     let selectionController: NovelTextSelectionController?
+    let likeHighlightController: NovelLikeHighlightController?
+    let likedImageAnchors: Set<NovelImageLikeAnchor>
     let onImageTap: (URL, String?) -> Void
 
     var body: some View {
@@ -674,6 +711,8 @@ private struct NovelReaderPagedPageCurlLeafView: View {
                     surface: surface,
                     displayReference: surface.flatMap { displayReferenceProvider($0.identity) },
                     selectionController: selectionController,
+                    likeHighlightController: likeHighlightController,
+                    likedImageAnchors: likedImageAnchors,
                     fallbackDocumentView: surface?.documentView,
                     fallbackSurfaceIndex: surfaceIndex,
                     settings: settings,

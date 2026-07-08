@@ -15,6 +15,7 @@ struct NovelReaderBottomChrome: View {
     let onShowCache: () -> Void
     let onShowComments: () -> Void
     let onOpenForum: () -> Void
+    let onShowLikes: () -> Void
     let onJumpChapter: (Int) -> Void
     let onProgressCommit: (Int) -> Void
     let onVerticalProgressCommit: (Int) -> Void
@@ -96,10 +97,10 @@ struct NovelReaderBottomChrome: View {
             )
             Spacer(minLength: chromeLayout.actionButtonSpacing)
             bottomActionButton(
-                action: ReaderBottomAction(kind: .bookmark, isDisabled: true),
-                title: "书签",
+                action: ReaderBottomAction(kind: .bookmark),
+                title: L10n.string("mine.my_likes"),
                 systemName: "heart",
-                handler: {}
+                handler: onShowLikes
             )
             Spacer(minLength: chromeLayout.actionButtonSpacing)
             bottomActionButton(

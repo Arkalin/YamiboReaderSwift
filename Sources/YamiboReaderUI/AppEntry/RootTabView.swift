@@ -68,7 +68,8 @@ public struct RootTabView: View {
             MineHomeView(
                 dependencies: appModel.appContext.accountDependencies,
                 settingsDependencies: appModel.appContext.settingsDependencies,
-                appModel: appModel
+                appModel: appModel,
+                likeDependencies: appModel.appContext.likeLibraryDependencies
             )
                 .tag(AppTab.mine)
                 .tabItem {

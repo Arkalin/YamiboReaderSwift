@@ -880,12 +880,15 @@ public final class NovelReadingWorkflow {
                 chapterTitle: surface.chapterTitle,
                 presentationSize: CGSize(width: readableSize.width, height: presentationHeight),
                 presentationSpacingAfter: spacingAfter,
-                externalBlocks: surface.externalBlocks.map {
+                externalBlocks: surface.externalBlocks.map { externalBlock in
                     NovelReaderExternalBlock(
-                        url: $0.url,
-                        frame: $0.frozenFrame.map {
+                        url: externalBlock.url,
+                        frame: externalBlock.frozenFrame.map {
                             CGRect(x: $0.x, y: $0.y, width: $0.width, height: $0.height)
-                        }
+                        },
+                        chapterIdentity: externalBlock.chapterIdentity,
+                        imageSegmentIdentity: externalBlock.imageSegmentIdentity,
+                        chapterOrdinal: externalBlock.chapterOrdinal
                     )
                 },
                 chapterCommentTarget: surface.chapterCommentTarget

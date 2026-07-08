@@ -64,6 +64,7 @@ struct MineCheckInSection: View {
 struct MineLibraryEntriesSection: View {
     let offlineCacheQueueCount: Int
     let showOfflineCacheQueue: () -> Void
+    let showMyLikes: () -> Void
 
     var body: some View {
         Section {
@@ -72,10 +73,11 @@ struct MineLibraryEntriesSection: View {
                 systemImage: "clock.arrow.circlepath",
                 tint: .blue
             )
-            MineEntryDisplayRow(
+            MineEntryButtonRow(
                 title: L10n.string("mine.my_likes"),
                 systemImage: "heart.fill",
-                tint: .pink
+                tint: .pink,
+                action: showMyLikes
             )
             MineEntryButtonRow(
                 title: L10n.string("mine.download_queue"),

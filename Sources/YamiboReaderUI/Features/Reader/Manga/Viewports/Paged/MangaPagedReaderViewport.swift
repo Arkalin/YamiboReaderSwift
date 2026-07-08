@@ -11,6 +11,7 @@ struct MangaPagedReaderViewport: UIViewRepresentable {
     let imageLoader: MangaReaderPageImageLoader
     let isChromeVisible: Bool
     let zoomEnabled: Bool
+    let likedPageIDs: Set<String>
     let onCurrentPageChange: (Int) -> Void
     let canBoundaryPageTurn: (Int) -> Bool
     let onBoundaryPageTurn: (Int) -> Void
