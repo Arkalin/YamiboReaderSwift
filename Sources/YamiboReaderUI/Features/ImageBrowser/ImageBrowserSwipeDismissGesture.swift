@@ -17,10 +17,6 @@ enum ImageBrowserSwipeDismissGesture {
         1 - min(max(progress, 0), 1) * 0.08
     }
 
-    static func backgroundOpacity(for progress: CGFloat) -> CGFloat {
-        1 - min(max(progress, 0), 1)
-    }
-
     static func canBegin(translation: CGPoint, zoomScale: CGFloat, minimumZoomScale: CGFloat) -> Bool {
         guard zoomScale <= minimumZoomScale + 0.01 else { return false }
         guard translation.y > 0 else { return false }
