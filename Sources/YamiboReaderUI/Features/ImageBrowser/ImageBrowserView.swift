@@ -90,6 +90,7 @@ struct ImageBrowserView: View {
                 onDismiss: onDismiss
             )
         }
+        .modalTransitionStyle(.crossDissolve)
         .task {
             await reloadCoverActions()
         }
