@@ -34,6 +34,15 @@ struct YamiboRemoteFavoriteDeleter {
                 // or the mapping never resolved) — nothing to delete remotely,
                 // but the local removal this call is part of must still proceed.
                 continue
+            } catch YamiboError.parsingFailed {
+                // Could not confirm this item's remote state (markup drift or
+                // a transient hiccup while paging the favorites list) — skip
+                // just this item's remote delete rather than aborting the
+                // whole batch, which would otherwise also block the pending
+                // local removal of every other selected item, including ones
+                // already handled earlier in this same loop.
+                YamiboLog.sync.warning("Failed to resolve remote favorite id for thread \(item.target.threadID ?? "?", privacy: .public) during batch delete, skipping remote delete for this item")
+                continue
             }
         }
     }

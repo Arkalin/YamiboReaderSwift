@@ -303,10 +303,12 @@
 "favorites.sync.warning.background_unavailable" = "当前环境不支持后台继续运行，请保持应用在前台。";
 "favorites.sync.warning.duplicate_remote_entry" = "网站收藏列表出现重复帖子：%@";
 "favorites.sync.warning.import_failed_item" = "无法导入 %@：%@";
+"favorites.sync.warning.imported_with_unresolved_source" = "已导入 %@，但未能获取来源版块信息，稍后会自动补齐。";
 "favorites.sync.warning.interrupted" = "任务被中断，可从进度页继续。";
 "favorites.sync.warning.interrupted_by_user" = "你已手动中断同步，可稍后继续。";
 "favorites.sync.warning.page_count_changed" = "同步期间网站收藏页数发生变动，建议完成后再同步一次。";
 "favorites.sync.warning.reconcile_failed" = "回填远端映射失败：%@，下次同步会补齐。";
+"favorites.sync.warning.remote_favorites_empty_before_upload" = "网站收藏列表读取为空，即将把 %d 项本地收藏重新上传到百合会；如果你确定网站上原本有收藏，请检查网络后重新同步一次。";
 "favorites.sync.warning.task_lost" = "检测到运行中的同步任务已丢失，已标记为中断。";
 "favorites.sync.warning.upload_failed_item" = "无法上传 %@：%@";
 "favorites.updates.title" = "收藏更新";

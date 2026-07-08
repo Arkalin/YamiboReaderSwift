@@ -3988,6 +3988,16 @@ final class FavoriteRepositoryThreadFavoriteTests: XCTestCase {
         XCTAssertEqual(page.favorites.count, 1)
     }
 
+    func testFavoritePageParserDistinguishesUnparseableFromGenuinelyEmptyDocument() {
+        let unparseable = FavoriteHTMLParser.parseFavoritePage(from: "")
+        XCTAssertFalse(unparseable.documentParsed)
+        XCTAssertTrue(unparseable.favorites.isEmpty)
+
+        let wellFormedButEmpty = FavoriteHTMLParser.parseFavoritePage(from: "<html><body></body></html>")
+        XCTAssertTrue(wellFormedButEmpty.documentParsed)
+        XCTAssertTrue(wellFormedButEmpty.favorites.isEmpty)
+    }
+
     private func makeFavoriteRepository(cookie: String) -> FavoriteRepository {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [StubURLProtocol.self]

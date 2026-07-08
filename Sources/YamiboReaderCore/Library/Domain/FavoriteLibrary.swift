@@ -455,6 +455,11 @@ public struct FavoriteThreadProbeResult: Hashable, Sendable {
     public var coverURL: URL?
     public var contentUpdatedAt: Date?
     public var authorID: String?
+    /// Set when the thread-page fetch backing `sourceGroup`/`coverURL`/
+    /// `contentUpdatedAt` failed even after retries, so the caller can still
+    /// import the item while surfacing that its metadata is degraded rather
+    /// than silently treating it as a clean success.
+    public var sourceMetadataFetchFailed: Bool
 
     public init(
         target: FavoriteContentTarget,
@@ -464,7 +469,8 @@ public struct FavoriteThreadProbeResult: Hashable, Sendable {
         forumName: String? = nil,
         coverURL: URL? = nil,
         contentUpdatedAt: Date? = nil,
-        authorID: String? = nil
+        authorID: String? = nil,
+        sourceMetadataFetchFailed: Bool = false
     ) {
         self.target = target
         self.title = title
@@ -479,6 +485,7 @@ public struct FavoriteThreadProbeResult: Hashable, Sendable {
         self.coverURL = coverURL
         self.contentUpdatedAt = contentUpdatedAt
         self.authorID = authorID
+        self.sourceMetadataFetchFailed = sourceMetadataFetchFailed
     }
 }
 

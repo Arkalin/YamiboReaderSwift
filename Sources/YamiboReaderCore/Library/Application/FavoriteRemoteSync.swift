@@ -143,16 +143,7 @@ public struct FavoriteYamiboSyncEngine: Sendable {
             var totalPages: Int?
             while true {
                 try Task.checkCancellation()
-                let result: FavoriteYamiboRemotePage
-                do {
-                    result = try await client.fetchPage(page)
-                } catch let error where page == 1 && Self.isEmptyRemoteFavoritesError(error) {
-                    // An empty first page (HTML parsed fine, zero entries, no
-                    // auth/flood markers) means the account genuinely has no
-                    // remote favorites yet — a valid state, not a failure.
-                    // Sync must still proceed to the upload phase.
-                    result = FavoriteYamiboRemotePage(entries: [], currentPage: 1, totalPages: 1)
-                }
+                let result = try await Self.fetchPageWithRetry(page, client: client)
                 if let known = totalPages, known != result.totalPages, !reportedPageCountChange {
                     reportedPageCountChange = true
                     await commit { $0.warnings.append(.remotePageCountChanged) }
@@ -277,6 +268,9 @@ public struct FavoriteYamiboSyncEngine: Sendable {
                         }
                     }
                     await commit { $0.importedCount += 1 }
+                    if probeResult.sourceMetadataFetchFailed {
+                        await commit { $0.warnings.append(.importedWithUnresolvedSource(title: label)) }
+                    }
                 } catch is CancellationError {
                     throw CancellationError()
                 } catch let error where Self.isRunFatal(error) {
@@ -307,6 +301,9 @@ public struct FavoriteYamiboSyncEngine: Sendable {
                 snapshot.phase = .uploading
                 snapshot.uploadTargetCount = uploadCandidates.count
                 snapshot.logEntries.append(.uploading(targetCount: uploadCandidates.count))
+            }
+            if remoteEntries.isEmpty && !uploadCandidates.isEmpty {
+                await commit { $0.warnings.append(.remoteFavoritesEmptyBeforeBulkUpload(count: uploadCandidates.count)) }
             }
             for (offset, item) in uploadCandidates.enumerated() {
                 try Task.checkCancellation()
@@ -432,13 +429,36 @@ public struct FavoriteYamiboSyncEngine: Sendable {
         throw lastError
     }
 
+    private static func fetchPageWithRetry(
+        _ page: Int,
+        client: FavoriteYamiboSyncClient,
+        attempts: Int = 3
+    ) async throws -> FavoriteYamiboRemotePage {
+        var lastError: any Error = YamiboError.parsingFailed(context: "\(page)")
+        for attempt in 1 ... max(1, attempts) {
+            do {
+                return try await client.fetchPage(page)
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch let error where isRunFatal(error) {
+                throw error
+            } catch {
+                lastError = error
+                if attempt < attempts {
+                    try Task.checkCancellation()
+                }
+            }
+        }
+        throw lastError
+    }
+
     private static func fetchAllPages(client: FavoriteYamiboSyncClient) async throws -> [YamiboRemoteFavoriteEntry] {
         var entries: [YamiboRemoteFavoriteEntry] = []
         var seenThreadIDs: Set<String> = []
         var page = 1
         while true {
             try Task.checkCancellation()
-            let result = try await client.fetchPage(page)
+            let result = try await Self.fetchPageWithRetry(page, client: client)
             for entry in result.entries where seenThreadIDs.insert(entry.threadID).inserted {
                 var ordered = entry
                 ordered.remoteOrder = entries.count
@@ -461,15 +481,6 @@ public struct FavoriteYamiboSyncEngine: Sendable {
         default:
             return false
         }
-    }
-
-    /// True only for the specific "HTML parsed but zero favorite entries"
-    /// failure mode — not for auth/flood-control errors, which must still
-    /// abort the run.
-    private static func isEmptyRemoteFavoritesError(_ error: any Error) -> Bool {
-        guard let yamiboError = error as? YamiboError else { return false }
-        if case .parsingFailed = yamiboError { return true }
-        return false
     }
 
     private static func postLabel(threadID: String, title: String?) -> String {

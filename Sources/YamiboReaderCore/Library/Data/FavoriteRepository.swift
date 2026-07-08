@@ -22,11 +22,16 @@ public actor FavoriteRepository {
 
     public func fetchFavorites(page: Int = 1) async throws -> [Favorite] {
         let html = try await client.fetchHTML(for: .favorites(page: page))
-        let favorites = FavoriteHTMLParser.parseFavorites(from: html)
-        if favorites.isEmpty {
-            throw inferContentError(from: html, fallback: .parsingFailed(context: L10n.string("context.favorites_page")))
+        let parsed = FavoriteHTMLParser.parseFavoritePage(from: html)
+        if parsed.favorites.isEmpty {
+            if let error = inferContentError(from: html) {
+                throw error
+            }
+            if !parsed.documentParsed {
+                throw YamiboError.parsingFailed(context: L10n.string("context.favorites_page"))
+            }
         }
-        return favorites
+        return parsed.favorites
     }
 
     public func fetchFavoritesPage(page: Int = 1) async throws -> FavoriteRemotePage {
@@ -42,7 +47,12 @@ public actor FavoriteRepository {
         let html = try await client.fetchHTML(for: .favorites(page: page))
         let parsed = FavoriteHTMLParser.parseFavoritePage(from: html)
         if parsed.favorites.isEmpty {
-            throw inferContentError(from: html, fallback: .parsingFailed(context: L10n.string("context.favorites_page")))
+            if let error = inferContentError(from: html) {
+                throw error
+            }
+            if !parsed.documentParsed {
+                throw YamiboError.parsingFailed(context: L10n.string("context.favorites_page"))
+            }
         }
         return parsed
     }
@@ -88,16 +98,13 @@ public actor FavoriteRepository {
             let html = try await client.fetchHTML(for: .favorites(page: page))
             let parsed = FavoriteHTMLParser.parseFavoritePage(from: html)
             if parsed.favorites.isEmpty {
-                let error = inferContentError(
-                    from: html,
-                    fallback: .parsingFailed(context: L10n.string("context.favorites_page"))
-                )
-                switch error {
-                case .parsingFailed:
-                    return nil
-                default:
+                if let error = inferContentError(from: html) {
                     throw error
                 }
+                if !parsed.documentParsed {
+                    throw YamiboError.parsingFailed(context: L10n.string("context.favorites_page"))
+                }
+                return nil
             }
             if let favorite = parsed.favorites.first(where: { $0.threadID == threadID }) {
                 return favorite
@@ -137,14 +144,14 @@ public actor FavoriteRepository {
         }
     }
 
-    private func inferContentError(from html: String, fallback: YamiboError) -> YamiboError {
+    private func inferContentError(from html: String) -> YamiboError? {
         if isLoginPage(html) {
             return .notAuthenticated
         }
         if isFloodControlOrError(html) {
             return .floodControl
         }
-        return fallback
+        return nil
     }
 
     private func isLoginPage(_ html: String) -> Bool {
