@@ -39,6 +39,5 @@ final class ImageBrowserSwipeDismissGestureTests: XCTestCase {
         XCTAssertEqual(ImageBrowserSwipeDismissGesture.progress(for: 75), 0.5)
         XCTAssertEqual(ImageBrowserSwipeDismissGesture.progress(for: 300), 1)
         XCTAssertEqual(ImageBrowserSwipeDismissGesture.imageScale(for: 1), 0.92, accuracy: 0.001)
-        XCTAssertEqual(ImageBrowserSwipeDismissGesture.backgroundOpacity(for: 1), 0, accuracy: 0.001)
     }
 }

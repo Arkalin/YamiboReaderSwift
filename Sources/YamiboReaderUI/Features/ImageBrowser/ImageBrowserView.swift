@@ -19,10 +19,6 @@ struct ImageBrowserView: View {
     let items: [ImageBrowserItem]
     let mode: ImageBrowserMode
     let coverActionsProvider: ImageBrowserCoverActionsProvider?
-    /// A frozen snapshot of the presenting screen, taken right before this view was shown.
-    /// Revealed behind the black scrim as the user swipes down to dismiss, so the interactive
-    /// dismiss gesture appears to peel away to the page underneath instead of fading to black.
-    let backgroundRevealImage: UIImage?
     let onDismiss: () -> Void
 
     @State private var selectedItemID: String
@@ -38,33 +34,18 @@ struct ImageBrowserView: View {
         initialItemID: String?,
         mode: ImageBrowserMode,
         coverActionsProvider: ImageBrowserCoverActionsProvider? = nil,
-        backgroundRevealImage: UIImage? = nil,
         onDismiss: @escaping () -> Void
     ) {
         self.items = items
         self.mode = mode
         self.coverActionsProvider = coverActionsProvider
-        self.backgroundRevealImage = backgroundRevealImage
         self.onDismiss = onDismiss
         _selectedItemID = State(initialValue: Self.initialSelection(in: items, initialItemID: initialItemID))
     }
 
     var body: some View {
         ZStack {
-            if let backgroundRevealImage {
-                GeometryReader { geometry in
-                    Image(uiImage: backgroundRevealImage)
-                        .resizable()
-                        .scaledToFill()
-                        .frame(width: geometry.size.width, height: geometry.size.height)
-                        .clipped()
-                }
-                .ignoresSafeArea()
-                .accessibilityHidden(true)
-            }
-
             Color.black
-                .opacity(isSwipeDismissCommitted ? 0 : ImageBrowserSwipeDismissGesture.backgroundOpacity(for: swipeDismissProgress))
                 .ignoresSafeArea()
 
             ImageBrowserContentView(
@@ -109,7 +90,7 @@ struct ImageBrowserView: View {
                 onDismiss: onDismiss
             )
         }
-        .background(Color.black)
+        .modalTransitionStyle(.crossDissolve)
         .task {
             await reloadCoverActions()
         }
