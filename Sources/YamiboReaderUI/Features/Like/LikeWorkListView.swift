@@ -144,7 +144,8 @@ struct LikeWorkListView: View {
                     displayTitle: workTitle,
                     source: .like,
                     initialPage: mangaAnchor.pageLocalIndex,
-                    directoryName: work.id
+                    directoryName: work.id,
+                    isPreview: true
                 )
             )
         }
@@ -157,7 +158,8 @@ struct LikeWorkListView: View {
                 threadTitle: workTitle,
                 source: .like,
                 initialView: resumePoint.view,
-                initialResumePoint: resumePoint
+                initialResumePoint: resumePoint,
+                isPreview: true
             )
         )
     }

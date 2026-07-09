@@ -290,4 +290,30 @@ func readerChromePanelTint(for colorScheme: ColorScheme) -> Color {
 func readerChromeButtonTint(for colorScheme: ColorScheme) -> Color {
     colorScheme == .dark ? Color(red: 0.78, green: 0.58, blue: 0.42) : .accentColor
 }
+
+/// Reader Preview Mode indicator: shown in the top chrome of both the novel
+/// and manga readers while `NovelLaunchContext`/`MangaLaunchContext.isPreview`
+/// is true, so the user knows reading progress isn't being recorded. See
+/// Reader Preview Mode in docs/contexts/reader-navigation/CONTEXT.md.
+struct ReaderPreviewModeBadge: View {
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "eye")
+            Text(L10n.string("reader.preview_mode"))
+                .fontWeight(.semibold)
+            Text("·")
+                .foregroundStyle(.secondary)
+            Text(L10n.string("reader.preview_mode_hint"))
+                .foregroundStyle(.secondary)
+        }
+        .font(.caption)
+        .lineLimit(1)
+        .minimumScaleFactor(0.8)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .readerChromePanel(cornerRadius: 14, tint: readerChromePanelTint(for: colorScheme))
+    }
+}
 #endif

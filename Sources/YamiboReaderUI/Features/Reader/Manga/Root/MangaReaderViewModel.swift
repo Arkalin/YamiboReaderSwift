@@ -849,6 +849,10 @@ public final class MangaReaderViewModel: ObservableObject {
         guard let snapshot = progressSnapshot(from: presentation) else {
             return context
         }
+        lastQueuedProgressSnapshot = snapshot
+        guard !context.isPreview else {
+            return snapshot.resumeContext
+        }
 
         await onReaderResumeRouteChange(.manga(snapshot.resumeContext))
         do {
@@ -856,7 +860,6 @@ public final class MangaReaderViewModel: ObservableObject {
         } catch {
             YamiboLog.sync.error("Failed to flush final manga reading progress on close: \(error.localizedDescription)")
         }
-        lastQueuedProgressSnapshot = snapshot
         return snapshot.resumeContext
     }
 
@@ -972,6 +975,7 @@ public final class MangaReaderViewModel: ObservableObject {
     private func scheduleProgressSync(snapshot: MangaReaderProgressSnapshot?) {
         guard let snapshot else { return }
         lastQueuedProgressSnapshot = snapshot
+        guard !context.isPreview else { return }
         let progressSync = dependencies.progressSync
         Task { [onReaderResumeRouteChange, snapshot, progressSync] in
             await onReaderResumeRouteChange(.manga(snapshot.resumeContext))
@@ -1204,7 +1208,8 @@ public final class MangaReaderViewModel: ObservableObject {
             chapterView: currentPage.sourceIdentity.view,
             initialPage: currentPage.localIndex,
             directoryName: directoryName,
-            offlineCacheFavoriteID: context.offlineCacheFavoriteID
+            offlineCacheFavoriteID: context.offlineCacheFavoriteID,
+            isPreview: context.isPreview
         )
         return MangaReaderProgressSnapshot(
             progress: progress,

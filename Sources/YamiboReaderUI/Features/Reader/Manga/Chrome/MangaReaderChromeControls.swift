@@ -13,6 +13,7 @@ struct MangaReaderChromeControls: View {
     let topInset: CGFloat
     let bottomInset: CGFloat
     let isVisible: Bool
+    let isPreview: Bool
     let imageLoader: MangaReaderPageImageLoader?
     let summary: MangaReaderChromeSummary?
     let readingMode: MangaReadingMode
@@ -38,6 +39,7 @@ struct MangaReaderChromeControls: View {
                 MangaReaderTopChrome(
                     title: summary?.headerTitle,
                     topInset: topInset,
+                    isPreview: isPreview,
                     canNavigateBack: canNavigateBack,
                     canNavigateForward: canNavigateForward,
                     onNavigateBack: onNavigateBack,

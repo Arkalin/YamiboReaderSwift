@@ -14,6 +14,10 @@ public struct NovelLaunchContext: Codable, Hashable, Identifiable, Sendable {
     public var initialView: Int?
     public var authorID: String?
     public var initialResumePoint: NovelResumePoint?
+    /// When true, this reader session must not persist reading progress,
+    /// resume route, or Favorite Library recency. See Reader Preview Mode in
+    /// docs/contexts/reader-navigation/CONTEXT.md.
+    public var isPreview: Bool
 
     public var id: String { threadID }
 
@@ -23,7 +27,8 @@ public struct NovelLaunchContext: Codable, Hashable, Identifiable, Sendable {
         source: NovelLaunchSource,
         initialView: Int? = nil,
         authorID: String? = nil,
-        initialResumePoint: NovelResumePoint? = nil
+        initialResumePoint: NovelResumePoint? = nil,
+        isPreview: Bool = false
     ) {
         self.threadID = Self.normalizedThreadID(threadID)
         self.threadTitle = threadTitle
@@ -31,6 +36,7 @@ public struct NovelLaunchContext: Codable, Hashable, Identifiable, Sendable {
         self.initialView = initialView
         self.authorID = authorID
         self.initialResumePoint = initialResumePoint
+        self.isPreview = isPreview
     }
 
     private static func normalizedThreadID(_ value: String) -> String {

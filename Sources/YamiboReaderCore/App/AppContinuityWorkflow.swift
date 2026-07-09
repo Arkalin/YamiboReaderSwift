@@ -315,7 +315,8 @@ private extension NovelLaunchContext {
             source: .resume,
             initialView: resumePoint?.view ?? novel?.lastView ?? initialView,
             authorID: resumePoint?.authorID ?? novel?.authorID ?? authorID,
-            initialResumePoint: resumePoint
+            initialResumePoint: resumePoint,
+            isPreview: isPreview
         )
     }
 }
@@ -334,7 +335,8 @@ private extension MangaLaunchContext {
             chapterView: manga.chapterView,
             initialPage: manga.mangaPageIndex,
             directoryName: directoryName,
-            offlineCacheFavoriteID: favoriteItem?.id ?? offlineCacheFavoriteID
+            offlineCacheFavoriteID: favoriteItem?.id ?? offlineCacheFavoriteID,
+            isPreview: isPreview
         )
     }
 }

@@ -20,62 +20,68 @@ struct NovelReaderTopChrome: View {
             progressText: model.progressText
         )
 
-        ReaderGlassContainer(spacing: 12) {
-            let chromeButtonSize: CGFloat = 44
-            let historyButtonsUseGlassBackground = model.settings.readingMode == .vertical
-            let historyIconSize = ReaderChromeHistoryButton.controlSize(
-                isGlassBacked: historyButtonsUseGlassBackground
-            )
-            let buttonSpacing: CGFloat = 8
-            let leadingControlsWidth = navigation.canNavigateBack ? historyIconSize : 0
-            let trailingControlsWidth = chromeButtonSize
-                + (navigation.canNavigateForward ? historyIconSize + buttonSpacing : 0)
-            let titleSidePadding = max(leadingControlsWidth, trailingControlsWidth) + 16
+        VStack(spacing: 8) {
+            ReaderGlassContainer(spacing: 12) {
+                let chromeButtonSize: CGFloat = 44
+                let historyButtonsUseGlassBackground = model.settings.readingMode == .vertical
+                let historyIconSize = ReaderChromeHistoryButton.controlSize(
+                    isGlassBacked: historyButtonsUseGlassBackground
+                )
+                let buttonSpacing: CGFloat = 8
+                let leadingControlsWidth = navigation.canNavigateBack ? historyIconSize : 0
+                let trailingControlsWidth = chromeButtonSize
+                    + (navigation.canNavigateForward ? historyIconSize + buttonSpacing : 0)
+                let titleSidePadding = max(leadingControlsWidth, trailingControlsWidth) + 16
 
-            ZStack {
-                chapterTitleView(summary.chapterTitle)
-                    .frame(maxWidth: .infinity)
-                    .padding(.horizontal, titleSidePadding)
-                    .offset(y: shouldLiftPagedChapterTitle ? -pagedChapterTitleTopLift : 0)
+                ZStack {
+                    chapterTitleView(summary.chapterTitle)
+                        .frame(maxWidth: .infinity)
+                        .padding(.horizontal, titleSidePadding)
+                        .offset(y: shouldLiftPagedChapterTitle ? -pagedChapterTitleTopLift : 0)
 
-                HStack(spacing: buttonSpacing) {
-                    if navigation.canNavigateBack {
-                        ReaderChromeHistoryButton(
-                            direction: .back,
-                            title: L10n.string("common.back"),
-                            isGlassBacked: historyButtonsUseGlassBackground,
-                            action: onNavigateBack
+                    HStack(spacing: buttonSpacing) {
+                        if navigation.canNavigateBack {
+                            ReaderChromeHistoryButton(
+                                direction: .back,
+                                title: L10n.string("common.back"),
+                                isGlassBacked: historyButtonsUseGlassBackground,
+                                action: onNavigateBack
+                            )
+                        }
+
+                        Spacer(minLength: 0)
+
+                        if navigation.canNavigateForward {
+                            ReaderChromeHistoryButton(
+                                direction: .forward,
+                                title: L10n.string("common.forward"),
+                                isGlassBacked: historyButtonsUseGlassBackground,
+                                action: onNavigateForward
+                            )
+                        }
+
+                        ReaderChromeCircleButton(
+                            systemName: "xmark",
+                            title: L10n.string("common.close"),
+                            tint: readerChromeButtonTint(for: colorScheme),
+                            action: onClose
                         )
+                        .frame(width: chromeButtonSize, height: chromeButtonSize)
                     }
-
-                    Spacer(minLength: 0)
-
-                    if navigation.canNavigateForward {
-                        ReaderChromeHistoryButton(
-                            direction: .forward,
-                            title: L10n.string("common.forward"),
-                            isGlassBacked: historyButtonsUseGlassBackground,
-                            action: onNavigateForward
-                        )
-                    }
-
-                    ReaderChromeCircleButton(
-                        systemName: "xmark",
-                        title: L10n.string("common.close"),
-                        tint: readerChromeButtonTint(for: colorScheme),
-                        action: onClose
-                    )
-                    .frame(width: chromeButtonSize, height: chromeButtonSize)
                 }
+                .frame(maxWidth: .infinity, minHeight: chromeButtonSize)
+                .padding(.horizontal, 4)
             }
-            .frame(maxWidth: .infinity, minHeight: chromeButtonSize)
-            .padding(.horizontal, 4)
+            .frame(maxWidth: .infinity)
+            .tint(readerChromeButtonTint(for: colorScheme))
+
+            if model.context.isPreview {
+                ReaderPreviewModeBadge()
+            }
         }
-        .frame(maxWidth: .infinity)
         .padding(.top, max(topInset + 8, 20))
         .padding(.horizontal, 12)
         .padding(.bottom, 8)
-        .tint(readerChromeButtonTint(for: colorScheme))
     }
 
     @ViewBuilder

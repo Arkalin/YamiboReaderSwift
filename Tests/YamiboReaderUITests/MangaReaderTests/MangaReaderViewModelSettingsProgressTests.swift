@@ -358,6 +358,48 @@ final class MangaReaderViewModelSettingsProgressTests: XCTestCase {
         XCTAssertEqual(storedResumeRoute, try persistedResumeRoute(.manga(route)))
     }
 
+    func testUpdateCurrentPageInPreviewModeDoesNotQueueReadingProgress() async throws {
+        let progressAdapter = RecordingMangaProgressAdapter()
+        let fixture = try await makeFixture(
+            progressSync: ProgressSyncModule(adapter: progressAdapter, debounceNanoseconds: 0),
+            isPreview: true
+        )
+
+        await fixture.model.prepare()
+        fixture.model.updateCurrentPage(globalIndex: 2)
+        try await Task.sleep(nanoseconds: 80_000_000)
+
+        let savedPositions = await progressAdapter.savedPositions
+        XCTAssertTrue(savedPositions.isEmpty)
+        let storedResumeRoute = await fixture.resumeRouteStore.load()
+        XCTAssertNil(storedResumeRoute)
+    }
+
+    func testSaveProgressInPreviewModeDoesNotPersistReadingProgressOrResumeRoute() async throws {
+        let defaultsSuiteName = YamiboTestDefaults.suiteName(prefix: "manga-save-progress-preview")
+        let readingProgressStore = try ReadingProgressStore(testSuiteName: defaultsSuiteName, key: "reading-progress")
+        let fixture = try await makeFixture(
+            progressSync: ProgressSyncModule(
+                adapter: FavoriteLibraryProgressSyncAdapter(
+                    readingProgressStore: readingProgressStore
+                ),
+                debounceNanoseconds: 0
+            ),
+            isPreview: true
+        )
+
+        await fixture.model.prepare()
+        fixture.model.updateCurrentPage(globalIndex: 2)
+        let route = await fixture.model.saveProgress()
+
+        XCTAssertTrue(route.isPreview)
+        XCTAssertEqual(route.initialPage, 2)
+        let progress = await readingProgressStore.load(threadID: "700")
+        XCTAssertNil(progress?.manga)
+        let storedResumeRoute = await fixture.resumeRouteStore.load()
+        XCTAssertNil(storedResumeRoute)
+    }
+
     func testSaveProgressDoesNotCreateMissingFavorite() async throws {
         let defaultsSuiteName = YamiboTestDefaults.suiteName(prefix: "manga-save-progress-missing")
         let readingProgressStore = try ReadingProgressStore(testSuiteName: defaultsSuiteName, key: "reading-progress")
@@ -685,7 +727,8 @@ private func makeFixture(
     appSettings: AppSettings = AppSettings(),
     progressSync: ProgressSyncModule? = nil,
     documents suppliedDocuments: [MangaReaderProjection]? = nil,
-    directory suppliedDirectory: MangaDirectory? = nil
+    directory suppliedDirectory: MangaDirectory? = nil,
+    isPreview: Bool = false
 ) async throws -> MangaReaderViewModelSettingsProgressFixture {
     let defaultsSuiteName = YamiboTestDefaults.suiteName(prefix: "manga-settings-progress-fixture")
     let settingsStore = try SettingsStore(testSuiteName: defaultsSuiteName, key: "settings")
@@ -698,7 +741,8 @@ private func makeFixture(
         displayTitle: "测试漫画",
         source: .forum,
         initialPage: initialPage,
-        directoryName: nil
+        directoryName: nil,
+        isPreview: isPreview
     )
     let document = try suppliedDocument ?? makeFixtureDocument(tid: "701", pageCount: max(imageCount, 1))
     let repository = StubMangaDirectoryRepository(

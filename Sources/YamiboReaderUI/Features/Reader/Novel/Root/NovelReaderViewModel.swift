@@ -1087,6 +1087,7 @@ public final class NovelReaderViewModel: ObservableObject {
     }
 
     private func scheduleProgressSync() {
+        guard !context.isPreview else { return }
         let snapshot = currentProgressSnapshot()
         Task { [weak self, progressSync] in
             await self?.persistNovelResumeRoute(snapshot)
@@ -1097,6 +1098,7 @@ public final class NovelReaderViewModel: ObservableObject {
     private func flushProgress() async -> NovelLaunchContext {
         let snapshot = currentProgressSnapshot()
         let resumeContext = resumeContext(for: snapshot)
+        guard !context.isPreview else { return resumeContext }
         await persistNovelResumeRoute(resumeContext)
         try? await progressSync.flush(.novel(snapshot))
         return resumeContext
@@ -1117,7 +1119,8 @@ public final class NovelReaderViewModel: ObservableObject {
             source: .resume,
             initialView: snapshot.view,
             authorID: snapshot.authorID ?? context.authorID,
-            initialResumePoint: snapshot.resumePoint
+            initialResumePoint: snapshot.resumePoint,
+            isPreview: context.isPreview
         )
     }
 

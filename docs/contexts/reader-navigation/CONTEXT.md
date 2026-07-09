@@ -24,7 +24,14 @@ _Avoid_: left stack, previous stack, undo stack
 The ordered stack of **Reader Return Anchors** available after moving backward through **Reader Navigation History**.
 _Avoid_: right stack, redo stack, next stack
 
+**Reader Preview Mode**:
+A reader session state, fixed when the session launches, in which reading progress, resume route, and Favorite Library recency are never persisted while everything else about the reader — layout, chrome, chapter comments, prefetch, and offline cache — behaves normally. Reader chrome shows a visible indicator while it is active.
+_Avoid_: read-only mode, ephemeral session, sandbox session
+
 ## Relationships
+
+- **Reader Preview Mode** is decided once when a reader session launches from a designated jump, such as the Mine Home My Likes jump-to-original action; it is not entered or left partway through an existing session.
+- **Reader Preview Mode** does not change **Reader Navigation History**, **Reader Return Anchor**, or **Current Stable Reading Position** semantics; it only controls whether the session's reading position is persisted outside the session.
 
 - Ordinary linear reading updates the **Current Stable Reading Position** without changing **Reader Back Stack** or **Reader Forward Stack**.
 - A user-initiated non-linear jump freezes the latest accepted **Current Stable Reading Position** at request start and adds it to **Reader Back Stack** only after the jump target resolves successfully.
