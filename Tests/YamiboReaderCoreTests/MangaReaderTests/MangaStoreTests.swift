@@ -158,13 +158,11 @@ struct MangaReaderTestsMangaStores {
         let firstIdentity = MangaReaderProjectionSourceIdentity(
             tid: "920",
             authorID: "42",
-            contentSource: .authorFilteredPage,
             view: 5
         )
         let secondIdentity = MangaReaderProjectionSourceIdentity(
             tid: "920",
             authorID: "42",
-            contentSource: .authorFilteredPage,
             view: 2
         )
         let firstImages = try [

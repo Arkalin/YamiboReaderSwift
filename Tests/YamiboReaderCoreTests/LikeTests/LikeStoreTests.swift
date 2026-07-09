@@ -18,7 +18,9 @@ import Testing
     let anchor = NovelTextLikeAnchor(
         chapterIdentity: NovelChapterIdentity(rawValue: "chapter-1"),
         textSegmentIdentity: NovelTextSegmentIdentity(rawValue: "chapter-1#text:0"),
-        range: NovelCharacterRange(location: 0, length: 4)
+        range: NovelCharacterRange(location: 0, length: 4),
+        view: 1,
+        resolvedAuthorID: nil
     )
 
     let result = try await store.upsertTextLike(workKey: workKey, anchor: anchor, excerptText: "你好世界")
@@ -44,7 +46,7 @@ import Testing
     try await store.upsertTextLike(
         id: "first",
         workKey: workKey,
-        anchor: NovelTextLikeAnchor(chapterIdentity: chapter, textSegmentIdentity: segment, range: NovelCharacterRange(location: 0, length: 10)),
+        anchor: NovelTextLikeAnchor(chapterIdentity: chapter, textSegmentIdentity: segment, range: NovelCharacterRange(location: 0, length: 10), view: 1, resolvedAuthorID: nil),
         excerptText: "AAAAAAAAAA"
     )
 
@@ -54,7 +56,7 @@ import Testing
     let merged = try await store.upsertTextLike(
         id: "second",
         workKey: workKey,
-        anchor: NovelTextLikeAnchor(chapterIdentity: chapter, textSegmentIdentity: segment, range: NovelCharacterRange(location: 0, length: 15)),
+        anchor: NovelTextLikeAnchor(chapterIdentity: chapter, textSegmentIdentity: segment, range: NovelCharacterRange(location: 0, length: 15), view: 1, resolvedAuthorID: nil),
         excerptText: "AAAAAAAAAABBBBB"
     )
 
@@ -74,7 +76,7 @@ import Testing
     try await store.upsertTextLike(
         id: "first",
         workKey: workKey,
-        anchor: NovelTextLikeAnchor(chapterIdentity: chapter, textSegmentIdentity: segment, range: NovelCharacterRange(location: 0, length: 10)),
+        anchor: NovelTextLikeAnchor(chapterIdentity: chapter, textSegmentIdentity: segment, range: NovelCharacterRange(location: 0, length: 10), view: 1, resolvedAuthorID: nil),
         excerptText: "0123456789"
     )
 
@@ -83,7 +85,7 @@ import Testing
     let merged = try await store.upsertTextLike(
         id: "second",
         workKey: workKey,
-        anchor: NovelTextLikeAnchor(chapterIdentity: chapter, textSegmentIdentity: segment, range: NovelCharacterRange(location: 0, length: 15)),
+        anchor: NovelTextLikeAnchor(chapterIdentity: chapter, textSegmentIdentity: segment, range: NovelCharacterRange(location: 0, length: 15), view: 1, resolvedAuthorID: nil),
         excerptText: "0123456789ABCDE"
     )
 
@@ -100,14 +102,14 @@ import Testing
     try await store.upsertTextLike(
         id: "first",
         workKey: workKey,
-        anchor: NovelTextLikeAnchor(chapterIdentity: chapter, textSegmentIdentity: segment, range: NovelCharacterRange(location: 0, length: 5)),
+        anchor: NovelTextLikeAnchor(chapterIdentity: chapter, textSegmentIdentity: segment, range: NovelCharacterRange(location: 0, length: 5), view: 1, resolvedAuthorID: nil),
         excerptText: "01234"
     )
 
     let result = try await store.upsertTextLike(
         id: "second",
         workKey: workKey,
-        anchor: NovelTextLikeAnchor(chapterIdentity: chapter, textSegmentIdentity: segment, range: NovelCharacterRange(location: 10, length: 5)),
+        anchor: NovelTextLikeAnchor(chapterIdentity: chapter, textSegmentIdentity: segment, range: NovelCharacterRange(location: 10, length: 5), view: 1, resolvedAuthorID: nil),
         excerptText: "56789"
     )
 
@@ -144,7 +146,9 @@ import Testing
         anchor: NovelTextLikeAnchor(
             chapterIdentity: NovelChapterIdentity(rawValue: "chapter-a"),
             textSegmentIdentity: NovelTextSegmentIdentity(rawValue: "chapter-a#text:0"),
-            range: NovelCharacterRange(location: 0, length: 2)
+            range: NovelCharacterRange(location: 0, length: 2),
+            view: 1,
+            resolvedAuthorID: nil
         ),
         excerptText: "旧的",
         date: earlier
@@ -172,12 +176,12 @@ import Testing
 
     try await store.upsertTextLike(
         workKey: keyA,
-        anchor: NovelTextLikeAnchor(chapterIdentity: chapter, textSegmentIdentity: segment, range: NovelCharacterRange(location: 0, length: 3)),
+        anchor: NovelTextLikeAnchor(chapterIdentity: chapter, textSegmentIdentity: segment, range: NovelCharacterRange(location: 0, length: 3), view: 1, resolvedAuthorID: nil),
         excerptText: "A"
     )
     try await store.upsertTextLike(
         workKey: keyB,
-        anchor: NovelTextLikeAnchor(chapterIdentity: chapter, textSegmentIdentity: segment, range: NovelCharacterRange(location: 0, length: 3)),
+        anchor: NovelTextLikeAnchor(chapterIdentity: chapter, textSegmentIdentity: segment, range: NovelCharacterRange(location: 0, length: 3), view: 1, resolvedAuthorID: nil),
         excerptText: "B"
     )
 

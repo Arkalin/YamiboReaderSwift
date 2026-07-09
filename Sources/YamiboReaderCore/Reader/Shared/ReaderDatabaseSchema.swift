@@ -77,7 +77,6 @@ enum ReaderDatabaseSchema: DatabaseSchemaModule {
                 table.column("thread_id", .text).notNull()
                 table.column("view", .integer).notNull()
                 table.column("author_id", .text)
-                table.column("content_source", .text).notNull()
                 table.column("document_json", .text).notNull()
                 table.column("source_page_file_name", .text)
                 table.column("source_page_schema_version", .integer)

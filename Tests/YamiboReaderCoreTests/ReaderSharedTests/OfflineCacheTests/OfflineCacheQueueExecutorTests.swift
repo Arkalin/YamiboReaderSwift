@@ -687,8 +687,7 @@ struct ReaderSharedTestsOfflineCacheQueueExecutor {
         let sourceSnapshot = await store.novelOfflineSourcePageSnapshot(
             threadID: request.threadID,
             view: request.view,
-            authorID: request.authorID,
-            contentSource: request.contentSource
+            authorID: request.authorID
         )
         #expect(sourceSnapshot?.sourcePage == preparedPage.sourcePage)
         let entry = await store.novelOfflineCacheEntry(id: OfflineCacheEntryID(
@@ -1156,7 +1155,6 @@ private func makeNovelExecutorWorkRequest(
         threadID: tid,
         view: view,
         authorID: "42",
-        contentSource: .authorFilteredPage,
         retainsInlineImages: retainsInlineImages
     )
 }
@@ -1187,7 +1185,6 @@ private func makeNovelExecutorPreparedSourcePage(
         view: view,
         maxView: max(2, view),
         resolvedAuthorID: "42",
-        contentSource: .authorFilteredPage,
         segments: segments,
         projectionSourceFingerprint: "novel-\(tid)-\(view)",
         projectionSchemaVersion: 1

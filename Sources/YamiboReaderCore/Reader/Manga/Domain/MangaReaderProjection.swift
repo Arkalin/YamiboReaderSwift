@@ -3,13 +3,11 @@ import Foundation
 public struct MangaReaderProjectionSourceIdentity: Codable, Hashable, Sendable {
     public var tid: String
     public var authorID: String?
-    public var contentSource: ReaderProjectionContentSource
     public var view: Int
 
     public init(
         tid: String,
         authorID: String?,
-        contentSource: ReaderProjectionContentSource,
         view: Int
     ) {
         self.tid = tid.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -17,7 +15,6 @@ public struct MangaReaderProjectionSourceIdentity: Codable, Hashable, Sendable {
         if self.authorID?.isEmpty == true {
             self.authorID = nil
         }
-        self.contentSource = contentSource
         self.view = max(1, view)
     }
 }
@@ -69,7 +66,6 @@ public struct MangaReaderProjection: Codable, Hashable, Sendable {
         self.sourceIdentity = sourceIdentity ?? MangaReaderProjectionSourceIdentity(
             tid: tid,
             authorID: self.ownerAuthorID,
-            contentSource: .authorFilteredPage,
             view: 1
         )
         self.sourceFingerprint = sourceFingerprint

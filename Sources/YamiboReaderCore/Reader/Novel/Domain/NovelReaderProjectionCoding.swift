@@ -6,7 +6,6 @@ extension NovelReaderProjection {
         case view
         case maxView
         case resolvedAuthorID
-        case contentSource
         case retainedChapterCount
         case filteredChapterCandidateCount
         case segments
@@ -37,7 +36,6 @@ extension NovelReaderProjection {
             view: try container.decode(Int.self, forKey: .view),
             maxView: try container.decode(Int.self, forKey: .maxView),
             resolvedAuthorID: try container.decodeIfPresent(String.self, forKey: .resolvedAuthorID),
-            contentSource: try container.decode(ReaderProjectionContentSource.self, forKey: .contentSource),
             retainedChapterCount: try container.decode(Int.self, forKey: .retainedChapterCount),
             filteredChapterCandidateCount: try container.decode(Int.self, forKey: .filteredChapterCandidateCount),
             segments: segments,
@@ -57,7 +55,6 @@ extension NovelReaderProjection {
         try container.encode(view, forKey: .view)
         try container.encode(maxView, forKey: .maxView)
         try container.encodeIfPresent(resolvedAuthorID, forKey: .resolvedAuthorID)
-        try container.encode(contentSource, forKey: .contentSource)
         try container.encode(retainedChapterCount, forKey: .retainedChapterCount)
         try container.encode(filteredChapterCandidateCount, forKey: .filteredChapterCandidateCount)
         try container.encode(segments, forKey: .segments)

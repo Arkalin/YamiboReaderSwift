@@ -48,6 +48,10 @@ public struct NovelReaderSurface: Hashable, Sendable {
     public var presentationSpacingAfter: CGFloat
     public var externalBlocks: [NovelReaderExternalBlock]
     public var chapterCommentTarget: ReaderChapterCommentTarget?
+    /// The owning projection's cache-key identity (see
+    /// `NovelImageLikeAnchor.resolvedAuthorID`) — uniform across every
+    /// surface built from the same `NovelReaderProjection`.
+    public var resolvedAuthorID: String?
 
     public init(
         identity: NovelReaderSurfaceIdentity,
@@ -58,7 +62,8 @@ public struct NovelReaderSurface: Hashable, Sendable {
         presentationSize: CGSize,
         presentationSpacingAfter: CGFloat = 0,
         externalBlocks: [NovelReaderExternalBlock] = [],
-        chapterCommentTarget: ReaderChapterCommentTarget? = nil
+        chapterCommentTarget: ReaderChapterCommentTarget? = nil,
+        resolvedAuthorID: String? = nil
     ) {
         self.identity = identity
         self.presentationIndex = max(0, presentationIndex)
@@ -69,6 +74,7 @@ public struct NovelReaderSurface: Hashable, Sendable {
         self.presentationSpacingAfter = max(0, presentationSpacingAfter)
         self.externalBlocks = externalBlocks
         self.chapterCommentTarget = chapterCommentTarget
+        self.resolvedAuthorID = resolvedAuthorID
     }
 }
 

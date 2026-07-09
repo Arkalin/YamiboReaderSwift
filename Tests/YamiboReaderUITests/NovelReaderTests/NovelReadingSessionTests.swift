@@ -25,7 +25,6 @@ final class NovelReadingSessionTests: XCTestCase {
                 documentView: document.view,
                 maxView: document.maxView,
                 fetchedAt: document.fetchedAt,
-                contentSource: document.contentSource,
                 appearance: NovelReaderAppearanceSettings(readingMode: .paged),
                 layout: NovelReaderLayout(width: 320, height: 568)
             ),
@@ -285,7 +284,6 @@ final class NovelReadingSessionTests: XCTestCase {
             threadID: originalDocument.threadID,
             view: 1,
             maxView: 1,
-            contentSource: originalDocument.contentSource,
             segments: [.text("保留段", chapterTitle: "第一章")],
             segmentSemantics: [
                 NovelReaderSegmentSemantics(
@@ -991,7 +989,6 @@ private func makeNovelDocument(
         threadID: "9001",
         view: view,
         maxView: maxView,
-        contentSource: .fallbackUnfilteredPage,
         segments: segments.map { .text($0.text, chapterTitle: $0.chapterTitle) }
     )
 }
@@ -1129,7 +1126,6 @@ private func layoutResult(
             documentView: index.documentView,
             maxView: index.documentView,
             fetchedAt: Date(timeIntervalSince1970: 0),
-            contentSource: .fallbackUnfilteredPage,
             appearance: NovelReaderAppearanceSettings(readingMode: index.readingMode),
             layout: NovelReaderLayout(width: 320, height: 568, readingMode: index.readingMode)
         ),

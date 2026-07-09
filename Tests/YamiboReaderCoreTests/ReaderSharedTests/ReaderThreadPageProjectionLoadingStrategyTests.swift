@@ -101,7 +101,7 @@ struct ReaderThreadPageProjectionLoadingStrategyTests {
         #expect(fixture.requests.count == 2)
     }
 
-    @Test func fingerprintHelperKeepsNovelAndMangaComponentShapesStable() {
+    @Test func fingerprintHelperKeepsComponentShapeStable() {
         let page = ForumThreadPage(
             thread: ThreadIdentity(tid: "10"),
             title: "指纹测试",
@@ -124,10 +124,6 @@ struct ReaderThreadPageProjectionLoadingStrategyTests {
             page: page,
             identityComponents: ["10", "2", "99"]
         ) == "489252183f6074f6")
-        #expect(ReaderThreadPageProjectionFingerprint.fingerprint(
-            page: page,
-            identityComponents: ["10", "99", ReaderProjectionContentSource.authorFilteredPage.rawValue, "2"]
-        ) == "9f9e7cb8b9d7d378")
     }
 }
 
@@ -147,7 +143,6 @@ private struct SharedThreadPageProjectionIdentity: ReaderThreadPageProjectionIde
     var threadID: String
     var view: Int
     var authorID: String?
-    var contentSource: ReaderProjectionContentSource
 }
 
 private struct SharedThreadPageProjection: Hashable, Sendable {
@@ -169,8 +164,7 @@ private struct SharedThreadPageProjectionAdapter: ReaderThreadPageProjectionAdap
         SharedThreadPageProjectionIdentity(
             threadID: request.threadID,
             view: request.view,
-            authorID: authorID,
-            contentSource: .authorFilteredPage
+            authorID: authorID
         )
     }
 

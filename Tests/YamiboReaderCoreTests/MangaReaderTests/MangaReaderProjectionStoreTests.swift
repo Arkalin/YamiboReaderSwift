@@ -17,7 +17,6 @@ struct MangaReaderTestsMangaReaderProjectionStore {
         #expect(await store.projection(for: MangaReaderProjectionSourceIdentity(
             tid: "800",
             authorID: "42",
-            contentSource: .authorFilteredPage,
             view: 2
         )) == nil)
     }
@@ -44,7 +43,6 @@ private func makeProjection(tid: String, authorID: String, view: Int, imageName:
     let identity = MangaReaderProjectionSourceIdentity(
         tid: tid,
         authorID: authorID,
-        contentSource: .authorFilteredPage,
         view: view
     )
     return MangaReaderProjection(

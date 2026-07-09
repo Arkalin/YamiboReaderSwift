@@ -155,7 +155,6 @@ struct MangaReaderTestsOfflineCacheStore {
         let sourceIdentity = MangaReaderProjectionSourceIdentity(
             tid: "100",
             authorID: "42",
-            contentSource: .authorFilteredPage,
             view: 1
         )
 

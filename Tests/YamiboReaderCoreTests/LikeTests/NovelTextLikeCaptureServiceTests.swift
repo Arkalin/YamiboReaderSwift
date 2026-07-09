@@ -154,6 +154,8 @@ private func makeCaptureRequest(
         workKey: workKey,
         start: makeSemanticPosition(chapter: chapter, offset: start),
         end: makeSemanticPosition(chapter: chapter, offset: end),
-        excerptText: excerptText
+        excerptText: excerptText,
+        view: 1,
+        resolvedAuthorID: nil
     )
 }

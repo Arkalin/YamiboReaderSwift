@@ -189,7 +189,6 @@ struct OfflineImageScopeLookupTests {
             threadID: "7013",
             view: 1,
             authorID: "42",
-            contentSource: .authorFilteredPage,
             targetImageURLs: [imageURL],
             retainsInlineImages: true
         )

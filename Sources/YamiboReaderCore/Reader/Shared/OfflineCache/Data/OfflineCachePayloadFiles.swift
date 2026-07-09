@@ -68,16 +68,14 @@ extension OfflineCacheStore {
         ownerTitle: String,
         threadID: String,
         view: Int,
-        authorID: String?,
-        contentSource: ReaderProjectionContentSource?
+        authorID: String?
     ) async -> ForumThreadPage? {
         try? await recoverQueueStateAfterRestart()
         guard let identity = novelEntryLookup(
             ownerTitle: ownerTitle,
             threadID: threadID,
             view: view,
-            authorID: authorID,
-            contentSource: contentSource
+            authorID: authorID
         ) else { return nil }
         let fileName: String?
         do {
@@ -110,19 +108,16 @@ extension OfflineCacheStore {
     func novelOfflineSourcePageSnapshot(
         threadID: String,
         view: Int,
-        authorID: String?,
-        contentSource: ReaderProjectionContentSource?
+        authorID: String?
     ) async -> NovelOfflineSourcePageSnapshot? {
         try? await recoverQueueStateAfterRestart()
         let normalizedThreadID = threadID.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !normalizedThreadID.isEmpty else { return nil }
         let normalizedAuthorID = authorID?.mangaReaderTrimmedNonEmpty
-        let source = normalizedAuthorID == nil ? (contentSource ?? .fallbackUnfilteredPage) : .authorFilteredPage
         let entryKey = NovelOfflineCacheEntry.entryKey(
             threadID: normalizedThreadID,
             view: view,
-            authorID: normalizedAuthorID,
-            contentSource: source
+            authorID: normalizedAuthorID
         )
         let row: NovelOfflineSourcePageSnapshotRow?
         do {
@@ -172,35 +167,29 @@ extension OfflineCacheStore {
         ownerTitle: String,
         threadID: String,
         view: Int,
-        authorID: String?,
-        contentSource: ReaderProjectionContentSource?
+        authorID: String?
     ) -> NovelEntryLookup? {
         let normalizedThreadID = threadID.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !normalizedThreadID.isEmpty else { return nil }
         let identity = NovelReaderCacheIdentity(
             threadID: normalizedThreadID,
             view: max(1, view),
-            authorID: authorID,
-            contentSource: contentSource
+            authorID: authorID
         )
         let normalizedAuthorID = authorID?.mangaReaderTrimmedNonEmpty
-        let source = normalizedAuthorID == nil ? (contentSource ?? .fallbackUnfilteredPage) : .authorFilteredPage
         return NovelEntryLookup(
             ownerTitle: Self.novelDisplayOwnerTitle(ownerTitle: ownerTitle, threadID: normalizedThreadID),
             groupKey: NovelOfflineCacheEntry.groupKey(
                 threadID: normalizedThreadID,
-                authorID: normalizedAuthorID,
-                contentSource: source
+                authorID: normalizedAuthorID
             ),
             threadID: identity.threadID,
             entryKey: NovelOfflineCacheEntry.entryKey(
                 threadID: normalizedThreadID,
                 view: view,
-                authorID: normalizedAuthorID,
-                contentSource: source
+                authorID: normalizedAuthorID
             ),
-            authorID: normalizedAuthorID,
-            contentSource: source
+            authorID: normalizedAuthorID
         )
     }
 
@@ -349,7 +338,6 @@ struct NovelEntryLookup {
     var threadID: String
     var entryKey: String
     var authorID: String?
-    var contentSource: ReaderProjectionContentSource
 }
 
 struct NovelPayloadFileNames {

@@ -748,7 +748,6 @@ private func persistedResumeRoute(_ route: ReaderResumeRoute) throws -> ReaderRe
     let projectionIdentity = MangaReaderProjectionSourceIdentity(
         tid: "700",
         authorID: nil,
-        contentSource: .authorFilteredPage,
         view: 1
     )
     try await mangaReaderProjectionStore.save(MangaReaderProjection(
@@ -789,7 +788,6 @@ private func persistedResumeRoute(_ route: ReaderResumeRoute) throws -> ReaderRe
                 view: 1,
                 maxView: 2,
                 resolvedAuthorID: "author-700",
-                contentSource: .authorFilteredPage,
                 segments: [.text("离线小说正文", chapterTitle: "第一章")]
             )
         )
@@ -800,8 +798,7 @@ private func persistedResumeRoute(_ route: ReaderResumeRoute) throws -> ReaderRe
             title: "第二页",
             threadID: "700",
             view: 2,
-            authorID: "author-700",
-            contentSource: .authorFilteredPage
+            authorID: "author-700"
         )
     )
     try await offlineCacheStore.setOfflineCacheQueueRunState(.running)

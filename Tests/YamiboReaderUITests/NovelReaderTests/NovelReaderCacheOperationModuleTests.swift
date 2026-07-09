@@ -42,8 +42,7 @@ final class NovelReaderCacheOperationModuleTests: XCTestCase {
                 cachingViews: [1, 2],
                 context: NovelReaderCacheOperationContext(
                     threadID: "1",
-                    authorID: "42",
-                    contentSource: .authorFilteredPage
+                    authorID: "42"
                 )
             )
         )
@@ -137,8 +136,7 @@ final class NovelReaderCacheOperationModuleTests: XCTestCase {
     func testRepositoryReceivesSnapshotContextForCacheUpdateDeleteAndRefresh() async throws {
         let context = NovelReaderCacheOperationContext(
             threadID: "42",
-            authorID: "42",
-            contentSource: .authorFilteredPage
+            authorID: "42"
         )
         let snapshot = NovelReaderCacheOperationSnapshot(
             cacheableViews: [1, 2, 3],
@@ -190,8 +188,7 @@ final class NovelReaderCacheOperationModuleTests: XCTestCase {
         let context = NovelReaderCacheOperationContext(
             ownerTitle: "小说A",
             threadID: "8848",
-            authorID: "42",
-            contentSource: .authorFilteredPage
+            authorID: "42"
         )
 
         let result = await adapter.cacheViews([1], for: context, progress: nil)
@@ -210,8 +207,7 @@ final class NovelReaderCacheOperationModuleTests: XCTestCase {
             cachedViews: cachedViews,
             context: NovelReaderCacheOperationContext(
                 threadID: "1",
-                authorID: nil,
-                contentSource: .fallbackUnfilteredPage
+                authorID: nil
             )
         )
     }

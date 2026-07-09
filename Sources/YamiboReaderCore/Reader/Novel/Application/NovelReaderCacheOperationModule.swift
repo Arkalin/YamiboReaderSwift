@@ -4,13 +4,11 @@ public struct NovelReaderCacheOperationContext: Equatable, Sendable {
     public var ownerTitle: String
     public var threadID: String
     public var authorID: String?
-    public var contentSource: ReaderProjectionContentSource?
 
-    public init(ownerTitle: String = "", threadID: String, authorID: String?, contentSource: ReaderProjectionContentSource?) {
+    public init(ownerTitle: String = "", threadID: String, authorID: String?) {
         self.ownerTitle = ownerTitle
         self.threadID = threadID.trimmingCharacters(in: .whitespacesAndNewlines)
         self.authorID = authorID
-        self.contentSource = contentSource
     }
 }
 

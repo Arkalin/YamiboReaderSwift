@@ -172,7 +172,8 @@ package extension NovelTextViewportDocument {
             surfaceIdentity: surfaceIdentity,
             documentView: documentView,
             textSegmentIdentity: position.textSegmentIdentity,
-            displayedTextOffset: position.displayedTextOffset
+            displayedTextOffset: position.displayedTextOffset,
+            resolvedAuthorID: document.resolvedAuthorID
         )
     }
 

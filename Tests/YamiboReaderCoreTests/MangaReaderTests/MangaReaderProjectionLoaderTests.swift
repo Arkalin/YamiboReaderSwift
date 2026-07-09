@@ -43,7 +43,6 @@ struct MangaReaderTestsReaderProjectionLoader {
         #expect(projection.sourceIdentity == MangaReaderProjectionSourceIdentity(
             tid: "700",
             authorID: "42",
-            contentSource: .authorFilteredPage,
             view: 5
         ))
         #expect(!projection.sourceFingerprint.isEmpty)
@@ -96,7 +95,6 @@ struct MangaReaderTestsReaderProjectionLoader {
         let sourceIdentity = MangaReaderProjectionSourceIdentity(
             tid: "702",
             authorID: "42",
-            contentSource: .authorFilteredPage,
             view: 1
         )
         try await fixtures.projectionStore.save(MangaReaderProjection(
@@ -315,7 +313,6 @@ struct MangaReaderTestsReaderProjectionLoader {
         let identity = MangaReaderProjectionSourceIdentity(
             tid: "707",
             authorID: "42",
-            contentSource: .authorFilteredPage,
             view: 1
         )
         try await fixtures.projectionStore.save(MangaReaderProjection(

@@ -8,8 +8,7 @@ enum MangaReaderProjectionBuilder {
         schemaVersion: Int = MangaReaderProjection.schemaVersion,
         parserVersion: Int = MangaReaderProjection.parserVersion
     ) throws -> MangaReaderProjection {
-        guard identity.contentSource == .authorFilteredPage,
-              identity.authorID?.mangaReaderTrimmedNonEmpty != nil else {
+        guard identity.authorID?.mangaReaderTrimmedNonEmpty != nil else {
             throw YamiboError.parsingFailed(context: "漫画作者范围")
         }
 

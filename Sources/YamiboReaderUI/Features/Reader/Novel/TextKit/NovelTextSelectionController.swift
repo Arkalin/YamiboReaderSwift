@@ -154,7 +154,9 @@ final class NovelTextSelectionController {
             workKey: likeWorkKey,
             start: endpoints.start,
             end: endpoints.end,
-            excerptText: endpoints.excerptText
+            excerptText: endpoints.excerptText,
+            view: endpoints.documentView,
+            resolvedAuthorID: endpoints.resolvedAuthorID
         )
         let onLikeCaptured = onLikeCaptured
         Task {
@@ -196,10 +198,21 @@ final class NovelTextSelectionController {
     /// This recovers character-precise positions for both selection
     /// endpoints by hit-testing the exact rects `selectionRects(for:)`
     /// already computes for drawing the selection highlight.
+    ///
+    /// `documentView` comes straight off `start`'s `NovelTextViewportSample`
+    /// — the exact forum page the selection's own surface is showing, not a
+    /// coarser "reader's current page" signal. In vertical mode, several
+    /// surfaces (adjacent pages) can be concurrently registered, so a
+    /// same-generation, non-active surface can legitimately be on a
+    /// different page than whatever the reader chrome currently reports as
+    /// "visible" — using anything less precise here would reintroduce the
+    /// same wrong-page bug `NovelTextLikeAnchor.view` exists to fix.
     private func likeAnchorEndpoints() -> (
         start: NovelTextViewportSemanticTextPosition,
         end: NovelTextViewportSemanticTextPosition,
-        excerptText: String
+        excerptText: String,
+        documentView: Int,
+        resolvedAuthorID: String?
     )? {
         guard let selectionRangeValue,
               let displayReference = firstCurrentDisplayReference(),
@@ -232,7 +245,9 @@ final class NovelTextSelectionController {
                 displayedTextOffset: end.displayedTextOffset,
                 progressInTextRange: 0
             ),
-            excerptText
+            excerptText,
+            start.documentView,
+            start.resolvedAuthorID
         )
     }
 

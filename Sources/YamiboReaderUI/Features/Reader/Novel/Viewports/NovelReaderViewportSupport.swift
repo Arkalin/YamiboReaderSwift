@@ -90,20 +90,6 @@ struct NovelReaderVerticalBoundaryPullBadge: View {
     }
 }
 
-extension NovelChapterIdentity {
-    /// Forum-page-keyed identities embed "#view:N#" (see
-    /// `NovelReaderProjectionBuilder.chapterIdentity`); post-keyed identities
-    /// carry no page number at all, so this returns nil for those and callers
-    /// fall back to the reader's current view.
-    var embeddedDocumentView: Int? {
-        guard let match = rawValue.range(of: #"#view:(\d+)#"#, options: .regularExpression) else {
-            return nil
-        }
-        let digits = rawValue[match].drop(while: { !$0.isNumber })
-        return Int(digits)
-    }
-}
-
 extension NovelTextSegmentIdentity {
     /// Segment identities are "<chapterIdentity>#text:N" / "...#image:N"
     /// (`NovelReaderProjectionBuilder.segmentSemantics`); this recovers the
@@ -117,21 +103,37 @@ extension NovelTextSegmentIdentity {
 }
 
 extension NovelReaderSurface {
-    /// Best-effort external-block lookup for a long-pressed image URL. Only
-    /// the surfaces passed in are searched, so a duplicate image URL reused
+    /// Best-effort external-block lookup for a long-pressed image URL,
+    /// paired with the surface it was found on — image blocks don't carry a
+    /// page number themselves, only their owning surface's `documentView`
+    /// does, and that's needed for `NovelImageLikeAnchor.view`. Only the
+    /// surfaces passed in are searched, so a duplicate image URL reused
     /// across two different surfaces resolves to the first match.
-    static func externalBlock(forImageURL url: URL, in surfaces: [NovelReaderSurface]) -> NovelReaderExternalBlock? {
-        surfaces.lazy.flatMap(\.externalBlocks).first { $0.url == url }
+    static func externalBlock(
+        forImageURL url: URL,
+        in surfaces: [NovelReaderSurface]
+    ) -> (surface: NovelReaderSurface, block: NovelReaderExternalBlock)? {
+        for surface in surfaces {
+            if let block = surface.externalBlocks.first(where: { $0.url == url }) {
+                return (surface, block)
+            }
+        }
+        return nil
     }
 }
 
 func novelImageLikeAnchor(forImageURL url: URL, in surfaces: [NovelReaderSurface]) -> NovelImageLikeAnchor? {
-    guard let block = NovelReaderSurface.externalBlock(forImageURL: url, in: surfaces),
-          let chapterIdentity = block.chapterIdentity,
-          let imageSegmentIdentity = block.imageSegmentIdentity else {
+    guard let match = NovelReaderSurface.externalBlock(forImageURL: url, in: surfaces),
+          let chapterIdentity = match.block.chapterIdentity,
+          let imageSegmentIdentity = match.block.imageSegmentIdentity else {
         return nil
     }
-    return NovelImageLikeAnchor(chapterIdentity: chapterIdentity, imageSegmentIdentity: imageSegmentIdentity.rawValue)
+    return NovelImageLikeAnchor(
+        chapterIdentity: chapterIdentity,
+        imageSegmentIdentity: imageSegmentIdentity.rawValue,
+        view: match.surface.documentView,
+        resolvedAuthorID: match.surface.resolvedAuthorID
+    )
 }
 
 /// Single-surface convenience for block-level "is this image liked" lookups

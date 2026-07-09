@@ -66,7 +66,6 @@ private struct MangaProjectionAdapter: ReaderThreadPageProjectionAdapter {
         MangaReaderProjectionSourceIdentity(
             tid: request.threadID,
             authorID: authorID,
-            contentSource: .authorFilteredPage,
             view: request.view
         )
     }
@@ -100,7 +99,6 @@ private struct MangaProjectionAdapter: ReaderThreadPageProjectionAdapter {
         [
             identity.tid,
             identity.authorID ?? "",
-            identity.contentSource.rawValue,
             String(identity.view)
         ]
     }

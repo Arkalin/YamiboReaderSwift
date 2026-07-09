@@ -64,13 +64,11 @@ public actor NovelReaderRepository {
 
     public func cachedViews(
         for threadID: String,
-        authorID: String?,
-        contentSource: ReaderProjectionContentSource?
+        authorID: String?
     ) async -> Set<Int> {
         let normalizedThreadID = Self.normalizedThreadID(threadID)
-        let projectionViews = await cacheStore.cachedViews(for: normalizedThreadID, authorID: authorID, contentSource: contentSource)
-        guard (contentSource ?? (normalizedAuthorID(authorID) == nil ? .fallbackUnfilteredPage : .authorFilteredPage)) == .authorFilteredPage,
-              let normalizedAuthorID = normalizedAuthorID(authorID) else {
+        let projectionViews = await cacheStore.cachedViews(for: normalizedThreadID, authorID: authorID)
+        guard let normalizedAuthorID = normalizedAuthorID(authorID) else {
             return projectionViews
         }
         let thread = ThreadIdentity(tid: normalizedThreadID)
@@ -81,14 +79,11 @@ public actor NovelReaderRepository {
     public func deleteCachedViews(
         _ views: Set<Int>,
         for threadID: String,
-        authorID: String?,
-        contentSource: ReaderProjectionContentSource?
+        authorID: String?
     ) async throws {
         let normalizedThreadID = Self.normalizedThreadID(threadID)
-        let source = contentSource ?? (normalizedAuthorID(authorID) == nil ? .fallbackUnfilteredPage : .authorFilteredPage)
-        try await cacheStore.deleteViews(views, for: normalizedThreadID, authorID: authorID, contentSource: source)
-        if source == .authorFilteredPage,
-           let normalizedAuthorID = normalizedAuthorID(authorID) {
+        try await cacheStore.deleteViews(views, for: normalizedThreadID, authorID: authorID)
+        if let normalizedAuthorID = normalizedAuthorID(authorID) {
             let thread = ThreadIdentity(tid: normalizedThreadID)
             try await forumCacheStore.deleteThreadPages(views, thread: thread, authorID: normalizedAuthorID)
         }
@@ -97,14 +92,13 @@ public actor NovelReaderRepository {
     public func refreshCachedViews(
         _ views: Set<Int>,
         for threadID: String,
-        authorID: String?,
-        contentSource: ReaderProjectionContentSource?
+        authorID: String?
     ) async throws {
         let normalizedThreadID = Self.normalizedThreadID(threadID)
         let targets = views.isEmpty
-            ? await cachedViews(for: normalizedThreadID, authorID: authorID, contentSource: contentSource)
+            ? await cachedViews(for: normalizedThreadID, authorID: authorID)
             : views
-        try await cacheStore.deleteViews(targets, for: normalizedThreadID, authorID: authorID, contentSource: .authorFilteredPage)
+        try await cacheStore.deleteViews(targets, for: normalizedThreadID, authorID: authorID)
         if let authorID = normalizedAuthorID(authorID) {
             let thread = ThreadIdentity(tid: normalizedThreadID)
             try await forumCacheStore.deleteThreadPages(targets, thread: thread, authorID: authorID)
@@ -119,7 +113,6 @@ public actor NovelReaderRepository {
         _ views: Set<Int>,
         for threadID: String,
         authorID: String?,
-        contentSource: ReaderProjectionContentSource?,
         progress: (@Sendable (NovelReaderCacheBatchProgress) async -> Void)? = nil
     ) async -> NovelReaderCacheBatchResult {
         let normalizedThreadID = Self.normalizedThreadID(threadID)
@@ -254,8 +247,7 @@ public actor NovelReaderRepository {
         guard let existing = await offlineCacheStore.novelOfflineSourcePageSnapshot(
             threadID: onlinePage.projection.threadID,
             view: onlinePage.projection.view,
-            authorID: authorID,
-            contentSource: .authorFilteredPage
+            authorID: authorID
         ) else {
             return
         }
@@ -267,7 +259,6 @@ public actor NovelReaderRepository {
             threadID: onlinePage.projection.threadID,
             view: onlinePage.projection.view,
             authorID: authorID,
-            contentSource: .authorFilteredPage,
             targetImageURLs: targetImageURLs,
             retainsInlineImages: retainsInlineImages
         )

@@ -59,7 +59,6 @@ final class NovelReadingSessionRuntimeTests: XCTestCase {
             threadID: "9101",
             view: 1,
             maxView: 1,
-            contentSource: .authorFilteredPage,
             segments: [
                 .text(String(repeating: "第一章 内容。", count: 80), chapterTitle: "第一章"),
                 .text(String(repeating: "读者甲 发表于 2026-5-1\n楼主回复。", count: 20), chapterTitle: "读者甲 发表于 2026-5-1"),
@@ -105,7 +104,6 @@ final class NovelReadingSessionRuntimeTests: XCTestCase {
             threadID: "9102",
             view: 1,
             maxView: 1,
-            contentSource: .authorFilteredPage,
             segments: [
                 .text(String(repeating: "读者甲 发表于 2026-5-1\n楼主回复。", count: 20), chapterTitle: "读者甲 发表于 2026-5-1"),
                 .text(String(repeating: "第一章 内容。", count: 80), chapterTitle: "第一章"),
@@ -149,7 +147,6 @@ final class NovelReadingSessionRuntimeTests: XCTestCase {
             threadID: "9002",
             view: 1,
             maxView: 1,
-            contentSource: .fallbackUnfilteredPage,
             segments: (0 ..< 6).map { .image(URL(string: "https://example.com/\($0).jpg")!, chapterTitle: "第一章") }
         )
         let settings = NovelReaderAppearanceSettings(
@@ -178,7 +175,6 @@ final class NovelReadingSessionRuntimeTests: XCTestCase {
             threadID: "9002",
             view: 1,
             maxView: 1,
-            contentSource: .fallbackUnfilteredPage,
             segments: (0 ..< 6).map { .image(URL(string: "https://example.com/\($0).jpg")!, chapterTitle: "第一章") }
         )
         let settings = NovelReaderAppearanceSettings(
@@ -208,7 +204,6 @@ final class NovelReadingSessionRuntimeTests: XCTestCase {
             threadID: "9002",
             view: 1,
             maxView: 2,
-            contentSource: .fallbackUnfilteredPage,
             segments: (0 ..< 6).map { .image(URL(string: "https://example.com/\($0).jpg")!, chapterTitle: "第一章") }
         )
         let settings = NovelReaderAppearanceSettings(
@@ -240,7 +235,6 @@ private func makeNovelDocument(
         threadID: "9001",
         view: view,
         maxView: maxView,
-        contentSource: .fallbackUnfilteredPage,
         segments: segments.map { .text($0.text, chapterTitle: $0.chapterTitle) }
     )
 }

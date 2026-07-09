@@ -924,32 +924,33 @@ public struct NovelReaderView: View {
         }
     }
 
-    // NovelTextLikeAnchor/NovelImageLikeAnchor don't carry `view` (the forum
-    // page the excerpt/image came from) or the other cosmetic resume-point
-    // fields (chapterOrdinal/segmentProgress/readingModeHint); this
-    // synthesizes a best-effort resume point from what the anchor does carry,
-    // falling back to the reader's current view when it can't be recovered
-    // from the chapter identity (see `NovelChapterIdentity.embeddedDocumentView`).
+    // NovelTextLikeAnchor/NovelImageLikeAnchor carry `view` (the forum page
+    // the excerpt/image came from) directly, but not the other cosmetic
+    // resume-point fields (chapterOrdinal/segmentProgress/readingModeHint);
+    // this synthesizes a best-effort resume point from what the anchor does
+    // carry.
     private func resumePoint(forTextLikeAnchor anchor: NovelTextLikeAnchor) -> NovelResumePoint {
         NovelResumePoint(
-            view: anchor.chapterIdentity.embeddedDocumentView ?? model.visibleView,
+            view: anchor.view,
             chapterIdentity: anchor.chapterIdentity,
             textSegmentIdentity: anchor.textSegmentIdentity,
             displayedTextOffset: anchor.range.location,
             chapterOrdinal: 0,
             segmentProgress: 0,
+            authorID: anchor.resolvedAuthorID,
             readingModeHint: model.settings.readingMode
         )
     }
 
     private func resumePoint(forImageLikeAnchor anchor: NovelImageLikeAnchor) -> NovelResumePoint {
         NovelResumePoint(
-            view: anchor.chapterIdentity.embeddedDocumentView ?? model.visibleView,
+            view: anchor.view,
             chapterIdentity: anchor.chapterIdentity,
             textSegmentIdentity: NovelTextSegmentIdentity(rawValue: anchor.imageSegmentIdentity),
             displayedTextOffset: 0,
             chapterOrdinal: 0,
             segmentProgress: 0,
+            authorID: anchor.resolvedAuthorID,
             readingModeHint: model.settings.readingMode
         )
     }

@@ -7,14 +7,12 @@ package protocol NovelReadingPageRepository: Sendable {
     func loadPageIgnoringCacheResult(_ request: NovelPageRequest) async throws -> NovelReaderProjectionLoad
     func cachedViews(
         for threadID: String,
-        authorID: String?,
-        contentSource: ReaderProjectionContentSource?
+        authorID: String?
     ) async -> Set<Int>
     func deleteCachedViews(
         _ views: Set<Int>,
         for threadID: String,
-        authorID: String?,
-        contentSource: ReaderProjectionContentSource?
+        authorID: String?
     ) async throws
 }
 
@@ -42,11 +40,9 @@ public struct NovelReadingInitialPosition: Equatable, Sendable {
 
 public struct NovelReadingCacheContext: Equatable, Sendable {
     public var authorID: String?
-    public var contentSource: ReaderProjectionContentSource?
 
-    public init(authorID: String?, contentSource: ReaderProjectionContentSource?) {
+    public init(authorID: String?) {
         self.authorID = authorID
-        self.contentSource = contentSource
     }
 }
 
@@ -224,11 +220,7 @@ public final class NovelReadingWorkflow {
         }
 
         let authorID = currentAuthorID ?? context.authorID
-        let contentSource = state?.snapshot.currentContentSource
-        return NovelReadingCacheContext(
-            authorID: authorID,
-            contentSource: contentSource == .allPostsPage ? inferredContentSource(for: authorID) : contentSource
-        )
+        return NovelReadingCacheContext(authorID: authorID)
     }
 
     public func canPromotePrefetchedDocument(forView view: Int) -> Bool {
@@ -612,19 +604,8 @@ public final class NovelReadingWorkflow {
     }
 
     private func cacheContext(for document: NovelReaderProjection) -> NovelReadingCacheContext {
-        switch document.contentSource {
-        case .authorFilteredPage:
-            let authorID = document.resolvedAuthorID ?? currentAuthorID ?? context.authorID
-            return NovelReadingCacheContext(authorID: authorID, contentSource: .authorFilteredPage)
-        case .fallbackUnfilteredPage:
-            return NovelReadingCacheContext(authorID: nil, contentSource: .fallbackUnfilteredPage)
-        case .allPostsPage:
-            let authorID = document.resolvedAuthorID ?? currentAuthorID ?? context.authorID
-            return NovelReadingCacheContext(
-                authorID: authorID,
-                contentSource: inferredContentSource(for: authorID)
-            )
-        }
+        let authorID = document.resolvedAuthorID ?? currentAuthorID ?? context.authorID
+        return NovelReadingCacheContext(authorID: authorID)
     }
 
     private func currentDisplayedView(
@@ -735,8 +716,7 @@ public final class NovelReadingWorkflow {
             try await repository.deleteCachedViews(
                 [view],
                 for: self.context.threadID,
-                authorID: context.authorID,
-                contentSource: context.contentSource
+                authorID: context.authorID
             )
         }
 
@@ -773,8 +753,7 @@ public final class NovelReadingWorkflow {
         let documentCacheContext = cacheContext(for: document)
         let cachedViews = await repository.cachedViews(
             for: context.threadID,
-            authorID: documentCacheContext.authorID,
-            contentSource: documentCacheContext.contentSource
+            authorID: documentCacheContext.authorID
         )
         let preparedTransaction = try makePreparedTransaction(
             runtime: transaction,
@@ -805,8 +784,7 @@ public final class NovelReadingWorkflow {
         let cachedViews = if refreshCachedViews {
             await repository.cachedViews(
                 for: context.threadID,
-                authorID: cacheContext(forView: snapshot.currentView).authorID,
-                contentSource: cacheContext(forView: snapshot.currentView).contentSource
+                authorID: cacheContext(forView: snapshot.currentView).authorID
             )
         } else {
             state?.cachedViews ?? []
@@ -891,7 +869,8 @@ public final class NovelReadingWorkflow {
                         chapterOrdinal: externalBlock.chapterOrdinal
                     )
                 },
-                chapterCommentTarget: surface.chapterCommentTarget
+                chapterCommentTarget: surface.chapterCommentTarget,
+                resolvedAuthorID: snapshot.currentAuthorID
             )
         }
         let surfaceIdentityByOrdinal = Dictionary(
@@ -939,7 +918,6 @@ public final class NovelReadingWorkflow {
             chapters: layoutResult?.viewportIndex.novelReaderChapters ?? [],
             committedSettings: settings,
             readingState: readingState,
-            currentContentSource: snapshot.currentContentSource,
             pageLoadSource: pageLoadSource,
             retainedChapterCount: snapshot.retainedChapterCount,
             filteredChapterCandidateCount: snapshot.filteredChapterCandidateCount,
@@ -1007,10 +985,5 @@ public final class NovelReadingWorkflow {
             settings.showsTwoPagesInLandscapeOnPad &&
             usesPadPresentation &&
             layout.width > layout.height
-    }
-
-    private func inferredContentSource(for authorID: String?) -> ReaderProjectionContentSource {
-        let normalizedAuthorID = authorID?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        return normalizedAuthorID.isEmpty ? .fallbackUnfilteredPage : .authorFilteredPage
     }
 }

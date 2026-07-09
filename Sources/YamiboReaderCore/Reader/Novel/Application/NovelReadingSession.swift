@@ -22,7 +22,6 @@ package struct NovelReadingSnapshot: Equatable, Sendable {
     public var currentView: Int
     public var maxView: Int
     public var currentChapterTitle: String?
-    public var currentContentSource: ReaderProjectionContentSource
     public var retainedChapterCount: Int
     public var filteredChapterCandidateCount: Int
     public var currentAuthorID: String?
@@ -33,7 +32,6 @@ package struct NovelReadingSnapshot: Equatable, Sendable {
         currentView: Int,
         maxView: Int,
         currentChapterTitle: String?,
-        currentContentSource: ReaderProjectionContentSource,
         retainedChapterCount: Int,
         filteredChapterCandidateCount: Int,
         currentAuthorID: String?
@@ -43,7 +41,6 @@ package struct NovelReadingSnapshot: Equatable, Sendable {
         self.currentView = max(1, currentView)
         self.maxView = max(self.currentView, maxView)
         self.currentChapterTitle = currentChapterTitle
-        self.currentContentSource = currentContentSource
         self.retainedChapterCount = max(0, retainedChapterCount)
         self.filteredChapterCandidateCount = max(0, filteredChapterCandidateCount)
         self.currentAuthorID = currentAuthorID
@@ -138,7 +135,6 @@ package struct NovelReadingSession: Sendable {
             currentView: document.view,
             maxView: document.maxView,
             currentChapterTitle: nil,
-            currentContentSource: document.contentSource,
             retainedChapterCount: document.retainedChapterCount,
             filteredChapterCandidateCount: document.filteredChapterCandidateCount,
             currentAuthorID: document.resolvedAuthorID ?? currentAuthorID
@@ -443,7 +439,6 @@ package struct NovelReadingSession: Sendable {
                 surfaces: surfaces,
                 chapters: renderedChapters
             ),
-            currentContentSource: document.contentSource,
             retainedChapterCount: document.retainedChapterCount,
             filteredChapterCandidateCount: document.filteredChapterCandidateCount,
             currentAuthorID: document.resolvedAuthorID ?? snapshot.currentAuthorID

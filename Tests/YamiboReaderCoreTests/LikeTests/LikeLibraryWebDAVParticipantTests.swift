@@ -13,7 +13,9 @@ import Testing
         anchor: NovelTextLikeAnchor(
             chapterIdentity: NovelChapterIdentity(rawValue: "chapter-1"),
             textSegmentIdentity: NovelTextSegmentIdentity(rawValue: "chapter-1#text:0"),
-            range: NovelCharacterRange(location: 0, length: 4)
+            range: NovelCharacterRange(location: 0, length: 4),
+            view: 1,
+            resolvedAuthorID: nil
         ),
         excerptText: "你好世界"
     )
@@ -76,7 +78,9 @@ import Testing
     let anchor = NovelTextLikeAnchor(
         chapterIdentity: NovelChapterIdentity(rawValue: "chapter-1"),
         textSegmentIdentity: NovelTextSegmentIdentity(rawValue: "chapter-1#text:0"),
-        range: NovelCharacterRange(location: 0, length: 4)
+        range: NovelCharacterRange(location: 0, length: 4),
+        view: 1,
+        resolvedAuthorID: nil
     )
     let remoteItem = LikeItem(id: "remote-only", workKey: workKey, kind: .text, excerptText: "远端专属", anchor: .novelText(anchor))
     let remotePayload = LikeLibraryWebDAVPayload(updatedAt: .now, items: [remoteItem], tombstones: [:])

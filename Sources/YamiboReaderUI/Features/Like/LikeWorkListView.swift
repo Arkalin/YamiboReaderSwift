@@ -111,12 +111,13 @@ struct LikeWorkListView: View {
                 threadID: work.id,
                 workTitle: workTitle,
                 resumePoint: NovelResumePoint(
-                    view: textAnchor.chapterIdentity.embeddedDocumentView ?? 1,
+                    view: textAnchor.view,
                     chapterIdentity: textAnchor.chapterIdentity,
                     textSegmentIdentity: textAnchor.textSegmentIdentity,
                     displayedTextOffset: textAnchor.range.location,
                     chapterOrdinal: 0,
                     segmentProgress: 0,
+                    authorID: textAnchor.resolvedAuthorID,
                     readingModeHint: .paged
                 )
             )
@@ -125,12 +126,13 @@ struct LikeWorkListView: View {
                 threadID: work.id,
                 workTitle: workTitle,
                 resumePoint: NovelResumePoint(
-                    view: imageAnchor.chapterIdentity.embeddedDocumentView ?? 1,
+                    view: imageAnchor.view,
                     chapterIdentity: imageAnchor.chapterIdentity,
                     textSegmentIdentity: NovelTextSegmentIdentity(rawValue: imageAnchor.imageSegmentIdentity),
                     displayedTextOffset: 0,
                     chapterOrdinal: 0,
                     segmentProgress: 0,
+                    authorID: imageAnchor.resolvedAuthorID,
                     readingModeHint: .paged
                 )
             )

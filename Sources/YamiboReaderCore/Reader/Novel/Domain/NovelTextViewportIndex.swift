@@ -151,17 +151,24 @@ package struct NovelTextViewportSample: Hashable, Sendable {
     public var documentView: Int
     public var textSegmentIdentity: NovelTextSegmentIdentity
     public var displayedTextOffset: Int
+    /// The owning `NovelReaderProjection`'s cache-key identity (see
+    /// `NovelTextLikeAnchor.resolvedAuthorID`) — carried on the sample so
+    /// Like capture can round-trip the exact cache key later without
+    /// guessing it.
+    public var resolvedAuthorID: String?
 
     public init(
         surfaceIdentity: NovelReaderSurfaceIdentity,
         documentView: Int,
         textSegmentIdentity: NovelTextSegmentIdentity,
-        displayedTextOffset: Int
+        displayedTextOffset: Int,
+        resolvedAuthorID: String? = nil
     ) {
         self.surfaceIdentity = surfaceIdentity
         self.documentView = max(1, documentView)
         self.textSegmentIdentity = textSegmentIdentity
         self.displayedTextOffset = max(0, displayedTextOffset)
+        self.resolvedAuthorID = resolvedAuthorID
     }
 }
 
@@ -353,7 +360,8 @@ package extension NovelTextViewportIndexSurface {
                     ),
                     documentView: document.view,
                     textSegmentIdentity: textSegmentIdentity,
-                    displayedTextOffset: range.startOffset + min(max(normalizedOffset - runningOffset, 0), length)
+                    displayedTextOffset: range.startOffset + min(max(normalizedOffset - runningOffset, 0), length),
+                    resolvedAuthorID: document.resolvedAuthorID
                 )
             }
             runningOffset = rangeEnd + 2
@@ -372,7 +380,8 @@ package extension NovelTextViewportIndexSurface {
             ),
             documentView: document.view,
             textSegmentIdentity: textSegmentIdentity,
-            displayedTextOffset: lastRange.endOffset
+            displayedTextOffset: lastRange.endOffset,
+            resolvedAuthorID: document.resolvedAuthorID
         )
     }
 
@@ -479,7 +488,8 @@ package extension NovelTextViewportIndexSurface {
                     surfaceIdentity: surfaceIdentity,
                     documentView: documentView,
                     textSegmentIdentity: textSegmentIdentity,
-                    displayedTextOffset: nearestOffset - documentRange.lowerBound + range.startOffset
+                    displayedTextOffset: nearestOffset - documentRange.lowerBound + range.startOffset,
+                    resolvedAuthorID: sourceDocument.resolvedAuthorID
                 )
             )
         }

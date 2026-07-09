@@ -57,8 +57,7 @@ public final class NovelReaderViewModel: ObservableObject {
                 self?.currentCacheOperationContext() ?? NovelReaderCacheOperationContext(
                     ownerTitle: "",
                     threadID: "",
-                    authorID: nil,
-                    contentSource: nil
+                    authorID: nil
                 )
             },
             onError: { [weak self] message in
@@ -207,10 +206,6 @@ public final class NovelReaderViewModel: ObservableObject {
 
     private var currentAuthorID: String? {
         novelReaderPresentation?.readingState.authorID
-    }
-
-    var currentContentSource: ReaderProjectionContentSource {
-        novelReaderPresentation?.currentContentSource ?? .allPostsPage
     }
 
     var retainedChapterCount: Int {
@@ -1155,25 +1150,18 @@ public final class NovelReaderViewModel: ObservableObject {
         return progressSurfaceIndex(forSpreadIndex: spreadIndex(forSurfaceIndex: clampedIndex))
     }
 
-    private func cacheContext(forView view: Int) -> (authorID: String?, contentSource: ReaderProjectionContentSource?) {
+    private func cacheContext(forView view: Int) -> String? {
         guard let workflowContext = readingWorkflow?.cacheContext(forView: view) else {
-            let authorID = currentAuthorID ?? context.authorID
-            return (authorID, inferredContentSource(for: authorID))
+            return currentAuthorID ?? context.authorID
         }
-        return (workflowContext.authorID, workflowContext.contentSource)
-    }
-
-    private func inferredContentSource(for authorID: String?) -> ReaderProjectionContentSource {
-        .authorFilteredPage
+        return workflowContext.authorID
     }
 
     private func currentCacheOperationContext() -> NovelReaderCacheOperationContext {
-        let cacheContext = cacheContext(forView: displayedView)
-        return NovelReaderCacheOperationContext(
+        NovelReaderCacheOperationContext(
             ownerTitle: title,
             threadID: context.threadID,
-            authorID: cacheContext.authorID,
-            contentSource: cacheContext.contentSource
+            authorID: cacheContext(forView: displayedView)
         )
     }
 

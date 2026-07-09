@@ -13,8 +13,7 @@ struct MangaReaderTestsNovelOfflineCacheStore {
         #expect(await store.novelOfflineCacheViewsSnapshot(
             ownerTitle: request.ownerTitle,
             threadID: request.threadID,
-            authorID: request.authorID,
-            contentSource: request.contentSource
+            authorID: request.authorID
         ).cachedViews.isEmpty)
 
         try await store.saveNovelOfflineSourcePage(
@@ -26,15 +25,13 @@ struct MangaReaderTestsNovelOfflineCacheStore {
         let snapshot = await store.novelOfflineCacheViewsSnapshot(
             ownerTitle: request.ownerTitle,
             threadID: request.threadID,
-            authorID: request.authorID,
-            contentSource: request.contentSource
+            authorID: request.authorID
         )
         let loadedSource = await store.novelOfflineSourcePage(
             ownerTitle: request.ownerTitle,
             threadID: request.threadID,
             view: request.view,
-            authorID: request.authorID,
-            contentSource: request.contentSource
+            authorID: request.authorID
         )
         let expectedBytes = try JSONEncoder().encode(sourcePage).count
 
@@ -62,8 +59,7 @@ struct MangaReaderTestsNovelOfflineCacheStore {
         let snapshot = await store.novelOfflineCacheViewsSnapshot(
             ownerTitle: request.ownerTitle,
             threadID: request.threadID,
-            authorID: request.authorID,
-            contentSource: request.contentSource
+            authorID: request.authorID
         )
 
         #expect(snapshot.cachedViews == [1])
@@ -79,8 +75,7 @@ struct MangaReaderTestsNovelOfflineCacheStore {
         let snapshot = await store.novelOfflineCacheViewsSnapshot(
             ownerTitle: request.ownerTitle,
             threadID: request.threadID,
-            authorID: request.authorID,
-            contentSource: request.contentSource
+            authorID: request.authorID
         )
 
         #expect(snapshot.cachedViews.isEmpty)
@@ -104,15 +99,13 @@ struct MangaReaderTestsNovelOfflineCacheStore {
         let renamedSnapshot = await store.novelOfflineCacheViewsSnapshot(
             ownerTitle: renamedRequest.ownerTitle,
             threadID: renamedRequest.threadID,
-            authorID: renamedRequest.authorID,
-            contentSource: renamedRequest.contentSource
+            authorID: renamedRequest.authorID
         )
         let loadedSource = await store.novelOfflineSourcePage(
             ownerTitle: renamedRequest.ownerTitle,
             threadID: renamedRequest.threadID,
             view: renamedRequest.view,
-            authorID: renamedRequest.authorID,
-            contentSource: renamedRequest.contentSource
+            authorID: renamedRequest.authorID
         )
 
         #expect(renamedSnapshot.cachedViews == [1])
@@ -122,16 +115,14 @@ struct MangaReaderTestsNovelOfflineCacheStore {
             [1],
             ownerTitle: renamedRequest.ownerTitle,
             threadID: renamedRequest.threadID,
-            authorID: renamedRequest.authorID,
-            contentSource: renamedRequest.contentSource
+            authorID: renamedRequest.authorID
         )
 
         #expect(await store.novelOfflineSourcePage(
             ownerTitle: originalRequest.ownerTitle,
             threadID: originalRequest.threadID,
             view: originalRequest.view,
-            authorID: originalRequest.authorID,
-            contentSource: originalRequest.contentSource
+            authorID: originalRequest.authorID
         ) == nil)
         #expect(await store.allNovelOfflineCacheEntries().isEmpty)
     }
@@ -151,8 +142,7 @@ struct MangaReaderTestsNovelOfflineCacheStore {
         let works = await store.offlineCacheQueueWorks()
         let expectedGroupKey = NovelOfflineCacheEntry.groupKey(
             threadID: renamedRequest.threadID,
-            authorID: renamedRequest.authorID,
-            contentSource: renamedRequest.contentSource
+            authorID: renamedRequest.authorID
         )
 
         #expect(works.count == 1)
@@ -182,8 +172,7 @@ struct MangaReaderTestsNovelOfflineCacheStore {
         let group = try #require(snapshot.groups.first)
         let expectedGroupKey = NovelOfflineCacheEntry.groupKey(
             threadID: renamedRequest.threadID,
-            authorID: renamedRequest.authorID,
-            contentSource: renamedRequest.contentSource
+            authorID: renamedRequest.authorID
         )
 
         #expect(snapshot.groups.count == 1)
@@ -202,7 +191,6 @@ struct MangaReaderTestsNovelOfflineCacheStore {
             threadID: "7013",
             view: 1,
             authorID: "42",
-            contentSource: .authorFilteredPage,
             targetImageURLs: [sharedImageURL],
             retainsInlineImages: true
         )
@@ -249,22 +237,19 @@ struct MangaReaderTestsNovelOfflineCacheStore {
             [1],
             ownerTitle: request.ownerTitle,
             threadID: request.threadID,
-            authorID: request.authorID,
-            contentSource: request.contentSource
+            authorID: request.authorID
         )
 
         #expect(await offlineStore.novelOfflineSourcePage(
             ownerTitle: request.ownerTitle,
             threadID: request.threadID,
             view: 1,
-            authorID: request.authorID,
-            contentSource: request.contentSource
+            authorID: request.authorID
         ) == nil)
         #expect(await offlineStore.offlineCacheQueueWorks().isEmpty)
         #expect(await forumCacheStore.loadThreadPage(thread: thread, page: 1, authorID: "42") == sourcePage)
         let retainedProjection = await novelReaderCacheStore.loadProjection(
-            for: NovelPageRequest(threadID: request.threadID, view: 1, authorID: "42"),
-            contentSource: .authorFilteredPage
+            for: NovelPageRequest(threadID: request.threadID, view: 1, authorID: "42")
         )
         #expect(retainedProjection?.view == projection.view)
         #expect(retainedProjection?.segments == projection.segments)
@@ -280,7 +265,6 @@ struct MangaReaderTestsNovelOfflineCacheStore {
             threadID: "7005",
             view: 1,
             authorID: "42",
-            contentSource: .authorFilteredPage,
             targetImageURLs: [imageURL],
             retainsInlineImages: true
         )
@@ -290,7 +274,6 @@ struct MangaReaderTestsNovelOfflineCacheStore {
             threadID: initialRequest.threadID,
             view: initialRequest.view,
             authorID: initialRequest.authorID,
-            contentSource: initialRequest.contentSource,
             retainsInlineImages: false
         )
 
@@ -327,8 +310,7 @@ private func makeNovelWorkRequest(
         title: "第\(view)页",
         threadID: tid,
         view: view,
-        authorID: "42",
-        contentSource: .authorFilteredPage
+        authorID: "42"
     )
 }
 
@@ -354,7 +336,6 @@ private func makeNovelDocument(tid: String, view: Int, maxView: Int) throws -> N
         view: view,
         maxView: maxView,
         resolvedAuthorID: "42",
-        contentSource: .authorFilteredPage,
         segments: [.text("正文\(view)", chapterTitle: "第\(view)章")],
         projectionSourceFingerprint: "source-\(view)",
         projectionSchemaVersion: 1

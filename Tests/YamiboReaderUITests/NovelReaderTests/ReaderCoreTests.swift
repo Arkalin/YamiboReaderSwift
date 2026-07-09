@@ -1040,7 +1040,7 @@ private final class StubURLProtocol: URLProtocol {
     #expect(NovelTextTransformer.transform("恋上朋友的妹妹了 后记", mode: .traditional) == "戀上朋友的妹妹了 後記")
 }
 
-@Test func parseProjectionCarriesContentSourceAndChapterStats() async throws {
+@Test func parseProjectionCarriesChapterStats() async throws {
     let html = #"""
     <html>
       <body>
@@ -1055,7 +1055,6 @@ private final class StubURLProtocol: URLProtocol {
     )
     let document = try novelProjection(from: html, request: request)
 
-    #expect(document.contentSource == .authorFilteredPage)
     #expect(document.retainedChapterCount == 2)
     #expect(document.filteredChapterCandidateCount == 0)
     let chapterTitles = document.segments.compactMap { segment -> String? in
@@ -1179,7 +1178,6 @@ private final class StubURLProtocol: URLProtocol {
         threadID: "188",
         view: 1,
         maxView: 1,
-        contentSource: .authorFilteredPage,
         segments: [
             .text(String(repeating: "第一章 正文。", count: 40), chapterTitle: "第一章"),
             .text(String(repeating: "读者甲 发表于 2026-5-1\n楼主回复。", count: 12), chapterTitle: "读者甲 发表于 2026-5-1"),
@@ -1218,7 +1216,6 @@ private final class StubURLProtocol: URLProtocol {
         view: 2,
         maxView: 3,
         resolvedAuthorID: "42",
-        contentSource: .authorFilteredPage,
         segments: [
             .text("第一章\n开头", chapterTitle: "第一章"),
             .text("第一章续文", chapterTitle: "第一章"),
@@ -1265,7 +1262,6 @@ private final class StubURLProtocol: URLProtocol {
         view: 1,
         maxView: 1,
         resolvedAuthorID: "42",
-        contentSource: .authorFilteredPage,
         segments: [
             .text("第一章\n正文", chapterTitle: "第一章"),
             .text("作者回复\n正文", chapterTitle: "作者回复"),
@@ -1856,7 +1852,6 @@ private final class StubURLProtocol: URLProtocol {
             documentView: 2,
             maxView: 3,
             fetchedAt: Date(timeIntervalSince1970: 159),
-            contentSource: .fallbackUnfilteredPage,
             appearance: settings,
             layout: NovelReaderLayout(width: 390, height: 844)
         ),
@@ -1908,7 +1903,6 @@ private final class StubURLProtocol: URLProtocol {
             documentView: 1,
             maxView: 1,
             fetchedAt: Date(timeIntervalSince1970: 159),
-            contentSource: .fallbackUnfilteredPage,
             appearance: settings,
             layout: NovelReaderLayout(width: 390, height: 844)
         ),
@@ -2875,7 +2869,6 @@ private final class StubURLProtocol: URLProtocol {
         view: 3,
         maxView: 5,
         resolvedAuthorID: "12",
-        contentSource: .authorFilteredPage,
         segments: [.text("正文", chapterTitle: "测试章")],
         fetchedAt: Date(timeIntervalSince1970: 100)
     )
@@ -2883,9 +2876,9 @@ private final class StubURLProtocol: URLProtocol {
     try await store.save(document)
     let loaded = await store.loadProjection(for: NovelPageRequest(threadID: "10", view: 3, authorID: "12"))
     #expect(loaded == document)
-    #expect(await store.cachedViews(for: "10", authorID: "12", contentSource: .authorFilteredPage) == [3])
+    #expect(await store.cachedViews(for: "10", authorID: "12") == [3])
 
-    try await store.deleteViews([3], for: "10", authorID: "12", contentSource: .authorFilteredPage)
+    try await store.deleteViews([3], for: "10", authorID: "12")
     let deleted = await store.loadProjection(for: NovelPageRequest(threadID: "10", view: 3, authorID: "12"))
     #expect(deleted == nil)
 }
@@ -2900,7 +2893,6 @@ private final class StubURLProtocol: URLProtocol {
         view: 4,
         maxView: 5,
         resolvedAuthorID: "12",
-        contentSource: .authorFilteredPage,
         segments: [.text("正文", chapterTitle: "测试章")]
     )
 
@@ -2911,7 +2903,7 @@ private final class StubURLProtocol: URLProtocol {
 
     #expect(rows.count == 1)
     #expect(metadata.namespace == "novel_reader_projections")
-    #expect(metadata.key == "tid_18610_source_authorFilteredPage_author_12_view_4")
+    #expect(metadata.key == "tid_18610_author_12_view_4")
     #expect(!metadata.key.contains("https://"))
     #expect(FileManager.default.fileExists(
         atPath: novelReaderProjectionCacheFile(rootDirectory: directory, key: metadata.key).path
@@ -2932,8 +2924,7 @@ private final class StubURLProtocol: URLProtocol {
 
     let store = NovelReaderProjectionStore(databasePool: database, baseDirectory: directory)
     let legacyLoaded = await store.loadProjection(
-        for: NovelPageRequest(threadID: "18611", view: 1),
-        contentSource: .fallbackUnfilteredPage
+        for: NovelPageRequest(threadID: "18611", view: 1)
     )
     try await store.save(
         NovelReaderProjection(
@@ -3074,7 +3065,6 @@ private final class StubURLProtocol: URLProtocol {
             threadID: "18604",
             view: 1,
             maxView: 1,
-            contentSource: .fallbackUnfilteredPage,
             segments: [.text("短文", chapterTitle: "短文")]
         )
     )
@@ -3084,8 +3074,7 @@ private final class StubURLProtocol: URLProtocol {
 
     let verifyingStore = NovelReaderProjectionStore(databasePool: database, baseDirectory: directory)
     let loaded = await verifyingStore.loadProjection(
-        for: NovelPageRequest(threadID: "18604", view: 1),
-        contentSource: .fallbackUnfilteredPage
+        for: NovelPageRequest(threadID: "18604", view: 1)
     )
 
     #expect(loaded == nil)
@@ -3130,7 +3119,6 @@ private final class StubURLProtocol: URLProtocol {
             threadID: "18606",
             view: 1,
             maxView: 1,
-            contentSource: .fallbackUnfilteredPage,
             segments: [.text("短文", chapterTitle: "短文")]
         )
     )
@@ -3140,8 +3128,7 @@ private final class StubURLProtocol: URLProtocol {
 
     let verifyingStore = NovelReaderProjectionStore(databasePool: database, baseDirectory: directory)
     let loaded = await verifyingStore.loadProjection(
-        for: NovelPageRequest(threadID: "18606", view: 1),
-        contentSource: .fallbackUnfilteredPage
+        for: NovelPageRequest(threadID: "18606", view: 1)
     )
 
     #expect(loaded == nil)
@@ -3149,7 +3136,7 @@ private final class StubURLProtocol: URLProtocol {
     #expect(!FileManager.default.fileExists(atPath: fileURL.path))
 }
 
-@Test func novelReaderCacheStoreSeparatesAuthorFilteredAndUnfilteredVariants() async throws {
+@Test func novelReaderCacheStoreSeparatesVariantsByAuthorID() async throws {
     let directory = URL(fileURLWithPath: NSTemporaryDirectory())
         .appendingPathComponent(UUID().uuidString, isDirectory: true)
     let store = NovelReaderProjectionStore(baseDirectory: directory)
@@ -3157,7 +3144,6 @@ private final class StubURLProtocol: URLProtocol {
         threadID: "21",
         view: 1,
         maxView: 3,
-        contentSource: .fallbackUnfilteredPage,
         segments: [.text("全部回复正文", chapterTitle: "第一章")]
     )
     let authorFiltered = NovelReaderProjection(
@@ -3165,7 +3151,6 @@ private final class StubURLProtocol: URLProtocol {
         view: 1,
         maxView: 3,
         resolvedAuthorID: "42",
-        contentSource: .authorFilteredPage,
         segments: [.text("只看楼主正文", chapterTitle: "第一章")]
     )
 
@@ -3173,28 +3158,24 @@ private final class StubURLProtocol: URLProtocol {
     try await store.save(authorFiltered)
 
     let loadedUnfiltered = await store.loadProjection(
-        for: NovelPageRequest(threadID: "21", view: 1),
-        contentSource: .fallbackUnfilteredPage
+        for: NovelPageRequest(threadID: "21", view: 1)
     )
     let loadedAuthorFiltered = await store.loadProjection(
-        for: NovelPageRequest(threadID: "21", view: 1, authorID: "42"),
-        contentSource: .authorFilteredPage
+        for: NovelPageRequest(threadID: "21", view: 1, authorID: "42")
     )
 
     #expect(loadedUnfiltered?.segments == unfiltered.segments)
     #expect(loadedAuthorFiltered?.segments == authorFiltered.segments)
-    #expect(await store.cachedViews(for: "21", authorID: nil, contentSource: .fallbackUnfilteredPage) == [1])
-    #expect(await store.cachedViews(for: "21", authorID: "42", contentSource: .authorFilteredPage) == [1])
+    #expect(await store.cachedViews(for: "21", authorID: nil) == [1])
+    #expect(await store.cachedViews(for: "21", authorID: "42") == [1])
 
-    try await store.deleteViews([1], for: "21", authorID: "42", contentSource: .authorFilteredPage)
+    try await store.deleteViews([1], for: "21", authorID: "42")
 
     let deletedAuthorFiltered = await store.loadProjection(
-        for: NovelPageRequest(threadID: "21", view: 1, authorID: "42"),
-        contentSource: .authorFilteredPage
+        for: NovelPageRequest(threadID: "21", view: 1, authorID: "42")
     )
     let preservedUnfiltered = await store.loadProjection(
-        for: NovelPageRequest(threadID: "21", view: 1),
-        contentSource: .fallbackUnfilteredPage
+        for: NovelPageRequest(threadID: "21", view: 1)
     )
 
     #expect(deletedAuthorFiltered == nil)
@@ -3219,7 +3200,6 @@ private final class StubURLProtocol: URLProtocol {
         view: 1,
         maxView: 2,
         resolvedAuthorID: "42",
-        contentSource: .authorFilteredPage,
         segments: [.text("只看楼主缓存", chapterTitle: "第一章")]
     )
     try await cacheStore.save(authorFiltered)
@@ -3263,10 +3243,9 @@ private final class StubURLProtocol: URLProtocol {
     let document = try await repository.loadPage(NovelPageRequest(threadID: "32", view: 1, authorID: "42"))
 
     #expect(document.resolvedAuthorID == "42")
-    #expect(document.contentSource == .authorFilteredPage)
     #expect(document.segments.contains(.text("第一章\n缓存正文", chapterTitle: "第一章")))
     #expect(document.projectionSourceFingerprint != nil)
-    #expect(await repository.cachedViews(for: "32", authorID: "42", contentSource: .authorFilteredPage) == [1])
+    #expect(await repository.cachedViews(for: "32", authorID: "42") == [1])
 }
 
 @Test func readerRepositoryPersistsProjectionDerivedFromCachedAuthorScopedThreadPage() async throws {
@@ -3299,14 +3278,12 @@ private final class StubURLProtocol: URLProtocol {
 
     let document = try await repository.loadPage(NovelPageRequest(threadID: "3201", view: 1, authorID: "42"))
     let persisted = await NovelReaderProjectionStore(baseDirectory: readerCacheDirectory).loadProjection(
-        for: NovelPageRequest(threadID: "3201", view: 1, authorID: "42"),
-        contentSource: .authorFilteredPage
+        for: NovelPageRequest(threadID: "3201", view: 1, authorID: "42")
     )
 
     #expect(persisted?.threadID == document.threadID)
     #expect(persisted?.view == document.view)
     #expect(persisted?.resolvedAuthorID == document.resolvedAuthorID)
-    #expect(persisted?.contentSource == document.contentSource)
     #expect(persisted?.segments == document.segments)
     #expect(persisted?.segmentSources == document.segmentSources)
     #expect(persisted?.segmentSemantics == document.segmentSemantics)
@@ -3349,8 +3326,7 @@ private final class StubURLProtocol: URLProtocol {
     )
     let document = try await repository.loadPage(NovelPageRequest(threadID: "3202", view: 1, authorID: "42"))
     let persisted = await NovelReaderProjectionStore(baseDirectory: readerCacheDirectory).loadProjection(
-        for: NovelPageRequest(threadID: "3202", view: 1, authorID: "42"),
-        contentSource: .authorFilteredPage
+        for: NovelPageRequest(threadID: "3202", view: 1, authorID: "42")
     )
 
     #expect(persisted?.segments == document.segments)
@@ -3371,7 +3347,6 @@ private final class StubURLProtocol: URLProtocol {
             view: 1,
             maxView: 1,
             resolvedAuthorID: "42",
-            contentSource: .authorFilteredPage,
             segments: [.text("旧 reader projection", chapterTitle: "旧章")]
         )
     )
@@ -3385,7 +3360,7 @@ private final class StubURLProtocol: URLProtocol {
         _ = try await repository.loadPage(NovelPageRequest(threadID: "33", view: 1, authorID: "42"))
     }
 
-    #expect(await repository.cachedViews(for: "33", authorID: "42", contentSource: .authorFilteredPage).isEmpty)
+    #expect(await repository.cachedViews(for: "33", authorID: "42").isEmpty)
 }
 
 private func makeReaderRepositoryThreadPage(
@@ -3429,7 +3404,6 @@ private func makeReaderRepositoryThreadPage(
         threadID: "23",
         view: 1,
         maxView: 2,
-        contentSource: .fallbackUnfilteredPage,
         segments: [.text("全部回复旧缓存", chapterTitle: "第一章")]
     )
     let authorFiltered = NovelReaderProjection(
@@ -3437,7 +3411,6 @@ private func makeReaderRepositoryThreadPage(
         view: 1,
         maxView: 2,
         resolvedAuthorID: "42",
-        contentSource: .authorFilteredPage,
         segments: [.text("只看楼主旧缓存", chapterTitle: "第一章")]
     )
     try await cacheStore.save(unfiltered)
@@ -3446,17 +3419,14 @@ private func makeReaderRepositoryThreadPage(
     try await repository.refreshCachedViews(
         [1],
         for: "23",
-        authorID: "42",
-        contentSource: .authorFilteredPage
+        authorID: "42"
     )
 
     let refreshedAuthorFiltered = await cacheStore.loadProjection(
-        for: NovelPageRequest(threadID: "23", view: 1, authorID: "42"),
-        contentSource: .authorFilteredPage
+        for: NovelPageRequest(threadID: "23", view: 1, authorID: "42")
     )
     let preservedUnfiltered = await cacheStore.loadProjection(
-        for: NovelPageRequest(threadID: "23", view: 1),
-        contentSource: .fallbackUnfilteredPage
+        for: NovelPageRequest(threadID: "23", view: 1)
     )
 
     let refreshedText = refreshedAuthorFiltered?.segments.compactMap { segment -> String? in
@@ -3487,7 +3457,6 @@ private func makeReaderRepositoryThreadPage(
             view: 1,
             maxView: 1,
             resolvedAuthorID: "42",
-            contentSource: .authorFilteredPage,
             segments: [.text("旧 schema 缓存正文", chapterTitle: "第一章")]
         )
     )
@@ -3522,7 +3491,6 @@ private func makeReaderRepositoryThreadPage(
             view: 1,
             maxView: 1,
             resolvedAuthorID: "42",
-            contentSource: .authorFilteredPage,
             segments: [.text("旧 schema 离线缓存正文", chapterTitle: "第一章")]
         )
     )
@@ -3563,8 +3531,7 @@ private func makeReaderRepositoryThreadPage(
             title: "第一页",
             threadID: "34",
             view: 1,
-            authorID: "42",
-            contentSource: .authorFilteredPage
+            authorID: "42"
         ),
         updatedAt: updatedAt
     )
@@ -3577,8 +3544,7 @@ private func makeReaderRepositoryThreadPage(
 
     let load = try await repository.loadPageResult(NovelPageRequest(threadID: "34", view: 1, authorID: "42"))
     let prewarm = await novelReaderCacheStore.loadProjection(
-        for: NovelPageRequest(threadID: "34", view: 1, authorID: "42"),
-        contentSource: .authorFilteredPage
+        for: NovelPageRequest(threadID: "34", view: 1, authorID: "42")
     )
 
     #expect(load.source == .offlineFallback(updatedAt: updatedAt))
@@ -3613,8 +3579,7 @@ private func makeReaderRepositoryThreadPage(
             title: "第一页",
             threadID: "341",
             view: 1,
-            authorID: "42",
-            contentSource: .authorFilteredPage
+            authorID: "42"
         ),
         updatedAt: updatedAt
     )
@@ -3631,7 +3596,6 @@ private func makeReaderRepositoryThreadPage(
         view: 1,
         maxView: parsedLoad.projection.maxView,
         resolvedAuthorID: "42",
-        contentSource: .authorFilteredPage,
         segments: [.text("透明缓存正文", chapterTitle: "透明缓存章节")],
         projectionSourceFingerprint: fingerprint,
         projectionSchemaVersion: parsedLoad.projection.projectionSchemaVersion
@@ -3666,8 +3630,7 @@ private func makeReaderRepositoryThreadPage(
             title: "第一页",
             threadID: "35",
             view: 1,
-            authorID: "42",
-            contentSource: .authorFilteredPage
+            authorID: "42"
         ),
         updatedAt: Date(timeIntervalSince1970: 35_000)
     )
@@ -3706,8 +3669,7 @@ private func makeReaderRepositoryThreadPage(
             title: "第一页",
             threadID: "36",
             view: 1,
-            authorID: "42",
-            contentSource: .authorFilteredPage
+            authorID: "42"
         ),
         updatedAt: oldUpdatedAt
     )
@@ -3724,14 +3686,12 @@ private func makeReaderRepositoryThreadPage(
         ownerTitle: "自动刷新小说",
         threadID: "36",
         view: 1,
-        authorID: "42",
-        contentSource: .authorFilteredPage
+        authorID: "42"
     )
     let snapshot = await offlineStore.novelOfflineCacheViewsSnapshot(
         ownerTitle: "自动刷新小说",
         threadID: "36",
-        authorID: "42",
-        contentSource: .authorFilteredPage
+        authorID: "42"
     )
 
     #expect(load.source == .online)
@@ -3759,8 +3719,7 @@ private func makeReaderRepositoryThreadPage(
     let snapshot = await offlineStore.novelOfflineCacheViewsSnapshot(
         ownerTitle: "未缓存小说",
         threadID: "37",
-        authorID: "42",
-        contentSource: .authorFilteredPage
+        authorID: "42"
     )
 
     #expect(snapshot.cachedViews.isEmpty)
@@ -3783,15 +3742,14 @@ private func makeReaderRepositoryThreadPage(
     let result = await repository.cacheViews(
         [1, 2, 3],
         for: "24",
-        authorID: "42",
-        contentSource: .authorFilteredPage
+        authorID: "42"
     )
 
     #expect(result.completedViews == [1, 3])
     #expect(result.failedViews == [2])
     #expect(!result.wasCancelled)
-    #expect(await repository.cachedViews(for: "24", authorID: "42", contentSource: .authorFilteredPage) == [1, 3])
-    #expect(await cacheStore.cachedViews(for: "24", authorID: nil, contentSource: .fallbackUnfilteredPage).isEmpty)
+    #expect(await repository.cachedViews(for: "24", authorID: "42") == [1, 3])
+    #expect(await cacheStore.cachedViews(for: "24", authorID: nil).isEmpty)
 }
 
 @Test func readerRepositoryRefreshesLegacyCacheMissingChapterCommentSources() async throws {
@@ -3812,7 +3770,6 @@ private func makeReaderRepositoryThreadPage(
         view: 1,
         maxView: 1,
         resolvedAuthorID: "42",
-        contentSource: .authorFilteredPage,
         retainedChapterCount: 1,
         segments: [.text("旧缓存章节\n旧正文", chapterTitle: "旧缓存章节")]
     )

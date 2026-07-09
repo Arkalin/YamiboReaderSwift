@@ -53,7 +53,7 @@ struct YamiboThreadURLCanonicalizerTests {
 
     @Test func readerCacheIdentityUsesThreadIDAsCacheKey() throws {
         let url = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=521519&extra=page%3D1&mobile=2&page=25&authorid=406769"))
-        let identity = NovelReaderCacheIdentity(threadID: "521519", view: 25, authorID: "406769", contentSource: .authorFilteredPage)
+        let identity = NovelReaderCacheIdentity(threadID: "521519", view: 25, authorID: "406769")
 
         #expect(YamiboThreadURLCanonicalizer.canonicalThreadURL(from: url).absoluteString == "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=521519")
         #expect(identity.threadID == "521519")

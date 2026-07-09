@@ -6,7 +6,6 @@ package struct NovelTextViewportIdentity: Hashable, Sendable {
     public var documentView: Int
     public var maxView: Int
     public var fetchedAt: Date
-    public var contentSource: ReaderProjectionContentSource
     public var appearance: NovelReaderAppearanceSettings
     public var layout: NovelReaderLayout
 
@@ -15,7 +14,6 @@ package struct NovelTextViewportIdentity: Hashable, Sendable {
         documentView: Int,
         maxView: Int,
         fetchedAt: Date,
-        contentSource: ReaderProjectionContentSource,
         appearance: NovelReaderAppearanceSettings,
         layout: NovelReaderLayout
     ) {
@@ -25,7 +23,6 @@ package struct NovelTextViewportIdentity: Hashable, Sendable {
         self.documentView = max(1, documentView)
         self.maxView = max(self.documentView, maxView)
         self.fetchedAt = fetchedAt
-        self.contentSource = contentSource
         self.appearance = appearance
         self.layout = layout
     }

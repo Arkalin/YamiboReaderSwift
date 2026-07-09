@@ -10,7 +10,9 @@ import Testing
     let workKey = LikeWorkKey.novel(threadID: "10")
     let anchor = NovelImageLikeAnchor(
         chapterIdentity: NovelChapterIdentity(rawValue: "chapter-1"),
-        imageSegmentIdentity: "chapter-1#image:0"
+        imageSegmentIdentity: "chapter-1#image:0",
+        view: 1,
+        resolvedAuthorID: nil
     )
     let sourceURL = try #require(URL(string: "https://img.example.com/a.jpg"))
     let data = Data([1, 2, 3, 4])
@@ -34,7 +36,9 @@ import Testing
     let workKey = LikeWorkKey.novel(threadID: "11")
     let anchor = NovelImageLikeAnchor(
         chapterIdentity: NovelChapterIdentity(rawValue: "chapter-1"),
-        imageSegmentIdentity: "chapter-1#image:0"
+        imageSegmentIdentity: "chapter-1#image:0",
+        view: 1,
+        resolvedAuthorID: nil
     )
     let sourceURL = try #require(URL(string: "https://img.example.com/a.jpg"))
 

@@ -5,17 +5,28 @@ package struct NovelTextLikeCaptureRequest: Sendable {
     package var start: NovelTextViewportSemanticTextPosition
     package var end: NovelTextViewportSemanticTextPosition
     package var excerptText: String
+    /// The forum page currently on screen when the selection was made (see
+    /// `NovelTextLikeAnchor.view` for why this can't be recovered from
+    /// `chapterIdentity` after the fact).
+    package var view: Int
+    /// The active projection's cache-key identity at selection time (see
+    /// `NovelTextLikeAnchor.resolvedAuthorID`).
+    package var resolvedAuthorID: String?
 
     package init(
         workKey: LikeWorkKey,
         start: NovelTextViewportSemanticTextPosition,
         end: NovelTextViewportSemanticTextPosition,
-        excerptText: String
+        excerptText: String,
+        view: Int,
+        resolvedAuthorID: String?
     ) {
         self.workKey = workKey
         self.start = start
         self.end = end
         self.excerptText = excerptText
+        self.view = view
+        self.resolvedAuthorID = resolvedAuthorID
     }
 }
 
@@ -57,7 +68,9 @@ public struct NovelTextLikeCaptureService: Sendable {
         let requestAnchor = NovelTextLikeAnchor(
             chapterIdentity: chapterIdentity,
             textSegmentIdentity: segment,
-            range: NovelCharacterRange(location: location, length: upperBound - location)
+            range: NovelCharacterRange(location: location, length: upperBound - location),
+            view: request.view,
+            resolvedAuthorID: request.resolvedAuthorID
         )
 
         let existing = await likeStore.likes(for: request.workKey).filter { $0.kind == .text }
@@ -97,7 +110,9 @@ public struct NovelTextLikeCaptureService: Sendable {
         let unionAnchor = NovelTextLikeAnchor(
             chapterIdentity: chapterIdentity,
             textSegmentIdentity: segment,
-            range: NovelCharacterRange(location: unionLocation, length: unionUpperBound - unionLocation)
+            range: NovelCharacterRange(location: unionLocation, length: unionUpperBound - unionLocation),
+            view: request.view,
+            resolvedAuthorID: request.resolvedAuthorID
         )
         guard let mergedExcerpt = excerptTextForRange(unionAnchor) else {
             throw YamiboError.underlying("Novel text like capture could not recapture the merged excerpt text.")

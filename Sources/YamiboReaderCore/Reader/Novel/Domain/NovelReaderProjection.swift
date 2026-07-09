@@ -26,13 +26,12 @@ public struct NovelReaderProjectionLoad: Hashable, Sendable {
 }
 
 public struct NovelReaderProjection: Codable, Hashable, Sendable {
-    public static let schemaVersion = 6
+    public static let schemaVersion = 7
 
     public var threadID: String
     public var view: Int
     public var maxView: Int
     public var resolvedAuthorID: String?
-    public var contentSource: ReaderProjectionContentSource
     public var retainedChapterCount: Int
     public var filteredChapterCandidateCount: Int
     public var segments: [NovelReaderSegment]
@@ -47,7 +46,6 @@ public struct NovelReaderProjection: Codable, Hashable, Sendable {
         view: Int,
         maxView: Int,
         resolvedAuthorID: String? = nil,
-        contentSource: ReaderProjectionContentSource = .allPostsPage,
         retainedChapterCount: Int = 0,
         filteredChapterCandidateCount: Int = 0,
         segments: [NovelReaderSegment],
@@ -63,7 +61,6 @@ public struct NovelReaderProjection: Codable, Hashable, Sendable {
         self.view = max(1, view)
         self.maxView = max(self.view, maxView)
         self.resolvedAuthorID = resolvedAuthorID
-        self.contentSource = contentSource
         self.retainedChapterCount = retainedChapterCount
         self.filteredChapterCandidateCount = filteredChapterCandidateCount
         self.segments = segments
@@ -72,8 +69,7 @@ public struct NovelReaderProjection: Codable, Hashable, Sendable {
             segments: segments,
             segmentSources: self.segmentSources,
             threadID: self.threadID,
-            view: self.view,
-            contentSource: self.contentSource
+            view: self.view
         )
         self.projectionSourceFingerprint = projectionSourceFingerprint
         self.projectionSchemaVersion = projectionSchemaVersion
@@ -96,8 +92,7 @@ extension NovelReaderProjection {
         segments: [NovelReaderSegment],
         segmentSources: [NovelReaderSegmentSource?],
         threadID: String,
-        view: Int,
-        contentSource: ReaderProjectionContentSource
+        view: Int
     ) -> [NovelReaderSegmentSemantics?] {
         var occurrenceByPostID: [String: Int] = [:]
         var sourceOccurrence = 0
@@ -116,7 +111,7 @@ extension NovelReaderProjection {
                 chapterIdentity = NovelChapterIdentity(rawValue: "post:\(ownerPostID)#chapter:\(postOccurrence)")
             } else {
                 chapterIdentity = NovelChapterIdentity(
-                    rawValue: "thread:\(threadID)#view:\(max(1, view))#source:\(contentSource.rawValue)#chapter:\(sourceOccurrence)"
+                    rawValue: "thread:\(threadID)#view:\(max(1, view))#chapter:\(sourceOccurrence)"
                 )
                 sourceOccurrence += 1
             }

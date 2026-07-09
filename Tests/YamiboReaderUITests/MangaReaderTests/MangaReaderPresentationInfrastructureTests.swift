@@ -235,7 +235,6 @@ private func makePipelinePage() throws -> MangaReaderPageProjection {
         sourceIdentity: MangaReaderProjectionSourceIdentity(
             tid: "700",
             authorID: nil,
-            contentSource: .authorFilteredPage,
             view: 1
         ),
         globalIndex: 0,

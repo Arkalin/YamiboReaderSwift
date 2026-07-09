@@ -79,8 +79,6 @@ public actor MangaReaderProjectionStore: MangaReaderProjectionPersisting {
         [
             "tid",
             stableKeyComponent(identity.tid),
-            "source",
-            stableKeyComponent(identity.contentSource.rawValue),
             "author",
             stableKeyComponent(identity.authorID ?? "all"),
             "view",

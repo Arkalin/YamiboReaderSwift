@@ -644,7 +644,6 @@ final class NovelReaderViewModelTests: XCTestCase {
             threadID: "445566",
             view: 1,
             maxView: 1,
-            contentSource: .fallbackUnfilteredPage,
             segments: [
                 .text("没有章节标题的正文。", chapterTitle: nil),
             ]
@@ -987,7 +986,6 @@ final class NovelReaderViewModelTests: XCTestCase {
             threadID: "9911",
             view: 1,
             maxView: 1,
-            contentSource: .fallbackUnfilteredPage,
             segments: [
                 .text(String(repeating: "第一章 内容。", count: 420), chapterTitle: "第一章")
             ]
@@ -1020,7 +1018,6 @@ final class NovelReaderViewModelTests: XCTestCase {
             threadID: "9912",
             view: 1,
             maxView: 1,
-            contentSource: .fallbackUnfilteredPage,
             segments: [
                 .text(String(repeating: "第一章 前台恢复布局竞态。", count: 1_200), chapterTitle: "第一章")
             ]
@@ -1438,7 +1435,6 @@ final class NovelReaderViewModelTests: XCTestCase {
                 view: 1,
                 maxView: 2,
                 resolvedAuthorID: "42",
-                contentSource: .authorFilteredPage,
                 segments: [
                     .text(String(repeating: "第一章 正文。", count: 40), chapterTitle: "第一章"),
                     .text(String(repeating: "读者甲 发表于 2026-5-1\n楼主回复。", count: 12), chapterTitle: "读者甲 发表于 2026-5-1"),
@@ -1453,7 +1449,6 @@ final class NovelReaderViewModelTests: XCTestCase {
                 view: 2,
                 maxView: 2,
                 resolvedAuthorID: "42",
-                contentSource: .authorFilteredPage,
                 segments: [
                     .text(String(repeating: "第二章 正文。", count: 40), chapterTitle: "第二章"),
                     .text(String(repeating: "读者乙 发表于 2026-5-2\n楼主回复。", count: 12), chapterTitle: "读者乙 发表于 2026-5-2"),
@@ -1526,7 +1521,6 @@ final class NovelReaderViewModelTests: XCTestCase {
             threadID: "9012",
             view: 1,
             maxView: 1,
-            contentSource: .fallbackUnfilteredPage,
             segments: [
                 .text("聽到弓莉這麼說，我急忙收拾東西。戀上朋友的妹妹了 後記", chapterTitle: "後記")
             ]
@@ -1567,7 +1561,6 @@ final class NovelReaderViewModelTests: XCTestCase {
             view: 1,
             maxView: 1,
             resolvedAuthorID: "author-1",
-            contentSource: .authorFilteredPage,
             segments: [
                 .text("第一段不应预览", chapterTitle: "第一章"),
                 .text("第二段不应预览", chapterTitle: "第一章"),
@@ -1879,7 +1872,6 @@ final class NovelReaderViewModelTests: XCTestCase {
             threadID: "901",
             view: 1,
             maxView: 1,
-            contentSource: .fallbackUnfilteredPage,
             segments: [
                 .text(String(repeating: "第一章 内容。", count: 220), chapterTitle: "第一章")
             ]
@@ -1952,7 +1944,6 @@ final class NovelReaderViewModelTests: XCTestCase {
             threadID: threadID,
             view: 2,
             maxView: 2,
-            contentSource: .fallbackUnfilteredPage,
             segments: [
                 .text(String(repeating: "第一章 内容。", count: 120), chapterTitle: "第一章"),
                 .text(String(repeating: "第二章 内容。", count: 120), chapterTitle: "第二章"),
@@ -2043,7 +2034,6 @@ final class NovelReaderViewModelTests: XCTestCase {
             threadID: threadID,
             view: 1,
             maxView: 1,
-            contentSource: .fallbackUnfilteredPage,
             segments: [
                 .text(String(repeating: "第一章 内容。", count: 420), chapterTitle: "第一章")
             ]
@@ -2124,7 +2114,6 @@ final class NovelReaderViewModelTests: XCTestCase {
             threadID: threadID,
             view: 2,
             maxView: 2,
-            contentSource: .fallbackUnfilteredPage,
             segments: [
                 .text(String(repeating: "第一章 内容。", count: 160), chapterTitle: "第一章"),
                 .text(String(repeating: "第二章 内容。", count: 160), chapterTitle: "第二章"),
@@ -2214,7 +2203,6 @@ final class NovelReaderViewModelTests: XCTestCase {
             threadID: threadID,
             view: 1,
             maxView: 1,
-            contentSource: .fallbackUnfilteredPage,
             segments: [
                 .text(String(repeating: "第一章 内容。", count: 520), chapterTitle: "第一章")
             ]
@@ -2290,7 +2278,6 @@ final class NovelReaderViewModelTests: XCTestCase {
             threadID: "910",
             view: 1,
             maxView: 1,
-            contentSource: .fallbackUnfilteredPage,
             segments: [
                 .text(String(repeating: "第一章 内容。", count: 520), chapterTitle: "第一章")
             ]
@@ -2338,7 +2325,6 @@ final class NovelReaderViewModelTests: XCTestCase {
             threadID: "905",
             view: 1,
             maxView: 1,
-            contentSource: .fallbackUnfilteredPage,
             segments: [
                 .text(String(repeating: "第一章 内容。", count: 320), chapterTitle: "第一章")
             ]
@@ -2391,7 +2377,6 @@ final class NovelReaderViewModelTests: XCTestCase {
             threadID: "903",
             view: 1,
             maxView: 1,
-            contentSource: .fallbackUnfilteredPage,
             segments: [
                 .text(String(repeating: "第一章 内容。", count: 260), chapterTitle: "第一章")
             ]
@@ -2435,7 +2420,6 @@ final class NovelReaderViewModelTests: XCTestCase {
             threadID: "906",
             view: 1,
             maxView: 1,
-            contentSource: .fallbackUnfilteredPage,
             segments: [
                 .text("第一段。", chapterTitle: "第一章"),
                 .text("第二段目标位置。", chapterTitle: "第一章"),
@@ -2476,7 +2460,6 @@ final class NovelReaderViewModelTests: XCTestCase {
             threadID: "907",
             view: 1,
             maxView: 1,
-            contentSource: .fallbackUnfilteredPage,
             segments: [
                 .text(String(repeating: "第一章 内容。", count: 420), chapterTitle: "第一章")
             ]
@@ -2516,7 +2499,6 @@ final class NovelReaderViewModelTests: XCTestCase {
             threadID: "908",
             view: 1,
             maxView: 1,
-            contentSource: .fallbackUnfilteredPage,
             segments: [
                 .text(String(repeating: "第一章 内容。", count: 520), chapterTitle: "第一章")
             ]
@@ -2552,16 +2534,14 @@ final class NovelReaderViewModelTests: XCTestCase {
             threadID: threadID,
             view: 1,
             maxView: 1,
-            chapterTitles: ["全部回复"],
-            contentSource: .fallbackUnfilteredPage
+            chapterTitles: ["全部回复"]
         )
         let authorFilteredDocument = makeDocument(
             threadID: threadID,
             view: 1,
             maxView: 1,
             chapterTitles: ["只看楼主"],
-            authorID: "42",
-            contentSource: .authorFilteredPage
+            authorID: "42"
         )
 
         let unfilteredOfflineStore = try makeReaderModelOfflineCacheStore()
@@ -2615,8 +2595,7 @@ final class NovelReaderViewModelTests: XCTestCase {
             view: 1,
             maxView: 1,
             chapterTitles: ["离线章节"],
-            authorID: "42",
-            contentSource: .authorFilteredPage
+            authorID: "42"
         )
         let offlineStore = try makeReaderModelOfflineCacheStore()
         try await seedNovelOfflineCache(
@@ -2662,16 +2641,14 @@ final class NovelReaderViewModelTests: XCTestCase {
             threadID: threadID,
             view: 1,
             maxView: 1,
-            chapterTitles: ["全部回复旧缓存"],
-            contentSource: .fallbackUnfilteredPage
+            chapterTitles: ["全部回复旧缓存"]
         )
         let authorFilteredDocument = makeDocument(
             threadID: threadID,
             view: 1,
             maxView: 1,
             chapterTitles: ["只看楼主旧缓存"],
-            authorID: "42",
-            contentSource: .authorFilteredPage
+            authorID: "42"
         )
 
         let cacheDirectory = FileManager.default.temporaryDirectory
@@ -2703,12 +2680,10 @@ final class NovelReaderViewModelTests: XCTestCase {
         }
 
         let preservedAuthorFiltered = await cacheStore.loadProjection(
-            for: NovelPageRequest(threadID: threadID, view: 1, authorID: "42"),
-            contentSource: .authorFilteredPage
+            for: NovelPageRequest(threadID: threadID, view: 1, authorID: "42")
         )
         let preservedUnfiltered = await cacheStore.loadProjection(
-            for: NovelPageRequest(threadID: threadID, view: 1),
-            contentSource: .fallbackUnfilteredPage
+            for: NovelPageRequest(threadID: threadID, view: 1)
         )
 
         XCTAssertTrue(
@@ -2923,7 +2898,6 @@ final class NovelReaderViewModelTests: XCTestCase {
                     maxView: 1,
                     chapterTitles: ["第一章"],
                     authorID: "42",
-                    contentSource: .authorFilteredPage,
                     ownerPostIDs: ["101"]
                 )
             ],
@@ -2950,8 +2924,7 @@ final class NovelReaderViewModelTests: XCTestCase {
         let seededSnapshot = await offlineStore.novelOfflineCacheViewsSnapshot(
             ownerTitle: "测试线程",
             threadID: document.threadID,
-            authorID: "42",
-            contentSource: .authorFilteredPage
+            authorID: "42"
         )
         XCTAssertEqual(seededSnapshot.cachedViews, [1])
         let model = try await makeModel(
@@ -3025,8 +2998,7 @@ final class NovelReaderViewModelTests: XCTestCase {
             view: 1,
             maxView: 2,
             chapterTitles: ["当前页"],
-            authorID: "42",
-            contentSource: .authorFilteredPage
+            authorID: "42"
         )
         let model = try await makeModel(
             documents: [document],
@@ -3049,8 +3021,7 @@ final class NovelReaderViewModelTests: XCTestCase {
             title: L10n.string("reader.page_number_spaced", 2),
             threadID: threadID,
             view: 2,
-            authorID: "42",
-            contentSource: .authorFilteredPage
+            authorID: "42"
         )
         _ = try await offlineStore.enqueueNovelOfflineCacheWork(request)
 
@@ -3067,15 +3038,13 @@ final class NovelReaderViewModelTests: XCTestCase {
             view: 2,
             maxView: 2,
             chapterTitles: ["离线完成"],
-            authorID: "42",
-            contentSource: .authorFilteredPage
+            authorID: "42"
         )
         let thread = makeThreadIdentity(from: threadID)
         let sourcePage = makeThreadPageSource(from: completionDocument, thread: thread, authorID: "42")
         var projection = completionDocument
         projection.threadID = thread.tid
         projection.resolvedAuthorID = "42"
-        projection.contentSource = .authorFilteredPage
         try await offlineStore.saveNovelOfflineSourcePage(
             sourcePage,
             request: request,
@@ -3156,8 +3125,7 @@ final class NovelReaderViewModelTests: XCTestCase {
         let retainedThreadPage = await forumCacheStore.loadThreadPage(thread: thread, page: 1, authorID: "42")
         XCTAssertNotNil(retainedThreadPage)
         let retainedProjection = await cacheStore.loadProjection(
-            for: NovelPageRequest(threadID: threadID, view: 1, authorID: "42"),
-            contentSource: .authorFilteredPage
+            for: NovelPageRequest(threadID: threadID, view: 1, authorID: "42")
         )
         XCTAssertNotNil(retainedProjection)
     }
@@ -3263,7 +3231,6 @@ private func seedReaderSourceCaches(
         var projection = document
         projection.threadID = thread.tid
         projection.resolvedAuthorID = authorID
-        projection.contentSource = .authorFilteredPage
         projection.projectionSourceFingerprint = projectionFingerprint(
             page: sourcePage,
             threadID: thread.tid,
@@ -3290,13 +3257,11 @@ private func seedNovelOfflineCache(
         title: L10n.string("reader.page_number_spaced", document.view),
         threadID: document.threadID,
         view: document.view,
-        authorID: authorID,
-        contentSource: .authorFilteredPage
+        authorID: authorID
     )
     var projection = document
     projection.threadID = thread.tid
     projection.resolvedAuthorID = authorID
-    projection.contentSource = .authorFilteredPage
     try await store.saveNovelOfflineSourcePage(
         sourcePage,
         request: request,
@@ -3591,7 +3556,6 @@ private func makeDocument(
     maxView: Int,
     chapterTitles: [String],
     authorID: String? = nil,
-    contentSource: ReaderProjectionContentSource = .fallbackUnfilteredPage,
     ownerPostIDs: [String?]? = nil
 ) -> NovelReaderProjection {
     let segments = chapterTitles.map { title in
@@ -3607,7 +3571,6 @@ private func makeDocument(
         view: view,
         maxView: maxView,
         resolvedAuthorID: authorID,
-        contentSource: contentSource,
         segments: segments,
         segmentSources: segmentSources
     )
@@ -3629,7 +3592,6 @@ private func makeImageDocument(
         threadID: threadID,
         view: view,
         maxView: maxView,
-        contentSource: .fallbackUnfilteredPage,
         segments: segments
     )
 }
@@ -3666,7 +3628,6 @@ private func layoutResult(
             documentView: index.documentView,
             maxView: index.documentView,
             fetchedAt: Date(timeIntervalSince1970: 0),
-            contentSource: .fallbackUnfilteredPage,
             appearance: NovelReaderAppearanceSettings(readingMode: index.readingMode),
             layout: NovelReaderLayout(width: 320, height: 568, readingMode: index.readingMode)
         ),

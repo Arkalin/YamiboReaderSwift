@@ -747,21 +747,18 @@ private func novelOfflineEntryID(
     ownerTitle: String = "小说A",
     tid: String,
     view: Int,
-    authorID: String? = nil,
-    contentSource: ReaderProjectionContentSource = .fallbackUnfilteredPage
+    authorID: String? = nil
 ) throws -> OfflineCacheEntryID {
     OfflineCacheEntryID(
         readerKind: .novel,
         ownerKey: NovelOfflineCacheEntry.groupKey(
             threadID: tid,
-            authorID: authorID,
-            contentSource: contentSource
+            authorID: authorID
         ),
         entryKey: NovelOfflineCacheEntry.entryKey(
             threadID: tid,
             view: view,
-            authorID: authorID,
-            contentSource: contentSource
+            authorID: authorID
         )
     )
 }
@@ -801,7 +798,6 @@ private func makeNovelOfflineCacheEntry(
             view: view,
             maxView: max(2, view),
             resolvedAuthorID: authorID,
-            contentSource: authorID == nil ? .fallbackUnfilteredPage : .authorFilteredPage,
             segments: [.text("小说\(tid)-\(view)", chapterTitle: nil)]
         ),
         updatedAt: Date(timeIntervalSince1970: Double(1_000 + view))
@@ -838,7 +834,6 @@ private func seedMangaIndexCache(_ fixture: SystemSettingsFixture) async throws 
     let sourceIdentity = MangaReaderProjectionSourceIdentity(
         tid: "901",
         authorID: nil,
-        contentSource: .authorFilteredPage,
         view: 1
     )
     try await fixture.mangaReaderProjectionStore.save(MangaReaderProjection(

@@ -213,7 +213,6 @@ final class NovelReadingWorkflowTests: XCTestCase {
             view: 1,
             maxView: 1,
             resolvedAuthorID: "author-1",
-            contentSource: .authorFilteredPage,
             segments: [.text(text, chapterTitle: "第一章")]
         )
         let repository = RecordingNovelReadingRepository(documents: [
@@ -266,7 +265,6 @@ final class NovelReadingWorkflowTests: XCTestCase {
             view: 1,
             maxView: 1,
             resolvedAuthorID: "author-1",
-            contentSource: .authorFilteredPage,
             segments: [
                 .text("第一段第二段第三段", chapterTitle: "第一章"),
                 .image(imageURL, chapterTitle: "插图"),
@@ -342,7 +340,6 @@ final class NovelReadingWorkflowTests: XCTestCase {
             view: 1,
             maxView: 1,
             resolvedAuthorID: "author-1",
-            contentSource: .authorFilteredPage,
             segments: [
                 .text("第一章正文", chapterTitle: "第一章"),
                 .text("第二章正文", chapterTitle: "第二章"),
@@ -477,7 +474,6 @@ final class NovelReadingWorkflowTests: XCTestCase {
             view: 1,
             maxView: 1,
             resolvedAuthorID: "author-1",
-            contentSource: .authorFilteredPage,
             segments: (0..<4).map { index in
                 .text("第\(index + 1)章正文", chapterTitle: "第\(index + 1)章")
             }
@@ -579,7 +575,6 @@ final class NovelReadingWorkflowTests: XCTestCase {
                 authorID: nil,
                 currentSurfaceIntraProgress: 0
             ),
-            currentContentSource: .fallbackUnfilteredPage,
             retainedChapterCount: 800,
             filteredChapterCandidateCount: 800,
             selectedSurfaceIndex: 777
@@ -1149,8 +1144,7 @@ final class NovelReadingWorkflowTests: XCTestCase {
                 threadID: threadID,
                 view: 2,
                 maxView: 4,
-                authorID: "author-2",
-                contentSource: .authorFilteredPage
+                authorID: "author-2"
             )
         ])
         let workflow = NovelReadingWorkflow(
@@ -1177,8 +1171,7 @@ final class NovelReadingWorkflowTests: XCTestCase {
             RecordingNovelReadingRepository.DeletedViews(
                 views: [2],
                 threadID: threadID,
-                authorID: "author-2",
-                contentSource: .authorFilteredPage
+                authorID: "author-2"
             )
         ])
         XCTAssertEqual(repository.ignoringCacheRequests, [
@@ -1895,7 +1888,6 @@ final class NovelReadingWorkflowTests: XCTestCase {
                 view: 1,
                 maxView: 1,
                 resolvedAuthorID: "author-1",
-                contentSource: .authorFilteredPage,
                 segments: [
                     .text(String(repeating: "第一章 内容。", count: 120), chapterTitle: "第一章")
                 ]
@@ -1952,7 +1944,6 @@ final class NovelReadingWorkflowTests: XCTestCase {
             view: 1,
             maxView: 1,
             resolvedAuthorID: "author-1",
-            contentSource: .authorFilteredPage,
             segments: [
                 .text("前文不应进入预览", chapterTitle: "第一章"),
                 .text("0123456789目标预览文本", chapterTitle: "第二章"),
@@ -1999,7 +1990,6 @@ final class NovelReadingWorkflowTests: XCTestCase {
             view: 1,
             maxView: 1,
             resolvedAuthorID: "author-1",
-            contentSource: .authorFilteredPage,
             segments: [
                 .text("第一段预览", chapterTitle: "第一章"),
                 .text("第二段预览", chapterTitle: "第一章"),
@@ -2087,7 +2077,6 @@ final class NovelReadingWorkflowTests: XCTestCase {
                 view: 1,
                 maxView: 1,
                 resolvedAuthorID: "author-1",
-                contentSource: .authorFilteredPage,
                 segments: [.image(imageURL, chapterTitle: "插图")]
             )
         ])
@@ -2300,22 +2289,20 @@ final class NovelReadingWorkflowTests: XCTestCase {
         XCTAssertEqual(currentState, initialState)
     }
 
-    func testCacheContextSeparatesCurrentFallbackAndPrefetchedAuthorFilteredVariants() async throws {
+    func testCacheContextSeparatesCurrentAndPrefetchedAuthorIDVariants() async throws {
         let threadID = "9107"
         let repository = RecordingNovelReadingRepository(documents: [
             1: makeNovelDocument(
                 threadID: threadID,
                 view: 1,
                 maxView: 2,
-                authorID: nil,
-                contentSource: .fallbackUnfilteredPage
+                authorID: nil
             ),
             2: makeNovelDocument(
                 threadID: threadID,
                 view: 2,
                 maxView: 2,
-                authorID: "author-2",
-                contentSource: .authorFilteredPage
+                authorID: "author-2"
             )
         ])
         let workflow = NovelReadingWorkflow(
@@ -2337,8 +2324,8 @@ final class NovelReadingWorkflowTests: XCTestCase {
         let currentContext = workflow.cacheContext(forView: 1)
         let prefetchedContext = workflow.cacheContext(forView: 2)
 
-        XCTAssertEqual(currentContext, NovelReadingCacheContext(authorID: nil, contentSource: .fallbackUnfilteredPage))
-        XCTAssertEqual(prefetchedContext, NovelReadingCacheContext(authorID: "author-2", contentSource: .authorFilteredPage))
+        XCTAssertEqual(currentContext, NovelReadingCacheContext(authorID: nil))
+        XCTAssertEqual(prefetchedContext, NovelReadingCacheContext(authorID: "author-2"))
     }
 
     func testLongCurrentWebpageViewportPublishesExactIndexAndRestoresAcrossReaderChanges() async throws {
@@ -2349,7 +2336,6 @@ final class NovelReadingWorkflowTests: XCTestCase {
             view: 1,
             maxView: 1,
             resolvedAuthorID: "author-152",
-            contentSource: .fallbackUnfilteredPage,
             segments: chapterTitles.map { title in
                 .text(String(repeating: "\(title) 长篇当前页正文。", count: 50), chapterTitle: title)
             }
@@ -2592,7 +2578,6 @@ private final class RecordingNovelReadingRepository: NovelReadingPageRepository,
         var views: Set<Int>
         var threadID: String
         var authorID: String?
-        var contentSource: ReaderProjectionContentSource?
     }
 
     private let documents: [Int: NovelReaderProjection]
@@ -2634,8 +2619,7 @@ private final class RecordingNovelReadingRepository: NovelReadingPageRepository,
 
     func cachedViews(
         for threadID: String,
-        authorID: String?,
-        contentSource: ReaderProjectionContentSource?
+        authorID: String?
     ) async -> Set<Int> {
         []
     }
@@ -2643,14 +2627,12 @@ private final class RecordingNovelReadingRepository: NovelReadingPageRepository,
     func deleteCachedViews(
         _ views: Set<Int>,
         for threadID: String,
-        authorID: String?,
-        contentSource: ReaderProjectionContentSource?
+        authorID: String?
     ) async throws {
         deletedViews.append(DeletedViews(
             views: views,
             threadID: threadID,
-            authorID: authorID,
-            contentSource: contentSource
+            authorID: authorID
         ))
     }
 
@@ -2676,15 +2658,13 @@ private func makeNovelDocument(
     threadID: String,
     view: Int,
     maxView: Int,
-    authorID: String? = nil,
-    contentSource: ReaderProjectionContentSource = .authorFilteredPage
+    authorID: String? = nil
 ) -> NovelReaderProjection {
     NovelReaderProjection(
         threadID: threadID,
         view: view,
         maxView: maxView,
         resolvedAuthorID: authorID,
-        contentSource: contentSource,
         segments: [
             .text(String(repeating: "第\(view)页正文。", count: 80), chapterTitle: "第\(view)章")
         ]
@@ -2703,7 +2683,6 @@ private func makeSegmentedNovelDocument(
         view: view,
         maxView: maxView,
         resolvedAuthorID: authorID,
-        contentSource: .authorFilteredPage,
         segments: (0..<max(1, segmentCount)).map { index in
             .text(
                 String(repeating: "第\(view)页第\(index)段正文。", count: 80),
@@ -2745,7 +2724,6 @@ private func layoutResult(
             documentView: index.documentView,
             maxView: index.documentView,
             fetchedAt: Date(timeIntervalSince1970: 0),
-            contentSource: .fallbackUnfilteredPage,
             appearance: NovelReaderAppearanceSettings(readingMode: index.readingMode),
             layout: NovelReaderLayout(width: 320, height: 568, readingMode: index.readingMode)
         ),
@@ -2829,7 +2807,6 @@ private func previewSourcePagination(
             documentView: document.view,
             maxView: document.maxView,
             fetchedAt: document.fetchedAt,
-            contentSource: document.contentSource,
             appearance: settings,
             layout: layout
         ),

@@ -38,36 +38,29 @@ public struct NovelOfflineCacheEntry: Codable, Hashable, Identifiable, Sendable 
         entryKey(
             threadID: document.threadID,
             view: document.view,
-            authorID: document.resolvedAuthorID,
-            contentSource: document.contentSource
+            authorID: document.resolvedAuthorID
         )
     }
 
     public static func groupKey(document: NovelReaderProjection) -> String {
         groupKey(
             threadID: document.threadID,
-            authorID: document.resolvedAuthorID,
-            contentSource: document.contentSource
+            authorID: document.resolvedAuthorID
         )
     }
 
     public static func groupKey(
         threadID: String,
-        authorID: String?,
-        contentSource: ReaderProjectionContentSource?
+        authorID: String?
     ) -> String {
         let identity = NovelReaderCacheIdentity(
             threadID: threadID,
             view: 1,
-            authorID: authorID,
-            contentSource: contentSource
+            authorID: authorID
         )
-        let source = resolvedContentSource(authorID: authorID, contentSource: contentSource)
         return [
             "tid",
             identity.threadID,
-            "source",
-            source.rawValue,
             "author",
             normalizedAuthorID(authorID) ?? "all"
         ].joined(separator: "_")
@@ -76,17 +69,15 @@ public struct NovelOfflineCacheEntry: Codable, Hashable, Identifiable, Sendable 
     public static func entryKey(
         threadID: String,
         view: Int,
-        authorID: String?,
-        contentSource: ReaderProjectionContentSource?
+        authorID: String?
     ) -> String {
         let normalizedView = NovelReaderCacheIdentity(
             threadID: threadID,
             view: view,
-            authorID: authorID,
-            contentSource: contentSource
+            authorID: authorID
         ).view
         return [
-            groupKey(threadID: threadID, authorID: authorID, contentSource: contentSource),
+            groupKey(threadID: threadID, authorID: authorID),
             "view",
             String(normalizedView)
         ].joined(separator: "_")
@@ -94,35 +85,22 @@ public struct NovelOfflineCacheEntry: Codable, Hashable, Identifiable, Sendable 
 
     static func entryKeyComponents(from key: String) -> NovelOfflineCacheEntryKeyComponents? {
         let components = key.components(separatedBy: "_")
-        guard components.count == 8,
+        guard components.count == 6,
               components[0] == "tid",
-              components[2] == "source",
-              components[4] == "author",
-              components[6] == "view",
-              let contentSource = ReaderProjectionContentSource(rawValue: components[3]),
-              let view = Int(components[7]) else {
+              components[2] == "author",
+              components[4] == "view",
+              let view = Int(components[5]) else {
             return nil
         }
         return NovelOfflineCacheEntryKeyComponents(
             threadID: components[1],
-            contentSource: contentSource,
-            authorID: components[5] == "all" ? nil : components[5],
+            authorID: components[3] == "all" ? nil : components[3],
             view: max(1, view)
         )
     }
 
     public static func defaultTitle(document: NovelReaderProjection) -> String {
         L10n.string("reader.page_number_spaced", document.view)
-    }
-
-    private static func resolvedContentSource(
-        authorID: String?,
-        contentSource: ReaderProjectionContentSource?
-    ) -> ReaderProjectionContentSource {
-        if normalizedAuthorID(authorID) != nil {
-            return .authorFilteredPage
-        }
-        return contentSource ?? .fallbackUnfilteredPage
     }
 
     private static func normalizedAuthorID(_ authorID: String?) -> String? {
@@ -142,7 +120,6 @@ public struct NovelOfflineCacheEntry: Codable, Hashable, Identifiable, Sendable 
 
 struct NovelOfflineCacheEntryKeyComponents {
     var threadID: String
-    var contentSource: ReaderProjectionContentSource
     var authorID: String?
     var view: Int
 }
@@ -153,7 +130,6 @@ public struct NovelOfflineCacheWorkRequest: Hashable, Sendable {
     public var threadID: String
     public var view: Int
     public var authorID: String?
-    public var contentSource: ReaderProjectionContentSource
     public var targetImageURLs: [URL]
     public var retainsInlineImages: Bool
 
@@ -161,16 +137,14 @@ public struct NovelOfflineCacheWorkRequest: Hashable, Sendable {
         NovelOfflineCacheEntry.entryKey(
             threadID: threadID,
             view: view,
-            authorID: authorID,
-            contentSource: contentSource
+            authorID: authorID
         )
     }
 
     public var groupKey: String {
         NovelOfflineCacheEntry.groupKey(
             threadID: threadID,
-            authorID: authorID,
-            contentSource: contentSource
+            authorID: authorID
         )
     }
 
@@ -180,7 +154,6 @@ public struct NovelOfflineCacheWorkRequest: Hashable, Sendable {
         threadID: String,
         view: Int,
         authorID: String? = nil,
-        contentSource: ReaderProjectionContentSource = .fallbackUnfilteredPage,
         targetImageURLs: [URL] = [],
         retainsInlineImages: Bool = false
     ) {
@@ -194,7 +167,6 @@ public struct NovelOfflineCacheWorkRequest: Hashable, Sendable {
         if self.authorID?.isEmpty == true {
             self.authorID = nil
         }
-        self.contentSource = self.authorID == nil ? contentSource : .authorFilteredPage
         self.targetImageURLs = Self.uniqueURLs(targetImageURLs)
         self.retainsInlineImages = retainsInlineImages
     }

@@ -15,27 +15,23 @@ public protocol NovelOfflineCacheStoring: OfflineCacheUpdateObserving {
         ownerTitle: String,
         threadID: String,
         view: Int,
-        authorID: String?,
-        contentSource: ReaderProjectionContentSource?
+        authorID: String?
     ) async -> ForumThreadPage?
     func novelOfflineSourcePageSnapshot(
         threadID: String,
         view: Int,
-        authorID: String?,
-        contentSource: ReaderProjectionContentSource?
+        authorID: String?
     ) async -> NovelOfflineSourcePageSnapshot?
     func novelOfflineCacheViewsSnapshot(
         ownerTitle: String,
         threadID: String,
-        authorID: String?,
-        contentSource: ReaderProjectionContentSource?
+        authorID: String?
     ) async -> NovelOfflineCacheViewsSnapshot
     func removeNovelOfflineCacheViews(
         _ views: Set<Int>,
         ownerTitle: String,
         threadID: String,
-        authorID: String?,
-        contentSource: ReaderProjectionContentSource?
+        authorID: String?
     ) async throws
     func enqueueNovelOfflineCacheWork(_ request: NovelOfflineCacheWorkRequest) async throws -> NovelOfflineCacheEnqueueResult
     func enqueueNovelOfflineCacheUpdateWork(_ request: NovelOfflineCacheWorkRequest) async throws -> NovelOfflineCacheEnqueueResult

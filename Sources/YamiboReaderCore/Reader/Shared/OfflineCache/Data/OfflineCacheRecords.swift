@@ -3,7 +3,7 @@ import Foundation
 
 extension OfflineCacheStore {
     private static let novelEntryColumnList = """
-    owner_name, owner_title, entry_key, title, thread_id, view, author_id, content_source, document_json,
+    owner_name, owner_title, entry_key, title, thread_id, view, author_id, document_json,
     source_page_file_name, source_page_schema_version, source_page_fingerprint, byte_count, created_at, updated_at
     """
 
@@ -32,7 +32,6 @@ extension OfflineCacheStore {
             threadID: entry.document.threadID,
             view: entry.document.view,
             authorID: entry.document.resolvedAuthorID,
-            contentSource: entry.document.contentSource,
             targetImageURLs: entry.imageURLs,
             retainsInlineImages: !entry.imageURLs.isEmpty
         )
@@ -71,16 +70,14 @@ extension OfflineCacheStore {
     func novelOfflineCacheViewsSnapshot(
         ownerTitle: String,
         threadID: String,
-        authorID: String?,
-        contentSource: ReaderProjectionContentSource?
+        authorID: String?
     ) async -> NovelOfflineCacheViewsSnapshot {
         try? await recoverQueueStateAfterRestart()
         guard let lookup = novelEntryLookup(
             ownerTitle: ownerTitle,
             threadID: threadID,
             view: 1,
-            authorID: authorID,
-            contentSource: contentSource
+            authorID: authorID
         ) else { return NovelOfflineCacheViewsSnapshot() }
         do {
             return try await database.read { db in
@@ -91,14 +88,13 @@ extension OfflineCacheStore {
                         sql: """
                         SELECT view, source_page_file_name, updated_at
                         FROM offline_cache_novel_entries
-                        WHERE owner_name = ? AND thread_id = ? AND author_id = ? AND content_source = ?
+                        WHERE owner_name = ? AND thread_id = ? AND author_id = ?
                         ORDER BY view ASC
                         """,
                         arguments: [
                             lookup.groupKey,
                             lookup.threadID,
-                            authorID,
-                            lookup.contentSource.rawValue
+                            authorID
                         ]
                     )
                 } else {
@@ -107,13 +103,12 @@ extension OfflineCacheStore {
                         sql: """
                         SELECT view, source_page_file_name, updated_at
                         FROM offline_cache_novel_entries
-                        WHERE owner_name = ? AND thread_id = ? AND author_id IS NULL AND content_source = ?
+                        WHERE owner_name = ? AND thread_id = ? AND author_id IS NULL
                         ORDER BY view ASC
                         """,
                         arguments: [
                             lookup.groupKey,
-                            lookup.threadID,
-                            lookup.contentSource.rawValue
+                            lookup.threadID
                         ]
                     )
                 }
@@ -139,8 +134,7 @@ extension OfflineCacheStore {
                 let cachingViews = Set(works.compactMap { work -> Int? in
                     guard let parsed = NovelOfflineCacheEntry.entryKeyComponents(from: work.entryKey),
                           parsed.threadID == lookup.threadID,
-                          parsed.authorID == lookup.authorID,
-                          parsed.contentSource == lookup.contentSource else {
+                          parsed.authorID == lookup.authorID else {
                         return nil
                     }
                     return parsed.view
@@ -161,16 +155,14 @@ extension OfflineCacheStore {
         _ views: Set<Int>,
         ownerTitle: String,
         threadID: String,
-        authorID: String?,
-        contentSource: ReaderProjectionContentSource?
+        authorID: String?
     ) async throws {
         for view in views {
             guard let lookup = novelEntryLookup(
                 ownerTitle: ownerTitle,
                 threadID: threadID,
                 view: view,
-                authorID: authorID,
-                contentSource: contentSource
+                authorID: authorID
             ) else { continue }
             try await removeNovelOfflineCacheEntry(entryKey: lookup.entryKey)
         }
@@ -259,7 +251,6 @@ extension OfflineCacheStore {
             threadID: request.threadID,
             view: request.view,
             authorID: request.authorID,
-            contentSource: request.contentSource,
             targetImageURLs: request.targetImageURLs,
             retainsInlineImages: request.retainsInlineImages
         )
@@ -332,11 +323,11 @@ extension OfflineCacheStore {
             sql: """
             INSERT OR REPLACE INTO offline_cache_novel_entries
             (
-                owner_name, owner_title, entry_key, title, thread_id, view, author_id, content_source, document_json,
+                owner_name, owner_title, entry_key, title, thread_id, view, author_id, document_json,
                 source_page_file_name, source_page_schema_version, source_page_fingerprint,
                 byte_count, created_at, updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, ?, COALESCE((SELECT created_at FROM offline_cache_novel_entries WHERE entry_key = ?), ?), ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, ?, COALESCE((SELECT created_at FROM offline_cache_novel_entries WHERE entry_key = ?), ?), ?)
             """,
             arguments: [
                 entry.id.ownerKey,
@@ -346,7 +337,6 @@ extension OfflineCacheStore {
                 entry.document.threadID,
                 entry.document.view,
                 entry.document.resolvedAuthorID,
-                entry.document.contentSource.rawValue,
                 documentJSON,
                 documentJSON.utf8.count,
                 entryKey,
@@ -383,11 +373,11 @@ extension OfflineCacheStore {
             sql: """
             INSERT OR REPLACE INTO offline_cache_novel_entries
             (
-                owner_name, owner_title, entry_key, title, thread_id, view, author_id, content_source, document_json,
+                owner_name, owner_title, entry_key, title, thread_id, view, author_id, document_json,
                 source_page_file_name, source_page_schema_version, source_page_fingerprint,
                 byte_count, created_at, updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE((SELECT created_at FROM offline_cache_novel_entries WHERE entry_key = ?), ?), ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE((SELECT created_at FROM offline_cache_novel_entries WHERE entry_key = ?), ?), ?)
             """,
             arguments: [
                 request.groupKey,
@@ -397,7 +387,6 @@ extension OfflineCacheStore {
                 request.threadID,
                 request.view,
                 request.authorID,
-                request.contentSource.rawValue,
                 documentJSON,
                 sourceFileName,
                 NovelOfflineCacheEntry.sourcePageSchemaVersion,
@@ -456,7 +445,6 @@ extension OfflineCacheStore {
         document.threadID = row["thread_id"] as String
         document.view = row["view"] as Int
         document.resolvedAuthorID = row["author_id"] as String?
-        document.contentSource = ReaderProjectionContentSource(rawValue: row["content_source"] as String) ?? document.contentSource
         return NovelOfflineCacheEntry(
             ownerTitle: (row["owner_title"] as String?) ?? novelDisplayOwnerTitle(ownerTitle: "", threadID: document.threadID),
             title: row["title"],
@@ -507,14 +495,13 @@ extension OfflineCacheStore {
 
     static func novelGroupKey(fromEntryKey entryKey: String) -> String? {
         let components = entryKey.components(separatedBy: "_")
-        guard components.count == 8,
+        guard components.count == 6,
               components[0] == "tid",
-              components[2] == "source",
-              components[4] == "author",
-              components[6] == "view" else {
+              components[2] == "author",
+              components[4] == "view" else {
             return nil
         }
-        return components.prefix(6).joined(separator: "_")
+        return components.prefix(4).joined(separator: "_")
     }
 
 }

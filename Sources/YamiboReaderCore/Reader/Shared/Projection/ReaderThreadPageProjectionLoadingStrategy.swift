@@ -10,7 +10,6 @@ protocol ReaderThreadPageProjectionIdentifying: Hashable, Sendable {
     var threadID: String { get }
     var view: Int { get }
     var authorID: String? { get }
-    var contentSource: ReaderProjectionContentSource { get }
 }
 
 protocol ReaderThreadPageProjectionAdapter: Sendable {

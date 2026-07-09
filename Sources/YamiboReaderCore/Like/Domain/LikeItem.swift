@@ -58,19 +58,43 @@ public struct NovelLikeTextEndpoint: Hashable, Sendable {
 /// A text excerpt anchor in the persisted Novel Reading Position coordinate
 /// space: chapter identity, segment identity, and displayed-text Character
 /// offsets, confined to one text segment.
+///
+/// `view` (the forum page the segment lives on) is stored explicitly rather
+/// than recovered from `chapterIdentity`, because most real content is
+/// post-keyed (`NovelReaderProjectionBuilder.chapterIdentity` uses
+/// `"post:<ownerPostID>#chapter:0"` whenever a post has a non-empty
+/// `postID`, which is virtually always), and post-keyed identities embed no
+/// page number at all. Guessing a fallback view (e.g. `1`) makes both
+/// chapter-title lookups and jump-back navigation silently land on the wrong
+/// page for almost every real like.
+///
+/// `resolvedAuthorID` is stored for the same "don't guess a cache key
+/// dimension, record the real one" reason: `NovelReaderProjection` is always
+/// cached keyed by `(threadID, view, authorID)`
+/// (`NovelReaderProjectionStore.projectionCacheKey`), and — because
+/// `NovelReaderProjectionBuilder.build` unconditionally stamps every
+/// projection with a real, non-empty author ID — a lookup that omits it
+/// (defaulting to the unfiltered/"all" namespace) can never match a real
+/// disk-cache entry.
 public struct NovelTextLikeAnchor: Codable, Hashable, Sendable {
     public var chapterIdentity: NovelChapterIdentity
     public var textSegmentIdentity: NovelTextSegmentIdentity
     public var range: NovelCharacterRange
+    public var view: Int
+    public var resolvedAuthorID: String?
 
     public init(
         chapterIdentity: NovelChapterIdentity,
         textSegmentIdentity: NovelTextSegmentIdentity,
-        range: NovelCharacterRange
+        range: NovelCharacterRange,
+        view: Int,
+        resolvedAuthorID: String?
     ) {
         self.chapterIdentity = chapterIdentity
         self.textSegmentIdentity = textSegmentIdentity
         self.range = range
+        self.view = max(1, view)
+        self.resolvedAuthorID = resolvedAuthorID
     }
 
     var startEndpoint: NovelLikeTextEndpoint {
@@ -86,13 +110,25 @@ public struct NovelTextLikeAnchor: Codable, Hashable, Sendable {
 /// rather than a Character range, identified by their image segment identity
 /// ("<chapterIdentity>#image:N", mirroring `NovelTextSegmentIdentity`'s shape).
 /// The source image URL lives on `LikeItem.sourceImageURL`, not here.
+///
+/// `view`/`resolvedAuthorID` are stored for the same reason as on
+/// `NovelTextLikeAnchor` above.
 public struct NovelImageLikeAnchor: Codable, Hashable, Sendable {
     public var chapterIdentity: NovelChapterIdentity
     public var imageSegmentIdentity: String
+    public var view: Int
+    public var resolvedAuthorID: String?
 
-    public init(chapterIdentity: NovelChapterIdentity, imageSegmentIdentity: String) {
+    public init(
+        chapterIdentity: NovelChapterIdentity,
+        imageSegmentIdentity: String,
+        view: Int,
+        resolvedAuthorID: String?
+    ) {
         self.chapterIdentity = chapterIdentity
         self.imageSegmentIdentity = imageSegmentIdentity
+        self.view = max(1, view)
+        self.resolvedAuthorID = resolvedAuthorID
     }
 }
 

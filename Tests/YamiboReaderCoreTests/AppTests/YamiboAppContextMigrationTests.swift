@@ -249,8 +249,7 @@ import YamiboReaderTestSupport
             title: "第一页",
             threadID: novelSourcePage.thread.tid,
             view: 1,
-            authorID: "42",
-            contentSource: .authorFilteredPage
+            authorID: "42"
         ),
         updatedAt: Date(timeIntervalSince1970: 100),
         completesMatchingWork: true,
@@ -269,8 +268,7 @@ import YamiboReaderTestSupport
         ownerTitle: "Legacy Novel",
         threadID: novelSourcePage.thread.tid,
         view: 1,
-        authorID: "42",
-        contentSource: .authorFilteredPage
+        authorID: "42"
     )
     #expect(loadedNovelSourcePage == nil)
 }

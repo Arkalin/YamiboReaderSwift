@@ -53,7 +53,7 @@ struct MangaReaderTestsReaderProjectionBuilder {
         ])
     }
 
-    @Test func builderRejectsNonAuthorFilteredIdentityAndMissingAuthorID() throws {
+    @Test func builderRejectsMissingAuthorID() throws {
         let page = mangaProjectionPage(
             tid: "801",
             title: "第1话",
@@ -64,19 +64,6 @@ struct MangaReaderTestsReaderProjectionBuilder {
             _ = try MangaReaderProjectionBuilder.build(
                 from: page,
                 identity: mangaProjectionIdentity(tid: "801", authorID: nil),
-                sourceFingerprint: "fingerprint-801"
-            )
-        }
-
-        #expect(throws: YamiboError.parsingFailed(context: "漫画作者范围")) {
-            _ = try MangaReaderProjectionBuilder.build(
-                from: page,
-                identity: MangaReaderProjectionSourceIdentity(
-                    tid: "801",
-                    authorID: "42",
-                    contentSource: .fallbackUnfilteredPage,
-                    view: 1
-                ),
                 sourceFingerprint: "fingerprint-801"
             )
         }
@@ -138,7 +125,6 @@ private func mangaProjectionIdentity(
     MangaReaderProjectionSourceIdentity(
         tid: tid,
         authorID: authorID,
-        contentSource: .authorFilteredPage,
         view: view
     )
 }

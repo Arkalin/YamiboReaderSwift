@@ -336,7 +336,6 @@ private func makePagedPlanPages(pageCountsByTID: [(String, Int)]) throws -> [Man
                     sourceIdentity: MangaReaderProjectionSourceIdentity(
                         tid: tid,
                         authorID: nil,
-                        contentSource: .authorFilteredPage,
                         view: 1
                     ),
                     globalIndex: globalIndex,

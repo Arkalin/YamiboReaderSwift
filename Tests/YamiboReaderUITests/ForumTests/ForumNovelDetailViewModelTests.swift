@@ -1306,7 +1306,6 @@ private struct FakeForumNovelDocumentLoader: ForumNovelDocumentLoading {
             view: request.view,
             maxView: 1,
             resolvedAuthorID: request.authorID,
-            contentSource: request.authorID == nil ? .fallbackUnfilteredPage : .authorFilteredPage,
             segments: [
                 .text("第一章\n正文", chapterTitle: "第一章")
             ]

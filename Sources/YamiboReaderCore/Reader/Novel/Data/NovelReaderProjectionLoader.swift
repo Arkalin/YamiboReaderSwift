@@ -78,7 +78,6 @@ private struct NovelProjectionIdentity: ReaderThreadPageProjectionIdentifying {
     var threadID: String
     var view: Int
     var authorID: String?
-    var contentSource: ReaderProjectionContentSource { .authorFilteredPage }
 }
 
 private struct NovelProjectionAdapter: ReaderThreadPageProjectionAdapter {
@@ -104,12 +103,10 @@ private struct NovelProjectionAdapter: ReaderThreadPageProjectionAdapter {
     ) async -> ReaderProjectionOfflineSourcePageLoad<NovelProjectionIdentity, ForumThreadPage>? {
         guard let offlineCacheStore else { return nil }
         let normalizedRequestAuthorID = ReaderThreadPageProjectionLoadingStrategy<Self>.normalizedAuthorID(request.authorID)
-        let contentSource: ReaderProjectionContentSource = normalizedRequestAuthorID == nil ? .fallbackUnfilteredPage : .authorFilteredPage
         guard let sourceSnapshot = await offlineCacheStore.novelOfflineSourcePageSnapshot(
             threadID: request.threadID,
             view: request.view,
-            authorID: normalizedRequestAuthorID,
-            contentSource: contentSource
+            authorID: normalizedRequestAuthorID
         ) else {
             return nil
         }
@@ -140,8 +137,7 @@ private struct NovelProjectionAdapter: ReaderThreadPageProjectionAdapter {
 
     func cachedProjection(for identity: NovelProjectionIdentity) async -> NovelReaderProjection? {
         await projectionStore.loadProjection(
-            for: NovelPageRequest(threadID: identity.threadID, view: identity.view, authorID: identity.authorID),
-            contentSource: .authorFilteredPage
+            for: NovelPageRequest(threadID: identity.threadID, view: identity.view, authorID: identity.authorID)
         )
     }
 
@@ -150,8 +146,7 @@ private struct NovelProjectionAdapter: ReaderThreadPageProjectionAdapter {
         identity: NovelProjectionIdentity,
         fingerprint: String
     ) -> Bool {
-        projection.contentSource == .authorFilteredPage &&
-            projection.projectionSchemaVersion == Self.projectionSchemaVersion &&
+        projection.projectionSchemaVersion == Self.projectionSchemaVersion &&
             projection.projectionSourceFingerprint == fingerprint &&
             !Self.isLegacyCachedProjectionMissingChapterCommentSources(projection)
     }

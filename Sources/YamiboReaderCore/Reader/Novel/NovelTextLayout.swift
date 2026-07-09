@@ -566,7 +566,6 @@ public enum NovelTextLayout {
                 documentView: document.view,
                 maxView: document.maxView,
                 fetchedAt: document.fetchedAt,
-                contentSource: document.contentSource,
                 appearance: settings,
                 layout: layout
             ),
@@ -893,7 +892,7 @@ public enum NovelTextLayout {
             view: document.view,
             ownerPostID: ownerPostID,
             title: annotatedSegment.chapterTitle,
-            authorID: document.contentSource.isAuthorFiltered ? document.resolvedAuthorID : nil
+            authorID: document.resolvedAuthorID
         )
     }
 

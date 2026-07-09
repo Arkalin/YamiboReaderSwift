@@ -10,7 +10,6 @@ public struct NovelReaderPresentation: Hashable, Sendable {
     public var chapters: [NovelReaderChapter]
     public var committedSettings: NovelReaderAppearanceSettings
     public var readingState: NovelReaderReadingState
-    public var currentContentSource: ReaderProjectionContentSource
     public var pageLoadSource: NovelReaderProjectionLoadSource
     public var retainedChapterCount: Int
     public var filteredChapterCandidateCount: Int
@@ -25,7 +24,6 @@ public struct NovelReaderPresentation: Hashable, Sendable {
         chapters: [NovelReaderChapter] = [],
         committedSettings: NovelReaderAppearanceSettings,
         readingState: NovelReaderReadingState,
-        currentContentSource: ReaderProjectionContentSource,
         pageLoadSource: NovelReaderProjectionLoadSource = .online,
         retainedChapterCount: Int,
         filteredChapterCandidateCount: Int,
@@ -47,7 +45,6 @@ public struct NovelReaderPresentation: Hashable, Sendable {
         self.chapters = chapters
         self.committedSettings = committedSettings
         self.readingState = readingState
-        self.currentContentSource = currentContentSource
         self.pageLoadSource = pageLoadSource
         self.retainedChapterCount = max(0, retainedChapterCount)
         self.filteredChapterCandidateCount = max(0, filteredChapterCandidateCount)

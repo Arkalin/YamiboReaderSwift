@@ -38,8 +38,7 @@ public enum NovelReaderProjectionBuilder {
         let parsed = try parseContent(
             from: page,
             threadID: request.threadID,
-            view: request.view,
-            contentSource: .authorFilteredPage
+            view: request.view
         )
         guard !parsed.segments.isEmpty else {
             throw YamiboError.parsingFailed(context: L10n.string("context.novel_body"))
@@ -53,7 +52,6 @@ public enum NovelReaderProjectionBuilder {
                 page.pageNavigation?.totalPages ?? page.pageNavigation?.currentPage ?? request.view
             ),
             resolvedAuthorID: normalizedAuthorID,
-            contentSource: .authorFilteredPage,
             retainedChapterCount: parsed.retainedChapterCount,
             filteredChapterCandidateCount: parsed.filteredChapterCandidateCount,
             segments: parsed.segments,
@@ -67,8 +65,7 @@ public enum NovelReaderProjectionBuilder {
     private static func parseContent(
         from page: ForumThreadPage,
         threadID: String,
-        view: Int,
-        contentSource: ReaderProjectionContentSource
+        view: Int
     ) throws -> NovelReaderParsedContent {
         var result = NovelReaderParsedContent()
         var textOccurrenceByChapter: [NovelChapterIdentity: Int] = [:]
@@ -82,14 +79,13 @@ public enum NovelReaderProjectionBuilder {
                 ownerPostID: projected.ownerPostID,
                 chapterTitle: projected.chapterTitle,
                 threadID: threadID,
-                view: view,
-                contentSource: contentSource
+                view: view
             )
 
             result.segments.append(contentsOf: projected.segments)
             let source = NovelReaderSegmentSource(
                 ownerPostID: projected.ownerPostID,
-                isAuthorReplyToOther: projected.isReplyToOther && contentSource.isAuthorFiltered
+                isAuthorReplyToOther: projected.isReplyToOther
             )
             result.segmentSources.append(contentsOf: Array(repeating: source, count: projected.segments.count))
             result.segmentSemantics.append(
@@ -161,15 +157,14 @@ public enum NovelReaderProjectionBuilder {
         ownerPostID: String?,
         chapterTitle: String?,
         threadID: String,
-        view: Int,
-        contentSource: ReaderProjectionContentSource
+        view: Int
     ) -> NovelChapterIdentity? {
         guard chapterTitle != nil else { return nil }
         if let ownerPostID, !ownerPostID.isEmpty {
             return NovelChapterIdentity(rawValue: "post:\(ownerPostID)#chapter:0")
         }
         return NovelChapterIdentity(
-            rawValue: "thread:\(threadID)#view:\(max(1, view))#source:\(contentSource.rawValue)#chapter:0"
+            rawValue: "thread:\(threadID)#view:\(max(1, view))#chapter:0"
         )
     }
 

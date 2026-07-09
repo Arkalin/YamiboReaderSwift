@@ -9,16 +9,34 @@ import YamiboReaderCore
 /// reader view, or since evicted) simply yields no chapter info; the card
 /// falls back to showing just the excerpt/image with no chapter caption.
 enum LikeChapterInfoResolver {
-    /// The forum page (`NovelPageRequest.view`) an anchor's segment lives on,
-    /// used to fetch the right cached projection.
-    static func documentView(for anchor: LikeAnchorPayload) -> Int {
+    /// A `NovelReaderProjection` cache lookup is keyed by more than just the
+    /// forum page: `NovelReaderProjectionStore` also keys on `authorID`, and
+    /// every real projection is cached under a real, non-empty author id
+    /// (see `NovelReaderProjectionBuilder.build`) — a lookup that omits it
+    /// resolves to the unfiltered/"all" namespace, which never has a real
+    /// entry, and is not merely a "cache miss": the underlying projection was
+    /// never written under that key. `NovelTextLikeAnchor`/
+    /// `NovelImageLikeAnchor` capture both dimensions at Like time so this
+    /// can round-trip the exact key rather than guessing either of them.
+    private struct NovelCacheContext: Hashable {
+        var view: Int
+        var resolvedAuthorID: String?
+    }
+
+    private static func cacheContext(for anchor: LikeAnchorPayload) -> NovelCacheContext? {
         switch anchor {
         case let .novelText(textAnchor):
-            return textAnchor.chapterIdentity.embeddedDocumentView ?? 1
+            return NovelCacheContext(
+                view: textAnchor.view,
+                resolvedAuthorID: textAnchor.resolvedAuthorID
+            )
         case let .novelImage(imageAnchor):
-            return imageAnchor.chapterIdentity.embeddedDocumentView ?? 1
+            return NovelCacheContext(
+                view: imageAnchor.view,
+                resolvedAuthorID: imageAnchor.resolvedAuthorID
+            )
         case .mangaImage:
-            return 1
+            return nil
         }
     }
 
@@ -47,26 +65,29 @@ enum LikeChapterInfoResolver {
     }
 
     /// Resolves chapter titles for a batch of novel Like items, caching one
-    /// projection load per distinct `view` so a list of many items on the
-    /// same forum page doesn't re-read the disk cache per item.
+    /// projection load per distinct `(view, authorID)` so a list of many
+    /// items on the same forum page/filter context doesn't re-read the disk
+    /// cache per item.
     static func novelChapterInfo(
         for items: [LikeItem],
         threadID: String,
         cacheStore: NovelReaderProjectionStore
     ) async -> [String: String] {
-        var projectionsByView: [Int: NovelReaderProjection] = [:]
-        var attemptedViews: Set<Int> = []
+        var projectionsByContext: [NovelCacheContext: NovelReaderProjection] = [:]
+        var attemptedContexts: Set<NovelCacheContext> = []
         var result: [String: String] = [:]
 
         for item in items {
-            let view = documentView(for: item.anchor)
-            if !attemptedViews.contains(view) {
-                attemptedViews.insert(view)
-                if let projection = await cacheStore.loadProjection(for: NovelPageRequest(threadID: threadID, view: view)) {
-                    projectionsByView[view] = projection
+            guard let context = cacheContext(for: item.anchor) else { continue }
+            if !attemptedContexts.contains(context) {
+                attemptedContexts.insert(context)
+                if let projection = await cacheStore.loadProjection(
+                    for: NovelPageRequest(threadID: threadID, view: context.view, authorID: context.resolvedAuthorID)
+                ) {
+                    projectionsByContext[context] = projection
                 }
             }
-            if let title = novelChapterTitle(for: item.anchor, in: projectionsByView[view]) {
+            if let title = novelChapterTitle(for: item.anchor, in: projectionsByContext[context]) {
                 result[item.id] = title
             }
         }

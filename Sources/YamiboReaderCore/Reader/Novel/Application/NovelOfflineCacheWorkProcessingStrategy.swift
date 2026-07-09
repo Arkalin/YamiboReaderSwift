@@ -69,7 +69,6 @@ struct NovelOfflineCacheWorkProcessingStrategy: OfflineCacheWorkProcessingStrate
             threadID: components.threadID,
             view: components.view,
             authorID: components.authorID,
-            contentSource: components.contentSource,
             targetImageURLs: work.targetImageURLs,
             retainsInlineImages: work.retainsInlineImages
         )

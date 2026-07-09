@@ -14,8 +14,7 @@ struct NovelReaderRepositoryCacheOperationAdapter: NovelReaderCacheOperationRepo
     func cachedViews(for context: NovelReaderCacheOperationContext) async -> Set<Int> {
         await repository.cachedViews(
             for: context.threadID,
-            authorID: context.authorID,
-            contentSource: context.contentSource
+            authorID: context.authorID
         )
     }
 
@@ -26,8 +25,7 @@ struct NovelReaderRepositoryCacheOperationAdapter: NovelReaderCacheOperationRepo
         try await repository.deleteCachedViews(
             views,
             for: context.threadID,
-            authorID: context.authorID,
-            contentSource: context.contentSource
+            authorID: context.authorID
         )
     }
 
@@ -40,7 +38,6 @@ struct NovelReaderRepositoryCacheOperationAdapter: NovelReaderCacheOperationRepo
             views,
             for: context.threadID,
             authorID: context.authorID,
-            contentSource: context.contentSource,
             progress: progress
         )
     }
@@ -78,8 +75,7 @@ struct NovelOfflineStoreReaderCacheOperationAdapter: NovelReaderCacheOperationRe
         await store.novelOfflineCacheViewsSnapshot(
             ownerTitle: context.ownerTitle,
             threadID: context.threadID,
-            authorID: context.authorID,
-            contentSource: context.contentSource
+            authorID: context.authorID
         )
     }
 
@@ -95,8 +91,7 @@ struct NovelOfflineStoreReaderCacheOperationAdapter: NovelReaderCacheOperationRe
             views,
             ownerTitle: context.ownerTitle,
             threadID: context.threadID,
-            authorID: context.authorID,
-            contentSource: context.contentSource
+            authorID: context.authorID
         )
     }
 
@@ -133,7 +128,6 @@ struct NovelOfflineStoreReaderCacheOperationAdapter: NovelReaderCacheOperationRe
                     threadID: context.threadID,
                     view: view,
                     authorID: context.authorID,
-                    contentSource: context.contentSource ?? .fallbackUnfilteredPage,
                     retainsInlineImages: settings.retainsInlineImages
                 )
                 let result = try await (isUpdate

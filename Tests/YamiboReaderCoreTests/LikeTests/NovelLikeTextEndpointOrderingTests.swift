@@ -36,9 +36,9 @@ import Testing
 @Test func novelLikeTextEndpointOrderingMergesTouchingAndOverlappingRanges() {
     let chapter = NovelChapterIdentity(rawValue: "chapter-1")
     let segment = NovelTextSegmentIdentity(rawValue: "chapter-1#text:0")
-    let first = NovelTextLikeAnchor(chapterIdentity: chapter, textSegmentIdentity: segment, range: NovelCharacterRange(location: 0, length: 10))
-    let touching = NovelTextLikeAnchor(chapterIdentity: chapter, textSegmentIdentity: segment, range: NovelCharacterRange(location: 10, length: 5))
-    let overlapping = NovelTextLikeAnchor(chapterIdentity: chapter, textSegmentIdentity: segment, range: NovelCharacterRange(location: 5, length: 10))
+    let first = NovelTextLikeAnchor(chapterIdentity: chapter, textSegmentIdentity: segment, range: NovelCharacterRange(location: 0, length: 10), view: 1, resolvedAuthorID: nil)
+    let touching = NovelTextLikeAnchor(chapterIdentity: chapter, textSegmentIdentity: segment, range: NovelCharacterRange(location: 10, length: 5), view: 1, resolvedAuthorID: nil)
+    let overlapping = NovelTextLikeAnchor(chapterIdentity: chapter, textSegmentIdentity: segment, range: NovelCharacterRange(location: 5, length: 10), view: 1, resolvedAuthorID: nil)
 
     #expect(NovelLikeTextEndpointOrdering.overlapsOrTouches(first, touching))
     #expect(NovelLikeTextEndpointOrdering.overlapsOrTouches(touching, first))
@@ -48,8 +48,8 @@ import Testing
 @Test func novelLikeTextEndpointOrderingDoesNotMergeGappedRanges() {
     let chapter = NovelChapterIdentity(rawValue: "chapter-1")
     let segment = NovelTextSegmentIdentity(rawValue: "chapter-1#text:0")
-    let first = NovelTextLikeAnchor(chapterIdentity: chapter, textSegmentIdentity: segment, range: NovelCharacterRange(location: 0, length: 5))
-    let gapped = NovelTextLikeAnchor(chapterIdentity: chapter, textSegmentIdentity: segment, range: NovelCharacterRange(location: 10, length: 5))
+    let first = NovelTextLikeAnchor(chapterIdentity: chapter, textSegmentIdentity: segment, range: NovelCharacterRange(location: 0, length: 5), view: 1, resolvedAuthorID: nil)
+    let gapped = NovelTextLikeAnchor(chapterIdentity: chapter, textSegmentIdentity: segment, range: NovelCharacterRange(location: 10, length: 5), view: 1, resolvedAuthorID: nil)
 
     #expect(!NovelLikeTextEndpointOrdering.overlapsOrTouches(first, gapped))
 }
@@ -58,12 +58,16 @@ import Testing
     let first = NovelTextLikeAnchor(
         chapterIdentity: NovelChapterIdentity(rawValue: "chapter-1"),
         textSegmentIdentity: NovelTextSegmentIdentity(rawValue: "chapter-1#text:0"),
-        range: NovelCharacterRange(location: 0, length: 5)
+        range: NovelCharacterRange(location: 0, length: 5),
+        view: 1,
+        resolvedAuthorID: nil
     )
     let second = NovelTextLikeAnchor(
         chapterIdentity: NovelChapterIdentity(rawValue: "chapter-2"),
         textSegmentIdentity: NovelTextSegmentIdentity(rawValue: "chapter-2#text:0"),
-        range: NovelCharacterRange(location: 0, length: 5)
+        range: NovelCharacterRange(location: 0, length: 5),
+        view: 1,
+        resolvedAuthorID: nil
     )
 
     #expect(!NovelLikeTextEndpointOrdering.overlapsOrTouches(first, second))
