@@ -11,6 +11,13 @@ struct LocalFavoriteGridContent: View {
     @ObservedObject var selection: LocalFavoriteBrowseSession
     let routes: LocalFavoritesRoutes
     let isStaggered: Bool
+    /// Explicit source of truth for this instance's scope (root overview vs.
+    /// the opened collection) — never read `organizer.derived` ambiently
+    /// here, since root and collection-detail content can be mounted
+    /// simultaneously during an interactive pop. See
+    /// `FavoriteLibraryOrganizer.rootDerived`.
+    let derived: LocalFavoriteDerivedState
+    let isCollectionDetail: Bool
     let onOpen: (FavoriteItem, FavoriteLaunchMode) async -> Void
 
     private let gridColumns = [
@@ -21,7 +28,12 @@ struct LocalFavoriteGridContent: View {
         GeometryReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 12) {
-                    LocalFavoriteBrowseChrome(organizer: organizer, routes: routes)
+                    LocalFavoriteBrowseChrome(
+                        organizer: organizer,
+                        routes: routes,
+                        cardsCount: derived.cards.count,
+                        showsCategoryTabBar: !isCollectionDetail
+                    )
                     if isStaggered {
                         LocalFavoriteStaggeredCards(
                             entries: gridEntries,
@@ -29,6 +41,7 @@ struct LocalFavoriteGridContent: View {
                             organizer: organizer,
                             selection: selection,
                             routes: routes,
+                            derived: derived,
                             actions: cardActions
                         )
                         .padding(.horizontal)
@@ -40,6 +53,7 @@ struct LocalFavoriteGridContent: View {
                                     organizer: organizer,
                                     selection: selection,
                                     routes: routes,
+                                    derived: derived,
                                     actions: cardActions
                                 )
                             }
@@ -53,7 +67,7 @@ struct LocalFavoriteGridContent: View {
     }
 
     private var gridEntries: [FavoriteMixedEntry] {
-        organizer.derived.mixedEntries
+        derived.mixedEntries
     }
 
     /// Two waterfall columns on iPhone widths, more as the width grows.
@@ -72,6 +86,7 @@ struct LocalFavoriteGridEntryCell: View {
     @ObservedObject var organizer: FavoriteLibraryOrganizer
     @ObservedObject var selection: LocalFavoriteBrowseSession
     let routes: LocalFavoritesRoutes
+    let derived: LocalFavoriteDerivedState
     let actions: LocalFavoriteCardActions
 
     var body: some View {
@@ -79,11 +94,11 @@ struct LocalFavoriteGridEntryCell: View {
         case let .collection(collection):
             LocalFavoriteCollectionGridCard(
                 collection: collection,
-                itemCount: organizer.derived.collectionEntryCounts[collection.id] ?? 0,
+                itemCount: derived.collectionEntryCounts[collection.id] ?? 0,
                 categories: organizer.categories,
                 isSelectionMode: selection.isSelectionMode,
                 isSelected: selection.selectedCollectionIDs.contains(collection.id),
-                previewTiles: organizer.derived.collectionPreviewTiles[collection.id] ?? [],
+                previewTiles: derived.collectionPreviewTiles[collection.id] ?? [],
                 onOpen: { organizer.openCollection(id: collection.id) },
                 onToggleSelection: { organizer.toggleCollectionSelection(id: collection.id) },
                 onEdit: { routes.sheet = .collectionEditor(LocalFavoriteCollectionDraft(collection: collection)) },
@@ -112,6 +127,7 @@ struct LocalFavoriteStaggeredCards: View {
     @ObservedObject var organizer: FavoriteLibraryOrganizer
     @ObservedObject var selection: LocalFavoriteBrowseSession
     let routes: LocalFavoritesRoutes
+    let derived: LocalFavoriteDerivedState
     let actions: LocalFavoriteCardActions
 
     var body: some View {
@@ -124,6 +140,7 @@ struct LocalFavoriteStaggeredCards: View {
                             organizer: organizer,
                             selection: selection,
                             routes: routes,
+                            derived: derived,
                             actions: actions
                         )
                     }

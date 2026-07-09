@@ -13,16 +13,23 @@ import YamiboReaderCore
 struct LocalFavoriteBrowseChrome: View {
     @ObservedObject var organizer: FavoriteLibraryOrganizer
     let routes: LocalFavoritesRoutes
+    let cardsCount: Int
+    /// Passed explicitly by the caller (root vs. collection detail) rather
+    /// than read from `organizer.selectedCollection`: both screens' chrome
+    /// can be mounted at once during an interactive pop, and at that point
+    /// they'd otherwise both read the same (stale) shared value. See
+    /// `FavoriteLibraryOrganizer.rootDerived`.
+    let showsCategoryTabBar: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            if organizer.selectedCollection == nil {
+            if showsCategoryTabBar {
                 LocalFavoriteCategoryTabBar(organizer: organizer, routes: routes)
             }
             if organizer.filter.hasActiveFilters {
                 LocalFavoriteActiveFilterStrip(organizer: organizer)
             }
-            LocalFavoriteViewOptionChips(organizer: organizer, routes: routes)
+            LocalFavoriteViewOptionChips(organizer: organizer, routes: routes, cardsCount: cardsCount)
         }
     }
 }

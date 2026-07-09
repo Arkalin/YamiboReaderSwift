@@ -502,6 +502,67 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
         XCTAssertFalse(dissolvedItem?.locations.contains { $0.collectionID == firstCollection.id } == true)
     }
 
+    /// `rootDerived` must keep reflecting the whole category (cards *and*
+    /// collections) even while a collection is open, so the root favorites
+    /// screen — which `NavigationStack` keeps mounted underneath the pushed
+    /// collection detail page — never renders the same narrowed content as
+    /// the detail page during an interactive edge-swipe-back gesture.
+    func testRootDerivedStaysUnscopedWhileCollectionIsOpen() async throws {
+        let suiteName = YamiboTestDefaults.suiteName(prefix: "local-favorites-root-derived")
+        _ = try YamiboTestDefaults.make(suiteName: suiteName)
+        let localFavoriteLibraryStore = FavoriteLibraryStore(
+            defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
+            key: "local-favorites"
+        )
+        let organizer = try makeOrganizer(libraryStore: localFavoriteLibraryStore)
+        await organizer.load()
+
+        let createdCategory = await organizer.createCategory(name: "分类A")
+        let category = try XCTUnwrap(createdCategory)
+        let createdCollection = await organizer.createCollection(name: "合集A", color: .blue)
+        let collection = try XCTUnwrap(createdCollection)
+
+        let collectionTarget = FavoriteContentTarget(kind: .normalThread, threadID: "920")
+        let rootTarget = FavoriteContentTarget(kind: .normalThread, threadID: "921")
+        var document = try await localFavoriteLibraryStore.load()
+        document.addItem(try FavoriteItem(
+            target: collectionTarget,
+            title: "合集内主题",
+            locations: [
+                .category(category.id),
+                .collection(categoryID: category.id, collectionID: collection.id)
+            ]
+        ))
+        document.addItem(try FavoriteItem(
+            target: rootTarget,
+            title: "分类根主题",
+            locations: [.category(category.id)]
+        ))
+        try await localFavoriteLibraryStore.save(document)
+        await organizer.reload()
+
+        // `createCollection` above already opened the new collection; return
+        // to the root scope so the "before opening" assertions below reflect
+        // how a user would actually land on this screen.
+        organizer.closeCollection()
+
+        // Before opening the collection, `rootDerived` mirrors `derived`.
+        XCTAssertEqual(organizer.rootDerived.cards.map(\.item.target), organizer.derived.cards.map(\.item.target))
+        XCTAssertTrue(organizer.rootDerived.mixedEntries.contains { if case let .collection(c) = $0 { c.id == collection.id } else { false } })
+
+        organizer.openCollection(id: collection.id)
+
+        // `derived` (the pushed detail page's scope) narrows to the
+        // collection's own member and drops sibling collections.
+        XCTAssertEqual(organizer.derived.cards.map(\.item.target), [collectionTarget])
+        XCTAssertFalse(organizer.derived.mixedEntries.contains { if case .collection = $0 { true } else { false } })
+
+        // `rootDerived` (the root page's scope) must still show everything,
+        // unaffected by the collection being open.
+        XCTAssertEqual(Set(organizer.rootDerived.cards.map(\.item.target)), [collectionTarget, rootTarget])
+        XCTAssertTrue(organizer.rootDerived.mixedEntries.contains { if case let .collection(c) = $0 { c.id == collection.id } else { false } })
+    }
+
     func testCategoryManagementUpdatesLibraryCountsAndSelectedCategorySetting() async throws {
         let suiteName = YamiboTestDefaults.suiteName(prefix: "local-favorites-categories")
         _ = try YamiboTestDefaults.make(suiteName: suiteName)

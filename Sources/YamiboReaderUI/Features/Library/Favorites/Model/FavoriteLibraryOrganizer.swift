@@ -48,6 +48,15 @@ final class FavoriteLibraryOrganizer: ObservableObject {
         }
     }
     @Published private(set) var derived = LocalFavoriteDerivedState()
+    /// `derived` scoped as if no collection were open, regardless of
+    /// `selectedCollectionID`. The root favorites screen renders from this
+    /// (never from `derived`) because `NavigationStack` keeps the root view
+    /// mounted underneath a pushed collection detail page, and its stock
+    /// interactive edge-swipe-back gesture reveals that root view mid-drag
+    /// while `selectedCollectionID` is still set — reading the same
+    /// collection-scoped `derived` there would show the collection page
+    /// duplicated behind itself. See `LocalFavoritesOrganizationView`.
+    @Published private(set) var rootDerived = LocalFavoriteDerivedState()
     @Published private(set) var display = FavoriteLibraryDisplayState()
     @Published var errorMessage: String?
     /// Short-lived toast feedback (single-item sync results and similar).
@@ -736,6 +745,18 @@ final class FavoriteLibraryOrganizer: ObservableObject {
                 contentCoverURLsByTargetID: contentCoverURLsByTargetID
             )
         )
+        rootDerived = selectedCollectionID == nil
+            ? derived
+            : LocalFavoriteLibraryDerivation.derive(
+                LocalFavoriteLibraryDerivation.Inputs(
+                    document: document,
+                    selectedCategoryID: selectedCategoryID,
+                    selectedCollectionID: nil,
+                    filter: filter,
+                    readingProgress: readingProgress,
+                    contentCoverURLsByTargetID: contentCoverURLsByTargetID
+                )
+            )
         selection.prune(
             validFavoriteIDs: Set(document.items.map(\.id)),
             validCollectionIDs: Set(document.collections.map(\.id))

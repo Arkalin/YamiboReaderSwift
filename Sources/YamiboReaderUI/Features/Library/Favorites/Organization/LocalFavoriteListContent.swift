@@ -10,32 +10,44 @@ struct LocalFavoriteListContent: View {
     @ObservedObject var selection: LocalFavoriteBrowseSession
     let routes: LocalFavoritesRoutes
     let showsCover: Bool
+    /// Explicit source of truth for this instance's scope (root overview vs.
+    /// the opened collection) — never read `organizer.derived` ambiently
+    /// here, since root and collection-detail content can be mounted
+    /// simultaneously during an interactive pop. See
+    /// `FavoriteLibraryOrganizer.rootDerived`.
+    let derived: LocalFavoriteDerivedState
+    let isCollectionDetail: Bool
     let onOpen: (FavoriteItem, FavoriteLaunchMode) async -> Void
 
     var body: some View {
         List {
             Section {
-                LocalFavoriteBrowseChrome(organizer: organizer, routes: routes)
-                    .listRowInsets(EdgeInsets())
-                    .listRowBackground(Color.clear)
-                    // The chrome is one plain content block, not a list row:
-                    // suppress the row/section separator lines List draws
-                    // around it by default (grid mode has no such line).
-                    .listRowSeparator(.hidden)
-                    .listSectionSeparator(.hidden)
+                LocalFavoriteBrowseChrome(
+                    organizer: organizer,
+                    routes: routes,
+                    cardsCount: derived.cards.count,
+                    showsCategoryTabBar: !isCollectionDetail
+                )
+                .listRowInsets(EdgeInsets())
+                .listRowBackground(Color.clear)
+                // The chrome is one plain content block, not a list row:
+                // suppress the row/section separator lines List draws
+                // around it by default (grid mode has no such line).
+                .listRowSeparator(.hidden)
+                .listSectionSeparator(.hidden)
             }
             Section {
-                ForEach(organizer.derived.mixedEntries) { entry in
+                ForEach(derived.mixedEntries) { entry in
                     switch entry {
                     case let .collection(collection):
                         LocalFavoriteCollectionRow(
                             collection: collection,
-                            itemCount: organizer.derived.collectionEntryCounts[collection.id] ?? 0,
+                            itemCount: derived.collectionEntryCounts[collection.id] ?? 0,
                             categories: organizer.categories,
                             showsCover: showsCover,
                             isSelectionMode: selection.isSelectionMode,
                             isSelected: selection.selectedCollectionIDs.contains(collection.id),
-                            previewTiles: organizer.derived.collectionPreviewTiles[collection.id] ?? [],
+                            previewTiles: derived.collectionPreviewTiles[collection.id] ?? [],
                             onOpen: { organizer.openCollection(id: collection.id) },
                             onToggleSelection: { organizer.toggleCollectionSelection(id: collection.id) },
                             onEdit: { routes.sheet = .collectionEditor(LocalFavoriteCollectionDraft(collection: collection)) },
