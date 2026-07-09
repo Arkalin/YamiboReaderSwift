@@ -195,18 +195,20 @@ public struct MangaReaderView: View {
         }
         .sheet(isPresented: $isLikesPresented) {
             if let likeSheetContext = model.likeSheetContext {
-                LikeWorkItemsView(
-                    work: likeSheetContext.workKey,
-                    workTitle: context.displayTitle,
-                    like: likeSheetContext.like,
-                    onOpenAnchor: { anchor in
-                        isLikesPresented = false
-                        Task {
-                            await openLikedAnchor(anchor)
-                        }
-                    },
-                    onDismiss: { isLikesPresented = false }
-                )
+                NavigationStack {
+                    LikeWorkItemsView(
+                        work: likeSheetContext.workKey,
+                        workTitle: context.displayTitle,
+                        like: likeSheetContext.like,
+                        onOpenAnchor: { anchor in
+                            isLikesPresented = false
+                            Task {
+                                await openLikedAnchor(anchor)
+                            }
+                        },
+                        onDismiss: { isLikesPresented = false }
+                    )
+                }
             }
         }
         .confirmationDialog(

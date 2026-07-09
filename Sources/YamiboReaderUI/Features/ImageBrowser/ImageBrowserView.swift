@@ -4,10 +4,33 @@ import YamiboReaderCore
 #if os(iOS)
 import UIKit
 
-struct ImageBrowserItem: Identifiable, Equatable {
+struct ImageBrowserItem: Identifiable {
     let id: String
     let source: YamiboImageSource
     let title: String
+    /// Optional local-bytes-first loader (e.g. Like Library's user-retained
+    /// image store). The page view tries this before falling back to the
+    /// network image pipeline. Existing call sites omit it and behave
+    /// exactly as before.
+    let localDataProvider: (@Sendable () async -> Data?)?
+
+    init(
+        id: String,
+        source: YamiboImageSource,
+        title: String,
+        localDataProvider: (@Sendable () async -> Data?)? = nil
+    ) {
+        self.id = id
+        self.source = source
+        self.title = title
+        self.localDataProvider = localDataProvider
+    }
+}
+
+extension ImageBrowserItem: Equatable {
+    static func == (lhs: ImageBrowserItem, rhs: ImageBrowserItem) -> Bool {
+        lhs.id == rhs.id && lhs.source == rhs.source && lhs.title == rhs.title
+    }
 }
 
 enum ImageBrowserMode: Equatable {
@@ -19,6 +42,7 @@ struct ImageBrowserView: View {
     let items: [ImageBrowserItem]
     let mode: ImageBrowserMode
     let coverActionsProvider: ImageBrowserCoverActionsProvider?
+    let onJumpToOriginal: (() -> Void)?
     let onDismiss: () -> Void
 
     @State private var selectedItemID: String
@@ -34,11 +58,13 @@ struct ImageBrowserView: View {
         initialItemID: String?,
         mode: ImageBrowserMode,
         coverActionsProvider: ImageBrowserCoverActionsProvider? = nil,
+        onJumpToOriginal: (() -> Void)? = nil,
         onDismiss: @escaping () -> Void
     ) {
         self.items = items
         self.mode = mode
         self.coverActionsProvider = coverActionsProvider
+        self.onJumpToOriginal = onJumpToOriginal
         self.onDismiss = onDismiss
         _selectedItemID = State(initialValue: Self.initialSelection(in: items, initialItemID: initialItemID))
     }
@@ -87,6 +113,7 @@ struct ImageBrowserView: View {
                         await performCoverAction(action)
                     }
                 },
+                onJumpToOriginal: onJumpToOriginal,
                 onDismiss: onDismiss
             )
         }
@@ -294,6 +321,12 @@ private struct ImageBrowserPageView: View {
 
     private func load() async {
         guard image == nil else { return }
+        if let localDataProvider = item.localDataProvider,
+           let localData = await localDataProvider(),
+           let localImage = UIImage(data: localData) {
+            image = localImage
+            return
+        }
         do {
             image = try await YamiboUIImagePipeline.shared.image(for: item.source)
         } catch {
@@ -334,6 +367,7 @@ private struct ImageBrowserToolbar: View {
     let saveImage: () -> Void
     let coverActions: [ImageBrowserCoverAction]
     let performCoverAction: (ImageBrowserCoverAction) -> Void
+    let onJumpToOriginal: (() -> Void)?
     let onDismiss: () -> Void
 
     var body: some View {
@@ -368,6 +402,13 @@ private struct ImageBrowserToolbar: View {
                             } label: {
                                 Label(action.title, systemImage: action.systemImage)
                             }
+                        }
+                    }
+
+                    if let onJumpToOriginal {
+                        Divider()
+                        Button(action: onJumpToOriginal) {
+                            Label(L10n.string("likes.jump_to_original"), systemImage: "book.closed")
                         }
                     }
                 } label: {
