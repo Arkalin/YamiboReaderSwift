@@ -916,9 +916,9 @@ public struct NovelReaderView: View {
         showingLikes = false
         switch payload {
         case let .novelText(anchor):
-            Task { await model.restoreResumePoint(resumePoint(forTextLikeAnchor: anchor)) }
+            Task { await model.jumpToLikeAnchor(resumePoint(forTextLikeAnchor: anchor)) }
         case let .novelImage(anchor):
-            Task { await model.restoreResumePoint(resumePoint(forImageLikeAnchor: anchor)) }
+            Task { await model.jumpToLikeAnchor(resumePoint(forImageLikeAnchor: anchor)) }
         case .mangaImage:
             break
         }

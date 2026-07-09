@@ -619,13 +619,14 @@ public final class NovelReaderViewModel: ObservableObject {
               presentation.surfaces.indices.contains(surfaceIndex) else {
             return
         }
+        let oldSurfaceIndex = selectedSurfaceIndex
         if let state = readingWorkflow?.selectSurface(
             presentation.surfaces[surfaceIndex].identity,
             presentationRevision: presentation.revision
         ) {
             syncFromWorkflowState(state)
             if recordsLinearReading {
-                navigation.recordLinearReading()
+                navigation.recordLinearReading(direction: surfaceIndex >= oldSurfaceIndex ? .forward : .backward)
             }
         }
         scheduleProgressSync()
@@ -654,7 +655,7 @@ public final class NovelReaderViewModel: ObservableObject {
         let oldSurfaceIndex = selectedSurfaceIndex
         syncFromWorkflowState(state)
         if oldSurfaceIndex != selectedSurfaceIndex {
-            navigation.recordLinearReading()
+            navigation.recordLinearReading(direction: selectedSurfaceIndex > oldSurfaceIndex ? .forward : .backward)
         }
         scheduleProgressSync()
 
@@ -681,7 +682,7 @@ public final class NovelReaderViewModel: ObservableObject {
         ) {
             syncFromWorkflowState(state)
             if oldSurfaceIndex != selectedSurfaceIndex {
-                navigation.recordLinearReading()
+                navigation.recordLinearReading(direction: selectedSurfaceIndex > oldSurfaceIndex ? .forward : .backward)
             }
             let newResumePoint = currentNovelResumePoint
             let didChangePosition = oldSurfaceIndex != selectedSurfaceIndex ||
@@ -724,10 +725,11 @@ public final class NovelReaderViewModel: ObservableObject {
             return
         }
 
+        let direction: ReaderNavigationLinearReadingDirection = delta >= 0 ? .forward : .backward
         syncFromWorkflowState(result.state)
         switch result.request {
         case nil:
-            navigation.recordLinearReading()
+            navigation.recordLinearReading(direction: direction)
             scheduleProgressSync()
             Task {
                 await prefetchIfNeeded(for: selectedSurfaceIndex)
@@ -741,7 +743,7 @@ public final class NovelReaderViewModel: ObservableObject {
                 showsNovelReaderProjectionNavigationOverlay: true
             )
             if didLoad {
-                navigation.recordLinearReading()
+                navigation.recordLinearReading(direction: direction)
             }
         case let .promotePrefetched(preferredSurfaceOrdinal, resumePoint):
             let didPromote = await promotePrefetchedDocument(
@@ -750,7 +752,7 @@ public final class NovelReaderViewModel: ObservableObject {
                 showsNovelReaderProjectionNavigationOverlay: true
             )
             if didPromote {
-                navigation.recordLinearReading()
+                navigation.recordLinearReading(direction: direction)
             }
         }
     }
@@ -928,9 +930,11 @@ public final class NovelReaderViewModel: ObservableObject {
         currentStableResumePoint = readingWorkflow?.captureNovelReadingPosition()
     }
 
-    // Internal (not private): the Like sheet's `onOpenAnchor` jump path in
-    // `NovelReaderView` restores a synthesized resume point from a liked
-    // anchor while the reader for that work is already open.
+    // Internal (not private): the raw resume-point jump primitive, also used
+    // by the navigation coordinator to restore back/forward history anchors.
+    // Does not itself record navigation history — callers that represent a
+    // user-initiated nonlinear jump (see `jumpToLikeAnchor` below) must do
+    // that themselves.
     func restoreResumePoint(_ resumePoint: NovelResumePoint) async -> Bool {
         if resumePoint.view == currentView,
            let state = readingWorkflow?.restoreResumePointInCurrentDocument(resumePoint) {
@@ -958,6 +962,21 @@ public final class NovelReaderViewModel: ObservableObject {
             showsNovelReaderProjectionNavigationOverlay: true,
             reportsError: false
         )
+    }
+
+    // The Like sheet's `onOpenAnchor` jump path in `NovelReaderView` opens a
+    // synthesized resume point from a liked anchor while the reader for that
+    // work is already open; this is a nonlinear jump like any other (chapter
+    // directory, relative-chapter jump, cross-view jump), so it is recorded
+    // the same way, making it eligible for the chrome's back/forward history.
+    func jumpToLikeAnchor(_ resumePoint: NovelResumePoint) async -> Bool {
+        let navigationSequence = navigation.beginNavigationRequest()
+        let sourceResumePoint = currentStableResumePoint
+        let didRestore = await restoreResumePoint(resumePoint)
+        if didRestore, navigation.isCurrentNavigationRequest(navigationSequence) {
+            navigation.recordSuccessfulNonlinearNavigation(from: sourceResumePoint, to: currentStableResumePoint)
+        }
+        return didRestore
     }
 
     /// Opens a chapter anchor discovered while browsing another web view's

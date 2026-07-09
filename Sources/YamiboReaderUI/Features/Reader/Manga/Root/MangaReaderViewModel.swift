@@ -240,12 +240,15 @@ public final class MangaReaderViewModel: ObservableObject {
 
     public func updateCurrentPage(globalIndex: Int) {
         guard let workflow else { return }
+        let previousGlobalIndex = currentPageIndex(in: presentation)
         adjacentPrefetchTask?.cancel()
         readerContentGeneration += 1
         let previousProgressSnapshot = progressSnapshot(from: presentation)
         let nextPresentation = workflow.moveToLoadedPage(at: globalIndex)
         publishPresentation(nextPresentation, previousProgressSnapshot: previousProgressSnapshot)
-        recordLinearReadingForNavigationHistory()
+        let direction: ReaderNavigationLinearReadingDirection =
+            (previousGlobalIndex.map { globalIndex < $0 } ?? false) ? .backward : .forward
+        recordLinearReadingForNavigationHistory(direction: direction)
         scheduleAdjacentPrefetch(around: currentPageIndex(in: nextPresentation) ?? globalIndex)
     }
 
@@ -316,7 +319,7 @@ public final class MangaReaderViewModel: ObservableObject {
         let previousProgressSnapshot = progressSnapshot(from: presentation)
         let nextPresentation = workflow.jumpToLoadedPage(at: targetGlobalIndex, animated: true)
         publishPresentation(nextPresentation, previousProgressSnapshot: previousProgressSnapshot)
-        recordLinearReadingForNavigationHistory()
+        recordLinearReadingForNavigationHistory(direction: delta >= 0 ? .forward : .backward)
         scheduleAdjacentPrefetch(around: currentPageIndex(in: nextPresentation) ?? targetGlobalIndex)
     }
 
@@ -505,14 +508,22 @@ public final class MangaReaderViewModel: ObservableObject {
     }
 
     // Returns false when there's no prepared workflow, so the caller can fall back to presenting a fresh reader.
+    // This is a nonlinear jump like any other (`jumpToPage`, chapter directory), so it is recorded the same way,
+    // making it eligible for the chrome's back/forward history.
     func jumpToLikedMangaPage(tid: String, localIndex: Int) async -> Bool {
         guard let workflow else { return false }
+        let navigationGeneration = beginNavigationRequest()
+        let sourcePosition = currentStableReadingPosition
+        let targetPosition = MangaReadingPosition(tid: tid, localIndex: localIndex)
         adjacentPrefetchTask?.cancel()
         readerContentGeneration += 1
         let previousProgressSnapshot = progressSnapshot(from: presentation)
         do {
-            let nextPresentation = try await workflow.jumpToPosition(MangaReadingPosition(tid: tid, localIndex: localIndex))
+            let nextPresentation = try await workflow.jumpToPosition(targetPosition)
             publishPresentation(nextPresentation, previousProgressSnapshot: previousProgressSnapshot)
+            if isCurrentNavigationRequest(navigationGeneration) {
+                recordSuccessfulNonlinearNavigation(from: sourcePosition, to: targetPosition)
+            }
             scheduleAdjacentPrefetch(around: currentPageIndex(in: nextPresentation) ?? 0)
             return true
         } catch {
@@ -914,7 +925,7 @@ public final class MangaReaderViewModel: ObservableObject {
             )
             guard !Task.isCancelled, readerContentGeneration == generation else { return }
             publishPresentation(nextPresentation, previousProgressSnapshot: previousProgressSnapshot)
-            recordLinearReadingForNavigationHistory()
+            recordLinearReadingForNavigationHistory(direction: delta >= 0 ? .forward : .backward)
             scheduleAdjacentPrefetch(around: currentPageIndex(in: nextPresentation) ?? 0)
         } catch is CancellationError {
             return
@@ -1081,13 +1092,13 @@ public final class MangaReaderViewModel: ObservableObject {
         armLinearReadingHistoryExpirationIfNeeded()
     }
 
-    private func recordLinearReadingForNavigationHistory() {
+    private func recordLinearReadingForNavigationHistory(direction: ReaderNavigationLinearReadingDirection) {
         guard navigationHistory.canGoBack || navigationHistory.canGoForward else {
             linearReadingHistoryExpiration.reset()
             return
         }
         guard let position = currentStableReadingPosition else { return }
-        if linearReadingHistoryExpiration.recordLinearReading(at: position) {
+        if linearReadingHistoryExpiration.recordLinearReading(at: position, direction: direction) {
             navigationHistory.clear()
         }
     }
