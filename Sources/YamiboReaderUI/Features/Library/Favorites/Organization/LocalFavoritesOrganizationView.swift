@@ -28,8 +28,8 @@ struct LocalFavoritesOrganizationView: View {
 
     var body: some View {
         NavigationStack {
-            content
-                .overlay { emptyStateOverlay }
+            content(derived: organizer.rootDerived, isCollectionDetail: false)
+                .overlay { emptyStateOverlay(derived: organizer.rootDerived, isCollectionDetail: false) }
                 .navigationTitle(
                     selection.isSelectionMode
                         ? L10n.string("favorites.selected_count", selection.selectedEntryCount)
@@ -122,8 +122,12 @@ struct LocalFavoritesOrganizationView: View {
     // MARK: - Collection detail
 
     /// Opened collections push a detail page (iOS navigation instead of the
-    /// Android in-place switch); the content views scope themselves through
-    /// `organizer.selectedCollection`.
+    /// Android in-place switch). The pushed page's content is scoped by the
+    /// `organizer.derived` explicitly passed to it, not read ambiently,
+    /// because `organizer.selectedCollectionID` only resets once this
+    /// binding's `set` fires (i.e. once the pop fully commits) — during an
+    /// interactive edge-swipe-back gesture it stays non-nil for the whole
+    /// drag, while the root screen underneath is already visible.
     private var collectionDetailBinding: Binding<Bool> {
         Binding(
             get: { organizer.selectedCollectionID != nil },
@@ -136,8 +140,8 @@ struct LocalFavoritesOrganizationView: View {
     }
 
     private var collectionDetail: some View {
-        content
-            .overlay { emptyStateOverlay }
+        content(derived: organizer.derived, isCollectionDetail: true)
+            .overlay { emptyStateOverlay(derived: organizer.derived, isCollectionDetail: true) }
             .searchable(
                 text: $organizer.filter.searchText,
                 prompt: L10n.string("favorites.search.placeholder")
@@ -219,8 +223,12 @@ struct LocalFavoritesOrganizationView: View {
 
     // MARK: - Content
 
+    /// `derived` and `isCollectionDetail` are passed explicitly by the two
+    /// call sites (root vs. pushed collection detail) rather than read
+    /// ambiently from `organizer`, since both can be mounted at once during
+    /// an interactive edge-swipe pop. See `FavoriteLibraryOrganizer.rootDerived`.
     @ViewBuilder
-    private var content: some View {
+    private func content(derived: LocalFavoriteDerivedState, isCollectionDetail: Bool) -> some View {
         switch organizer.display.layoutMode {
         case .rowCard:
             LocalFavoriteListContent(
@@ -228,6 +236,8 @@ struct LocalFavoritesOrganizationView: View {
                 selection: selection,
                 routes: routes,
                 showsCover: true,
+                derived: derived,
+                isCollectionDetail: isCollectionDetail,
                 onOpen: onOpen
             )
         case .rowCardText:
@@ -236,6 +246,8 @@ struct LocalFavoritesOrganizationView: View {
                 selection: selection,
                 routes: routes,
                 showsCover: false,
+                derived: derived,
+                isCollectionDetail: isCollectionDetail,
                 onOpen: onOpen
             )
         case .fixedGrid:
@@ -244,6 +256,8 @@ struct LocalFavoritesOrganizationView: View {
                 selection: selection,
                 routes: routes,
                 isStaggered: false,
+                derived: derived,
+                isCollectionDetail: isCollectionDetail,
                 onOpen: onOpen
             )
         case .staggered:
@@ -252,6 +266,8 @@ struct LocalFavoritesOrganizationView: View {
                 selection: selection,
                 routes: routes,
                 isStaggered: true,
+                derived: derived,
+                isCollectionDetail: isCollectionDetail,
                 onOpen: onOpen
             )
         }
@@ -579,11 +595,11 @@ struct LocalFavoritesOrganizationView: View {
     }
 
     @ViewBuilder
-    private var emptyStateOverlay: some View {
-        if organizer.derived.cards.isEmpty, organizer.derived.visibleCollections.isEmpty {
+    private func emptyStateOverlay(derived: LocalFavoriteDerivedState, isCollectionDetail: Bool) -> some View {
+        if derived.cards.isEmpty, isCollectionDetail || derived.visibleCollections.isEmpty {
             if hasSubmittedSearch {
                 ContentUnavailableView(L10n.string("favorites.empty.no_results"), systemImage: "magnifyingglass")
-            } else if organizer.selectedCollectionID != nil {
+            } else if isCollectionDetail {
                 ContentUnavailableView(L10n.string("favorites.empty.collection"), systemImage: "folder")
             } else {
                 ContentUnavailableView {

@@ -8,11 +8,12 @@ import YamiboReaderCore
 struct LocalFavoriteViewOptionChips: View {
     @ObservedObject var organizer: FavoriteLibraryOrganizer
     let routes: LocalFavoritesRoutes
+    let cardsCount: Int
 
     var body: some View {
         HStack(spacing: 8) {
             if organizer.showsCategoryBadges {
-                Text(L10n.string("favorites.items_count", organizer.derived.cards.count))
+                Text(L10n.string("favorites.items_count", cardsCount))
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
