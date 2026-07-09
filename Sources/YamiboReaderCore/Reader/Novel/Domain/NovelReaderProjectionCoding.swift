@@ -119,11 +119,6 @@ extension NovelReaderProjection {
                 }
 
             case .image:
-                if semantics?.textSegmentIdentity != nil {
-                    throw DecodingError.dataCorrupted(
-                        DecodingError.Context(codingPath: [], debugDescription: "Image segment cannot carry a text segment identity.")
-                    )
-                }
                 if semantics?.inlineTextStyles.isEmpty == false {
                     throw DecodingError.dataCorrupted(
                         DecodingError.Context(codingPath: [], debugDescription: "Image segment cannot carry inline text styles.")
