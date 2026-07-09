@@ -800,8 +800,8 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
         let createdCollection = await organizer.createCollection(name: "合集A", color: .blue)
         let collection = try XCTUnwrap(createdCollection)
 
-        let collectionTarget = FavoriteContentTarget(kind: .normalThread, threadID: "920")
-        let rootTarget = FavoriteContentTarget(kind: .normalThread, threadID: "921")
+        let collectionTarget = FavoriteItemTarget(kind: .normalThread, threadID: "920")
+        let rootTarget = FavoriteItemTarget(kind: .normalThread, threadID: "921")
         var document = try await localFavoriteLibraryStore.load()
         document.addItem(try FavoriteItem(
             target: collectionTarget,
@@ -1114,7 +1114,7 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
             defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
             key: "content-covers"
         )
-        let target = FavoriteContentTarget(kind: .normalThread, threadID: "906")
+        let target = FavoriteItemTarget(kind: .normalThread, threadID: "906")
         let coverURL = try XCTUnwrap(URL(string: "https://img.example.com/toggle-cover.jpg"))
         var document = FavoriteLibraryDocument()
         let item = try FavoriteItem(
