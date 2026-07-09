@@ -825,6 +825,48 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
         XCTAssertEqual(organizer.derived.cards.first?.coverURL, resolvedCoverURL)
     }
 
+    func testToggleTextCoverSuppressesAndRestoresResolvedCoverURL() async throws {
+        let suiteName = YamiboTestDefaults.suiteName(prefix: "local-favorites-toggle-text-cover")
+        _ = try YamiboTestDefaults.make(suiteName: suiteName)
+        let localFavoriteLibraryStore = FavoriteLibraryStore(
+            defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
+            key: "local-favorites"
+        )
+        let contentCoverStore = ContentCoverStore(
+            defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
+            key: "content-covers"
+        )
+        let target = FavoriteContentTarget(kind: .normalThread, threadID: "906")
+        let coverURL = try XCTUnwrap(URL(string: "https://img.example.com/toggle-cover.jpg"))
+        var document = FavoriteLibraryDocument()
+        let item = try FavoriteItem(
+            target: target,
+            title: "长按封面主题",
+            locations: [.category(document.defaultCategory.id)]
+        )
+        document.addItem(item)
+        try await localFavoriteLibraryStore.save(document)
+        try await contentCoverStore.setAutomaticCover(coverURL, for: ContentCoverKey(targetType: .thread, targetID: "906"))
+
+        let organizer = try makeOrganizer(
+            libraryStore: localFavoriteLibraryStore,
+            contentCoverStore: contentCoverStore
+        )
+        await organizer.load()
+        XCTAssertEqual(organizer.derived.cards.first?.coverURL, coverURL)
+        XCTAssertEqual(organizer.derived.cards.first?.textCoverForced, false)
+
+        let firstToggleSucceeded = await organizer.toggleTextCover(for: item)
+        XCTAssertTrue(firstToggleSucceeded)
+        XCTAssertNil(organizer.derived.cards.first?.coverURL)
+        XCTAssertEqual(organizer.derived.cards.first?.textCoverForced, true)
+
+        let secondToggleSucceeded = await organizer.toggleTextCover(for: item)
+        XCTAssertTrue(secondToggleSucceeded)
+        XCTAssertEqual(organizer.derived.cards.first?.coverURL, coverURL)
+        XCTAssertEqual(organizer.derived.cards.first?.textCoverForced, false)
+    }
+
     func testSearchModeSubmitsCountsAndExitClearsSelection() async throws {
         let suiteName = YamiboTestDefaults.suiteName(prefix: "local-favorites-search-mode")
         _ = try YamiboTestDefaults.make(suiteName: suiteName)

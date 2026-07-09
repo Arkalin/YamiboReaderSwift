@@ -82,6 +82,9 @@ enum LibraryDatabaseSchema: DatabaseSchemaModule {
                 table.column("automatic_url", .text)
                 table.column("manual_url", .text)
                 table.column("dynamic_enabled", .boolean).notNull()
+                // User override that suppresses both cover URLs in favor of
+                // the text placeholder cover.
+                table.column("text_cover_forced", .boolean).notNull().defaults(to: false)
                 table.column("updated_at", .double).notNull()
                 table.primaryKey(["target_type", "target_id"], onConflict: .replace)
             }

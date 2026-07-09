@@ -565,6 +565,10 @@
 "cover.action_success_title" = "封面已更新";
 "cover.set_success_message" = "已将这张图片设为封面。";
 "cover.restore_success_message" = "已恢复为自动封面。";
+"cover.use_text_cover" = "使用文本封面";
+"cover.use_image_cover" = "使用图片封面";
+"cover.use_text_cover_success_message" = "已切换为文本封面。";
+"cover.use_image_cover_success_message" = "已切换为图片封面。";
 "image.actions.title" = "图片操作";
 "image.load_failed" = "图片加载失败";
 "image.loading" = "加载图片中…";

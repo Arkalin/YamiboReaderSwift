@@ -172,6 +172,9 @@ public struct FavoriteCardProjection: Equatable, Identifiable, Sendable {
     public var progressPercent: Int?
     public var chapterPageProgress: String?
     public var coverURL: URL?
+    /// Whether the user has forced the text placeholder cover for this
+    /// target, suppressing `coverURL` even when a real cover resolves.
+    public var textCoverForced: Bool
 
     public var id: String { item.id }
 }
@@ -274,7 +277,8 @@ public enum LocalFavoriteLibraryProjection {
             chapterPageProgress: chapterPageProgress(from: progress),
             // Filled from ContentCoverStore by the library derivation; items
             // deliberately carry no cover of their own.
-            coverURL: nil
+            coverURL: nil,
+            textCoverForced: false
         )
     }
 

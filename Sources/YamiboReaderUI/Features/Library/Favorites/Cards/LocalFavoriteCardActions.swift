@@ -9,6 +9,7 @@ struct LocalFavoriteCardActions {
     let select: (FavoriteItem) -> Void
     let move: (FavoriteItem) -> Void
     let editTags: (FavoriteItem) -> Void
+    let toggleTextCover: (FavoriteItem) -> Void
     let syncToRemote: (FavoriteItem) -> Void
     let delete: (FavoriteItem) -> Void
 
@@ -33,6 +34,9 @@ struct LocalFavoriteCardActions {
             },
             editTags: { item in
                 routes.sheet = .tagSelection(.favorite(item.id, initialTagIDs: Set(item.tagIDs)))
+            },
+            toggleTextCover: { item in
+                Task { await organizer.toggleTextCover(for: item) }
             },
             syncToRemote: { item in
                 Task { await organizer.syncItemToYamibo(item) }
@@ -75,6 +79,15 @@ struct LocalFavoriteCardContextMenu: View {
             actions.editTags(card.item)
         } label: {
             Label(L10n.string("favorites.tags_action"), systemImage: "tag")
+        }
+        Button {
+            actions.toggleTextCover(card.item)
+        } label: {
+            if card.textCoverForced {
+                Label(L10n.string("cover.use_image_cover"), systemImage: "photo")
+            } else {
+                Label(L10n.string("cover.use_text_cover"), systemImage: "textformat")
+            }
         }
         if card.item.target.threadID != nil, card.item.remoteMapping?.yamiboFavoriteID == nil {
             Button {

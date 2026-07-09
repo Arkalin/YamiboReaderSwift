@@ -76,6 +76,7 @@ final class FavoriteLibraryOrganizer: ObservableObject {
 
     private var readingProgress: [ReadingProgressRecord] = []
     private var contentCoverURLsByTargetID: [String: URL] = [:]
+    private var textCoverForcedTargetIDs: Set<String> = []
     private var libraryUpdatesTask: Task<Void, Never>?
     private var progressUpdatesTask: Task<Void, Never>?
     private var coverUpdatesTask: Task<Void, Never>?
@@ -226,7 +227,9 @@ final class FavoriteLibraryOrganizer: ObservableObject {
             errorMessage = error.localizedDescription
             return
         }
-        contentCoverURLsByTargetID = await contentCoverURLs(for: loadedDocument.items)
+        let coverLookup = await loadContentCovers(for: loadedDocument.items)
+        contentCoverURLsByTargetID = coverLookup.urlsByTargetID
+        textCoverForcedTargetIDs = coverLookup.forcedTargetIDs
         let settings = await settingsStore.load()
         display = FavoriteLibraryDisplayState(
             layoutMode: settings.favorites.layoutMode,
@@ -263,7 +266,9 @@ final class FavoriteLibraryOrganizer: ObservableObject {
             // let the next change notification retry.
             return
         }
-        contentCoverURLsByTargetID = await contentCoverURLs(for: loadedDocument.items)
+        let coverLookup = await loadContentCovers(for: loadedDocument.items)
+        contentCoverURLsByTargetID = coverLookup.urlsByTargetID
+        textCoverForcedTargetIDs = coverLookup.forcedTargetIDs
         document = loadedDocument
         if !loadedDocument.categories.contains(where: { $0.id == selectedCategoryID }) {
             selectedCategoryID = loadedDocument.defaultCategory.id
@@ -287,7 +292,9 @@ final class FavoriteLibraryOrganizer: ObservableObject {
     }
 
     private func reloadContentCovers() async {
-        contentCoverURLsByTargetID = await contentCoverURLs(for: document.items)
+        let coverLookup = await loadContentCovers(for: document.items)
+        contentCoverURLsByTargetID = coverLookup.urlsByTargetID
+        textCoverForcedTargetIDs = coverLookup.forcedTargetIDs
         refreshDerivedState()
     }
 
@@ -742,7 +749,8 @@ final class FavoriteLibraryOrganizer: ObservableObject {
                 selectedCollectionID: selectedCollectionID,
                 filter: filter,
                 readingProgress: readingProgress,
-                contentCoverURLsByTargetID: contentCoverURLsByTargetID
+                contentCoverURLsByTargetID: contentCoverURLsByTargetID,
+                textCoverForcedTargetIDs: textCoverForcedTargetIDs
             )
         )
         rootDerived = selectedCollectionID == nil
@@ -851,17 +859,53 @@ final class FavoriteLibraryOrganizer: ObservableObject {
 
     // MARK: - Covers
 
-    private func contentCoverURLs(for items: [FavoriteItem]) async -> [String: URL] {
+    private struct ContentCoverLookup {
         var urlsByTargetID: [String: URL] = [:]
+        var forcedTargetIDs: Set<String> = []
+    }
+
+    private func loadContentCovers(for items: [FavoriteItem]) async -> ContentCoverLookup {
+        var lookup = ContentCoverLookup()
         for item in items {
             guard let key = ContentCoverKey(target: item.target),
-                  let cover = await contentCoverStore.cover(for: key),
-                  let resolvedURL = cover.resolvedURL else {
+                  let cover = await contentCoverStore.cover(for: key) else {
                 continue
             }
-            urlsByTargetID[item.target.id] = resolvedURL
+            if let resolvedURL = cover.resolvedURL {
+                lookup.urlsByTargetID[item.target.id] = resolvedURL
+            }
+            if cover.textCoverForced {
+                lookup.forcedTargetIDs.insert(item.target.id)
+            }
         }
-        return urlsByTargetID
+        return lookup
+    }
+
+    /// Toggles whether the target shows the text placeholder cover instead of
+    /// its resolved automatic/manual cover (card context-menu action).
+    @discardableResult
+    func toggleTextCover(for item: FavoriteItem) async -> Bool {
+        guard let key = ContentCoverKey(target: item.target) else { return false }
+        let forced = !textCoverForcedTargetIDs.contains(item.target.id)
+        do {
+            try await contentCoverStore.setTextCoverForced(forced, for: key)
+        } catch {
+            YamiboLog.library.error("Failed to toggle text cover for \(item.id): \(error.localizedDescription)")
+            errorMessage = error.localizedDescription
+            return false
+        }
+        let cover = await contentCoverStore.cover(for: key)
+        if cover?.textCoverForced == true {
+            textCoverForcedTargetIDs.insert(item.target.id)
+        } else {
+            textCoverForcedTargetIDs.remove(item.target.id)
+        }
+        contentCoverURLsByTargetID[item.target.id] = cover?.resolvedURL
+        refreshDerivedState()
+        transientMessage = forced
+            ? L10n.string("cover.use_text_cover_success_message")
+            : L10n.string("cover.use_image_cover_success_message")
+        return true
     }
 
     /// Resolves missing manga covers from each title's first chapter (owner's
@@ -909,7 +953,9 @@ final class FavoriteLibraryOrganizer: ObservableObject {
             }
             guard let self, !Task.isCancelled else { return }
             if resolvedAny {
-                self.contentCoverURLsByTargetID = await self.contentCoverURLs(for: self.document.items)
+                let coverLookup = await self.loadContentCovers(for: self.document.items)
+                self.contentCoverURLsByTargetID = coverLookup.urlsByTargetID
+                self.textCoverForcedTargetIDs = coverLookup.forcedTargetIDs
                 self.refreshDerivedState()
             }
         }
