@@ -10,7 +10,10 @@ struct LocalFavoriteCardActions {
     let move: (FavoriteItem) -> Void
     let editTags: (FavoriteItem) -> Void
     let syncToRemote: (FavoriteItem) -> Void
-    let delete: (FavoriteItem) -> Void
+    /// Takes the whole card projection (not just `card.item`) so it can tell
+    /// a merged group apart from a standalone favorite (smart-comic-mode
+    /// decision #6) and route to the right confirmation dialog.
+    let delete: (FavoriteCardProjection) -> Void
 
     /// Standard wiring shared by the list and grid containers.
     @MainActor
@@ -37,8 +40,12 @@ struct LocalFavoriteCardActions {
             syncToRemote: { item in
                 Task { await organizer.syncItemToYamibo(item) }
             },
-            delete: { item in
-                routes.dialog = .deleteItem(item)
+            delete: { card in
+                if let members = card.mergedMembers {
+                    routes.dialog = .deleteMergedGroup(members: members)
+                } else {
+                    routes.dialog = .deleteItem(card.item)
+                }
             }
         )
     }
@@ -85,7 +92,7 @@ struct LocalFavoriteCardContextMenu: View {
         }
         Divider()
         Button(role: .destructive) {
-            actions.delete(card.item)
+            actions.delete(card)
         } label: {
             Label(L10n.string("common.delete"), systemImage: "trash")
         }

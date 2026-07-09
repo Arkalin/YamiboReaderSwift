@@ -397,13 +397,14 @@ public actor FavoriteLibraryStore {
         }
     }
 
-    private static func targetColumns(for target: FavoriteContentTarget) -> (threadID: String?, mangaID: String?, cleanBookName: String?) {
-        switch target {
-        case let .normalThread(threadID), let .novelThread(threadID):
-            return (threadID, nil, nil)
-        case let .mangaTitle(mangaID, cleanBookName):
-            return (nil, mangaID, cleanBookName)
-        }
+    /// `manga_id`/`clean_book_name` are permanently nil for favorites now:
+    /// `FavoriteItemTarget` has no merged-directory identity to store there
+    /// at all (smart-comic-mode design decision #9's second correction). The
+    /// columns themselves are left in place rather than migrated away — see
+    /// `MangaDirectoryStore.renameFavoriteMangaTargets`, which already
+    /// tolerates them being permanently empty.
+    private static func targetColumns(for target: FavoriteItemTarget) -> (threadID: String?, mangaID: String?, cleanBookName: String?) {
+        (target.threadID, nil, nil)
     }
 
     private static func timeInterval(from date: Date) -> Double {

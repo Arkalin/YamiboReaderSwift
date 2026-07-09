@@ -180,6 +180,7 @@ public final class YamiboAppContext: Sendable {
             makeDirectoryRepository: { [self] in await makeMangaDirectoryRepository() },
             makeChapterCommentsRepository: { [self] in await makeReaderChapterCommentsRepository() },
             makeOfflineCacheQueueExecutor: { [self] in await makeOfflineCacheQueueExecutor() },
+            makeForumThreadReaderRepository: { [self] in await makeForumThreadReaderRepository() },
             account: accountDependencies,
             like: likeLibraryDependencies
         )
@@ -281,7 +282,7 @@ public final class YamiboAppContext: Sendable {
     }
 
     func makeThreadRouteResolver() async -> YamiboThreadRouteResolver {
-        YamiboThreadRouteResolver(client: await makeClient())
+        YamiboThreadRouteResolver(client: await makeClient(), settingsStore: settingsStore)
     }
 
     func makeForumThreadReaderRepository() async -> ForumThreadReaderRepository {

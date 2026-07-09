@@ -195,6 +195,63 @@ final class SystemSettingsViewModelTests: XCTestCase {
         ))
     }
 
+    /// Phase I fix: `SmartComicModeSettings.enabledForumIDs` (Phase B) had no
+    /// UI to change it anywhere — this exercises the new Settings screen's
+    /// read side loading the persisted per-board toggle state.
+    func testLoadReadsSmartComicModeSettings() async throws {
+        let fixture = try makeFixture()
+        try await fixture.settingsStore.save(AppSettings(
+            smartComicMode: SmartComicModeSettings(enabledForumIDs: ["46"])
+        ))
+
+        let viewModel = SystemSettingsViewModel(dependencies: fixture.appContext.settingsDependencies)
+        await viewModel.load()
+
+        XCTAssertFalse(viewModel.smartComicMode.isEnabled(forumID: "30"))
+        XCTAssertTrue(viewModel.smartComicMode.isEnabled(forumID: "46"))
+        XCTAssertFalse(viewModel.smartComicMode.isEnabled(forumID: "37"))
+    }
+
+    /// The new per-board toggle's write side: turning fid 30 off and fid 46
+    /// on persists through `SettingsStore`, exercised independently for both
+    /// directions (enabling and disabling) on two different boards.
+    func testSetSmartComicModeEnabledPersistsSettings() async throws {
+        let fixture = try makeFixture()
+        try await fixture.settingsStore.save(AppSettings())
+
+        let viewModel = SystemSettingsViewModel(dependencies: fixture.appContext.settingsDependencies)
+        await viewModel.load()
+        XCTAssertTrue(viewModel.smartComicMode.isEnabled(forumID: "30"))
+        XCTAssertFalse(viewModel.smartComicMode.isEnabled(forumID: "46"))
+
+        viewModel.setSmartComicModeEnabled(false, forumID: "30")
+        viewModel.setSmartComicModeEnabled(true, forumID: "46")
+
+        try await waitFor {
+            let loaded = await fixture.settingsStore.load()
+            return !loaded.smartComicMode.isEnabled(forumID: "30")
+                && loaded.smartComicMode.isEnabled(forumID: "46")
+        }
+        XCTAssertFalse(viewModel.smartComicMode.isEnabled(forumID: "30"))
+        XCTAssertTrue(viewModel.smartComicMode.isEnabled(forumID: "46"))
+    }
+
+    /// `manageableForumIDs` is fixed to fid 30/46/37 (decision #1: no free
+    /// board picker) — a fid outside that set must be a no-op, not silently
+    /// stored as a new manageable board.
+    func testSetSmartComicModeEnabledIgnoresUnmanageableForumID() async throws {
+        let fixture = try makeFixture()
+        try await fixture.settingsStore.save(AppSettings())
+
+        let viewModel = SystemSettingsViewModel(dependencies: fixture.appContext.settingsDependencies)
+        await viewModel.load()
+        let before = viewModel.smartComicMode
+
+        viewModel.setSmartComicModeEnabled(true, forumID: "99")
+
+        XCTAssertEqual(viewModel.smartComicMode, before)
+    }
+
     func testResetApplicationRestoresDefaultApplePencilSettings() async throws {
         let fixture = try makeFixture()
         try await fixture.settingsStore.save(AppSettings(
@@ -205,7 +262,8 @@ final class SystemSettingsViewModelTests: XCTestCase {
             system: SystemSettings(applePencilPageTurn: ApplePencilPageTurnSettings(
                 isEnabled: true,
                 behavior: .doubleTapNextSqueezePrevious
-            ))
+            )),
+            smartComicMode: SmartComicModeSettings(enabledForumIDs: ["46", "37"])
         ))
 
         let viewModel = SystemSettingsViewModel(dependencies: fixture.appContext.settingsDependencies)
@@ -215,6 +273,7 @@ final class SystemSettingsViewModelTests: XCTestCase {
         XCTAssertTrue(didReset)
         XCTAssertEqual(viewModel.novelOfflineCache, NovelOfflineCacheSettings())
         XCTAssertEqual(viewModel.applePencilPageTurn, ApplePencilPageTurnSettings())
+        XCTAssertEqual(viewModel.smartComicMode, SmartComicModeSettings())
         let loaded = await fixture.settingsStore.load()
         XCTAssertEqual(loaded.novelOfflineCache, NovelOfflineCacheSettings())
         XCTAssertEqual(loaded.system.applePencilPageTurn, ApplePencilPageTurnSettings())
@@ -319,7 +378,7 @@ final class SystemSettingsViewModelTests: XCTestCase {
         ))
         var favoriteLibrary = FavoriteLibraryDocument()
         favoriteLibrary.addItem(try FavoriteItem(
-            target: FavoriteContentTarget(kind: .normalThread, threadID: "905"),
+            target: FavoriteItemTarget(kind: .normalThread, threadID: "905"),
             title: "收藏条目",
             locations: [.category(favoriteLibrary.defaultCategory.id)]
         ))

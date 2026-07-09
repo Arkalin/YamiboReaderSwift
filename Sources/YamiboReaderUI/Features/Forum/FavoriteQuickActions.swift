@@ -93,8 +93,22 @@ enum FavoriteQuickActions {
                 try await remoteRepository.deleteFavorite(remoteFavoriteID: remoteFavoriteID)
             }
         }
-        let target = try localTarget(for: favorite)
         try await localFavoriteLibraryStore.update { document in
+            // Classification is now forumID-dependent (decision #4), but
+            // `Favorite` carries no forumID and every toggle-favorite call
+            // site passes `.other` regardless of board — re-deriving the
+            // target from `favorite` alone here (as `localTarget(for:)` did
+            // pre-Phase-F) would risk computing a different `.id` than the
+            // one actually persisted for a manga-board thread (e.g.
+            // `manga-thread:704` vs `thread:normal:704`), silently turning
+            // this into a no-op for exactly the boards this phase adds
+            // support for. Look up the *actually stored* item by threadID
+            // and remove its real target instead; only fall back to
+            // re-deriving a target when no matching item exists (nothing to
+            // look up — e.g. a concurrent removal already won).
+            let target = document.items.first { $0.target.threadID == favorite.threadID }?.target
+                ?? (try? localTarget(for: favorite, forumID: nil))
+            guard let target else { return }
             document.removeItem(target: target)
         }
     }
@@ -136,7 +150,7 @@ enum FavoriteQuickActions {
         contentUpdatedAt: Date?,
         localFavoriteLibraryStore: FavoriteLibraryStore
     ) async throws -> FavoriteItem {
-        let target = try localTarget(for: favorite)
+        let target = try localTarget(for: favorite, forumID: forumID)
         return try await localFavoriteLibraryStore.update { document in
             let item = try FavoriteItem(
                 target: target,
@@ -155,9 +169,29 @@ enum FavoriteQuickActions {
         }
     }
 
-    private static func localTarget(for favorite: Favorite) throws -> FavoriteContentTarget {
-        let kind: FavoriteContentTargetKind = favorite.type == .novel ? .novelThread : .normalThread
-        return FavoriteContentTarget(kind: kind, threadID: favorite.threadID)
+    /// Classifies a favorite's target kind (decision #4): `.novelThread`
+    /// keeps its existing priority over board classification (unchanged from
+    /// pre-Phase-F behavior — a novel-type favorite never becomes a manga
+    /// thread just because it happens to share a board id), then falls back
+    /// to `.mangaThread` purely by the thread's board fid via
+    /// `YamiboThreadTaxonomy.threadKind(for:)` — independent of whether that
+    /// board's Smart Comic Mode toggle is currently on or off (decision #4's
+    /// explicit point: the toggle only affects display grouping/routing, not
+    /// classification, so a favorite's kind never flips depending on when it
+    /// was added relative to a toggle flip). `forumID` is optional because
+    /// not every call site can supply one (see `removeFavorite`, which looks
+    /// up the stored target instead of relying on this classification when
+    /// possible) — a missing/blank fid simply can't classify as manga.
+    private static func localTarget(for favorite: Favorite, forumID: String?) throws -> FavoriteItemTarget {
+        let kind: FavoriteItemTargetKind
+        if favorite.type == .novel {
+            kind = .novelThread
+        } else if let forumID, YamiboThreadTaxonomy.threadKind(for: forumID) == .manga {
+            kind = .mangaThread
+        } else {
+            kind = .normalThread
+        }
+        return FavoriteItemTarget(kind: kind, threadID: favorite.threadID)
     }
 
     private static func normalizedRemoteFavoriteID(_ value: String?) -> String? {

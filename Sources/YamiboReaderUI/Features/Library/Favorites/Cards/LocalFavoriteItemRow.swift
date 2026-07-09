@@ -31,7 +31,7 @@ struct LocalFavoriteItemRow: View {
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
             if !isSelectionMode {
                 Button(role: .destructive) {
-                    actions.delete(card.item)
+                    actions.delete(card)
                 } label: {
                     Label(L10n.string("common.delete"), systemImage: "trash")
                 }

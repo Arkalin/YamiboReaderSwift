@@ -39,6 +39,16 @@ public struct MangaProgressReadingPosition: Hashable, Sendable {
     public var pageCount: Int?
     public var mangaID: String?
     public var directoryName: String?
+    /// Whether Smart Comic Mode is on for this chapter's board — threaded
+    /// straight from `MangaLaunchContext.isSmartModeEnabled` (the reader
+    /// never re-derives it). `ReadingProgressStore.saveManga` branches on
+    /// this field (not on `directoryName != nil`) to decide whether to also
+    /// upsert the directory-level `.mangaTitle` record, since a mode-off
+    /// synthesized single-chapter pseudo-directory also produces a non-nil
+    /// `directoryName` (smart-comic-mode design decision #15; see the Phase B
+    /// warning in the design doc). Defaults to `true` to match
+    /// `MangaLaunchContext`'s own default for pre-Phase-C call sites.
+    public var isSmartModeEnabled: Bool
 
     public init(
         threadID: String? = nil,
@@ -48,7 +58,8 @@ public struct MangaProgressReadingPosition: Hashable, Sendable {
         pageIndex: Int,
         pageCount: Int? = nil,
         mangaID: String? = nil,
-        directoryName: String? = nil
+        directoryName: String? = nil,
+        isSmartModeEnabled: Bool = true
     ) {
         let normalizedChapterThreadID = chapterThreadID.trimmingCharacters(in: .whitespacesAndNewlines)
         precondition(!normalizedChapterThreadID.isEmpty, "MangaProgressReadingPosition requires a Yamibo chapter tid")
@@ -60,6 +71,7 @@ public struct MangaProgressReadingPosition: Hashable, Sendable {
         self.pageCount = pageCount.map { max(1, $0) }
         self.mangaID = mangaID?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
         self.directoryName = directoryName?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        self.isSmartModeEnabled = isSmartModeEnabled
     }
 }
 

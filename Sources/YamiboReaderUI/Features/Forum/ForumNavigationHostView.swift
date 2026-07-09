@@ -271,6 +271,27 @@ public struct ForumNavigationHostView: View {
                 directoryNameHint: cleanBookName
             )
             path.append(.mangaDetail(context))
+        case let .mangaDirect(payload):
+            // Board's Smart Comic Mode is off (decision #2/#12): open the
+            // manga reader directly for this one thread instead of pushing
+            // `ForumMangaDetailView`, using the same full-screen presentation
+            // path as favorites/likes/the chapter picker
+            // (`appModel.presentMangaReader`) rather than a NavigationStack
+            // destination. No directory concept applies here — this thread
+            // is treated exactly like a normal thread (total principle,
+            // decision #2), just rendered with the manga reader — so the
+            // title is used as-is (no `cleanBookName` cleanup) and page 0 is
+            // the only sensible start (no resume, matching
+            // `ForumMangaDetailViewModel.launchContext(for chapter:)`'s
+            // existing convention of never passing `initialPage`).
+            let context = MangaLaunchContext(
+                originalThreadID: payload.thread.tid,
+                chapterTID: payload.thread.tid,
+                displayTitle: payload.title,
+                source: .forum,
+                isSmartModeEnabled: false
+            )
+            appModel.presentMangaReader(context)
         case let .thread(payload):
             let context = ThreadNovelLaunchContext(
                 thread: payload.thread,

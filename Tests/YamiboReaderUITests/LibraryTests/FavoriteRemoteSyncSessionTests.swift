@@ -117,6 +117,124 @@ final class FavoriteRemoteSyncSessionTests: XCTestCase {
         XCTAssertEqual(saved?.warnings.isEmpty, false)
     }
 
+    /// Gap (smart-comic-mode design doc, Phase G's "遗留 TODO": "`makeEngineRunner()`
+    /// 是否正确转发了新依赖给引擎（这条链路目前只在引擎层单测被验证）"): every test
+    /// above drives `runnerOverride`, which entirely bypasses `makeEngineRunner()`
+    /// — none of them can tell whether `FavoriteRemoteSyncSession` actually
+    /// captures and forwards its `mangaDirectoryStore`/`settingsStore` init
+    /// parameters into the real `FavoriteYamiboSyncEngine` it constructs. This
+    /// test builds a session with no `runnerOverride`, so `start()` runs the
+    /// genuine `makeEngineRunner()` path (real `FavoriteRepository`/
+    /// `ForumThreadReaderRepository`/`YamiboThreadRouteResolver`, HTTP calls
+    /// intercepted by a `URLProtocol` double rather than faked away), and
+    /// deliberately turns Smart Comic Mode on for a board (fid 46) that is
+    /// *off* by `SmartComicModeSettings`'s own default. If the session failed
+    /// to forward the injected `settingsStore` (or `mangaDirectoryStore`) into
+    /// the engine, the engine would fall back to `SmartComicModeSettings()`'s
+    /// default (fid 46 off) or to no directory data at all, and the
+    /// attribution warning below would never fire — so the warning actually
+    /// firing is proof the session-to-engine wiring itself is correct, not
+    /// just that the engine's own attribution logic works (Phase G's own
+    /// tests in `FavoriteRemoteSyncTests.swift` already cover that).
+    func testStartForwardsMangaDirectoryStoreAndSettingsStoreIntoRealEngineAndSurfacesAttributionWarning() async throws {
+        defer { FavoriteSyncWiringTestURLProtocol.reset() }
+        let suiteName = YamiboTestDefaults.suiteName(prefix: "local-favorites-sync-wiring")
+        let defaults = try YamiboTestDefaults.make(suiteName: suiteName)
+        let libraryStore = FavoriteLibraryStore(defaults: defaults, key: "local-favorites")
+        let runStore = FavoriteSyncRunStore(defaults: defaults, key: "sync-runs")
+
+        var document = try await libraryStore.load()
+        // Kept out of the sync's target category on purpose so it never
+        // becomes an upload candidate in phase 4 — this test only needs to
+        // drive the import-phase attribution check, not the upload/formHash
+        // network path too.
+        let existingSibling = try FavoriteItem(
+            target: FavoriteItemTarget(kind: .mangaThread, threadID: "980"),
+            title: "第1话",
+            sourceGroup: .forumBoard(id: "46", label: "漫画区46"),
+            forumID: "46",
+            forumName: "漫画区46",
+            locations: [.category(document.defaultCategory.id)]
+        )
+        document.addItem(existingSibling)
+        let targetCategory = document.createCategory(name: "远端")
+        try await libraryStore.save(document)
+
+        let mangaDirectoryStore = try makeMangaDirectoryStore(suiteName: suiteName)
+        try await mangaDirectoryStore.saveDirectory(MangaDirectory(
+            cleanBookName: "会话集成测试漫画",
+            strategy: .tag,
+            sourceKey: "会话集成测试漫画",
+            chapters: [
+                MangaChapter(tid: "980", rawTitle: "第1话", chapterNumber: 1),
+                MangaChapter(tid: "981", rawTitle: "第2话", chapterNumber: 2),
+            ]
+        ))
+
+        // fid 46 is off by `SmartComicModeSettings`'s own default — turning
+        // it on here, in the *injected* store, is what makes the warning
+        // firing meaningful proof of forwarding rather than a coincidence of
+        // the engine's own defaults.
+        let settingsStore = SettingsStore(defaults: defaults, key: "settings")
+        var settings = await settingsStore.load()
+        settings.smartComicMode.enabledForumIDs = ["46"]
+        try await settingsStore.save(settings)
+
+        FavoriteSyncWiringTestURLProtocol.newChapterTID = "981"
+        FavoriteSyncWiringTestURLProtocol.newChapterTitle = "第2话"
+        FavoriteSyncWiringTestURLProtocol.remoteFavoriteID = "981"
+        FavoriteSyncWiringTestURLProtocol.forumID = "46"
+        FavoriteSyncWiringTestURLProtocol.forumName = "漫画区46"
+
+        let urlSessionConfiguration = URLSessionConfiguration.ephemeral
+        urlSessionConfiguration.protocolClasses = [FavoriteSyncWiringTestURLProtocol.self]
+        let mockedURLSession = URLSession(configuration: urlSessionConfiguration)
+        let forumCacheStore = ForumCacheStore(
+            baseDirectory: FileManager.default.temporaryDirectory
+                .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        )
+        // The route resolver's own settings store only decides `.manga` vs.
+        // `.mangaDirect` (both fold into the same `.mangaThread` favorite
+        // target — see `FavoriteRemoteSyncSession.probeResult`), so it
+        // deliberately does not need to agree with the engine's
+        // `settingsStore` above; kept isolated from real `UserDefaults` only
+        // for test hygiene.
+        let resolverSettingsStore = SettingsStore(defaults: defaults, key: "resolver-settings")
+
+        let session = FavoriteRemoteSyncSession(
+            libraryStore: libraryStore,
+            runStore: runStore,
+            contentCoverStore: ContentCoverStore(defaults: defaults, key: "content-covers"),
+            mangaDirectoryStore: mangaDirectoryStore,
+            settingsStore: settingsStore,
+            makeFavoriteRepository: { FavoriteRepository(client: YamiboClient(session: mockedURLSession)) },
+            makeForumThreadReaderRepository: {
+                ForumThreadReaderRepository(client: YamiboClient(session: mockedURLSession), cacheStore: forumCacheStore)
+            },
+            makeThreadRouteResolver: {
+                YamiboThreadRouteResolver(client: YamiboClient(session: mockedURLSession), settingsStore: resolverSettingsStore)
+            }
+            // No `runnerOverride` — this must run the real `makeEngineRunner()`.
+        )
+        await session.load()
+
+        _ = await session.start(targetCategoryID: targetCategory.id)
+        try await waitForStatus(.completed, in: session)
+
+        XCTAssertNil(session.errorMessage)
+        let hasAttributionWarning = session.snapshot?.warnings.contains { warning in
+            if case let .importedIntoExistingMangaDirectory(_, cleanBookName) = warning {
+                return cleanBookName == "会话集成测试漫画"
+            }
+            return false
+        } ?? false
+        XCTAssertTrue(hasAttributionWarning)
+        let savedItem = try await libraryStore.load().items.first {
+            $0.target == FavoriteItemTarget(kind: .mangaThread, threadID: "981")
+        }
+        XCTAssertEqual(savedItem?.remoteMapping?.yamiboFavoriteID, "981")
+    }
+
     private func waitForStatus(
         _ status: FavoriteRemoteSyncTaskStatus,
         in session: FavoriteRemoteSyncSession
@@ -129,6 +247,93 @@ final class FavoriteRemoteSyncSessionTests: XCTestCase {
         }
         XCTFail("Timed out waiting for remote sync status \(status)")
     }
+
+    private func makeMangaDirectoryStore(suiteName: String) throws -> MangaDirectoryStore {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("favorite-remote-sync-session-tests", isDirectory: true)
+            .appendingPathComponent(suiteName, isDirectory: true)
+        let database = try YamiboDatabase.openPool(rootDirectory: root)
+        return MangaDirectoryStore(databasePool: database)
+    }
+}
+
+/// Mocks the small slice of `bbs.yamibo.com` HTTP surface the real
+/// `makeEngineRunner()` path touches for this file's wiring test: the
+/// favorites list (one remote-only manga chapter) and that chapter's own
+/// thread page (fetched twice over — once for route classification, once for
+/// source-group/cover metadata — both are the same `mod=viewthread` URL, so
+/// one branch answers both).
+private final class FavoriteSyncWiringTestURLProtocol: URLProtocol {
+    nonisolated(unsafe) static var newChapterTID = ""
+    nonisolated(unsafe) static var newChapterTitle = ""
+    nonisolated(unsafe) static var remoteFavoriteID = ""
+    nonisolated(unsafe) static var forumID = ""
+    nonisolated(unsafe) static var forumName = ""
+
+    static func reset() {
+        newChapterTID = ""
+        newChapterTitle = ""
+        remoteFavoriteID = ""
+        forumID = ""
+        forumName = ""
+    }
+
+    override class func canInit(with request: URLRequest) -> Bool {
+        request.url?.host == "bbs.yamibo.com"
+    }
+
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest {
+        request
+    }
+
+    override func startLoading() {
+        let absoluteString = request.url?.absoluteString ?? ""
+        let body: String
+
+        if absoluteString.contains("do=favorite") {
+            body = """
+            <html><body>
+              <ul class="sclist">
+                <li>
+                  <a href="forum.php?mod=viewthread&tid=\(Self.newChapterTID)&mobile=2">\(Self.newChapterTitle)</a>
+                  <a class="mdel" href="home.php?mod=spacecp&ac=favorite&op=delete&favid=\(Self.remoteFavoriteID)">删除</a>
+                </li>
+              </ul>
+            </body></html>
+            """
+        } else if absoluteString.contains("mod=viewthread"), absoluteString.contains("tid=\(Self.newChapterTID)") {
+            body = """
+            <html>
+            <head><title>\(Self.newChapterTitle) - \(Self.forumName) - 百合会</title></head>
+            <body>
+              <a href="forum.php?mod=forumdisplay&fid=\(Self.forumID)&mobile=2">\(Self.forumName)</a>
+              <div id="post_1">
+                <div class="authi">
+                  <a class="author" href="home.php?mod=space&amp;uid=88&amp;mobile=2">作者名</a>
+                  <em>发表于 2026-6-1 10:00</em>
+                </div>
+                <div class="message" id="postmessage_1">章节正文</div>
+              </div>
+            </body>
+            </html>
+            """
+        } else {
+            body = "<html><body>not found</body></html>"
+        }
+
+        let data = Data(body.utf8)
+        let response = HTTPURLResponse(
+            url: request.url ?? URL(string: "https://bbs.yamibo.com/")!,
+            statusCode: 200,
+            httpVersion: nil,
+            headerFields: ["Content-Type": "text/html; charset=utf-8"]
+        )!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: data)
+        client?.urlProtocolDidFinishLoading(self)
+    }
+
+    override func stopLoading() {}
 }
 
 private actor FavoriteRemoteSyncTestRecorder {

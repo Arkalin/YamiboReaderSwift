@@ -36,6 +36,60 @@ public actor MangaDirectoryStore: MangaDirectoryPersisting, MangaDirectoryRenami
         }
     }
 
+    /// Bulk tid → owning-directory lookup used by favorites' virtual
+    /// merged-directory grouping (smart-comic-mode Phase E). Mirrors
+    /// `directory(containingTID:)`'s JOIN/most-recently-updated-directory-
+    /// wins ordering, just batched: a single `WHERE c.tid IN (...)` query
+    /// resolves every tid's owning directory name in one round trip (chunked
+    /// only if the input is larger than `Self.maxInClauseBatchSize` — see
+    /// that constant's doc comment), then each *distinct* resolved directory
+    /// is loaded once and shared by every tid that maps to it, rather than
+    /// once per tid.
+    public func directories(containingTIDs tids: [String]) async throws -> [String: MangaDirectory] {
+        let normalizedTIDs = Array(Set(tids.compactMap(\.mangaReaderTrimmedNonEmpty)))
+        guard !normalizedTIDs.isEmpty else { return [:] }
+        return try await database.read { db in
+            // Ties within a tid (same tid appearing under more than one
+            // directory) resolve exactly like the single-tid method: most
+            // recently updated directory wins, `clean_book_name` breaks ties.
+            // Ordering by `tid` first lets a single pass over the rows keep
+            // only the first (best-ranked) directory seen per tid.
+            var winningNameByTID: [String: String] = [:]
+            for batch in normalizedTIDs.chunked(intoBatchesOf: Self.maxInClauseBatchSize) {
+                let placeholders = Array(repeating: "?", count: batch.count).joined(separator: ", ")
+                let rows = try Row.fetchAll(
+                    db,
+                    sql: """
+                    SELECT c.tid AS tid, d.clean_book_name AS clean_book_name
+                    FROM manga_directories d
+                    JOIN manga_directory_chapters c ON c.directory_name = d.clean_book_name
+                    WHERE c.tid IN (\(placeholders))
+                    ORDER BY c.tid ASC, COALESCE(d.last_updated_at, -62135769600) DESC, d.clean_book_name ASC
+                    """,
+                    arguments: StatementArguments(batch)
+                )
+                for row in rows {
+                    let tid: String = row["tid"]
+                    guard winningNameByTID[tid] == nil else { continue }
+                    winningNameByTID[tid] = row["clean_book_name"]
+                }
+            }
+
+            var directoriesByName: [String: MangaDirectory] = [:]
+            var result: [String: MangaDirectory] = [:]
+            for (tid, cleanBookName) in winningNameByTID {
+                if let cached = directoriesByName[cleanBookName] {
+                    result[tid] = cached
+                    continue
+                }
+                guard let directory = try Self.directory(named: cleanBookName, in: db) else { continue }
+                directoriesByName[cleanBookName] = directory
+                result[tid] = directory
+            }
+            return result
+        }
+    }
+
     public func saveDirectory(_ directory: MangaDirectory) async throws {
         do {
             try await database.write { db in
@@ -212,10 +266,22 @@ public actor MangaDirectoryStore: MangaDirectoryPersisting, MangaDirectoryRenami
         guard oldName != newName else { return }
         try renameFavoriteMangaTargets(from: oldName, to: newName, in: db)
         try renameReadingProgressMangaTargets(from: oldName, to: newName, in: db)
-        try ContentCoverStore.renameMangaTitleCover(from: oldName, to: newName, in: db)
+        try ContentCoverStore.renameSmartMangaCover(from: oldName, to: newName, in: db)
         try LikeStore.renameMangaTitleLikes(from: oldName, to: newName, in: db)
     }
 
+    /// Guaranteed-empty, harmless no-op since the smart-comic-mode Phase A
+    /// type refactor: `favorite_items.target_kind` is now populated
+    /// exclusively from `FavoriteItemTargetKind`'s three thread-based raw
+    /// values (normalThread/novelThread/mangaThread) — favorites can no
+    /// longer carry the old title-merged `.mangaTitle` identity this query
+    /// was written for (see `FavoriteItemTarget` in FavoriteLibrary.swift and
+    /// smart-comic-mode design decision #9's second correction), so the
+    /// `WHERE target_kind = 'mangaTitle'` below can never match a row. Kept
+    /// (rather than deleted) so a later phase revisiting per-directory
+    /// favorite grouping has an obvious place to look; the body below is
+    /// therefore dead code that only needs to type-check, not to be
+    /// exercised.
     private static func renameFavoriteMangaTargets(from oldName: String, to newName: String, in db: Database) throws {
         let rows = try Row.fetchAll(
             db,
@@ -248,8 +314,7 @@ public actor MangaDirectoryStore: MangaDirectoryPersisting, MangaDirectoryRenami
                 continue
             }
 
-            item.target = item.target.renamedMangaTitle(to: newName)
-            item.sourceGroup = .mangaTitle(mangaID: item.target.mangaID ?? newName, cleanBookName: newName)
+            item.sourceGroup = .smartManga(mangaID: newName, cleanBookName: newName)
             if item.title == oldName {
                 item.title = newName
             }
@@ -257,16 +322,14 @@ public actor MangaDirectoryStore: MangaDirectoryPersisting, MangaDirectoryRenami
             try db.execute(
                 sql: """
                 UPDATE favorite_items
-                SET id = ?,
-                    manga_id = ?,
+                SET manga_id = ?,
                     clean_book_name = ?,
                     title = ?,
                     item_json = ?
                 WHERE id = ?
                 """,
                 arguments: [
-                    item.id,
-                    item.target.mangaID,
+                    newName,
                     newName,
                     oldTitle == oldName ? newName : oldTitle,
                     updatedJSON,
@@ -318,11 +381,33 @@ public actor MangaDirectoryStore: MangaDirectoryPersisting, MangaDirectoryRenami
         }
     }
 
+    /// Conservative ceiling for one `WHERE tid IN (...)` query's bound
+    /// parameters. SQLite's compiled-in `SQLITE_MAX_VARIABLE_NUMBER` has
+    /// varied a lot across versions (historically 999; modern default
+    /// builds raise it to 32766), and nothing here pins which SQLite this
+    /// app links against, so `directories(containingTIDs:)` chunks well
+    /// under the old, stricter ceiling rather than assuming the new one.
+    /// No existing chunking helper was found elsewhere in the codebase for
+    /// this (checked `ContentCoverStore`/`ReadingProgressStore`/
+    /// `FavoriteSyncRunStore` — none of them batch `IN` queries today), so
+    /// this is a fresh, file-local constant/helper rather than a reused one.
+    private static let maxInClauseBatchSize = 500
+
     private static func openDatabase() -> DatabasePool {
         do {
             return try YamiboDatabase.openPool()
         } catch {
             fatalError("Failed to open MangaDirectoryStore database: \(error)")
+        }
+    }
+}
+
+private extension Array {
+    /// Splits into batches of at most `size` elements, preserving order.
+    func chunked(intoBatchesOf size: Int) -> [[Element]] {
+        guard size > 0, !isEmpty else { return isEmpty ? [] : [self] }
+        return stride(from: 0, to: count, by: size).map {
+            Array(self[$0 ..< Swift.min($0 + size, count)])
         }
     }
 }

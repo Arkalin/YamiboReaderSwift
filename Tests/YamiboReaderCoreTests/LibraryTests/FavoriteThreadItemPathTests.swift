@@ -3,7 +3,7 @@ import Testing
 @testable import YamiboReaderCore
 
 @Test func threadFavoriteImportProbesBeforeCreatingNormalThreadItem() async throws {
-    let target = FavoriteContentTarget(kind: .normalThread, threadID: "420")
+    let target = FavoriteItemTarget(kind: .normalThread, threadID: "420")
     var document = FavoriteLibraryDocument()
     var probedThreadID: String?
 
@@ -29,7 +29,7 @@ import Testing
 
     let item = try document.importThreadFavorite(
         probeResult: FavoriteThreadProbeResult(
-            target: FavoriteContentTarget(kind: .normalThread, threadID: "426"),
+            target: FavoriteItemTarget(kind: .normalThread, threadID: "426"),
             title: "普通主题"
         ),
         displayName: nil
@@ -46,7 +46,7 @@ import Testing
 }
 
 @Test func threadFavoriteProbeResultCarriesExplicitForumMetadata() throws {
-    let target = FavoriteContentTarget(kind: .normalThread, threadID: "428")
+    let target = FavoriteItemTarget(kind: .normalThread, threadID: "428")
     let probe = FavoriteThreadProbeResult(
         target: target,
         title: "普通主题",
@@ -78,7 +78,7 @@ import Testing
 }
 
 @Test func threadFavoriteImportDoesNotEraseExistingForumMetadataWhenProbeSourceIsUnknown() throws {
-    let target = FavoriteContentTarget(kind: .normalThread, threadID: "427")
+    let target = FavoriteItemTarget(kind: .normalThread, threadID: "427")
     var document = FavoriteLibraryDocument()
     let existing = try FavoriteItem(
         target: target,
@@ -116,8 +116,8 @@ import Testing
 }
 
 @Test func threadFavoriteImportRetargetsExistingItemWhenThreadKindChanges() async throws {
-    let normalTarget = FavoriteContentTarget(kind: .normalThread, threadID: "422")
-    let novelTarget = FavoriteContentTarget(kind: .novelThread, threadID: "422")
+    let normalTarget = FavoriteItemTarget(kind: .normalThread, threadID: "422")
+    let novelTarget = FavoriteItemTarget(kind: .novelThread, threadID: "422")
     var document = FavoriteLibraryDocument()
     let tag = document.createTag(name: "保留标签", color: .purple)
     let existing = try FavoriteItem(
@@ -142,7 +142,7 @@ import Testing
 }
 
 @Test func threadFavoriteDisplayNameStaysLocalMetadata() throws {
-    let target = FavoriteContentTarget(kind: .normalThread, threadID: "423")
+    let target = FavoriteItemTarget(kind: .normalThread, threadID: "423")
     var document = FavoriteLibraryDocument()
 
     let item = try document.importThreadFavorite(
@@ -160,13 +160,13 @@ import Testing
     var document = FavoriteLibraryDocument()
     let normal = try document.importThreadFavorite(
         probeResult: FavoriteThreadProbeResult(
-            target: FavoriteContentTarget(kind: .normalThread, threadID: "424"),
+            target: FavoriteItemTarget(kind: .normalThread, threadID: "424"),
             title: "普通主题"
         )
     )
     let novel = try document.importThreadFavorite(
         probeResult: FavoriteThreadProbeResult(
-            target: FavoriteContentTarget(kind: .novelThread, threadID: "425"),
+            target: FavoriteItemTarget(kind: .novelThread, threadID: "425"),
             title: "小说主题"
         )
     )

@@ -92,18 +92,33 @@ public final class MangaReaderWorkflow {
                 )
             )
             let resolution: MangaDirectoryResolutionResult
-            do {
-                resolution = try await directoryWorkflow.resolveInitialDirectory(
-                    context: context,
-                    projection: document
-                )
-            } catch {
-                guard let offlineDirectory = await offlineReadableCurrentChapterDirectory(for: document) else {
-                    throw error
+            if context.isSmartModeEnabled {
+                do {
+                    resolution = try await directoryWorkflow.resolveInitialDirectory(
+                        context: context,
+                        projection: document
+                    )
+                } catch {
+                    guard let offlineDirectory = await offlineReadableCurrentChapterDirectory(for: document) else {
+                        throw error
+                    }
+                    YamiboLog.reader.warning("Initial directory resolution failed, falling back to offline-readable directory: \(error)")
+                    resolution = MangaDirectoryResolutionResult(
+                        directory: offlineDirectory,
+                        shouldAutoUpdateAfterInitialLoad: false
+                    )
                 }
-                YamiboLog.reader.warning("Initial directory resolution failed, falling back to offline-readable directory: \(error)")
+            } else {
+                // Smart Comic Mode is off for this thread's board: per
+                // decision #12, skip `resolveInitialDirectory` entirely (no
+                // directory-related network activity at all), not just
+                // "resolve but ignore the result". Synthesize a single-
+                // chapter pseudo-directory containing only this chapter —
+                // this thread is read exactly like a normal thread, with no
+                // siblings and no auto-update, matching the "totally
+                // standalone" reading behavior mode-off documents.
                 resolution = MangaDirectoryResolutionResult(
-                    directory: offlineDirectory,
+                    directory: Self.standaloneDirectory(for: document, context: context),
                     shouldAutoUpdateAfterInitialLoad: false
                 )
             }
@@ -134,6 +149,40 @@ public final class MangaReaderWorkflow {
         }
 
         return presentation
+    }
+
+    /// A single-chapter, never-persisted `MangaDirectory` used when Smart
+    /// Comic Mode is off for this chapter's board (decision #12). It exists
+    /// only to satisfy `MangaChapterWindow`'s non-optional `directory`
+    /// parameter with the least disruption to its existing shape — see the
+    /// Phase B report for why this was chosen over making `directory`
+    /// optional. Because it contains no sibling chapters,
+    /// `adjacentChapter`/`adjacentChapterForLoadedRange` naturally return
+    /// `nil`, so chapter-jump affordances are unavailable without any extra
+    /// gating. `strategy` is never read for anything persisted here — this
+    /// directory is never passed to `directoryStore.saveDirectory` — so
+    /// `.pendingSearch` is chosen only to mirror the existing single-chapter
+    /// offline fallback below.
+    private static func standaloneDirectory(
+        for document: MangaReaderProjection,
+        context: MangaLaunchContext
+    ) -> MangaDirectory {
+        let title = context.displayTitle.mangaReaderTrimmedNonEmpty ?? document.chapterTitle
+        return MangaDirectory(
+            cleanBookName: title,
+            strategy: .pendingSearch,
+            sourceKey: title,
+            chapters: [
+                MangaChapter(
+                    tid: document.tid,
+                    rawTitle: document.chapterTitle,
+                    chapterNumber: MangaTitleCleaner.extractChapterNumber(document.chapterTitle),
+                    view: document.sourceIdentity.view,
+                    authorUID: document.sourceIdentity.authorID,
+                    authorName: document.ownerAuthorName
+                )
+            ]
+        )
     }
 
     private nonisolated(nonsending) func offlineReadableCurrentChapterDirectory(for document: MangaReaderProjection) async -> MangaDirectory? {

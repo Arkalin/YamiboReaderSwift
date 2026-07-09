@@ -85,7 +85,7 @@ public struct FavoriteUpdateRunSnapshot: Codable, Hashable, Identifiable, Sendab
 }
 
 public struct FavoriteUpdateTrackedTarget: Codable, Hashable, Identifiable, Sendable {
-    public var target: FavoriteContentTarget
+    public var target: FavoriteItemTarget
     public var title: String
     public var mode: FavoriteUpdateTargetMode
     public var categoryIDs: Set<String>
@@ -103,7 +103,7 @@ public struct FavoriteUpdateTrackedTarget: Codable, Hashable, Identifiable, Send
     public var id: String { target.id }
 
     public init(
-        target: FavoriteContentTarget,
+        target: FavoriteItemTarget,
         title: String,
         mode: FavoriteUpdateTargetMode,
         categoryIDs: Set<String> = [],
@@ -144,7 +144,7 @@ public enum FavoriteUpdateSummary: Codable, Hashable, Sendable {
 
 public struct FavoriteUpdateEvent: Codable, Hashable, Identifiable, Sendable {
     public var id: String
-    public var target: FavoriteContentTarget
+    public var target: FavoriteItemTarget
     public var title: String
     public var mode: FavoriteUpdateTargetMode
     public var fid: String?
@@ -158,7 +158,7 @@ public struct FavoriteUpdateEvent: Codable, Hashable, Identifiable, Sendable {
 
     public init(
         id: String = UUID().uuidString,
-        target: FavoriteContentTarget,
+        target: FavoriteItemTarget,
         title: String,
         mode: FavoriteUpdateTargetMode,
         fid: String? = nil,

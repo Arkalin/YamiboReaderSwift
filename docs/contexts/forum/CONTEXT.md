@@ -79,7 +79,7 @@ A compact representation of a Yamibo thread used by **Forum Board**, pinned thre
 _Avoid_: reader document, post summary, favorite item
 
 **Forum Thread Tap Context**:
-The source context supplied when a user opens a **Forum Thread Summary**, including the containing **Forum Board** when the list itself is board-scoped and mode flags such as tag manga browsing. It does not replace the thread's own board identity when that identity is carried by the summary.
+The source context supplied when a user opens a **Forum Thread Summary**, including the containing **Forum Board** when the list itself is board-scoped. It does not replace the thread's own board identity when that identity is carried by the summary. (Its formerly-unwired `isTagMangaMode` flag was removed as dead code; per-board Smart Comic Mode state is looked up separately by **Yamibo Thread Routing** via `AppSettings`, not carried on this context.)
 _Avoid_: cell state, navigation path, tap URL
 
 **Novel Detail**:
@@ -95,7 +95,7 @@ The Core classification of Yamibo board identities into mutually exclusive threa
 _Avoid_: reader mode detector, parser-owned board list, scattered fid checks
 
 **Thread Route Target**:
-The pure value produced by **Yamibo Thread Routing** for a caller to map into its own navigation or reader entry. It describes parsed content type rather than a UI destination, and carries both the canonical thread URL and parsed thread or board identity when available.
+The pure value produced by **Yamibo Thread Routing** for a caller to map into its own navigation or reader entry. It describes parsed content type rather than a UI destination, and carries both the canonical thread URL and parsed thread or board identity when available. A manga-classified thread on a board with Smart Comic Mode off resolves to a distinct target variant than one with the mode on, even though both share the same manga thread classification — the routing layer, not the caller, decides that split by checking `AppSettings` for the containing board.
 _Avoid_: navigation side effect, destination enum leak, direct presentation
 
 **Thread Route Request**:

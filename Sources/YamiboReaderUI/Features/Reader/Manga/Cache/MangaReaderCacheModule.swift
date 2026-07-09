@@ -237,15 +237,12 @@ public final class MangaReaderCacheViewModel: ObservableObject {
 
     private func localFavoriteItem() async -> FavoriteItem? {
         guard let document = try? await localFavoriteLibraryStore.load() else { return nil }
-        let directoryName = panel.directoryTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !directoryName.isEmpty {
-            let target = FavoriteContentTarget(mangaCleanBookName: directoryName)
-            if let item = document.items.first(where: { $0.target.id == target.id }) {
-                return item
-            }
-        }
+        // A `.mangaThread` favorite is keyed by its own chapter thread id now
+        // (no merged-directory identity left to look up by directoryTitle —
+        // smart-comic-mode Phase A decision #3/#9), so a direct threadID
+        // match is the only lookup that still applies.
         return document.items.first { item in
-            item.target.threadID == context.originalThreadID || item.mangaChapterMetadata?.chapterTID == context.chapterTID
+            item.target.threadID == context.originalThreadID
         }
     }
 
@@ -253,7 +250,7 @@ public final class MangaReaderCacheViewModel: ObservableObject {
 
 private extension FavoriteItem {
     func favorite(type: FavoriteType) -> Favorite {
-        let threadID = target.threadID ?? mangaChapterMetadata?.chapterTID ?? target.mangaID ?? id
+        let threadID = target.threadID ?? id
         return Favorite(
             id: id,
             title: title,

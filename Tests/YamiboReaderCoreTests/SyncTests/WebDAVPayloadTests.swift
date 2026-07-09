@@ -20,7 +20,7 @@ import Testing
 }
 
 @Test func favoriteLibraryWebDAVMergePreservesIndependentLocationsAndTagsWithTombstones() throws {
-    let target = FavoriteContentTarget(kind: .normalThread, threadID: "1001")
+    let target = FavoriteItemTarget(kind: .normalThread, threadID: "1001")
     let baseDate = Date(timeIntervalSince1970: 10)
     var localDocument = FavoriteLibraryDocument()
     let category = localDocument.createCategory(name: "分类")
@@ -50,7 +50,7 @@ import Testing
 }
 
 @Test func favoriteLibraryWebDAVMergeUsesFieldDomainClocks() throws {
-    let target = FavoriteContentTarget(kind: .normalThread, threadID: "1002")
+    let target = FavoriteItemTarget(kind: .normalThread, threadID: "1002")
     let localClock = Date(timeIntervalSince1970: 20)
     let remoteClock = Date(timeIntervalSince1970: 30)
     let localItem = try FavoriteItem(

@@ -1,15 +1,38 @@
 import Foundation
 
+/// Reading-progress-only target kind (`ReadingProgressRecord.contentTarget`).
+/// Favorites no longer use this type at all — see `FavoriteItemTarget` below,
+/// which is the favorites-side equivalent and deliberately cannot represent
+/// `.mangaTitle` (2026-07-08 smart-comic-mode decision #9's second
+/// correction: a compiler-enforced split, not a dead switch branch).
 public enum FavoriteContentTargetKind: String, Codable, CaseIterable, Sendable {
     case normalThread
     case novelThread
     case mangaTitle
+    /// Per-thread manga reading progress, written alongside (mode on) or
+    /// instead of (mode off) the directory-level `.mangaTitle` record. See
+    /// smart-comic-mode design decision #15. The full dual-write/read
+    /// mode-dependent logic is implemented in a later phase; this phase only
+    /// adds the case and its column mapping.
+    case mangaThread
 }
 
+/// Reading-progress-only target type (`ReadingProgressRecord.contentTarget`).
+/// Kept exactly as it was before smart-comic-mode except for the new
+/// `.mangaThread` case (decision #15) — the favorites side now uses the
+/// separate `FavoriteItemTarget` type instead of this one (decision #9's
+/// second correction).
 public enum FavoriteContentTarget: Codable, Hashable, Identifiable, Sendable {
     case normalThread(threadID: String)
     case novelThread(threadID: String)
     case mangaTitle(mangaID: String, cleanBookName: String)
+    /// This thread's own manga reading progress, independent of the
+    /// directory-level `.mangaTitle` record. Deliberately uses the same id
+    /// format (`"manga-thread:\(threadID)"`) as the favorites-side
+    /// `FavoriteItemTarget.mangaThread` so a closed-board single-thread
+    /// favorite can match its progress record by direct id lookup without a
+    /// cleanBookName fallback (smart-comic-mode design decision #15).
+    case mangaThread(threadID: String)
 
     private enum CodingKeys: String, CodingKey {
         case kind
@@ -26,6 +49,8 @@ public enum FavoriteContentTarget: Codable, Hashable, Identifiable, Sendable {
             "thread:novel:\(threadID)"
         case let .mangaTitle(mangaID, _):
             "manga-title:\(mangaID)"
+        case let .mangaThread(threadID):
+            "manga-thread:\(threadID)"
         }
     }
 
@@ -37,6 +62,8 @@ public enum FavoriteContentTarget: Codable, Hashable, Identifiable, Sendable {
             .novelThread
         case .mangaTitle:
             .mangaTitle
+        case .mangaThread:
+            .mangaThread
         }
     }
 
@@ -52,7 +79,7 @@ public enum FavoriteContentTarget: Codable, Hashable, Identifiable, Sendable {
 
     public var threadID: String? {
         switch self {
-        case let .normalThread(threadID), let .novelThread(threadID):
+        case let .normalThread(threadID), let .novelThread(threadID), let .mangaThread(threadID):
             threadID
         case .mangaTitle:
             nil
@@ -69,6 +96,8 @@ public enum FavoriteContentTarget: Codable, Hashable, Identifiable, Sendable {
             self = .novelThread(threadID: normalizedThreadID)
         case .mangaTitle:
             self = .mangaTitle(mangaID: normalizedThreadID, cleanBookName: normalizedThreadID)
+        case .mangaThread:
+            self = .mangaThread(threadID: normalizedThreadID)
         }
     }
 
@@ -100,6 +129,8 @@ public enum FavoriteContentTarget: Codable, Hashable, Identifiable, Sendable {
                 mangaID: try container.decodeIfPresent(String.self, forKey: .mangaID) ?? cleanBookName,
                 cleanBookName: cleanBookName
             )
+        case .mangaThread:
+            self = .mangaThread(threadID: try Self.decodeThreadID(from: container))
         }
     }
 
@@ -107,7 +138,7 @@ public enum FavoriteContentTarget: Codable, Hashable, Identifiable, Sendable {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(kind, forKey: .kind)
         switch self {
-        case let .normalThread(threadID), let .novelThread(threadID):
+        case let .normalThread(threadID), let .novelThread(threadID), let .mangaThread(threadID):
             try container.encode(threadID, forKey: .threadID)
         case let .mangaTitle(mangaID, cleanBookName):
             try container.encode(mangaID, forKey: .mangaID)
@@ -135,14 +166,138 @@ public enum FavoriteContentTarget: Codable, Hashable, Identifiable, Sendable {
     }
 }
 
+/// Favorites-only target kind (`FavoriteItem.target`). Physically cannot
+/// represent the reading-progress-side `.mangaTitle` merged-directory
+/// identity — see `FavoriteItemTarget`.
+public enum FavoriteItemTargetKind: String, Codable, CaseIterable, Sendable {
+    case normalThread
+    case novelThread
+    case mangaThread
+}
+
+/// Favorites-only target type. Introduced by smart-comic-mode design decision
+/// #9's second correction: favorites and reading progress used to share
+/// `FavoriteContentTarget`, but the user explicitly rejected keeping a dead
+/// `.mangaTitle` fallback branch in favorites' exhaustive switches just to
+/// satisfy the compiler. This type has exactly three cases — every switch
+/// over it is exhaustive without a `.mangaTitle` option, so a favorite simply
+/// cannot be constructed with the old merged-directory identity.
+///
+/// `.mangaThread(threadID:)` is a *different* case from the reading-progress
+/// side's `FavoriteContentTarget.mangaThread(threadID:)` — same name, two
+/// unrelated enums, one per consumer (`FavoriteItem.target` vs
+/// `ReadingProgressRecord.contentTarget`). Their `.id` strings are
+/// deliberately formatted identically (`"manga-thread:\(threadID)"`) so a
+/// favorite and its own per-thread reading progress line up by direct id
+/// lookup (design decision #15).
+public enum FavoriteItemTarget: Codable, Hashable, Identifiable, Sendable {
+    case normalThread(threadID: String)
+    case novelThread(threadID: String)
+    case mangaThread(threadID: String)
+
+    private enum CodingKeys: String, CodingKey {
+        case kind
+        case threadID
+    }
+
+    public var id: String {
+        switch self {
+        case let .normalThread(threadID):
+            "thread:normal:\(threadID)"
+        case let .novelThread(threadID):
+            "thread:novel:\(threadID)"
+        case let .mangaThread(threadID):
+            "manga-thread:\(threadID)"
+        }
+    }
+
+    public var kind: FavoriteItemTargetKind {
+        switch self {
+        case .normalThread:
+            .normalThread
+        case .novelThread:
+            .novelThread
+        case .mangaThread:
+            .mangaThread
+        }
+    }
+
+    /// Every case carries a real Yamibo thread tid — unlike the old shared
+    /// `FavoriteContentTarget.mangaTitle`, there is no case here without one.
+    /// Kept `String?` (rather than a non-optional `String`) purely to match
+    /// the shape favorites-side call sites already expect from the shared
+    /// type this replaces, minimizing churn at existing `guard let`/`?? `
+    /// call sites.
+    public var threadID: String? {
+        switch self {
+        case let .normalThread(threadID), let .novelThread(threadID), let .mangaThread(threadID):
+            threadID
+        }
+    }
+
+    public init(kind: FavoriteItemTargetKind, threadID: String) {
+        let normalizedThreadID = threadID.trimmingCharacters(in: .whitespacesAndNewlines)
+        precondition(!normalizedThreadID.isEmpty, "FavoriteItemTarget requires a Yamibo thread tid")
+        switch kind {
+        case .normalThread:
+            self = .normalThread(threadID: normalizedThreadID)
+        case .novelThread:
+            self = .novelThread(threadID: normalizedThreadID)
+        case .mangaThread:
+            self = .mangaThread(threadID: normalizedThreadID)
+        }
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let kind = try container.decode(FavoriteItemTargetKind.self, forKey: .kind)
+        let threadID = try Self.decodeThreadID(from: container)
+        switch kind {
+        case .normalThread:
+            self = .normalThread(threadID: threadID)
+        case .novelThread:
+            self = .novelThread(threadID: threadID)
+        case .mangaThread:
+            self = .mangaThread(threadID: threadID)
+        }
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(kind, forKey: .kind)
+        switch self {
+        case let .normalThread(threadID), let .novelThread(threadID), let .mangaThread(threadID):
+            try container.encode(threadID, forKey: .threadID)
+        }
+    }
+
+    private static func decodeThreadID(
+        from container: KeyedDecodingContainer<CodingKeys>
+    ) throws -> String {
+        if let threadID = try container.decodeIfPresent(String.self, forKey: .threadID)?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+           !threadID.isEmpty {
+            return threadID
+        }
+        throw DecodingError.keyNotFound(
+            CodingKeys.threadID,
+            DecodingError.Context(codingPath: container.codingPath, debugDescription: "FavoriteItemTarget requires threadID")
+        )
+    }
+}
+
 public enum FavoriteSourceGroup: Codable, Hashable, Sendable {
     case forumBoard(id: String, label: String)
-    case mangaTitle(mangaID: String, cleanBookName: String)
+    /// Renamed from `.mangaTitle` (smart-comic-mode design decision #9): the
+    /// favorites-page display/sort grouping label for manga. No behavior
+    /// change, pure rename (including its wire format — no shipped user data
+    /// exists yet, see [[yamiboreader-no-data-compat]]).
+    case smartManga(mangaID: String, cleanBookName: String)
     case unknown
 
     private enum CodingKeys: String, CodingKey {
         case forumBoard
-        case mangaTitle
+        case smartManga
         case unknown
     }
 
@@ -151,7 +306,7 @@ public enum FavoriteSourceGroup: Codable, Hashable, Sendable {
         case label
     }
 
-    private enum MangaTitleCodingKeys: String, CodingKey {
+    private enum SmartMangaCodingKeys: String, CodingKey {
         case mangaID
         case cleanBookName
     }
@@ -160,7 +315,7 @@ public enum FavoriteSourceGroup: Codable, Hashable, Sendable {
         switch (lhs, rhs) {
         case let (.forumBoard(lhsID, _), .forumBoard(rhsID, _)):
             lhsID == rhsID
-        case let (.mangaTitle(lhsID, _), .mangaTitle(rhsID, _)):
+        case let (.smartManga(lhsID, _), .smartManga(rhsID, _)):
             lhsID == rhsID
         case (.unknown, .unknown):
             true
@@ -174,8 +329,8 @@ public enum FavoriteSourceGroup: Codable, Hashable, Sendable {
         case let .forumBoard(id, _):
             hasher.combine("forumBoard")
             hasher.combine(id)
-        case let .mangaTitle(mangaID, _):
-            hasher.combine("mangaTitle")
+        case let .smartManga(mangaID, _):
+            hasher.combine("smartManga")
             hasher.combine(mangaID)
         case .unknown:
             hasher.combine("unknown")
@@ -196,9 +351,9 @@ public enum FavoriteSourceGroup: Codable, Hashable, Sendable {
             )
             return
         }
-        let values = try container.nestedContainer(keyedBy: MangaTitleCodingKeys.self, forKey: .mangaTitle)
+        let values = try container.nestedContainer(keyedBy: SmartMangaCodingKeys.self, forKey: .smartManga)
         let cleanBookName = try values.decode(String.self, forKey: .cleanBookName)
-        self = FavoriteSourceGroup.mangaTitle(
+        self = FavoriteSourceGroup.smartManga(
             mangaID: try values.decodeIfPresent(String.self, forKey: .mangaID) ?? cleanBookName,
             cleanBookName: cleanBookName
         )
@@ -211,12 +366,12 @@ public enum FavoriteSourceGroup: Codable, Hashable, Sendable {
             var values = container.nestedContainer(keyedBy: ForumBoardCodingKeys.self, forKey: .forumBoard)
             try values.encode(id, forKey: .id)
             try values.encode(label, forKey: .label)
-        case let .mangaTitle(mangaID, cleanBookName):
-            var values = container.nestedContainer(keyedBy: MangaTitleCodingKeys.self, forKey: .mangaTitle)
+        case let .smartManga(mangaID, cleanBookName):
+            var values = container.nestedContainer(keyedBy: SmartMangaCodingKeys.self, forKey: .smartManga)
             try values.encode(mangaID, forKey: .mangaID)
             try values.encode(cleanBookName, forKey: .cleanBookName)
         case .unknown:
-            _ = container.nestedContainer(keyedBy: MangaTitleCodingKeys.self, forKey: .unknown)
+            _ = container.nestedContainer(keyedBy: SmartMangaCodingKeys.self, forKey: .unknown)
         }
     }
 
@@ -245,8 +400,8 @@ public enum FavoriteSourceGroup: Codable, Hashable, Sendable {
                 return (.unknown, nil, nil)
             }
             return (.forumBoard(id: resolvedID, label: resolvedName ?? resolvedID), resolvedID, resolvedName)
-        case let .mangaTitle(mangaID, cleanBookName):
-            return (.mangaTitle(mangaID: mangaID, cleanBookName: cleanBookName), nil, nil)
+        case let .smartManga(mangaID, cleanBookName):
+            return (.smartManga(mangaID: mangaID, cleanBookName: cleanBookName), nil, nil)
         case .unknown:
             guard let trimmedForumID else {
                 return (.unknown, nil, nil)
@@ -257,9 +412,9 @@ public enum FavoriteSourceGroup: Codable, Hashable, Sendable {
 }
 
 public extension FavoriteSourceGroup {
-    static func mangaTitle(cleanBookName: String) -> FavoriteSourceGroup {
+    static func smartManga(cleanBookName: String) -> FavoriteSourceGroup {
         let normalizedName = cleanBookName.trimmingCharacters(in: .whitespacesAndNewlines)
-        return .mangaTitle(mangaID: normalizedName, cleanBookName: normalizedName)
+        return .smartManga(mangaID: normalizedName, cleanBookName: normalizedName)
     }
 }
 
@@ -365,20 +520,6 @@ public struct FavoriteRemoteMapping: Codable, Hashable, Sendable {
     }
 }
 
-public struct FavoriteMangaChapterMetadata: Codable, Hashable, Sendable {
-    public var chapterTID: String
-    public var chapterView: Int
-    public var chapterTitle: String?
-    public var importedAt: Date
-
-    public init(chapterTID: String, chapterView: Int = 1, chapterTitle: String? = nil, importedAt: Date = .now) {
-        self.chapterTID = chapterTID.trimmingCharacters(in: .whitespacesAndNewlines)
-        self.chapterView = max(1, chapterView)
-        self.chapterTitle = chapterTitle
-        self.importedAt = importedAt
-    }
-}
-
 public enum FavoriteContentUpdateDateResolver {
     public static func date(lastEditedText: String?, postedAtText: String?) -> Date? {
         date(from: extractedEditTime(from: lastEditedText)) ?? date(from: postedAtText)
@@ -447,7 +588,7 @@ public enum FavoriteContentUpdateDateResolver {
 }
 
 public struct FavoriteThreadProbeResult: Hashable, Sendable {
-    public var target: FavoriteContentTarget
+    public var target: FavoriteItemTarget
     public var title: String
     public var sourceGroup: FavoriteSourceGroup
     public var forumID: String?
@@ -462,7 +603,7 @@ public struct FavoriteThreadProbeResult: Hashable, Sendable {
     public var sourceMetadataFetchFailed: Bool
 
     public init(
-        target: FavoriteContentTarget,
+        target: FavoriteItemTarget,
         title: String,
         sourceGroup: FavoriteSourceGroup = .unknown,
         forumID: String? = nil,
@@ -497,12 +638,16 @@ enum FavoriteThreadImportFailure: Error, Equatable, Sendable {
 public enum FavoriteItemOpenRoute: Equatable, Sendable {
     case nativeThread(threadID: String)
     case novelDetail(threadID: String)
-    case mangaTitle(cleanBookName: String)
+    /// Renamed from `.mangaTitle(cleanBookName:)`: favorites no longer carry
+    /// a merged-directory identity, so this now names the single chapter
+    /// thread the favorite points at (smart-comic-mode design decision #9's
+    /// second correction).
+    case mangaThread(threadID: String)
     case unsupported
 }
 
 public struct FavoriteItem: Codable, Hashable, Identifiable, Sendable {
-    public var target: FavoriteContentTarget
+    public var target: FavoriteItemTarget
     public var title: String
     public var displayName: String?
     public var sourceGroup: FavoriteSourceGroup
@@ -510,7 +655,6 @@ public struct FavoriteItem: Codable, Hashable, Identifiable, Sendable {
     public var forumName: String?
     public var contentUpdatedAt: Date?
     public var remoteMapping: FavoriteRemoteMapping?
-    public var mangaChapterMetadata: FavoriteMangaChapterMetadata?
     public var locations: [FavoriteLocation]
     public var tagIDs: [String]
     public var createdAt: Date
@@ -519,7 +663,7 @@ public struct FavoriteItem: Codable, Hashable, Identifiable, Sendable {
     public var id: String { target.id }
 
     public init(
-        target: FavoriteContentTarget,
+        target: FavoriteItemTarget,
         title: String,
         displayName: String? = nil,
         sourceGroup: FavoriteSourceGroup = .unknown,
@@ -527,7 +671,6 @@ public struct FavoriteItem: Codable, Hashable, Identifiable, Sendable {
         forumName: String? = nil,
         contentUpdatedAt: Date? = nil,
         remoteMapping: FavoriteRemoteMapping? = nil,
-        mangaChapterMetadata: FavoriteMangaChapterMetadata? = nil,
         locations: [FavoriteLocation],
         tagIDs: [String] = [],
         createdAt: Date = .now,
@@ -546,7 +689,6 @@ public struct FavoriteItem: Codable, Hashable, Identifiable, Sendable {
         self.forumName = forumMetadata.forumName
         self.contentUpdatedAt = contentUpdatedAt
         self.remoteMapping = remoteMapping
-        self.mangaChapterMetadata = mangaChapterMetadata
         self.locations = normalizedLocations
         self.tagIDs = Self.normalizedIDs(tagIDs)
         self.createdAt = createdAt
@@ -631,9 +773,12 @@ public struct FavoriteLibraryDocument: Codable, Equatable, Sendable {
         remoteMapping: FavoriteRemoteMapping? = nil,
         date: Date = .now
     ) throws -> FavoriteItem {
-        guard probeResult.target.kind == .normalThread || probeResult.target.kind == .novelThread else {
-            throw FavoriteThreadImportFailure.unsupportedTarget
-        }
+        // All three `FavoriteItemTargetKind` cases are plain per-thread
+        // favorites now (there is no merged-directory kind on this type at
+        // all), so a manga chapter thread imports through this same generic
+        // path as a normal/novel thread — see step 3 of the smart-comic-mode
+        // Phase A report for why the old dedicated
+        // `importMangaChapterFavorite` mechanism was removed instead of kept.
         let resolvedLocation = location ?? .category(defaultCategory.id)
         if let existingThreadID = probeResult.target.threadID,
            let existingTarget = items.first(where: { $0.target.threadID == existingThreadID })?.target,
@@ -680,140 +825,32 @@ public struct FavoriteLibraryDocument: Codable, Equatable, Sendable {
             .nativeThread(threadID: threadID)
         case let .novelThread(threadID):
             .novelDetail(threadID: threadID)
-        case let .mangaTitle(_, cleanBookName):
-            .mangaTitle(cleanBookName: cleanBookName)
+        case let .mangaThread(threadID):
+            .mangaThread(threadID: threadID)
         }
     }
 
-    @discardableResult
-    public mutating func addMangaTitleFavorite(
-        cleanBookName: String,
-        mangaID: String? = nil,
-        title: String? = nil,
-        location: FavoriteLocation? = nil,
-        remoteMapping: FavoriteRemoteMapping? = nil,
-        contentUpdatedAt: Date? = nil,
-        chapterMetadata: FavoriteMangaChapterMetadata? = nil,
-        date: Date = .now
-    ) throws -> FavoriteItem {
-        let normalizedName = cleanBookName.trimmingCharacters(in: .whitespacesAndNewlines)
-        let target = FavoriteContentTarget(mangaID: mangaID ?? normalizedName, mangaCleanBookName: normalizedName)
-        let normalizedMangaID = target.mangaID ?? normalizedName
-        let resolvedLocation = location ?? .category(defaultCategory.id)
-        if let retargetIndex = mangaRetargetCandidateIndex(
-            target: target,
-            cleanBookName: normalizedName,
-            chapterTID: chapterMetadata?.chapterTID
-        ) {
-            retargetItem(from: items[retargetIndex].target, to: target)
-        }
-        if let index = items.firstIndex(where: { $0.target.id == target.id }) {
-            items[index].title = title?.nilIfEmpty ?? items[index].title
-            items[index].target = target
-            items[index].sourceGroup = .mangaTitle(mangaID: normalizedMangaID, cleanBookName: normalizedName)
-            items[index].mangaChapterMetadata = chapterMetadata ?? items[index].mangaChapterMetadata
-            items[index].remoteMapping = remoteMapping ?? items[index].remoteMapping
-            items[index].contentUpdatedAt = contentUpdatedAt ?? items[index].contentUpdatedAt
-            items[index].locations = FavoriteItem.normalizedLocations(items[index].locations + [resolvedLocation])
-            items[index].updatedAt = date
-            items[index] = Self.normalizedItem(items[index], categories: categories, collections: collections)
-            return items[index]
-        }
+    // `addMangaTitleFavorite`/`importMangaChapterFavorite`/
+    // `mangaRetargetCandidateIndex` (the dormant merged-directory favorite
+    // mechanism) and `renameMangaTitle` (its rename counterpart) were removed
+    // in the smart-comic-mode Phase A type refactor — see decision #3/#9.
+    // `FavoriteItemTarget` cannot represent that identity at all anymore, so
+    // there is nothing left for these to operate on; manga chapter favorites
+    // now import through the same `importThreadFavorite` path as any other
+    // thread (see the comment above it), and a manga directory rename no
+    // longer needs to touch favorites at all since `.mangaThread` favorites
+    // are keyed by thread id, not by the directory's cleanBookName — see
+    // `MangaReaderViewModel.migrateMangaTitleReferences` for the remaining
+    // (reading-progress-only) half of that migration.
 
-        let item = try FavoriteItem(
-            target: target,
-            title: title?.nilIfEmpty ?? normalizedName,
-            sourceGroup: .mangaTitle(mangaID: normalizedMangaID, cleanBookName: normalizedName),
-            contentUpdatedAt: contentUpdatedAt,
-            remoteMapping: remoteMapping,
-            mangaChapterMetadata: chapterMetadata,
-            locations: [resolvedLocation],
-            createdAt: date,
-            updatedAt: date
-        )
-        addItem(item)
-        return item
-    }
-
-    private func mangaRetargetCandidateIndex(
-        target: FavoriteContentTarget,
-        cleanBookName: String,
-        chapterTID: String?
-    ) -> Int? {
-        guard case .mangaTitle = target else { return nil }
-        var candidateIDs = Set<String>()
-        candidateIDs.insert(FavoriteContentTarget(mangaCleanBookName: cleanBookName).id)
-        if let chapterTID = chapterTID?.trimmingCharacters(in: .whitespacesAndNewlines), !chapterTID.isEmpty {
-            candidateIDs.insert(FavoriteContentTarget(mangaID: "chapter:\(chapterTID)", mangaCleanBookName: cleanBookName).id)
-            candidateIDs.insert(FavoriteContentTarget(mangaID: "thread:\(chapterTID)", mangaCleanBookName: cleanBookName).id)
-        }
-        candidateIDs.remove(target.id)
-        return items.firstIndex { item in
-            candidateIDs.contains(item.target.id) ||
-                (chapterTID != nil && item.mangaChapterMetadata?.chapterTID == chapterTID && item.target.kind == .mangaTitle)
-        }
-    }
-
-    @discardableResult
-    public mutating func importMangaChapterFavorite(
-        chapterTID: String,
-        chapterView: Int = 1,
-        chapterTitle: String? = nil,
-        directories: [MangaDirectory],
-        fallbackCleanBookName: String? = nil,
-        location: FavoriteLocation? = nil,
-        remoteMapping: FavoriteRemoteMapping? = nil,
-        date: Date = .now
-    ) throws -> FavoriteItem {
-        let matchedDirectory = directories.first { directory in
-            directory.chapters.contains { $0.tid == chapterTID }
-        }
-        let cleanBookName = matchedDirectory?.cleanBookName ?? fallbackCleanBookName?.nilIfEmpty
-        let mangaID = matchedDirectory?.favoriteIdentity ?? "chapter:\(chapterTID)"
-
-        guard let cleanBookName else {
-            throw YamiboError.persistenceFailed(L10n.string("favorite_library.manga_title_resolution_failed"))
-        }
-
-        return try addMangaTitleFavorite(
-            cleanBookName: cleanBookName,
-            mangaID: mangaID,
-            title: cleanBookName,
-            location: location,
-            remoteMapping: remoteMapping,
-            contentUpdatedAt: matchedDirectory?.lastUpdatedAt,
-            chapterMetadata: FavoriteMangaChapterMetadata(
-                chapterTID: chapterTID,
-                chapterView: chapterView,
-                chapterTitle: chapterTitle,
-                importedAt: date
-            ),
-            date: date
-        )
-    }
-
-    public mutating func renameMangaTitle(from oldCleanBookName: String, to newCleanBookName: String) {
-        let oldTarget = items.first { item in
-            item.target.mangaCleanBookName == oldCleanBookName
-        }?.target ?? FavoriteContentTarget(mangaCleanBookName: oldCleanBookName)
-        let newTarget = oldTarget.renamedMangaTitle(to: newCleanBookName)
-        retargetItem(from: oldTarget, to: newTarget)
-        if let index = items.firstIndex(where: { $0.target.id == newTarget.id }) {
-            items[index].sourceGroup = .mangaTitle(mangaID: newTarget.mangaID ?? newCleanBookName, cleanBookName: newCleanBookName)
-            if items[index].title == oldCleanBookName {
-                items[index].title = newCleanBookName
-            }
-        }
-    }
-
-    public mutating func removeItem(target: FavoriteContentTarget) {
+    public mutating func removeItem(target: FavoriteItemTarget) {
         items.removeAll { $0.target.id == target.id }
     }
 
     /// Refreshes the Yamibo remote mapping after a sync run saw the item on
     /// the website. Passing nil keeps the previously known value.
     public mutating func updateRemoteMapping(
-        for target: FavoriteContentTarget,
+        for target: FavoriteItemTarget,
         yamiboFavoriteID: String?,
         yamiboRemoteOrder: Int?,
         date: Date = .now
@@ -834,7 +871,7 @@ public struct FavoriteLibraryDocument: Codable, Equatable, Sendable {
     /// (like the update-check filter) once the user disables any other
     /// forum's filter. No-ops if the item already has a resolved source
     /// group, so this never clobbers a value obtained elsewhere.
-    public mutating func healUnknownSourceGroup(for target: FavoriteContentTarget, forumID: String, forumName: String?, date: Date = .now) {
+    public mutating func healUnknownSourceGroup(for target: FavoriteItemTarget, forumID: String, forumName: String?, date: Date = .now) {
         guard let index = items.firstIndex(where: { $0.target.id == target.id }),
               items[index].sourceGroup == .unknown else {
             return
@@ -851,7 +888,7 @@ public struct FavoriteLibraryDocument: Codable, Equatable, Sendable {
         items[index].updatedAt = date
     }
 
-    public mutating func retargetItem(from oldTarget: FavoriteContentTarget, to newTarget: FavoriteContentTarget) {
+    public mutating func retargetItem(from oldTarget: FavoriteItemTarget, to newTarget: FavoriteItemTarget) {
         guard let index = items.firstIndex(where: { $0.target.id == oldTarget.id }) else { return }
         var replacement = items[index]
         replacement.target = newTarget
@@ -873,14 +910,14 @@ public struct FavoriteLibraryDocument: Codable, Equatable, Sendable {
         sortItems()
     }
 
-    public mutating func addLocation(_ location: FavoriteLocation, to target: FavoriteContentTarget) {
+    public mutating func addLocation(_ location: FavoriteLocation, to target: FavoriteItemTarget) {
         guard let index = items.firstIndex(where: { $0.target.id == target.id }) else { return }
         items[index].locations = FavoriteItem.normalizedLocations(items[index].locations + [location])
         items[index] = Self.normalizedItem(items[index], categories: categories, collections: collections)
     }
 
     @discardableResult
-    public mutating func removeLocation(_ location: FavoriteLocation, from target: FavoriteContentTarget) -> Bool {
+    public mutating func removeLocation(_ location: FavoriteLocation, from target: FavoriteItemTarget) -> Bool {
         guard let index = items.firstIndex(where: { $0.target.id == target.id }) else { return false }
         let remaining = items[index].locations.filter { $0 != location }
         guard !remaining.isEmpty else { return false }
@@ -1041,13 +1078,13 @@ public struct FavoriteLibraryDocument: Codable, Equatable, Sendable {
         }
     }
 
-    public mutating func assignTag(id tagID: String, to target: FavoriteContentTarget) {
+    public mutating func assignTag(id tagID: String, to target: FavoriteItemTarget) {
         guard tags.contains(where: { $0.id == tagID }),
               let index = items.firstIndex(where: { $0.target.id == target.id }) else { return }
         items[index].tagIDs = FavoriteItem.normalizedIDs(items[index].tagIDs + [tagID])
     }
 
-    public mutating func unassignTag(id tagID: String, from target: FavoriteContentTarget) {
+    public mutating func unassignTag(id tagID: String, from target: FavoriteItemTarget) {
         guard let index = items.firstIndex(where: { $0.target.id == target.id }) else { return }
         items[index].tagIDs.removeAll { $0 == tagID }
     }

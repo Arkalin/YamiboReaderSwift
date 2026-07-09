@@ -78,6 +78,45 @@ struct MangaReaderTestsMangaStores {
         #expect(databaseState.persistedTextValues.allSatisfy { !$0.contains("forum.php") })
     }
 
+    @Test func directoriesContainingTIDsBatchesLookupAndMirrorsSingleTidResolution() async throws {
+        let database = try YamiboDatabase.openPool(rootDirectory: makeMangaStoreRoot())
+        let store = MangaDirectoryStore(databasePool: database)
+
+        try await store.saveDirectory(MangaDirectory(
+            cleanBookName: "批量漫画A",
+            strategy: .links,
+            sourceKey: "chapter:920",
+            chapters: [
+                makeChapter(tid: "920", title: "第1话", order: 1),
+                makeChapter(tid: "921", title: "第2话", order: 2),
+            ]
+        ))
+        try await store.saveDirectory(MangaDirectory(
+            cleanBookName: "批量漫画B",
+            strategy: .links,
+            sourceKey: "chapter:930",
+            chapters: [makeChapter(tid: "930", title: "第1话", order: 1)]
+        ))
+
+        // "999" resolves to nothing; the result should simply omit it rather
+        // than error or crash.
+        let result = try await store.directories(containingTIDs: ["920", "921", "930", "999"])
+
+        #expect(Set(result.keys) == ["920", "921", "930"])
+        #expect(result["920"]?.cleanBookName == "批量漫画A")
+        #expect(result["921"]?.cleanBookName == "批量漫画A")
+        #expect(result["930"]?.cleanBookName == "批量漫画B")
+        // Both tids from the same directory share equal (structurally
+        // identical) resolved values, matching what two individual
+        // `directory(containingTID:)` calls would each return.
+        #expect(result["920"] == result["921"])
+
+        // Empty input and an all-miss input both degrade to an empty result,
+        // not an error.
+        #expect(try await store.directories(containingTIDs: []).isEmpty)
+        #expect(try await store.directories(containingTIDs: ["not-a-real-tid"]).isEmpty)
+    }
+
     @Test func directoryRenameReplacesIdentityInOneStoreOperation() async throws {
         let database = try YamiboDatabase.openPool(rootDirectory: makeMangaStoreRoot())
         let store = MangaDirectoryStore(databasePool: database)
@@ -116,7 +155,16 @@ struct MangaReaderTestsMangaStores {
         let favoriteStore = FavoriteLibraryStore(defaults: favoriteDefaults, key: "favorites", databasePool: database)
         let progressStore = ReadingProgressStore(defaults: progressDefaults, key: "progress", databasePool: database)
         var favorites = FavoriteLibraryDocument()
-        _ = try favorites.addMangaTitleFavorite(cleanBookName: "旧书名")
+        // Favorites no longer carry a cleanBookName-keyed identity at all
+        // (smart-comic-mode Phase A decision #3/#9), so a `.mangaThread`
+        // favorite is NOT part of this rename cascade anymore — proven below
+        // by asserting the favorite is untouched by the directory rename.
+        let favoriteItem = try FavoriteItem(
+            target: .mangaThread(threadID: "912"),
+            title: "旧书名",
+            locations: [.category(favorites.defaultCategory.id)]
+        )
+        favorites.addItem(favoriteItem)
         try await favoriteStore.save(favorites)
         _ = try await progressStore.saveMangaTitle(
             cleanBookName: "旧书名",
@@ -143,9 +191,8 @@ struct MangaReaderTestsMangaStores {
         )
 
         let favorite = try #require(try await favoriteStore.load().items.first)
-        #expect(favorite.target == FavoriteContentTarget(mangaID: "旧书名", mangaCleanBookName: "新书名"))
-        #expect(favorite.title == "新书名")
-        #expect(favorite.sourceGroup == .mangaTitle(mangaID: "旧书名", cleanBookName: "新书名"))
+        #expect(favorite.target == .mangaThread(threadID: "912"))
+        #expect(favorite.title == "旧书名")
         #expect(await progressStore.load(for: FavoriteContentTarget(mangaCleanBookName: "旧书名")) == nil)
         let progress = await progressStore.load(for: FavoriteContentTarget(mangaCleanBookName: "新书名"))
         #expect(progress?.manga?.mangaPageIndex == 6)

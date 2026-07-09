@@ -67,9 +67,23 @@ final class FavoriteLibraryOrganizer: ObservableObject {
 
     private var readingProgress: [ReadingProgressRecord] = []
     private var contentCoverURLsByTargetID: [String: URL] = [:]
+    /// tid → resolved `MangaDirectory`, for virtual favorites grouping
+    /// (smart-comic-mode decision #3/#5). Populated only at `load()`/
+    /// `reload()` via one batched `MangaDirectoryStore.directories
+    /// (containingTIDs:)` call — never recomputed per render (the design
+    /// doc's performance constraint #2).
+    private var mangaDirectoriesByTID: [String: MangaDirectory] = [:]
+    /// Snapshot of the per-board Smart Comic Mode toggle taken at the same
+    /// load/reload as `mangaDirectoriesByTID`, so the two are always
+    /// consistent with each other for a given derivation.
+    private var smartComicModeSettings = SmartComicModeSettings()
+    /// `.smartManga(cleanBookName:)` covers for every currently-resolved
+    /// directory, keyed by `cleanBookName` (decision #13/#16).
+    private var smartMangaCoverURLsByCleanBookName: [String: URL] = [:]
     private var libraryUpdatesTask: Task<Void, Never>?
     private var progressUpdatesTask: Task<Void, Never>?
     private var coverUpdatesTask: Task<Void, Never>?
+    private var settingsUpdatesTask: Task<Void, Never>?
     private var mangaCoverBackfillTask: Task<Void, Never>?
     private var attemptedMangaCoverTargetIDs: Set<String> = []
 
@@ -127,12 +141,30 @@ final class FavoriteLibraryOrganizer: ObservableObject {
                 await self.reloadContentCovers()
             }
         }
+        // Without this, toggling the new Smart Comic Mode settings UI while
+        // the Favorites tab is already loaded would leave the merged-card
+        // grouping and the "智能漫画" filter chip's availability stale until
+        // some unrelated favorite/progress/cover change happened to trigger
+        // a reload — the settings VALUE was always modeled/consumed
+        // correctly, but nothing here reacted to it changing live.
+        settingsUpdatesTask = Task { @MainActor [weak self, store = settingsStore] in
+            for await notification in NotificationCenter.default.notifications(named: SettingsStore.didChangeNotification) {
+                guard !Task.isCancelled else { return }
+                guard let self else { return }
+                guard let changeID = notification.userInfo?[SettingsStore.changeIDUserInfoKey] as? String,
+                      changeID == store.changeID else {
+                    continue
+                }
+                await self.reloadSmartComicModeSettings()
+            }
+        }
     }
 
     deinit {
         libraryUpdatesTask?.cancel()
         progressUpdatesTask?.cancel()
         coverUpdatesTask?.cancel()
+        settingsUpdatesTask?.cancel()
         mangaCoverBackfillTask?.cancel()
     }
 
@@ -219,6 +251,9 @@ final class FavoriteLibraryOrganizer: ObservableObject {
         }
         contentCoverURLsByTargetID = await contentCoverURLs(for: loadedDocument.items)
         let settings = await settingsStore.load()
+        smartComicModeSettings = settings.smartComicMode
+        mangaDirectoriesByTID = await resolveMangaDirectories(for: loadedDocument.items, smartComicModeSettings: smartComicModeSettings)
+        smartMangaCoverURLsByCleanBookName = await smartMangaCoverURLs(for: Array(Set(mangaDirectoriesByTID.values)))
         display = FavoriteLibraryDisplayState(
             layoutMode: settings.favorites.layoutMode,
             showsCategoryCounts: settings.favorites.showsCategoryCounts
@@ -255,6 +290,16 @@ final class FavoriteLibraryOrganizer: ObservableObject {
             return
         }
         contentCoverURLsByTargetID = await contentCoverURLs(for: loadedDocument.items)
+        // Only the Smart Comic Mode snapshot is refreshed here — unlike
+        // `load()`, `reload()` deliberately never re-applies
+        // `settings.favorites` (sort order/layout/etc.) so a background
+        // reload triggered by an unrelated favorite/progress/cover change
+        // can't clobber the sort order the user may have just changed live
+        // in this session.
+        let settings = await settingsStore.load()
+        smartComicModeSettings = settings.smartComicMode
+        mangaDirectoriesByTID = await resolveMangaDirectories(for: loadedDocument.items, smartComicModeSettings: smartComicModeSettings)
+        smartMangaCoverURLsByCleanBookName = await smartMangaCoverURLs(for: Array(Set(mangaDirectoriesByTID.values)))
         document = loadedDocument
         if !loadedDocument.categories.contains(where: { $0.id == selectedCategoryID }) {
             selectedCategoryID = loadedDocument.defaultCategory.id
@@ -279,7 +324,30 @@ final class FavoriteLibraryOrganizer: ObservableObject {
 
     private func reloadContentCovers() async {
         contentCoverURLsByTargetID = await contentCoverURLs(for: document.items)
+        smartMangaCoverURLsByCleanBookName = await smartMangaCoverURLs(for: Array(Set(mangaDirectoriesByTID.values)))
         refreshDerivedState()
+    }
+
+    /// Re-derives only the Smart Comic Mode-dependent slice of state
+    /// (`smartComicModeSettings`/`mangaDirectoriesByTID`/
+    /// `smartMangaCoverURLsByCleanBookName`) in response to *any*
+    /// `SettingsStore.didChangeNotification` — mirroring `reload()`'s
+    /// deliberately narrower approach (see the comment at `reload()`):
+    /// this must never re-apply `settings.favorites` (sort order/layout/
+    /// selected category/collection), or an unrelated settings save made
+    /// elsewhere (including this organizer's own `persistViewPreferences`/
+    /// `persistNavigationState`) would clobber sort/filter state the user
+    /// may have just changed live in this session. Guarded on an actual
+    /// diff so unrelated settings saves (which also post this notification)
+    /// don't re-run the manga-directory batch query for no reason.
+    private func reloadSmartComicModeSettings() async {
+        let settings = await settingsStore.load()
+        guard settings.smartComicMode != smartComicModeSettings else { return }
+        smartComicModeSettings = settings.smartComicMode
+        mangaDirectoriesByTID = await resolveMangaDirectories(for: document.items, smartComicModeSettings: smartComicModeSettings)
+        smartMangaCoverURLsByCleanBookName = await smartMangaCoverURLs(for: Array(Set(mangaDirectoriesByTID.values)))
+        refreshDerivedState()
+        scheduleMangaCoverBackfill(for: document.items)
     }
 
     // MARK: - Categories
@@ -677,6 +745,30 @@ final class FavoriteLibraryOrganizer: ObservableObject {
         }
     }
 
+    /// Unfavorites every member of a merged card in one commit
+    /// (smart-comic-mode decision #6): no per-chapter partial removal for a
+    /// merged group — the confirmation dialog already listed every title
+    /// that's about to go, so once confirmed this always removes the whole
+    /// set, with no "current location only" scope choice (there is no
+    /// coherent single "current location" for a card whose members can each
+    /// be filed under different categories/collections). Re-looks up members
+    /// by id in the freshly loaded document rather than trusting the
+    /// snapshot captured when the dialog was raised, matching
+    /// `deleteItem`/`deleteSelection`'s existing reload-then-mutate pattern.
+    func deleteMergedGroup(_ members: [FavoriteItem]) async {
+        let memberIDs = Set(members.map(\.id))
+        guard !memberIDs.isEmpty else { return }
+        let deleter = remoteDeleter
+        await commit { document in
+            let latestMembers = document.items.filter { memberIDs.contains($0.id) }
+            guard !latestMembers.isEmpty else { throw CommitAbort() }
+            try await deleter.deleteRemoteFavorites(for: latestMembers)
+            for member in latestMembers {
+                document.removeItem(target: member.target)
+            }
+        }
+    }
+
     // MARK: - Display and sort preferences
 
     func updateLayoutMode(_ value: FavoriteLibraryLayoutMode) {
@@ -733,7 +825,10 @@ final class FavoriteLibraryOrganizer: ObservableObject {
                 selectedCollectionID: selectedCollectionID,
                 filter: filter,
                 readingProgress: readingProgress,
-                contentCoverURLsByTargetID: contentCoverURLsByTargetID
+                contentCoverURLsByTargetID: contentCoverURLsByTargetID,
+                mangaDirectoriesByTID: mangaDirectoriesByTID,
+                smartComicModeSettings: smartComicModeSettings,
+                smartMangaCoverURLsByCleanBookName: smartMangaCoverURLsByCleanBookName
             )
         )
         selection.prune(
@@ -828,6 +923,39 @@ final class FavoriteLibraryOrganizer: ObservableObject {
         }
     }
 
+    // MARK: - Manga directory grouping (smart-comic-mode decision #3/#5)
+
+    /// Resolves the tid → `MangaDirectory` map virtual favorites grouping
+    /// needs, in exactly one batched query — the design doc's performance
+    /// constraint #1. `items` is first narrowed in memory (no I/O) to
+    /// mode-on `.mangaThread` favorites only, using the *explicit*
+    /// `SmartComicModeSettings.isEnabled(forumID:)` check (never a proxy
+    /// signal — this exact class of bug bit three earlier phases), before
+    /// the single `MangaDirectoryStore.directories(containingTIDs:)` round
+    /// trip. Called only from `load()`/`reload()`, never from
+    /// `refreshDerivedState()` or any SwiftUI-observed computed property —
+    /// performance constraint #2.
+    private func resolveMangaDirectories(
+        for items: [FavoriteItem],
+        smartComicModeSettings: SmartComicModeSettings
+    ) async -> [String: MangaDirectory] {
+        guard let mangaDirectoryStore else { return [:] }
+        let candidateTIDs = items.compactMap { item -> String? in
+            guard item.target.kind == .mangaThread,
+                  smartComicModeSettings.isEnabled(forumID: item.forumID) else {
+                return nil
+            }
+            return item.target.threadID
+        }
+        guard !candidateTIDs.isEmpty else { return [:] }
+        do {
+            return try await mangaDirectoryStore.directories(containingTIDs: candidateTIDs)
+        } catch {
+            YamiboLog.persistence.warning("Failed to resolve manga directories for favorites grouping; showing manga favorites standalone this load: \(error.localizedDescription)")
+            return [:]
+        }
+    }
+
     // MARK: - Covers
 
     private func contentCoverURLs(for items: [FavoriteItem]) async -> [String: URL] {
@@ -843,86 +971,86 @@ final class FavoriteLibraryOrganizer: ObservableObject {
         return urlsByTargetID
     }
 
-    /// Resolves missing manga covers from each title's first chapter (owner's
-    /// first image), once per target per organizer lifetime.
-    private func scheduleMangaCoverBackfill(for items: [FavoriteItem]) {
-        guard let mangaDirectoryStore, let makeForumThreadReaderRepository, mangaCoverBackfillTask == nil else {
-            return
+    /// `.smartManga(cleanBookName:)` covers for every currently-resolved
+    /// directory (decision #13/#16) — the cover source for any card with a
+    /// resolved `mangaDirectory`, merged or not.
+    private func smartMangaCoverURLs(for directories: [MangaDirectory]) async -> [String: URL] {
+        var urlsByCleanBookName: [String: URL] = [:]
+        for directory in directories {
+            let key = ContentCoverKey.smartManga(cleanBookName: directory.cleanBookName)
+            guard let cover = await contentCoverStore.cover(for: key),
+                  let resolvedURL = cover.resolvedURL else {
+                continue
+            }
+            urlsByCleanBookName[directory.cleanBookName] = resolvedURL
         }
-        let missing = items.filter { item in
-            item.target.kind == .mangaTitle
-                && item.target.mangaCleanBookName != nil
-                && contentCoverURLsByTargetID[item.target.id] == nil
-                && !attemptedMangaCoverTargetIDs.contains(item.target.id)
+        return urlsByCleanBookName
+    }
+
+    /// Resolves missing `.smartManga` covers for computed manga-directory
+    /// groups (smart-comic-mode decision #13/#16). The old trigger —
+    /// stored `.mangaTitle`-targeted favorites — is permanently gone since
+    /// the Phase A type refactor (`FavoriteItemTarget` only has
+    /// `.normalThread`/`.novelThread`/`.mangaThread`); this now triggers off
+    /// `LocalFavoriteLibraryProjection.mangaDirectoryGroups` instead — the
+    /// same mode-on `.mangaThread` favorites resolved to a directory that
+    /// back the virtual merged-card grouping — using each group's earliest
+    /// chapter tid, via the same `ThreadCoverResolver`/
+    /// `ContentCoverStore.setAutomaticCover` mechanism the pre-Phase-A
+    /// `.mangaTitle` implementation used. Standalone mode-off cards get
+    /// their cover from `MangaReaderViewModel`'s Phase D auto-thread-cover
+    /// resolution instead (when the user actually reads them), so they are
+    /// deliberately not this function's concern.
+    private func scheduleMangaCoverBackfill(for items: [FavoriteItem]) {
+        guard let makeForumThreadReaderRepository, mangaCoverBackfillTask == nil else { return }
+        let groups = LocalFavoriteLibraryProjection.mangaDirectoryGroups(
+            for: items,
+            mangaDirectoriesByTID: mangaDirectoriesByTID,
+            smartComicModeSettings: smartComicModeSettings
+        )
+        let missing = groups.filter { group in
+            let key = ContentCoverKey.smartManga(cleanBookName: group.directory.cleanBookName)
+            return smartMangaCoverURLsByCleanBookName[group.directory.cleanBookName] == nil
+                && !attemptedMangaCoverTargetIDs.contains(key.targetID)
         }
         guard !missing.isEmpty else { return }
-        attemptedMangaCoverTargetIDs.formUnion(missing.map(\.target.id))
+        // Marked attempted synchronously, before the resolution task even
+        // starts, so a reload firing again (from an unrelated favorite/
+        // progress change) while this batch is still in flight doesn't
+        // re-attempt the same groups.
+        attemptedMangaCoverTargetIDs.formUnion(
+            missing.map { ContentCoverKey.smartManga(cleanBookName: $0.directory.cleanBookName).targetID }
+        )
         mangaCoverBackfillTask = Task { [weak self, contentCoverStore] in
-            defer { self?.mangaCoverBackfillTask = nil }
             let repository = await makeForumThreadReaderRepository()
             let resolver = ThreadCoverResolver()
-            var resolvedAny = false
-            for item in missing {
+            for group in missing {
                 if Task.isCancelled { return }
-                guard let cleanBookName = item.target.mangaCleanBookName else { continue }
-                let key = ContentCoverKey.mangaTitle(cleanBookName: cleanBookName)
+                let key = ContentCoverKey.smartManga(cleanBookName: group.directory.cleanBookName)
                 if let existing = await contentCoverStore.cover(for: key), existing.resolvedURL != nil {
-                    resolvedAny = true
                     continue
                 }
-                guard let tid = await Self.firstChapterTID(for: item, mangaDirectoryStore: mangaDirectoryStore),
-                      let coverURL = await resolver.resolve(
-                          thread: ThreadIdentity(tid: tid),
-                          title: item.title,
-                          repository: repository
-                      ) else {
+                guard let firstChapter = group.directory.chapters.first else { continue }
+                guard let coverURL = await resolver.resolve(
+                    thread: ThreadIdentity(tid: firstChapter.tid),
+                    title: group.directory.cleanBookName,
+                    repository: repository
+                ) else {
                     continue
                 }
                 do {
-                    if try await contentCoverStore.setAutomaticCover(coverURL, for: key) {
-                        resolvedAny = true
-                    }
+                    _ = try await contentCoverStore.setAutomaticCover(coverURL, for: key)
                 } catch {
-                    YamiboLog.library.warning("Failed to persist automatic cover for manga \(cleanBookName): \(error.localizedDescription)")
+                    YamiboLog.persistence.error("Failed to set automatic smartManga cover for \(group.directory.cleanBookName): \(error.localizedDescription)")
                 }
+                // `setAutomaticCover` posts `ContentCoverStore
+                // .didChangeNotification` on success, which this organizer
+                // already subscribes to (`coverUpdatesTask` →
+                // `reloadContentCovers()`), so no manual state refresh is
+                // needed here.
             }
             guard let self, !Task.isCancelled else { return }
-            if resolvedAny {
-                self.contentCoverURLsByTargetID = await self.contentCoverURLs(for: self.document.items)
-                self.refreshDerivedState()
-            }
+            self.mangaCoverBackfillTask = nil
         }
-    }
-
-    private static func firstChapterTID(
-        for item: FavoriteItem,
-        mangaDirectoryStore: MangaDirectoryStore
-    ) async -> String? {
-        if let cleanBookName = item.target.mangaCleanBookName {
-            do {
-                if let directory = try await mangaDirectoryStore.directory(named: cleanBookName),
-                   let tid = directory.chapters.first?.tid.trimmedNonEmptyOrNil {
-                    return tid
-                }
-            } catch {
-                YamiboLog.library.warning("Manga directory lookup failed for \(cleanBookName), falling back to tid derivation from favorite target: \(error.localizedDescription)")
-            }
-        }
-        // Remote-synced and chapter-seeded favorites carry a tid in their identity.
-        if let mangaID = item.target.mangaID {
-            for prefix in ["thread:", "chapter:"] where mangaID.hasPrefix(prefix) {
-                if let tid = String(mangaID.dropFirst(prefix.count)).trimmedNonEmptyOrNil {
-                    return tid
-                }
-            }
-        }
-        return nil
-    }
-}
-
-private extension String {
-    var trimmedNonEmptyOrNil: String? {
-        let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? nil : trimmed
     }
 }

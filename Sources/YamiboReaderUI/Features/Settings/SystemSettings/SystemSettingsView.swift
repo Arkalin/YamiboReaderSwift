@@ -32,6 +32,8 @@ public struct SystemSettingsView: View {
             libraryStore: dependencies.library.localFavoriteLibraryStore,
             runStore: dependencies.library.favoriteSyncRunStore,
             contentCoverStore: dependencies.library.contentCoverStore,
+            mangaDirectoryStore: dependencies.library.mangaDirectoryStore,
+            settingsStore: dependencies.library.settingsStore,
             makeFavoriteRepository: dependencies.library.makeFavoriteRepository,
             makeForumThreadReaderRepository: dependencies.library.makeForumThreadReaderRepository,
             makeThreadRouteResolver: dependencies.library.makeThreadRouteResolver
@@ -166,6 +168,20 @@ public struct SystemSettingsView: View {
                         isOn: novelOfflineCacheAutoRefreshBinding
                     )
                     .disabled(viewModel.isBusy)
+                }
+
+                Section {
+                    ForEach(SystemSettingsSmartComicModeBoard.allBoards) { board in
+                        Toggle(
+                            L10n.string(board.titleKey),
+                            isOn: smartComicModeBinding(forumID: board.forumID)
+                        )
+                        .disabled(viewModel.isBusy)
+                    }
+                } header: {
+                    Text(L10n.string("settings.section.smart_comic_mode"))
+                } footer: {
+                    Text(L10n.string("settings.smart_comic_mode.footer"))
                 }
 
                 Section(L10n.string("settings.section.storage")) {
@@ -421,6 +437,13 @@ public struct SystemSettingsView: View {
         )
     }
 
+    private func smartComicModeBinding(forumID: String) -> Binding<Bool> {
+        Binding(
+            get: { viewModel.smartComicMode.isEnabled(forumID: forumID) },
+            set: { viewModel.setSmartComicModeEnabled($0, forumID: forumID) }
+        )
+    }
+
     private var aboutSettingsTitle: String {
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
         return L10n.string(
@@ -557,6 +580,25 @@ public struct SystemSettingsView: View {
 private enum FavoriteBackgroundPickerPurpose {
     case initial
     case replacement
+}
+
+/// The 3 manageable boards' toggle rows, in a fixed display order (smart-
+/// comic-mode design decision #1: fid 30/46/37, not a free board picker).
+/// fid 30's `中文百合漫画区` name is confirmed (test fixtures,
+/// `MangaDirectoryWorkflowConfiguration.searchForumID`'s default). fid 46/37
+/// have no confirmed display name anywhere in the app (no cached forum board
+/// list is wired into the settings composition root), so they fall back to
+/// a generic "板块 <fid>" label.
+private struct SystemSettingsSmartComicModeBoard: Identifiable {
+    let id: String
+    let forumID: String
+    let titleKey: String
+
+    static let allBoards: [SystemSettingsSmartComicModeBoard] = [
+        SystemSettingsSmartComicModeBoard(id: "30", forumID: "30", titleKey: "settings.smart_comic_mode.board_30"),
+        SystemSettingsSmartComicModeBoard(id: "46", forumID: "46", titleKey: "settings.smart_comic_mode.board_46"),
+        SystemSettingsSmartComicModeBoard(id: "37", forumID: "37", titleKey: "settings.smart_comic_mode.board_37")
+    ]
 }
 
 private extension View {

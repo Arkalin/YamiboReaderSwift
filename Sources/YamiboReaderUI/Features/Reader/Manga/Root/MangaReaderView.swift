@@ -107,6 +107,16 @@ public struct MangaReaderView: View {
                     },
                     onClose: closeReader,
                     onShowDirectory: {
+                        // Smart Comic Mode off (decision #2/#12): there is no
+                        // `MangaDirectory` to show — `MangaReaderWorkflow`
+                        // skipped resolution entirely and is holding a
+                        // single-chapter pseudo-directory. The capsule itself
+                        // keeps showing its own within-chapter page-progress
+                        // text unaffected (that comes from `summary?.progress`
+                        // independently of this closure); only the
+                        // tap-to-open-directory-sheet interaction becomes a
+                        // no-op.
+                        guard model.context.isSmartModeEnabled else { return }
                         isDirectoryPresented = true
                     },
                     onShowComments: {
@@ -423,7 +433,8 @@ public struct MangaReaderView: View {
                 source: .like,
                 initialPage: mangaAnchor.pageLocalIndex,
                 directoryName: context.directoryName,
-                offlineCacheFavoriteID: context.offlineCacheFavoriteID
+                offlineCacheFavoriteID: context.offlineCacheFavoriteID,
+                isSmartModeEnabled: context.isSmartModeEnabled
             )
         )
     }

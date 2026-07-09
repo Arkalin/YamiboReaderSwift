@@ -547,9 +547,13 @@ private func persistedResumeRoute(_ route: ReaderResumeRoute) throws -> ReaderRe
     }
     #expect(!databaseState.columns.contains("thread_url"))
     #expect(!databaseState.columns.contains("last_manga_url"))
+    // Smart Comic Mode defaults to on (`MangaProgressReadingPosition.isSmartModeEnabled`
+    // defaults `true`), so `saveManga` writes only the directory-level
+    // `.mangaTitle` record (thread_id keyed to the launch-context threadID
+    // "12345") — no `.mangaThread` row, per smart-comic-mode design decision #15.
     #expect(databaseState.rows.count == 2)
     #expect(databaseState.rows.contains { $0.id == "thread:novel:12345" && $0.threadID == "12345" && $0.novelLastView == 3 })
-    #expect(databaseState.rows.contains { $0.kind == ReadingProgressKind.manga.rawValue && $0.threadID == "12345" && $0.mangaChapterThreadID == "12346" && $0.mangaPageIndex == 6 })
+    #expect(databaseState.rows.contains { $0.id == "manga-title:第 12 话" && $0.threadID == "12345" && $0.mangaChapterThreadID == "12346" && $0.mangaPageIndex == 6 })
 }
 
 @Test func readingProgressStoreMatchesNovelProgressWithAndWithoutExtraQuery() async throws {
@@ -713,7 +717,7 @@ private func persistedResumeRoute(_ route: ReaderResumeRoute) throws -> ReaderRe
         )
     )
     var localLibrary = FavoriteLibraryDocument()
-    let localTarget = FavoriteContentTarget(kind: .normalThread, threadID: "700")
+    let localTarget = FavoriteItemTarget(kind: .normalThread, threadID: "700")
     try localLibrary.addItem(
         FavoriteItem(
             target: localTarget,
@@ -897,7 +901,7 @@ private func persistedResumeRoute(_ route: ReaderResumeRoute) throws -> ReaderRe
 @Test func contentCoverStoreClearManualCoverRestoresAutomaticMode() async throws {
     let defaults = try makeIsolatedDefaults(prefix: "content-cover-clear-manual")
     let store = ContentCoverStore(defaults: defaults, key: "content-covers")
-    let key = ContentCoverKey.mangaTitle(cleanBookName: "测试漫画")
+    let key = ContentCoverKey.smartManga(cleanBookName: "测试漫画")
     let automatic = try #require(URL(string: "https://img.example.com/auto.jpg"))
     let manual = try #require(URL(string: "https://img.example.com/manual.jpg"))
 
@@ -920,7 +924,7 @@ private func persistedResumeRoute(_ route: ReaderResumeRoute) throws -> ReaderRe
 
     #expect(normal == ContentCoverKey.thread(tid: "77"))
     #expect(novel == normal)
-    #expect(manga == ContentCoverKey.mangaTitle(cleanBookName: "清理书名"))
+    #expect(manga == ContentCoverKey.smartManga(cleanBookName: "清理书名"))
 }
 
 @Test func mangaDirectoryRenameMovesContentCoverRow() async throws {
@@ -936,14 +940,14 @@ private func persistedResumeRoute(_ route: ReaderResumeRoute) throws -> ReaderRe
         chapters: [MangaChapter(tid: "900", rawTitle: "第1话", chapterNumber: 1)]
     )
     try await directoryStore.saveDirectory(directory)
-    try await coverStore.setManualCover(manual, for: .mangaTitle(cleanBookName: "旧书名"))
+    try await coverStore.setManualCover(manual, for: .smartManga(cleanBookName: "旧书名"))
 
     var renamed = directory
     renamed.cleanBookName = "新书名"
     try await directoryStore.renameDirectory(from: "旧书名", to: renamed)
 
-    #expect(await coverStore.cover(for: .mangaTitle(cleanBookName: "旧书名")) == nil)
-    let moved = try #require(await coverStore.cover(for: .mangaTitle(cleanBookName: "新书名")))
+    #expect(await coverStore.cover(for: .smartManga(cleanBookName: "旧书名")) == nil)
+    let moved = try #require(await coverStore.cover(for: .smartManga(cleanBookName: "新书名")))
     #expect(moved.manualCoverURL == manual)
     #expect(moved.dynamicEnabled == false)
 }
@@ -960,7 +964,7 @@ private func persistedResumeRoute(_ route: ReaderResumeRoute) throws -> ReaderRe
     // Document saves fully rewrite the favorite rows; covers must survive.
     var document = FavoriteLibraryDocument()
     document.addItem(try FavoriteItem(
-        target: FavoriteContentTarget(kind: .normalThread, threadID: "555"),
+        target: FavoriteItemTarget(kind: .normalThread, threadID: "555"),
         title: "主题",
         locations: [.category(document.defaultCategory.id)]
     ))

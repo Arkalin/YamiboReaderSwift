@@ -109,12 +109,20 @@ final class ForumThreadReaderViewModel {
     }
 
     /// Cover menu entries for images opened from this thread: thread cover
-    /// always, manga cover when the thread is a chapter of a local directory.
+    /// always, manga cover when the thread is a chapter of a local directory
+    /// and its board currently has Smart Comic Mode on (design decision
+    /// #16 — mode off hides this entry outright, even if a `MangaDirectory`
+    /// technically still exists for this tid).
     var imageBrowserCoverActionsProvider: ImageBrowserCoverActionsProvider {
-        ImageBrowserThreadCoverActions.provider(
+        let forumID = resolvedForumID
+        return ImageBrowserThreadCoverActions.provider(
             tid: context.thread.tid,
             contentCoverStore: contentCoverStoreProvider,
-            mangaDirectoryStore: mangaDirectoryStoreProvider
+            mangaDirectoryStore: mangaDirectoryStoreProvider,
+            isSmartComicModeEnabled: { [settingsStoreProvider] in
+                guard let settingsStore = await settingsStoreProvider() else { return true }
+                return await settingsStore.load().isSmartComicModeEnabled(forumID: forumID)
+            }
         )
     }
 
@@ -213,7 +221,7 @@ final class ForumThreadReaderViewModel {
                 title: favoriteTitle,
                 type: .other,
                 authorID: nil,
-                forumID: page?.forumID ?? page?.thread.fid ?? context.thread.fid,
+                forumID: resolvedForumID,
                 forumName: page?.forumName,
                 contentUpdatedAt: Self.contentUpdatedAt(from: page),
                 formHash: page?.formHash,
@@ -230,7 +238,11 @@ final class ForumThreadReaderViewModel {
                 }
             }
             isFavorited = true
-            transientMessage = result.remote.addFeedbackMessage
+            if let directoryTitle = await autoAttributionDirectoryTitle(localFavoriteLibraryStore: localFavoriteLibraryStore) {
+                transientMessage = L10n.string("favorites.quick.auto_attributed", result.remote.addFeedbackMessage, directoryTitle)
+            } else {
+                transientMessage = result.remote.addFeedbackMessage
+            }
         } catch {
             favoriteErrorMessage = error.localizedDescription
             await refreshFavoriteState()
@@ -256,6 +268,53 @@ final class ForumThreadReaderViewModel {
             favoriteErrorMessage = error.localizedDescription
             await refreshFavoriteState()
         }
+    }
+
+    /// Local half of decision #8's "auto-attribution" feedback (the
+    /// remote-sync half is a later phase) — the star-button add path is the
+    /// most common way users hit this feature, so it gets an immediate toast
+    /// rather than waiting for a sync warning that may never come.
+    ///
+    /// Fires only when every one of these holds, checked in this order so
+    /// the cheapest gate runs first:
+    /// - This board's Smart Comic Mode is on, via an explicit
+    ///   `settingsStore` lookup (never inferred from a proxy signal like
+    ///   "a directory happened to resolve" — that exact mistake bit three
+    ///   earlier smart-comic-mode phases).
+    /// - A `MangaDirectory` actually resolves for this tid (a single-tid
+    ///   `directory(containingTID:)` lookup is enough here — this is one
+    ///   favorite, not the batch grouping the favorites page does).
+    /// - At least one *other* already-favorited `.mangaThread` item (the one
+    ///   just added is already persisted by the time this runs) shares that
+    ///   directory's chapter tids.
+    ///
+    /// Returns the directory's `cleanBookName` to interpolate into the toast,
+    /// or nil to leave `transientMessage` as the plain add-feedback string.
+    private func autoAttributionDirectoryTitle(localFavoriteLibraryStore: FavoriteLibraryStore) async -> String? {
+        guard let settingsStore = await settingsStoreProvider() else { return nil }
+        let settings = await settingsStore.load()
+        guard settings.isSmartComicModeEnabled(forumID: resolvedForumID) else { return nil }
+        guard let mangaDirectoryStore = await mangaDirectoryStoreProvider(),
+              let directory = try? await mangaDirectoryStore.directory(containingTID: context.thread.tid) else {
+            return nil
+        }
+        let siblingTIDs = Set(directory.chapters.map(\.tid))
+        guard let document = try? await localFavoriteLibraryStore.load() else { return nil }
+        // A sibling favorite only actually merges on the Favorites page if ITS
+        // OWN board also has Smart Comic Mode on (LocalFavoriteLibraryProjection's
+        // rawGroupedFavorites checks isEnabled(forumID:) per-member, not just for
+        // the item just favorited) — a MangaDirectory can span threads from
+        // different boards (e.g. a `.searched` strategy match isn't fid-scoped).
+        // Without this check the toast could claim "merged" for a sibling that
+        // the Favorites page will actually keep standalone.
+        let hasOtherFavoriteInDirectory = document.items.contains { item in
+            item.target.kind == .mangaThread
+                && item.target.threadID != context.thread.tid
+                && siblingTIDs.contains(item.target.threadID ?? "")
+                && settings.isSmartComicModeEnabled(forumID: item.forumID)
+        }
+        guard hasOtherFavoriteInDirectory else { return nil }
+        return directory.cleanBookName
     }
 
     private func favoriteSettings() async -> FavoriteLibrarySettings {
@@ -387,6 +446,14 @@ final class ForumThreadReaderViewModel {
         page?.thread.tid ?? context.thread.tid
     }
 
+    /// Best-known forum id for this thread, falling back from the freshest
+    /// loaded page down to the launch context — used wherever a forumID is
+    /// needed opportunistically (favorite add, cover-action mode gating)
+    /// rather than requiring the page to already be loaded.
+    private var resolvedForumID: String? {
+        page?.forumID ?? page?.thread.fid ?? context.thread.fid
+    }
+
     private var normalizedForumID: String? {
         normalized(page?.forumID)
     }
@@ -465,7 +532,7 @@ final class ForumThreadReaderViewModel {
 
     private func localFavoriteItem(forThreadID threadID: String) async -> FavoriteItem? {
         guard let localFavoriteLibraryStore = await localFavoriteLibraryStoreProvider() else { return nil }
-        let target = FavoriteContentTarget.normalThread(threadID: threadID)
+        let target = FavoriteItemTarget.normalThread(threadID: threadID)
         return (try? await localFavoriteLibraryStore.load())?.items.first { item in
             item.target.id == target.id || item.target.threadID == target.threadID
         }

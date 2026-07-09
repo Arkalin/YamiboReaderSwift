@@ -482,7 +482,7 @@ struct LocalFavoritesOrganizationView: View {
         switch routes.dialog {
         case .dissolveCollection, .dissolveSelectedCollections:
             Text(L10n.string("favorites.dissolve_collection"))
-        case .deleteItem:
+        case .deleteItem, .deleteMergedGroup:
             Text(L10n.string("favorites.delete_favorite"))
         case .deleteSelection:
             Text(L10n.string("favorites.delete_selection"))
@@ -508,6 +508,11 @@ struct LocalFavoritesOrganizationView: View {
             }
             Button(L10n.string("favorites.delete_scope.everywhere"), role: .destructive) {
                 Task { await organizer.deleteItem(item, scope: .everywhere) }
+            }
+        case let .deleteMergedGroup(members):
+            Button(L10n.string("common.cancel"), role: .cancel) {}
+            Button(L10n.string("favorites.delete_merged_group_confirm"), role: .destructive) {
+                Task { await organizer.deleteMergedGroup(members) }
             }
         case .deleteSelection:
             Button(L10n.string("common.cancel"), role: .cancel) {}
@@ -538,6 +543,12 @@ struct LocalFavoritesOrganizationView: View {
             } else {
                 Text(L10n.string("favorites.delete_favorite_message", item.resolvedDisplayTitle))
             }
+        case let .deleteMergedGroup(members):
+            Text(L10n.string(
+                "favorites.delete_merged_group_message",
+                members.count,
+                members.map(\.resolvedDisplayTitle).joined(separator: "\n")
+            ))
         case .deleteSelection:
             Text(deleteSelectionMessage)
         case .dissolveSelectedCollections:

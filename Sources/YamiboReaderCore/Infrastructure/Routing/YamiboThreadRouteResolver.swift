@@ -3,9 +3,11 @@ import os
 
 public actor YamiboThreadRouteResolver {
     private let client: YamiboClient
+    private let settingsStore: SettingsStore
 
-    init(client: YamiboClient) {
+    init(client: YamiboClient, settingsStore: SettingsStore = SettingsStore()) {
         self.client = client
+        self.settingsStore = settingsStore
     }
 
     public func resolve(_ request: YamiboThreadRouteRequest) async throws -> YamiboThreadRouteTarget {
@@ -92,17 +94,24 @@ public actor YamiboThreadRouteResolver {
                 )
             )
         case .manga:
-            return .manga(
-                YamiboThreadRoutePayload(
-                    thread: thread,
-                    title: title ?? L10n.string("manga.reader.title"),
-                    authorID: authorID,
-                    canonicalURL: canonicalURL,
-                    requestedURL: requestURL,
-                    initialPage: baseInitialPage,
-                    targetPostID: targetPostID
-                )
+            let payload = YamiboThreadRoutePayload(
+                thread: thread,
+                title: title ?? L10n.string("manga.reader.title"),
+                authorID: authorID,
+                canonicalURL: canonicalURL,
+                requestedURL: requestURL,
+                initialPage: baseInitialPage,
+                targetPostID: targetPostID
             )
+            // Classification (kind == .manga) never depends on the toggle
+            // (decision #4) — only which UI this routes to does. Boards
+            // outside the manageable set (or a missing fid) always report
+            // enabled, so this preserves today's unconditional `.manga`
+            // routing everywhere the feature doesn't apply.
+            guard await isSmartComicModeEnabled(forumID: fid) else {
+                return .mangaDirect(payload)
+            }
+            return .manga(payload)
         case .regular, .unknown:
             let initialPage = try await resolvedThreadReaderInitialPage(
                 requestURL: requestURL,
@@ -122,6 +131,10 @@ public actor YamiboThreadRouteResolver {
                 )
             )
         }
+    }
+
+    private func isSmartComicModeEnabled(forumID: String?) async -> Bool {
+        await settingsStore.load().isSmartComicModeEnabled(forumID: forumID)
     }
 
     private func shouldFetchMetadata(fid: String?, knownThreadKind: YamiboThreadKind?) -> Bool {

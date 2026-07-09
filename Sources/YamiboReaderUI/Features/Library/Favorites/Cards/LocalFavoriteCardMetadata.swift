@@ -36,7 +36,7 @@ struct LocalFavoriteCardTimeLines: View {
 
     /// Manga shows the chapter/page position, novels the surface percent.
     private var progressSuffix: String? {
-        if card.item.target.kind == .mangaTitle {
+        if card.item.target.kind == .mangaThread {
             return card.chapterPageProgress
         }
         guard let percent = card.progressPercent else { return nil }

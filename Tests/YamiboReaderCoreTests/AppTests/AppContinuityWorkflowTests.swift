@@ -42,7 +42,7 @@ import YamiboReaderTestSupport
     var document = FavoriteLibraryDocument()
     try document.importThreadFavorite(
         probeResult: FavoriteThreadProbeResult(
-            target: FavoriteContentTarget(kind: .novelThread, threadID: threadID),
+            target: FavoriteItemTarget(kind: .novelThread, threadID: threadID),
             title: "远端小说"
         )
     )

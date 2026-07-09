@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 @testable import YamiboReaderCore
+import YamiboReaderTestSupport
 
 private final class YamiboThreadRouteResolverTestURLProtocol: URLProtocol {
     typealias Handler = (URLRequest) throws -> (Data, HTTPURLResponse)
@@ -100,6 +101,80 @@ struct YamiboThreadRouteResolverTests {
     #expect(context.thread.tid == "200")
     #expect(context.thread.fid == "999999")
     #expect(context.title == "漫画标题")
+}
+
+// smart-comic-mode design decision #1/#2/#12: fid 46 defaults to Smart
+// Comic Mode off, so a manga-kind thread there should route directly to the
+// reader instead of `ForumMangaDetailView`.
+@Test func yamiboThreadRouteResolverRoutesDirectlyToMangaReaderWhenBoardModeIsOff() async throws {
+    let suiteName = YamiboTestDefaults.suiteName(prefix: "route-resolver-smart-comic-mode-default")
+    let settingsStore = try SettingsStore(testSuiteName: suiteName, key: "settings")
+    let resolver = YamiboThreadRouteResolver(client: yamiboThreadRouteTestClient(), settingsStore: settingsStore)
+    let request = YamiboThreadRouteRequest(
+        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=800&mobile=2")),
+        title: "漫画标题",
+        knownThreadKind: .manga,
+        tapContext: YamiboThreadTapContext(containingFid: "46")
+    )
+
+    let target = try await resolver.resolve(request)
+
+    guard case let .mangaDirect(payload) = target else {
+        Issue.record("Expected direct-to-reader manga target, got \(target)")
+        return
+    }
+    #expect(payload.thread.tid == "800")
+    #expect(payload.thread.fid == "46")
+    #expect(payload.title == "漫画标题")
+}
+
+// Same board, but with its toggle explicitly turned on: routing must fall
+// back to today's `ForumMangaDetailView` behavior.
+@Test func yamiboThreadRouteResolverRoutesToMangaDetailWhenBoardModeIsOn() async throws {
+    let suiteName = YamiboTestDefaults.suiteName(prefix: "route-resolver-smart-comic-mode-enabled")
+    let settingsStore = try SettingsStore(testSuiteName: suiteName, key: "settings")
+    var settings = await settingsStore.load()
+    settings.smartComicMode.enabledForumIDs.insert("46")
+    try await settingsStore.save(settings)
+    let resolver = YamiboThreadRouteResolver(client: yamiboThreadRouteTestClient(), settingsStore: settingsStore)
+    let request = YamiboThreadRouteRequest(
+        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=801&mobile=2")),
+        title: "漫画标题",
+        knownThreadKind: .manga,
+        tapContext: YamiboThreadTapContext(containingFid: "46")
+    )
+
+    let target = try await resolver.resolve(request)
+
+    guard case let .manga(payload) = target else {
+        Issue.record("Expected manga detail target, got \(target)")
+        return
+    }
+    #expect(payload.thread.tid == "801")
+    #expect(payload.thread.fid == "46")
+}
+
+// Boards outside the manageable set (30/46/37) have no toggle at all and
+// must keep today's unconditional manga routing even when explicitly
+// classified via `knownThreadKind` (decision #1's scope is exactly these
+// three boards).
+@Test func yamiboThreadRouteResolverRoutesToMangaDetailForOutOfScopeBoardRegardlessOfSettings() async throws {
+    let suiteName = YamiboTestDefaults.suiteName(prefix: "route-resolver-smart-comic-mode-out-of-scope")
+    let settingsStore = try SettingsStore(testSuiteName: suiteName, key: "settings")
+    let resolver = YamiboThreadRouteResolver(client: yamiboThreadRouteTestClient(), settingsStore: settingsStore)
+    let request = YamiboThreadRouteRequest(
+        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=802&mobile=2")),
+        title: "漫画标题",
+        threadFid: "999999",
+        knownThreadKind: .manga
+    )
+
+    let target = try await resolver.resolve(request)
+
+    guard case .manga = target else {
+        Issue.record("Expected manga detail target, got \(target)")
+        return
+    }
 }
 
 @Test func yamiboThreadRouteResolverNativeThreadIntentBypassesNovelClassification() async throws {

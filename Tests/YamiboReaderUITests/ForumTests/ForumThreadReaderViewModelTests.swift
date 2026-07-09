@@ -8,7 +8,7 @@ import Testing
     let fixture = try ForumThreadReaderViewModelFixture()
     var document = FavoriteLibraryDocument()
     document.addItem(try FavoriteItem(
-        target: FavoriteContentTarget(kind: .normalThread, threadID: "704"),
+        target: FavoriteItemTarget(kind: .normalThread, threadID: "704"),
         title: "已收藏标题",
         locations: [.category(document.defaultCategory.id)]
     ))
@@ -116,6 +116,118 @@ import Testing
     #expect(added.title == "上下文标题")
     #expect(added.forumID == "40")
     #expect(added.sourceGroup == .forumBoard(id: "40", label: "40"))
+}
+
+/// Smart-comic-mode decision #4: star-button classification is by board fid
+/// alone, independent of Smart Comic Mode's on/off state (fid 30 is on by
+/// default, but that's incidental here — the point is the board is a manga
+/// board at all). Also covers the add/remove consistency fix: removing must
+/// find the same `.mangaThread` target that was actually persisted, not a
+/// `.normalThread` one re-derived from `Favorite` alone.
+@MainActor
+@Test func forumThreadReaderClassifiesMangaBoardFavoriteAsMangaThreadAndRemovesConsistently() async throws {
+    let fixture = try ForumThreadReaderViewModelFixture(fid: "30")
+    let model = fixture.makeModel()
+
+    // Deliberately not calling `model.load()`: the fake page loader's
+    // fetched page always reports forumID "40" (see `makeThreadPage`), which
+    // would clobber the manga-board fid this test is about. Toggling before
+    // any page loads falls back to `context.thread.fid`, exactly like
+    // `forumThreadReaderToggleBeforePageLoadUsesContextForumID` above.
+    await model.toggleFavorite()
+    #expect(model.favoriteAddPromptPresented)
+    await model.confirmFavoriteAdd(syncToRemote: false, remember: false)
+
+    let added = try #require(await fixture.localFavoriteItem())
+    #expect(added.target == .mangaThread(threadID: "704"))
+    #expect(added.target.id == "manga-thread:704")
+    #expect(model.isFavorited)
+
+    // Toggling off must remove this exact `.mangaThread` item, not silently
+    // no-op by re-deriving a `.normalThread` target at remove time.
+    await model.toggleFavorite()
+    #expect(model.favoriteRemovePrompt == nil)
+    #expect(!model.isFavorited)
+    #expect(await fixture.localFavoriteItem() == nil)
+}
+
+/// Smart-comic-mode decision #8's local half: the star-button add path shows
+/// immediate feedback when the newly favorited chapter shares a
+/// `MangaDirectory` with an already-favorited sibling.
+@MainActor
+@Test func forumThreadReaderShowsAutoAttributionToastWhenSiblingChapterAlreadyFavorited() async throws {
+    let directory = MangaDirectory(
+        cleanBookName: "测试漫画",
+        strategy: .links,
+        sourceKey: "测试漫画",
+        chapters: [
+            MangaChapter(tid: "700", rawTitle: "第一话", chapterNumber: 1),
+            MangaChapter(tid: "704", rawTitle: "第二话", chapterNumber: 2)
+        ]
+    )
+    let fixture = try ForumThreadReaderViewModelFixture(
+        fid: "30",
+        mangaDirectoryStore: ForumThreadReaderTestMangaDirectoryStore(directories: [directory])
+    )
+    var seedDocument = try await fixture.localFavoriteLibraryStore.load()
+    seedDocument.addItem(try FavoriteItem(
+        target: .mangaThread(threadID: "700"),
+        title: "第一话",
+        locations: [.category(seedDocument.defaultCategory.id)]
+    ))
+    try await fixture.localFavoriteLibraryStore.save(seedDocument)
+    let model = fixture.makeModel()
+
+    // Not calling `model.load()` — see the comment in the classification
+    // test above for why.
+    await model.toggleFavorite()
+    #expect(model.favoriteAddPromptPresented)
+    await model.confirmFavoriteAdd(syncToRemote: false, remember: false)
+
+    #expect(model.transientMessage == L10n.string(
+        "favorites.quick.auto_attributed",
+        L10n.string("favorites.quick.added_local"),
+        "测试漫画"
+    ))
+}
+
+/// Decision #8 fires only when the board's Smart Comic Mode is actually on
+/// (an explicit settings lookup) — a directory resolving and a sibling
+/// favorite existing must not be enough by themselves.
+@MainActor
+@Test func forumThreadReaderSkipsAutoAttributionToastWhenSmartComicModeIsOff() async throws {
+    let directory = MangaDirectory(
+        cleanBookName: "测试漫画",
+        strategy: .links,
+        sourceKey: "测试漫画",
+        chapters: [
+            MangaChapter(tid: "700", rawTitle: "第一话", chapterNumber: 1),
+            MangaChapter(tid: "704", rawTitle: "第二话", chapterNumber: 2)
+        ]
+    )
+    let fixture = try ForumThreadReaderViewModelFixture(
+        fid: "30",
+        mangaDirectoryStore: ForumThreadReaderTestMangaDirectoryStore(directories: [directory])
+    )
+    var settings = await fixture.settingsStore.load()
+    settings.smartComicMode.enabledForumIDs.remove("30")
+    try await fixture.settingsStore.save(settings)
+    var seedDocument = try await fixture.localFavoriteLibraryStore.load()
+    seedDocument.addItem(try FavoriteItem(
+        target: .mangaThread(threadID: "700"),
+        title: "第一话",
+        locations: [.category(seedDocument.defaultCategory.id)]
+    ))
+    try await fixture.localFavoriteLibraryStore.save(seedDocument)
+    let model = fixture.makeModel()
+
+    // Not calling `model.load()` — see the comment in the classification
+    // test above for why.
+    await model.toggleFavorite()
+    #expect(model.favoriteAddPromptPresented)
+    await model.confirmFavoriteAdd(syncToRemote: false, remember: false)
+
+    #expect(model.transientMessage == L10n.string("favorites.quick.added_local"))
 }
 
 @MainActor
@@ -364,8 +476,16 @@ private struct ForumThreadReaderViewModelFixture {
     let settingsStore: SettingsStore
     let repository: FakeForumThreadPageLoader
     let favoriteRepository: FakeThreadFavoriteRepository
+    let fid: String
+    let mangaDirectoryStore: (any MangaDirectoryPersisting)?
 
-    init(cachedPages: [Int: ForumThreadPage] = [:], fetchError: Error? = nil, formHash: String? = nil) throws {
+    init(
+        cachedPages: [Int: ForumThreadPage] = [:],
+        fetchError: Error? = nil,
+        formHash: String? = nil,
+        fid: String = "40",
+        mangaDirectoryStore: (any MangaDirectoryPersisting)? = nil
+    ) throws {
         suiteName = "ForumThreadReaderViewModelTests.\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: suiteName))
         defaults.removePersistentDomain(forName: suiteName)
@@ -385,12 +505,13 @@ private struct ForumThreadReaderViewModelFixture {
             formHash: formHash
         )
         favoriteRepository = FakeThreadFavoriteRepository(threadURL: threadURL)
+        self.fid = fid
+        self.mangaDirectoryStore = mangaDirectoryStore
     }
 
     func localFavoriteItem() async -> FavoriteItem? {
-        let target = FavoriteContentTarget(kind: .normalThread, threadID: "704")
-        return (try? await localFavoriteLibraryStore.load())?.items.first { item in
-            item.target.id == target.id
+        (try? await localFavoriteLibraryStore.load())?.items.first { item in
+            item.target.threadID == "704"
         }
     }
 
@@ -398,12 +519,13 @@ private struct ForumThreadReaderViewModelFixture {
     func makeModel() -> ForumThreadReaderViewModel {
         ForumThreadReaderViewModel(
             context: ThreadNovelLaunchContext(
-                thread: ThreadIdentity(tid: "704", fid: "40"),
+                thread: ThreadIdentity(tid: "704", fid: fid),
                 title: "上下文标题"
             ),
             repository: repository,
             localFavoriteLibraryStore: localFavoriteLibraryStore,
             favoriteRepository: favoriteRepository,
+            mangaDirectoryStore: mangaDirectoryStore,
             settingsStore: settingsStore
         )
     }
@@ -521,4 +643,26 @@ private actor FakeThreadFavoriteRepository: ForumThreadFavoriteRemoteOperating {
     func remoteFavorite(forThreadID threadID: String, maxPages: Int) async throws -> Favorite? {
         Favorite(title: "远端标题", threadID: threadID, remoteFavoriteID: "8801")
     }
+}
+
+private actor ForumThreadReaderTestMangaDirectoryStore: MangaDirectoryPersisting {
+    private let directories: [MangaDirectory]
+
+    init(directories: [MangaDirectory]) {
+        self.directories = directories
+    }
+
+    func directory(named name: String) async throws -> MangaDirectory? {
+        directories.first { $0.cleanBookName == name }
+    }
+
+    func directory(containingTID tid: String) async throws -> MangaDirectory? {
+        directories.first { directory in
+            directory.chapters.contains { $0.tid == tid }
+        }
+    }
+
+    func saveDirectory(_ directory: MangaDirectory) async throws {}
+
+    func deleteDirectory(named name: String) async throws {}
 }
