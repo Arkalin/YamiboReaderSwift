@@ -55,7 +55,7 @@ final class FavoriteUpdateMonitor: ObservableObject {
                 // refresh task) must be picked up so the UI never sits on
                 // stale background-detected results.
                 guard self.snapshot?.status != .running else { continue }
-                await self.load()
+                await self.reloadFromExternalChange()
             }
         }
     }
@@ -68,6 +68,28 @@ final class FavoriteUpdateMonitor: ObservableObject {
     /// Reloads the persisted run, events, and filters. A run still marked
     /// running whose task no longer exists is downgraded to interrupted.
     func load() async {
+        snapshot = await fetchLatestRunDowngradingIfOrphaned()
+        await reloadEventState()
+    }
+
+    /// Applies a store change observed via notification. The notification
+    /// consumer can fall arbitrarily far behind under scheduler contention
+    /// (it drains a backlog that includes this very instance's own writes
+    /// from the run that just finished), so unlike `load()` this
+    /// re-validates immediately before publishing that no new run has
+    /// started on this instance while the store read was in flight —
+    /// applying a stale read at that point would regress the visible
+    /// snapshot back to the old run's runID and silently break the new
+    /// run's own updateSnapshot(runID:) calls, which compare against
+    /// self.snapshot.runID and no-op on a mismatch.
+    private func reloadFromExternalChange() async {
+        let latest = await fetchLatestRunDowngradingIfOrphaned()
+        guard snapshot?.status != .running else { return }
+        snapshot = latest
+        await reloadEventState()
+    }
+
+    private func fetchLatestRunDowngradingIfOrphaned() async -> FavoriteUpdateRunSnapshot? {
         var latest = await updateStore.latestRun()
         if var loaded = latest, loaded.status == .running, !Self.isRunActive(loaded.runID) {
             loaded.status = .interrupted
@@ -82,8 +104,7 @@ final class FavoriteUpdateMonitor: ObservableObject {
             }
             latest = loaded
         }
-        snapshot = latest
-        await reloadEventState()
+        return latest
     }
 
     /// Refreshes events and filters from the store. Kept separate from the
