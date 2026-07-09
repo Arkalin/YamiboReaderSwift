@@ -92,6 +92,47 @@ final class ReaderProgressScrubStateTests: XCTestCase {
         XCTAssertEqual(state.update(value: 0.6, context: context).haptics, [])
     }
 
+    func testFastDragSkippingPastATickIndexStillFiresChapterTick() {
+        var state = ReaderProgressScrubState()
+        let context = ReaderChromeProgress(
+            itemCount: 6,
+            currentIndex: 0,
+            primaryText: "目录 · 0%",
+            ticks: [
+                ReaderChromeProgressTick(targetIndex: 0, positionFraction: 0, title: nil, isCurrent: true),
+                ReaderChromeProgressTick(targetIndex: 2, positionFraction: 0.4, title: nil, isCurrent: false),
+                ReaderChromeProgressTick(targetIndex: 5, positionFraction: 1, title: nil, isCurrent: false),
+            ]
+        ).scrubContext
+
+        // A single fast onChanged delivery can jump straight from index 1 to
+        // index 3, skipping index 2 (the exact tick position) entirely. The
+        // crossing must still be felt.
+        XCTAssertEqual(state.update(value: 0.2, context: context).haptics, [.start])
+        XCTAssertEqual(state.update(value: 0.6, context: context).haptics, [.chapterTick])
+    }
+
+    func testStartingScrubWithinCurrentChapterDoesNotFireSpuriousTick() {
+        var state = ReaderProgressScrubState()
+        let context = ReaderChromeProgress(
+            itemCount: 6,
+            currentIndex: 3,
+            primaryText: "目录 · 60%",
+            ticks: [
+                ReaderChromeProgressTick(targetIndex: 0, positionFraction: 0, title: nil, isCurrent: false),
+                ReaderChromeProgressTick(targetIndex: 2, positionFraction: 0.4, title: nil, isCurrent: true),
+                ReaderChromeProgressTick(targetIndex: 5, positionFraction: 1, title: nil, isCurrent: false),
+            ]
+        ).scrubContext
+
+        // Resting position (index 3) is already inside the chapter started by
+        // the tick at index 2. The first move within that same chapter must
+        // not fire a chapter tick, only the start haptic.
+        XCTAssertEqual(state.update(value: 0.6, context: context).haptics, [.start])
+        XCTAssertEqual(state.update(value: 0.8, context: context).haptics, [])
+        XCTAssertEqual(state.update(value: 1.0, context: context).haptics, [.chapterTick])
+    }
+
     func testPreviewFallsBackToPageOnlyWhenChapterTitleIsUnavailable() {
         var state = ReaderProgressScrubState()
         let context = ReaderChromeProgress(

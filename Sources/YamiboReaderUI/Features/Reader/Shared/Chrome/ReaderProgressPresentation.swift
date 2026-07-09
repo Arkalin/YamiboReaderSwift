@@ -340,6 +340,11 @@ public struct ReaderProgressScrubState: Equatable, Sendable {
         var haptics: [ReaderProgressScrubHaptic] = []
         if phase != .scrubbing {
             haptics.append(.start)
+            // Seed with the chapter covering the resting position (not nil) so the
+            // very first update of a scrub doesn't spuriously read as a chapter
+            // crossing merely because it moved off the exact resting index.
+            let restingTargetIndex = context.targetIndex(context.restingValue)
+            lastTickTargetIndex = context.tickTargetIndex(restingTargetIndex)
         }
 
         phase = .scrubbing
