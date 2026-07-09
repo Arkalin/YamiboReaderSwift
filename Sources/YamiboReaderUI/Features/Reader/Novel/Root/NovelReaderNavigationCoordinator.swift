@@ -92,13 +92,13 @@ final class NovelReaderNavigationCoordinator: ObservableObject {
         armLinearReadingHistoryExpirationIfNeeded()
     }
 
-    func recordLinearReading() {
+    func recordLinearReading(direction: ReaderNavigationLinearReadingDirection) {
         guard navigationHistory.canGoBack || navigationHistory.canGoForward else {
             linearReadingHistoryExpiration.reset()
             return
         }
         guard let pageKey = reading.currentPageKey() else { return }
-        if linearReadingHistoryExpiration.recordLinearReading(at: pageKey) {
+        if linearReadingHistoryExpiration.recordLinearReading(at: pageKey, direction: direction) {
             navigationHistory.clear()
         }
     }

@@ -84,18 +84,18 @@ import Testing
     #expect(history.peekForward() == nil)
 }
 
-@Test func readerNavigationLinearReadingExpirationExpiresAfterThresholdDistinctPages() {
+@Test func readerNavigationLinearReadingExpirationExpiresAfterThresholdDistinctPagesInOneDirection() {
     var expiration = ReaderNavigationLinearReadingExpiration<Int>(threshold: 5)
 
     expiration.arm(at: 10)
 
-    let repeatedInitialPageExpired = expiration.recordLinearReading(at: 10)
-    let firstPageExpired = expiration.recordLinearReading(at: 11)
-    let repeatedFirstPageExpired = expiration.recordLinearReading(at: 11)
-    let secondPageExpired = expiration.recordLinearReading(at: 12)
-    let thirdPageExpired = expiration.recordLinearReading(at: 13)
-    let fourthPageExpired = expiration.recordLinearReading(at: 14)
-    let fifthPageExpired = expiration.recordLinearReading(at: 15)
+    let repeatedInitialPageExpired = expiration.recordLinearReading(at: 10, direction: .forward)
+    let firstPageExpired = expiration.recordLinearReading(at: 11, direction: .forward)
+    let repeatedFirstPageExpired = expiration.recordLinearReading(at: 11, direction: .forward)
+    let secondPageExpired = expiration.recordLinearReading(at: 12, direction: .forward)
+    let thirdPageExpired = expiration.recordLinearReading(at: 13, direction: .forward)
+    let fourthPageExpired = expiration.recordLinearReading(at: 14, direction: .forward)
+    let fifthPageExpired = expiration.recordLinearReading(at: 15, direction: .forward)
 
     #expect(!repeatedInitialPageExpired)
     #expect(!firstPageExpired)
@@ -107,13 +107,59 @@ import Testing
     #expect(!expiration.isArmed)
 }
 
+@Test func readerNavigationLinearReadingExpirationRestartsStreakWhenDirectionReverses() {
+    var expiration = ReaderNavigationLinearReadingExpiration<Int>(threshold: 5)
+
+    expiration.arm(at: 10)
+
+    // Three steps forward, then reverse: the reversal restarts the streak,
+    // so a full five more same-direction steps are needed to reach the
+    // threshold, not just the two remaining from the original streak.
+    _ = expiration.recordLinearReading(at: 11, direction: .forward)
+    _ = expiration.recordLinearReading(at: 12, direction: .forward)
+    _ = expiration.recordLinearReading(at: 13, direction: .forward)
+    let reversalExpired = expiration.recordLinearReading(at: 12, direction: .backward)
+    let firstForwardStepExpired = expiration.recordLinearReading(at: 13, direction: .forward)
+    let secondForwardStepExpired = expiration.recordLinearReading(at: 14, direction: .forward)
+    let thirdForwardStepExpired = expiration.recordLinearReading(at: 15, direction: .forward)
+    let fourthForwardStepExpired = expiration.recordLinearReading(at: 16, direction: .forward)
+    let fifthForwardStepExpired = expiration.recordLinearReading(at: 17, direction: .forward)
+
+    #expect(!reversalExpired)
+    #expect(!firstForwardStepExpired)
+    #expect(!secondForwardStepExpired)
+    #expect(!thirdForwardStepExpired)
+    #expect(!fourthForwardStepExpired)
+    #expect(fifthForwardStepExpired)
+    #expect(!expiration.isArmed)
+}
+
+@Test func readerNavigationLinearReadingExpirationNeverExpiresWhileOscillatingDirection() {
+    var expiration = ReaderNavigationLinearReadingExpiration<Int>(threshold: 3)
+
+    expiration.arm(at: 10)
+
+    var expired = false
+    var pageKey = 10
+    for step in 0..<10 {
+        pageKey += step.isMultiple(of: 2) ? 1 : -1
+        expired = expired || expiration.recordLinearReading(
+            at: pageKey,
+            direction: step.isMultiple(of: 2) ? .forward : .backward
+        )
+    }
+
+    #expect(!expired)
+    #expect(expiration.isArmed)
+}
+
 @Test func readerNavigationLinearReadingExpirationResetDisarmsTracking() {
     var expiration = ReaderNavigationLinearReadingExpiration<Int>(threshold: 2)
 
     expiration.arm(at: 1)
-    let firstPageExpired = expiration.recordLinearReading(at: 2)
+    let firstPageExpired = expiration.recordLinearReading(at: 2, direction: .forward)
     expiration.reset()
-    let disarmedPageExpired = expiration.recordLinearReading(at: 3)
+    let disarmedPageExpired = expiration.recordLinearReading(at: 3, direction: .forward)
 
     #expect(!firstPageExpired)
     #expect(!disarmedPageExpired)
