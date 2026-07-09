@@ -298,6 +298,17 @@ package extension NovelTextViewportIndexSurface {
         }
     }
 
+    /// External blocks (images) carry their own identity on
+    /// `NovelTextViewportExternalBlock.imageSegmentIdentity` rather than in
+    /// `ranges`, so a resume point targeting a liked image must be matched
+    /// here instead of via the text-range `contains(textSegmentIdentity:)`
+    /// overloads above, which only ever see text ranges.
+    func contains(
+        imageSegmentIdentity: NovelTextSegmentIdentity
+    ) -> Bool {
+        externalBlocks.contains { $0.imageSegmentIdentity == imageSegmentIdentity }
+    }
+
     func contains(
         chapterIdentity: NovelChapterIdentity,
         in document: NovelReaderProjection
