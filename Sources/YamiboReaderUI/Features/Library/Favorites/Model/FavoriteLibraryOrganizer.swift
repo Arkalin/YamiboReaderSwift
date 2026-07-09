@@ -762,7 +762,8 @@ final class FavoriteLibraryOrganizer: ObservableObject {
                     selectedCollectionID: nil,
                     filter: filter,
                     readingProgress: readingProgress,
-                    contentCoverURLsByTargetID: contentCoverURLsByTargetID
+                    contentCoverURLsByTargetID: contentCoverURLsByTargetID,
+                    textCoverForcedTargetIDs: textCoverForcedTargetIDs
                 )
             )
         selection.prune(
