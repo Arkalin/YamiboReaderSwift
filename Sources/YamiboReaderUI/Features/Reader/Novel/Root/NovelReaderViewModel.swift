@@ -444,12 +444,7 @@ public final class NovelReaderViewModel: ObservableObject {
             }
         }
         if novelReaderSurfaces.isEmpty {
-            let progress = await dependencies.readingProgressStore.load(threadID: context.threadID)
-            let novelProgress = progress?.novel
-            await startReadingWorkflow(
-                resumePoint: context.initialResumePoint ?? novelProgress?.novelResumePoint,
-                favoriteAuthorID: novelProgress?.authorID
-            )
+            await performInitialLoadIfNeeded()
         } else {
             do {
                 if let state = try await requestRuntimeUpdate(
@@ -467,6 +462,31 @@ public final class NovelReaderViewModel: ObservableObject {
         }
     }
 
+    /// Runs the initial page load when `novelReaderSurfaces` has never been
+    /// populated yet. Shared by `prepare(layout:)`'s first call and by
+    /// `commitNovelTextLayout`'s recovery path below, so that a first layout
+    /// pass too small to build a TextKit index (e.g. right after the reader
+    /// is presented while another sheet is still dismissing, as with a My
+    /// Likes jump-to-original) doesn't strand the reader on a permanent
+    /// error once a valid layout follows.
+    private func performInitialLoadIfNeeded() async {
+        guard novelReaderSurfaces.isEmpty, !isLoading else { return }
+        if readingWorkflow?.state == nil {
+            // `makeReadingWorkflow` bakes `layout` in at construction time
+            // and nothing updates it while `state` is nil, so a workflow
+            // that never got past its first `start()` would otherwise retry
+            // with the same failing geometry. Rebuild it to pick up the
+            // corrected `self.layout`.
+            readingWorkflow = nil
+        }
+        let progress = await dependencies.readingProgressStore.load(threadID: context.threadID)
+        let novelProgress = progress?.novel
+        await startReadingWorkflow(
+            resumePoint: context.initialResumePoint ?? novelProgress?.novelResumePoint,
+            favoriteAuthorID: novelProgress?.authorID
+        )
+    }
+
     public func commitNovelTextLayout(_ layout: NovelReaderLayout) async {
         guard latestRequestedLayout != layout else { return }
         latestRequestedLayout = layout
@@ -474,6 +494,7 @@ public final class NovelReaderViewModel: ObservableObject {
         let requestSequence = layoutRequestSequence
         guard readingWorkflow?.state != nil else {
             self.layout = layout
+            await performInitialLoadIfNeeded()
             return
         }
         do {

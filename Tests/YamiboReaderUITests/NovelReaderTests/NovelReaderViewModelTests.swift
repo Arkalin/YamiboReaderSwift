@@ -1171,6 +1171,72 @@ final class NovelReaderViewModelTests: XCTestCase {
         }
     }
 
+    // Reproduces the "My Likes" jump-to-original bug: the reader's very first
+    // layout pass (before the presenting view's real geometry has settled)
+    // can be implausibly narrow, so the initial load fails with
+    // `.textKitIndexing` before `readingWorkflow.state` is ever set. Without
+    // a retry, `commitNovelTextLayout`'s `readingWorkflow?.state != nil`
+    // guard treats that as "nothing to refresh" forever, so the corrected
+    // layout that follows moments later is silently dropped and the reader
+    // is stuck on the error permanently.
+    func testInitialLoadFailureRecoversWhenValidLayoutFollows() async throws {
+        let defaultsSuiteName = YamiboTestDefaults.suiteName(prefix: "reader-container-model")
+        let settingsStore = try SettingsStore(testSuiteName: defaultsSuiteName, key: "settings")
+        let cacheStore = NovelReaderProjectionStore(
+            baseDirectory: FileManager.default.temporaryDirectory
+                .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        )
+        let forumCacheStore = ForumCacheStore(
+            baseDirectory: FileManager.default.temporaryDirectory
+                .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        )
+        let settings = NovelReaderAppearanceSettings(readingMode: .paged)
+        let document = makeDocument(view: 1, maxView: 1, chapterTitles: ["第一章", "第二章"])
+        try await settingsStore.save(AppSettings(novelReader: settings))
+        try await seedReaderSourceCaches(
+            documents: [document],
+            novelReaderCacheStore: cacheStore,
+            forumCacheStore: forumCacheStore
+        )
+
+        let appContext = YamiboAppContext(
+            sessionStore: try SessionStore(testSuiteName: defaultsSuiteName, key: "session"),
+            settingsStore: settingsStore,
+            novelReaderCacheStore: cacheStore,
+            forumCacheStore: forumCacheStore
+        )
+        let model = await MainActor.run {
+            NovelReaderViewModel(
+                context: NovelLaunchContext(
+                    threadID: document.threadID,
+                    threadTitle: "测试线程",
+                    source: .forum
+                ),
+                appContext: appContext,
+                pagination: { document, settings, layout in
+                    // Mirrors the production TextKit adapter's minimum-width
+                    // guard (`NovelTextKitRuntimeAdapter.indexSurfaceRanges`).
+                    guard layout.readableFrame.width >= 120 else {
+                        throw NovelTextLayoutFailure.textKitIndexing
+                    }
+                    return try novelReaderViewModelSegmentPagination(document: document, settings: settings, layout: layout)
+                }
+            )
+        }
+
+        await model.prepare(layout: NovelReaderLayout(width: 80, height: 568))
+        await MainActor.run {
+            XCTAssertNil(model.novelReaderPresentation)
+            XCTAssertEqual(model.errorMessage, NovelTextLayoutFailure.textKitIndexing.localizedDescription)
+        }
+
+        await model.commitNovelTextLayout(NovelReaderLayout(width: 320, height: 568))
+        await MainActor.run {
+            XCTAssertNotNil(model.novelReaderPresentation)
+            XCTAssertNil(model.errorMessage)
+        }
+    }
+
     func testApplySettingsUpdatesStoredReaderSettings() async throws {
         let model = try await makeModel(
             documents: [
