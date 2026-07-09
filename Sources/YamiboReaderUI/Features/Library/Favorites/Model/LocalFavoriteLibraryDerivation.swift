@@ -60,6 +60,7 @@ enum LocalFavoriteLibraryDerivation {
         var filter: LocalFavoriteFilterState
         var readingProgress: [ReadingProgressRecord]
         var contentCoverURLsByTargetID: [String: URL]
+        var textCoverForcedTargetIDs: Set<String>
     }
 
     static func derive(_ inputs: Inputs) -> LocalFavoriteDerivedState {
@@ -118,6 +119,7 @@ enum LocalFavoriteLibraryDerivation {
         .map { card in
             var card = card
             card.coverURL = inputs.contentCoverURLsByTargetID[card.item.target.id]
+            card.textCoverForced = inputs.textCoverForcedTargetIDs.contains(card.item.target.id)
             return card
         }
     }

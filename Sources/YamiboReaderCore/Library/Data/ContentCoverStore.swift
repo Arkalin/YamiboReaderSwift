@@ -47,6 +47,12 @@ public struct ContentCover: Codable, Hashable, Sendable {
     public var automaticCoverURL: URL?
     public var manualCoverURL: URL?
     public var dynamicEnabled: Bool
+    /// User override that suppresses both cover URLs in favor of the text
+    /// placeholder, independent of `dynamicEnabled`/which URL would
+    /// otherwise resolve. Cleared whenever an explicit image-cover action
+    /// (manual set or restore-to-automatic) runs, since those represent the
+    /// user asking for an image again.
+    public var textCoverForced: Bool
     public var updatedAt: Date
 
     public init(
@@ -54,20 +60,23 @@ public struct ContentCover: Codable, Hashable, Sendable {
         automaticCoverURL: URL? = nil,
         manualCoverURL: URL? = nil,
         dynamicEnabled: Bool = true,
+        textCoverForced: Bool = false,
         updatedAt: Date = .now
     ) {
         self.key = key
         self.automaticCoverURL = automaticCoverURL
         self.manualCoverURL = manualCoverURL
         self.dynamicEnabled = dynamicEnabled
+        self.textCoverForced = textCoverForced
         self.updatedAt = updatedAt
     }
 
     public var resolvedURL: URL? {
+        guard !textCoverForced else { return nil }
         if dynamicEnabled {
-            automaticCoverURL ?? manualCoverURL
+            return automaticCoverURL ?? manualCoverURL
         } else {
-            manualCoverURL ?? automaticCoverURL
+            return manualCoverURL ?? automaticCoverURL
         }
     }
 }
@@ -128,6 +137,7 @@ public actor ContentCoverStore {
             var cover = try Self.fetchCover(for: key, in: db) ?? ContentCover(key: key)
             cover.manualCoverURL = normalizedURL
             cover.dynamicEnabled = false
+            cover.textCoverForced = false
             cover.updatedAt = date
             try Self.upsert(cover, in: db)
         }
@@ -146,6 +156,7 @@ public actor ContentCoverStore {
             }
             cover.manualCoverURL = nil
             cover.dynamicEnabled = true
+            cover.textCoverForced = false
             cover.updatedAt = date
             try Self.upsert(cover, in: db)
             return true
@@ -165,6 +176,23 @@ public actor ContentCoverStore {
             try Self.upsert(cover, in: db)
         }
         postChangeNotification()
+    }
+
+    /// Toggles the text-placeholder override on or off. Unlike
+    /// `setManualCover`/`clearManualCover`, this never touches the stored
+    /// automatic/manual URLs, so un-forcing resolves back to whatever those
+    /// would already have produced.
+    @discardableResult
+    public func setTextCoverForced(_ forced: Bool, for key: ContentCoverKey, date: Date = .now) async throws -> Bool {
+        guard !key.targetID.isEmpty else { return false }
+        try await database.write { db in
+            var cover = try Self.fetchCover(for: key, in: db) ?? ContentCover(key: key)
+            cover.textCoverForced = forced
+            cover.updatedAt = date
+            try Self.upsert(cover, in: db)
+        }
+        postChangeNotification()
+        return true
     }
 
     public func clearAll() async throws {
@@ -219,7 +247,7 @@ public actor ContentCoverStore {
         guard let row = try Row.fetchOne(
             db,
             sql: """
-            SELECT automatic_url, manual_url, dynamic_enabled, updated_at
+            SELECT automatic_url, manual_url, dynamic_enabled, text_cover_forced, updated_at
             FROM content_cover
             WHERE target_type = ? AND target_id = ?
             """,
@@ -232,6 +260,7 @@ public actor ContentCoverStore {
             automaticCoverURL: (row["automatic_url"] as String?).flatMap(URL.init(string:)),
             manualCoverURL: (row["manual_url"] as String?).flatMap(URL.init(string:)),
             dynamicEnabled: row["dynamic_enabled"],
+            textCoverForced: row["text_cover_forced"],
             updatedAt: Date(timeIntervalSince1970: row["updated_at"])
         )
     }
@@ -240,8 +269,8 @@ public actor ContentCoverStore {
         try db.execute(
             sql: """
             INSERT OR REPLACE INTO content_cover
-            (target_type, target_id, automatic_url, manual_url, dynamic_enabled, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?)
+            (target_type, target_id, automatic_url, manual_url, dynamic_enabled, text_cover_forced, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
             arguments: [
                 cover.key.targetType.rawValue,
@@ -249,6 +278,7 @@ public actor ContentCoverStore {
                 cover.automaticCoverURL?.absoluteString,
                 cover.manualCoverURL?.absoluteString,
                 cover.dynamicEnabled,
+                cover.textCoverForced,
                 cover.updatedAt.timeIntervalSince1970,
             ]
         )

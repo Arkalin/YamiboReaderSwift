@@ -913,6 +913,55 @@ private func persistedResumeRoute(_ route: ReaderResumeRoute) throws -> ReaderRe
     #expect(cover.resolvedURL == automatic)
 }
 
+@Test func contentCoverStoreForcedTextCoverSuppressesResolvedURL() async throws {
+    let defaults = try makeIsolatedDefaults(prefix: "content-cover-text-forced")
+    let store = ContentCoverStore(defaults: defaults, key: "content-covers")
+    let key = ContentCoverKey(targetType: .thread, targetID: "902")
+    let automatic = try #require(URL(string: "https://img.example.com/auto.jpg"))
+    let manual = try #require(URL(string: "https://img.example.com/manual.jpg"))
+
+    try await store.setAutomaticCover(automatic, for: key)
+    try await store.setManualCover(manual, for: key)
+    #expect(try await store.setTextCoverForced(true, for: key) == true)
+
+    var cover = try #require(await store.cover(for: key))
+    #expect(cover.textCoverForced)
+    #expect(cover.resolvedURL == nil)
+    // Un-forcing resolves back to whatever the stored URLs already produced,
+    // without the toggle itself touching them.
+    #expect(cover.manualCoverURL == manual)
+    #expect(cover.automaticCoverURL == automatic)
+
+    try await store.setTextCoverForced(false, for: key)
+    cover = try #require(await store.cover(for: key))
+    #expect(!cover.textCoverForced)
+    #expect(cover.resolvedURL == manual)
+}
+
+@Test func contentCoverStoreExplicitImageCoverActionsClearForcedTextCover() async throws {
+    let defaults = try makeIsolatedDefaults(prefix: "content-cover-text-forced-clear")
+    let store = ContentCoverStore(defaults: defaults, key: "content-covers")
+    let automaticKey = ContentCoverKey(targetType: .thread, targetID: "manual-clears-forced")
+    let automatic = try #require(URL(string: "https://img.example.com/auto.jpg"))
+    let manual = try #require(URL(string: "https://img.example.com/manual.jpg"))
+
+    try await store.setAutomaticCover(automatic, for: automaticKey)
+    try await store.setTextCoverForced(true, for: automaticKey)
+    try await store.setManualCover(manual, for: automaticKey)
+    var cover = try #require(await store.cover(for: automaticKey))
+    #expect(!cover.textCoverForced)
+    #expect(cover.resolvedURL == manual)
+
+    let restoreKey = ContentCoverKey(targetType: .thread, targetID: "restore-clears-forced")
+    try await store.setAutomaticCover(automatic, for: restoreKey)
+    try await store.setManualCover(manual, for: restoreKey)
+    try await store.setTextCoverForced(true, for: restoreKey)
+    try await store.clearManualCover(for: restoreKey)
+    cover = try #require(await store.cover(for: restoreKey))
+    #expect(!cover.textCoverForced)
+    #expect(cover.resolvedURL == automatic)
+}
+
 @Test func contentCoverKeyMergesThreadKindsAndUsesMangaCleanBookName() throws {
     let normal = ContentCoverKey(target: FavoriteContentTarget(kind: .normalThread, threadID: "77"))
     let novel = ContentCoverKey(target: FavoriteContentTarget(kind: .novelThread, threadID: "77"))
