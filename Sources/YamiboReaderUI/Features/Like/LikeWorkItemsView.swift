@@ -23,34 +23,38 @@ struct LikeWorkItemsView: View {
     @State private var presentedImageItem: LikeItem?
 
     var body: some View {
-        Group {
+        List {
+            ForEach(filteredItems) { item in
+                LikeItemCard(
+                    item: item,
+                    chapterInfo: chapterInfoByItemID[item.id],
+                    likeImageStore: like.likeImageStore,
+                    action: { open(item) }
+                )
+                .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+                .listRowSeparator(.hidden)
+                .listRowBackground(Color.clear)
+                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                    Button(role: .destructive) {
+                        delete(item)
+                    } label: {
+                        Label(L10n.string("common.delete"), systemImage: "trash")
+                    }
+                }
+            }
+        }
+        .listStyle(.plain)
+        .contentMargins(.top, 8, for: .scrollContent)
+        // The List stays permanently mounted (rather than being swapped for
+        // an empty-state view via if/else) so `.searchable` below always has
+        // a stable scrollable view to attach its search bar to — swapping it
+        // in right after this view is pushed (before `load()` finishes) is
+        // what caused the search bar to briefly ghost/overlap the first row.
+        .overlay {
             if items.isEmpty {
                 ContentUnavailableView(L10n.string("likes.empty_state"), systemImage: "heart")
             } else if filteredItems.isEmpty {
                 ContentUnavailableView.search(text: searchText)
-            } else {
-                List {
-                    ForEach(filteredItems) { item in
-                        LikeItemCard(
-                            item: item,
-                            chapterInfo: chapterInfoByItemID[item.id],
-                            likeImageStore: like.likeImageStore,
-                            action: { open(item) }
-                        )
-                        .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
-                        .listRowSeparator(.hidden)
-                        .listRowBackground(Color.clear)
-                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                            Button(role: .destructive) {
-                                delete(item)
-                            } label: {
-                                Label(L10n.string("common.delete"), systemImage: "trash")
-                            }
-                        }
-                    }
-                }
-                .listStyle(.plain)
-                .contentMargins(.top, 8, for: .scrollContent)
             }
         }
         .navigationTitle(workTitle)

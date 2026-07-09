@@ -20,26 +20,28 @@ struct LikeWorkListView: View {
     }
 
     var body: some View {
-        Group {
+        List(filteredSummaries, id: \.workKey) { summary in
+            NavigationLink {
+                LikeWorkItemsView(
+                    work: summary.workKey,
+                    workTitle: title(for: summary.workKey),
+                    like: likeDependencies,
+                    onOpenAnchor: { anchor in openAnchor(anchor, work: summary.workKey) },
+                    onDismiss: nil
+                )
+            } label: {
+                row(for: summary)
+            }
+        }
+        .listStyle(.plain)
+        // Kept permanently mounted rather than swapped for an empty-state
+        // view — see the matching comment in LikeWorkItemsView.body for why
+        // that swap makes `.searchable`'s search bar ghost during a push.
+        .overlay {
             if summaries.isEmpty {
                 ContentUnavailableView(L10n.string("likes.empty_state"), systemImage: "heart")
             } else if filteredSummaries.isEmpty {
                 ContentUnavailableView.search(text: searchText)
-            } else {
-                List(filteredSummaries, id: \.workKey) { summary in
-                    NavigationLink {
-                        LikeWorkItemsView(
-                            work: summary.workKey,
-                            workTitle: title(for: summary.workKey),
-                            like: likeDependencies,
-                            onOpenAnchor: { anchor in openAnchor(anchor, work: summary.workKey) },
-                            onDismiss: nil
-                        )
-                    } label: {
-                        row(for: summary)
-                    }
-                }
-                .listStyle(.plain)
             }
         }
         .navigationTitle(L10n.string("likes.section_title"))
