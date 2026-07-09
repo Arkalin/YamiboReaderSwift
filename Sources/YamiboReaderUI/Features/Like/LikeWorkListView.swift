@@ -11,13 +11,22 @@ struct LikeWorkListView: View {
     @State private var summaries: [LikeWorkSummary] = []
     @State private var titlesByWorkKey: [LikeWorkKey: String] = [:]
     @State private var coverURLsByWorkKey: [LikeWorkKey: URL] = [:]
+    @State private var searchText = ""
+
+    private var filteredSummaries: [LikeWorkSummary] {
+        let trimmed = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return summaries }
+        return summaries.filter { title(for: $0.workKey).localizedCaseInsensitiveContains(trimmed) }
+    }
 
     var body: some View {
         Group {
             if summaries.isEmpty {
                 ContentUnavailableView(L10n.string("likes.empty_state"), systemImage: "heart")
+            } else if filteredSummaries.isEmpty {
+                ContentUnavailableView.search(text: searchText)
             } else {
-                List(summaries, id: \.workKey) { summary in
+                List(filteredSummaries, id: \.workKey) { summary in
                     NavigationLink {
                         LikeWorkItemsView(
                             work: summary.workKey,
@@ -34,6 +43,7 @@ struct LikeWorkListView: View {
             }
         }
         .navigationTitle(L10n.string("likes.section_title"))
+        .searchable(text: $searchText, prompt: L10n.string("likes.search_placeholder"))
         .task { await load() }
         .onReceive(NotificationCenter.default.publisher(for: LikeStore.didChangeNotification)) { notification in
             guard let changeID = notification.userInfo?[LikeStore.changeIDUserInfoKey] as? String,

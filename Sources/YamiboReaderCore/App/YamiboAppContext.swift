@@ -242,7 +242,8 @@ public final class YamiboAppContext: Sendable {
         LikeDependencies(
             likeStore: likeStore,
             likeImageStore: likeImageStore,
-            mangaDirectoryStore: mangaDirectoryStore
+            mangaDirectoryStore: mangaDirectoryStore,
+            novelReaderCacheStore: novelReaderCacheStore
         )
     }
 

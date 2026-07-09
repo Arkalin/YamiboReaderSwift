@@ -4,6 +4,11 @@ import UIKit
 
 /// Second-level Like list for one work: Mine push destination and both
 /// readers' `.sheet` share this exact type (see implementation-design.md §9).
+///
+/// Tapping a card never jumps straight to the original reading position —
+/// it opens a text detail sheet or the image browser, and jumping back is a
+/// menu action inside those, so browsing likes never yanks the reader out
+/// from under the user by accident.
 struct LikeWorkItemsView: View {
     let work: LikeWorkKey
     let workTitle: String
@@ -12,20 +17,29 @@ struct LikeWorkItemsView: View {
     let onDismiss: (() -> Void)?
 
     @State private var items: [LikeItem] = []
+    @State private var chapterInfoByItemID: [String: String] = [:]
+    @State private var searchText = ""
+    @State private var presentedTextItem: LikeItem?
+    @State private var presentedImageItem: LikeItem?
 
     var body: some View {
         Group {
             if items.isEmpty {
                 ContentUnavailableView(L10n.string("likes.empty_state"), systemImage: "heart")
+            } else if filteredItems.isEmpty {
+                ContentUnavailableView.search(text: searchText)
             } else {
                 List {
-                    ForEach(items) { item in
-                        Button {
-                            onOpenAnchor(item.anchor)
-                        } label: {
-                            LikeItemRowContent(item: item, likeImageStore: like.likeImageStore)
-                        }
-                        .buttonStyle(.plain)
+                    ForEach(filteredItems) { item in
+                        LikeItemCard(
+                            item: item,
+                            chapterInfo: chapterInfoByItemID[item.id],
+                            likeImageStore: like.likeImageStore,
+                            action: { open(item) }
+                        )
+                        .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+                        .listRowSeparator(.hidden)
+                        .listRowBackground(Color.clear)
                         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                             Button(role: .destructive) {
                                 delete(item)
@@ -36,9 +50,11 @@ struct LikeWorkItemsView: View {
                     }
                 }
                 .listStyle(.plain)
+                .contentMargins(.top, 8, for: .scrollContent)
             }
         }
         .navigationTitle(workTitle)
+        .searchable(text: $searchText, prompt: L10n.string("likes.search_placeholder"))
         .toolbar {
             if let onDismiss {
                 ToolbarItem(placement: .cancellationAction) {
@@ -54,19 +70,87 @@ struct LikeWorkItemsView: View {
             }
             Task { await load() }
         }
+        .sheet(item: $presentedTextItem) { item in
+            LikeTextDetailView(
+                item: item,
+                chapterInfo: chapterInfoByItemID[item.id],
+                onJumpToOriginal: {
+                    presentedTextItem = nil
+                    onOpenAnchor(item.anchor)
+                }
+            )
+        }
+        .fullScreenCover(item: $presentedImageItem) { item in
+            if let browserItem = imageBrowserItem(for: item) {
+                ImageBrowserView(
+                    items: [browserItem],
+                    initialItemID: item.id,
+                    mode: .single,
+                    onJumpToOriginal: {
+                        presentedImageItem = nil
+                        onOpenAnchor(item.anchor)
+                    },
+                    onDismiss: { presentedImageItem = nil }
+                )
+                .presentationBackground(.clear)
+            }
+        }
+    }
+
+    private var filteredItems: [LikeItem] {
+        let trimmed = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return items }
+        return items.filter { item in
+            if let excerpt = item.excerptText, excerpt.localizedCaseInsensitiveContains(trimmed) {
+                return true
+            }
+            if let chapterInfo = chapterInfoByItemID[item.id], chapterInfo.localizedCaseInsensitiveContains(trimmed) {
+                return true
+            }
+            return false
+        }
+    }
+
+    private func open(_ item: LikeItem) {
+        switch item.kind {
+        case .text:
+            presentedTextItem = item
+        case .image:
+            guard item.sourceImageURL != nil else { return }
+            presentedImageItem = item
+        }
+    }
+
+    private func imageBrowserItem(for item: LikeItem) -> ImageBrowserItem? {
+        guard let url = item.sourceImageURL else { return nil }
+        let likeImageStore = like.likeImageStore
+        return ImageBrowserItem(
+            id: item.id,
+            source: YamiboImageSource(url: url),
+            title: chapterInfoByItemID[item.id] ?? workTitle,
+            localDataProvider: { await likeImageStore.loadData(id: item.id) }
+        )
     }
 
     private func load() async {
         let fetched = await like.likeStore.likes(for: work)
         switch work.kind {
         case .novel:
-            items = Self.sortedNovelItems(fetched)
+            let sorted = Self.sortedNovelItems(fetched)
+            items = sorted
+            chapterInfoByItemID = await LikeChapterInfoResolver.novelChapterInfo(
+                for: sorted,
+                threadID: work.id,
+                cacheStore: like.novelReaderCacheStore
+            )
         case .manga:
             // Manga Like Items never store a chapter ordinal (see
             // implementation-design.md §11): chapter order is always resolved
             // live against the directory's current chapter array.
             let directory = try? await like.mangaDirectoryStore.directory(named: work.id)
-            items = Self.sortedMangaItems(fetched, chapterOrder: Self.chapterOrder(for: directory))
+            let sorted = Self.sortedMangaItems(fetched, chapterOrder: Self.chapterOrder(for: directory))
+            items = sorted
+            chapterInfoByItemID = LikeChapterInfoResolver.mangaChapterInfo(for: sorted, directory: directory)
         }
     }
 
@@ -161,30 +245,96 @@ private enum LikeTextSegmentOccurrence {
     }
 }
 
-private struct LikeItemRowContent: View {
+/// One liked-item card: a quote-style card for text excerpts, a full-width
+/// photo card for images. Tapping either opens a detail surface instead of
+/// jumping straight to the original position (see `LikeWorkItemsView.open`).
+private struct LikeItemCard: View {
     let item: LikeItem
+    let chapterInfo: String?
     let likeImageStore: LikeImageStore
+    let action: () -> Void
 
     var body: some View {
-        switch item.kind {
-        case .text:
-            Text(item.excerptText ?? "")
-                .font(.body)
-                .foregroundStyle(.primary)
-                .lineLimit(4)
-                .multilineTextAlignment(.leading)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.vertical, 4)
-        case .image:
-            HStack {
-                LikeImageThumbnail(item: item, likeImageStore: likeImageStore)
-                Spacer(minLength: 0)
+        Button(action: action) {
+            switch item.kind {
+            case .text:
+                LikeTextCardContent(item: item, chapterInfo: chapterInfo)
+            case .image:
+                LikeImageCardContent(item: item, chapterInfo: chapterInfo, likeImageStore: likeImageStore)
             }
         }
+        .buttonStyle(.plain)
     }
 }
 
-private struct LikeImageThumbnail: View {
+private struct LikeTextCardContent: View {
+    let item: LikeItem
+    let chapterInfo: String?
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            RoundedRectangle(cornerRadius: 2, style: .continuous)
+                .fill(Color.accentColor.opacity(0.55))
+                .frame(width: 3)
+                .frame(maxHeight: .infinity)
+
+            VStack(alignment: .leading, spacing: 6) {
+                if let chapterInfo {
+                    Text(chapterInfo)
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                Text(item.excerptText ?? "")
+                    .font(.body)
+                    .foregroundStyle(.primary)
+                    .lineLimit(5)
+                    .multilineTextAlignment(.leading)
+                Text(LocalFavoriteRelativeDate.string(from: item.createdAt))
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+}
+
+private struct LikeImageCardContent: View {
+    let item: LikeItem
+    let chapterInfo: String?
+    let likeImageStore: LikeImageStore
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            LikeImageCardPhoto(item: item, likeImageStore: likeImageStore)
+                .frame(height: 220)
+                .frame(maxWidth: .infinity)
+                .clipped()
+
+            HStack(spacing: 6) {
+                if let chapterInfo {
+                    Text(chapterInfo)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 0)
+                Text(LocalFavoriteRelativeDate.string(from: item.createdAt))
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+        }
+        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+}
+
+private struct LikeImageCardPhoto: View {
     let item: LikeItem
     let likeImageStore: LikeImageStore
 
@@ -203,15 +353,17 @@ private struct LikeImageThumbnail: View {
                 } placeholder: {
                     Color.secondary.opacity(0.12)
                 } failure: {
-                    Image(systemName: "photo")
-                        .foregroundStyle(.secondary)
+                    ZStack {
+                        Color.secondary.opacity(0.08)
+                        Image(systemName: "photo")
+                            .foregroundStyle(.secondary)
+                    }
                 }
             } else {
                 Color.secondary.opacity(0.12)
             }
         }
-        .frame(width: 64, height: 64)
-        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .task {
             localData = await likeImageStore.loadData(id: item.id)
             didFinishLocalLookup = true
