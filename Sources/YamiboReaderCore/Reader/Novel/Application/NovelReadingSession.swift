@@ -560,14 +560,21 @@ package struct NovelReadingSession: Sendable {
             return nil
         }
 
-        if let textSegmentIdentity = resumePoint.textSegmentIdentity,
-           let target = resolveTextSegmentIdentity(
-            textSegmentIdentity,
-            displayedTextOffset: resumePoint.displayedTextOffset,
-            resumePoint: resumePoint,
-            surfacesInView: surfacesInView
-           ) {
-            return target
+        if let textSegmentIdentity = resumePoint.textSegmentIdentity {
+            if let target = resolveTextSegmentIdentity(
+                textSegmentIdentity,
+                displayedTextOffset: resumePoint.displayedTextOffset,
+                resumePoint: resumePoint,
+                surfacesInView: surfacesInView
+            ) {
+                return target
+            }
+            if let target = resolveImageSegmentIdentity(
+                textSegmentIdentity,
+                surfacesInView: surfacesInView
+            ) {
+                return target
+            }
         }
 
         if let chapterIdentity = resumePoint.chapterIdentity,
@@ -660,6 +667,29 @@ package struct NovelReadingSession: Sendable {
                 in: currentDocument
             ),
             documentView: nearestSurface.documentView
+        )
+    }
+
+    /// A liked image's resume point stores the image's identity in the same
+    /// `textSegmentIdentity` field text resume points use (see
+    /// `NovelImageLikeAnchor.imageSegmentIdentity`), but the image itself
+    /// lives on a surface's `externalBlocks`, not its `ranges` — so it never
+    /// matches `resolveTextSegmentIdentity` above. Without this, an image
+    /// resume point always falls through to `resolveChapterIdentity`, which
+    /// lands on the first surface of the chapter rather than the liked image.
+    private func resolveImageSegmentIdentity(
+        _ imageSegmentIdentity: NovelTextSegmentIdentity,
+        surfacesInView: [NovelTextViewportIndexSurface]
+    ) -> NovelReaderResolvedSurfaceTarget? {
+        guard let surface = surfacesInView.first(where: {
+            $0.contains(imageSegmentIdentity: imageSegmentIdentity)
+        }) else {
+            return nil
+        }
+        return NovelReaderResolvedSurfaceTarget(
+            surfaceOrdinal: surface.surfaceOrdinal,
+            intraSurfaceProgress: 0,
+            documentView: surface.documentView
         )
     }
 

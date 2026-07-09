@@ -1208,6 +1208,31 @@ private final class StubURLProtocol: URLProtocol {
     #expect(!hiddenSegmentIndexes.contains(1))
     #expect(hidden.viewportIndex.chapters.map(\.title) == ["第一章", "第二章"])
 }
+
+@Test func novelTextLayoutRendersImageOnlySurfaceWhenAllTextOnPageIsHiddenByAuthorReplyFilter() throws {
+    let document = NovelReaderProjection(
+        threadID: "189",
+        view: 1,
+        maxView: 1,
+        segments: [
+            .text(String(repeating: "读者回复正文。", count: 20), chapterTitle: "读者回复"),
+            .image(URL(string: "https://example.com/only-image.jpg")!, chapterTitle: "读者回复"),
+        ],
+        segmentSources: [
+            NovelReaderSegmentSource(ownerPostID: "701", isAuthorReplyToOther: true),
+            NovelReaderSegmentSource(ownerPostID: "702"),
+        ]
+    )
+
+    let result = try NovelTextLayout.layout(
+        document: document,
+        settings: NovelReaderAppearanceSettings(showsAuthorRepliesToOthers: false, readingMode: .vertical),
+        layout: NovelReaderLayout(width: 320, height: 568)
+    )
+
+    #expect(result.viewportIndex.surfaces.allSatisfy { $0.ranges.isEmpty })
+    #expect(result.viewportIndex.surfaces.contains { !$0.externalBlocks.isEmpty })
+}
 #endif
 
 @Test func novelChapterDirectoryExtractorMatchesReaderPreviewDirectoryRules() throws {

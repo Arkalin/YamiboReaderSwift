@@ -110,10 +110,7 @@ public enum NovelTextLayout {
             viewportSurfaceLayout: { _, _, _ in surfaceRanges }
         )
         let hasVisibleText = result.viewportIndex.surfaces.contains { !$0.ranges.isEmpty }
-        let hasInputText = preparedInput.document.segments.contains { segment in
-            guard case let .text(text, _) = segment else { return false }
-            return !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        }
+        let hasInputText = hasDisplayableText(in: preparedInput.annotatedSegments)
         guard !hasInputText || hasVisibleText else {
             throw NovelTextLayoutFailure.textKitIndexing
         }
@@ -178,14 +175,25 @@ public enum NovelTextLayout {
             viewportSurfaceLayout: viewportSurfaceLayout
         )
         let hasVisibleText = result.viewportIndex.surfaces.contains { !$0.ranges.isEmpty }
-        let hasInputText = document.segments.contains { segment in
-            guard case let .text(text, _) = segment else { return false }
-            return !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        }
+        let hasInputText = hasDisplayableText(in: preparedInput.annotatedSegments)
         guard !hasInputText || hasVisibleText else {
             throw NovelTextLayoutFailure.textKitIndexing
         }
         return result
+    }
+
+    /// Whether the segments we actually intend to display (post
+    /// `showsAuthorRepliesToOthers`/`loadsInlineImages` filtering) include
+    /// non-whitespace text. Deliberately checks `annotatedSegments`, not the
+    /// document's raw, unfiltered `segments` — a page whose only text is
+    /// hidden by a display setting has no displayable text at all, so a
+    /// resulting image-only (or empty) render is correct, not a TextKit
+    /// failure. Using the raw segments here previously made any page where
+    /// every text segment was filtered out (e.g. all author replies to
+    /// others, with `showsAuthorRepliesToOthers` off) throw
+    /// `.textKitIndexing`, even though nothing was actually broken.
+    private static func hasDisplayableText(in annotatedSegments: [NovelAnnotatedSegment]) -> Bool {
+        annotatedSegments.contains { !$0.textContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
     }
 
     private static func render(

@@ -335,6 +335,74 @@ final class NovelReadingSessionTests: XCTestCase {
         XCTAssertEqual(session.snapshot.selectedSurfaceOrdinal, 0)
     }
 
+    func testRestoresExactImageSurfaceByImageSegmentIdentityRatherThanFirstSurfaceInChapter() throws {
+        let document = makeNovelDocument(
+            view: 1,
+            maxView: 1,
+            segments: [("第一章", "第一章 正文")]
+        )
+        let chapterIdentity = try XCTUnwrap(document.semantics(forSegmentIndex: 0)?.chapterIdentity)
+        let firstImageIdentity = NovelTextSegmentIdentity(rawValue: "\(chapterIdentity.rawValue)#image:0")
+        let secondImageIdentity = NovelTextSegmentIdentity(rawValue: "\(chapterIdentity.rawValue)#image:1")
+        // Liked images store their identity on the resume point's shared
+        // `textSegmentIdentity` field (see `NovelImageLikeAnchor`), same as
+        // liked text.
+        let resumePoint = NovelResumePoint(
+            view: 1,
+            chapterIdentity: chapterIdentity,
+            textSegmentIdentity: secondImageIdentity,
+            displayedTextOffset: 0,
+            chapterOrdinal: 0,
+            chapterTitle: "第一章",
+            segmentProgress: 0,
+            readingModeHint: .paged
+        )
+
+        func imageSurface(ordinal: Int, identity: NovelTextSegmentIdentity, url: String) -> NovelTextViewportIndexSurface {
+            NovelTextViewportIndexSurface(
+                surfaceOrdinal: ordinal,
+                documentView: 1,
+                chapterOrdinal: 0,
+                chapterTitle: "第一章",
+                ranges: [],
+                externalBlocks: [
+                    NovelTextViewportExternalBlock(
+                        chapterIdentity: chapterIdentity,
+                        imageSegmentIdentity: identity,
+                        url: URL(string: url)!,
+                        chapterOrdinal: 0,
+                        chapterTitle: "第一章"
+                    ),
+                ]
+            )
+        }
+        let surfaces = [
+            imageSurface(ordinal: 0, identity: firstImageIdentity, url: "https://example.com/first.jpg"),
+            imageSurface(ordinal: 1, identity: secondImageIdentity, url: "https://example.com/second.jpg"),
+        ]
+
+        let session = try NovelReadingSession(
+            validating: document,
+            settings: NovelReaderAppearanceSettings(readingMode: .paged),
+            layout: NovelReaderLayout(width: 320, height: 568),
+            resumePoint: resumePoint,
+            pagination: { document, _, _ in
+                layoutResult(
+                    pages: surfaces,
+                    chapters: [NovelReaderChapter(ordinal: 0, title: "第一章", startIndex: 0)],
+                    viewportIndex: NovelTextViewportIndex(
+                        documentView: document.view,
+                        readingMode: .paged,
+                        surfaces: surfaces,
+                        chapters: [NovelTextViewportIndexChapter(ordinal: 0, title: "第一章", startSurfaceOrdinal: 0)]
+                    )
+                )
+            }
+        )
+
+        XCTAssertEqual(session.snapshot.selectedSurfaceOrdinal, 1)
+    }
+
     func testNovelResumePointEncodesSemanticSchemaWithoutRuntimeFields() throws {
         let resumePoint = NovelResumePoint(
             view: 2,
