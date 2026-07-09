@@ -94,6 +94,7 @@ public final class YamiboAppModel {
     public func presentNovelReader(_ context: NovelLaunchContext) {
         suspendedNovelContext = nil
         activeNovelContext = context
+        guard !context.isPreview else { return }
         appContinuity.readerRoutePresented(.novel(context))
     }
 
@@ -106,6 +107,7 @@ public final class YamiboAppModel {
     public func presentMangaReader(_ context: MangaLaunchContext) {
         suspendedMangaContext = nil
         activeMangaContext = context
+        guard !context.isPreview else { return }
         appContinuity.readerRoutePresented(.manga(context))
     }
 
@@ -208,6 +210,7 @@ public final class YamiboAppModel {
         guard tab == .favorites, let context = suspendedNovelContext else { return }
         suspendedNovelContext = nil
         activeNovelContext = context
+        guard !context.isPreview else { return }
         appContinuity.readerRoutePresented(.novel(context))
     }
 
@@ -215,6 +218,7 @@ public final class YamiboAppModel {
         guard tab == .favorites, let context = suspendedMangaContext else { return }
         suspendedMangaContext = nil
         activeMangaContext = context
+        guard !context.isPreview else { return }
         appContinuity.readerRoutePresented(.manga(context))
     }
 }

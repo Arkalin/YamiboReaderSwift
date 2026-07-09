@@ -1745,6 +1745,64 @@ final class NovelReaderViewModelTests: XCTestCase {
         XCTAssertEqual(savedContext, context)
     }
 
+    func testNovelProgressInPreviewModeDoesNotPersistReadingProgressOrResumeRoute() async throws {
+        let defaultsSuiteName = YamiboTestDefaults.suiteName(prefix: "reader-container-model")
+        let settingsStore = try SettingsStore(testSuiteName: defaultsSuiteName, key: "settings")
+        let readerResumeRouteStore = try ReaderResumeRouteStore(testSuiteName: defaultsSuiteName, key: "readerRoute")
+        let cacheStore = NovelReaderProjectionStore(
+            baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        )
+        let forumCacheStore = ForumCacheStore(
+            baseDirectory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        )
+        let document = makeDocument(view: 1, maxView: 1, chapterTitles: ["第一章", "第二章", "第三章"])
+
+        try await settingsStore.save(AppSettings(novelReader: NovelReaderAppearanceSettings(readingMode: .paged)))
+        try await seedReaderSourceCaches(
+            documents: [document],
+            novelReaderCacheStore: cacheStore,
+            forumCacheStore: forumCacheStore
+        )
+        let readingProgressStore = try makeReadingProgressStore(defaultsSuiteName: defaultsSuiteName)
+
+        let appContext = YamiboAppContext(
+            sessionStore: try SessionStore(testSuiteName: defaultsSuiteName, key: "session"),
+            settingsStore: settingsStore,
+            readerResumeRouteStore: readerResumeRouteStore,
+            readingProgressStore: readingProgressStore,
+            novelReaderCacheStore: cacheStore,
+            forumCacheStore: forumCacheStore
+        )
+        let model = await MainActor.run {
+            NovelReaderViewModel(
+                context: NovelLaunchContext(
+                    threadID: document.threadID,
+                    threadTitle: "测试线程",
+                    source: .like,
+                    isPreview: true
+                ),
+                appContext: appContext,
+                pagination: novelReaderViewModelSegmentPagination,
+                onReaderResumeRouteChange: { route in
+                    try? await readerResumeRouteStore.saveReadingPosition(route)
+                }
+            )
+        }
+
+        await model.prepare(layout: NovelReaderLayout(width: 320, height: 568))
+        await MainActor.run {
+            model.updateVerticalViewportPosition(surfaceIndex: 2, intraSurfaceProgress: 0.55, force: true)
+        }
+        let savedContext = await model.saveProgress()
+
+        XCTAssertTrue(savedContext.isPreview)
+        XCTAssertEqual(savedContext.initialView, 1)
+        let readingProgress = await readingProgressStore.load(threadID: document.threadID)
+        XCTAssertNil(readingProgress?.novel)
+        let storedRoute = await readerResumeRouteStore.load()
+        XCTAssertNil(storedRoute)
+    }
+
     func testLateNovelSaveAfterDismissDoesNotRecreateReaderResumeRoute() async throws {
         let defaultsSuiteName = YamiboTestDefaults.suiteName(prefix: "reader-container-model")
         let settingsStore = try SettingsStore(testSuiteName: defaultsSuiteName, key: "settings")

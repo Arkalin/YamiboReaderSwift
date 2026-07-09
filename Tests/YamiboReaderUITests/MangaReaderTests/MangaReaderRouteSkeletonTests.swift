@@ -17,6 +17,20 @@ struct MangaReaderTestsUIRouteContracts {
     }
 
     @MainActor
+    @Test func presentMangaReaderInPreviewModeDoesNotPersistResumeRoute() async throws {
+        let appContext = try makeAppContext()
+        let appModel = YamiboAppModel(appContext: appContext)
+        var context = try makeLaunchContext(tid: "700")
+        context.isPreview = true
+
+        appModel.presentMangaReader(context)
+
+        #expect(appModel.activeMangaContext == context)
+        let storedRoute = await appContext.readerResumeRouteStore.load()
+        #expect(storedRoute == nil)
+    }
+
+    @MainActor
     @Test func mangaReaderViewIsConstructible() throws {
         #if os(iOS)
         let appContext = try makeAppContext()

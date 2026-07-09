@@ -90,6 +90,7 @@ public struct MangaReaderView: View {
                     topInset: topInset,
                     bottomInset: bottomInset,
                     isVisible: isChromeVisible,
+                    isPreview: context.isPreview,
                     imageLoader: model.imageLoader,
                     summary: mangaChromeSummary(
                         from: model.presentation,

@@ -5,6 +5,7 @@ import YamiboReaderCore
 struct MangaReaderTopChrome: View {
     let title: String?
     let topInset: CGFloat
+    let isPreview: Bool
     let canNavigateBack: Bool
     let canNavigateForward: Bool
     let onNavigateBack: () -> Void
@@ -14,54 +15,60 @@ struct MangaReaderTopChrome: View {
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
-        ReaderGlassContainer(spacing: 12) {
-            let chromeButtonSize: CGFloat = 44
-            let historyIconSize = ReaderChromeHistoryButton.controlSize(isGlassBacked: true)
-            let buttonSpacing: CGFloat = 8
-            let leadingControlsWidth = canNavigateBack ? historyIconSize : 0
-            let trailingControlsWidth = chromeButtonSize
-                + (canNavigateForward ? historyIconSize + buttonSpacing : 0)
-            let titleSidePadding = max(leadingControlsWidth, trailingControlsWidth) + 16
+        VStack(spacing: 8) {
+            ReaderGlassContainer(spacing: 12) {
+                let chromeButtonSize: CGFloat = 44
+                let historyIconSize = ReaderChromeHistoryButton.controlSize(isGlassBacked: true)
+                let buttonSpacing: CGFloat = 8
+                let leadingControlsWidth = canNavigateBack ? historyIconSize : 0
+                let trailingControlsWidth = chromeButtonSize
+                    + (canNavigateForward ? historyIconSize + buttonSpacing : 0)
+                let titleSidePadding = max(leadingControlsWidth, trailingControlsWidth) + 16
 
-            ZStack {
-                MangaReaderTopChapterTitle(title: title)
-                    .frame(maxWidth: .infinity)
-                    .padding(.horizontal, titleSidePadding)
+                ZStack {
+                    MangaReaderTopChapterTitle(title: title)
+                        .frame(maxWidth: .infinity)
+                        .padding(.horizontal, titleSidePadding)
 
-                HStack(spacing: buttonSpacing) {
-                    if canNavigateBack {
-                        ReaderChromeHistoryButton(
-                            direction: .back,
-                            title: L10n.string("common.back"),
-                            isGlassBacked: true,
-                            action: onNavigateBack
+                    HStack(spacing: buttonSpacing) {
+                        if canNavigateBack {
+                            ReaderChromeHistoryButton(
+                                direction: .back,
+                                title: L10n.string("common.back"),
+                                isGlassBacked: true,
+                                action: onNavigateBack
+                            )
+                        }
+
+                        Spacer(minLength: 0)
+
+                        if canNavigateForward {
+                            ReaderChromeHistoryButton(
+                                direction: .forward,
+                                title: L10n.string("common.forward"),
+                                isGlassBacked: true,
+                                action: onNavigateForward
+                            )
+                        }
+
+                        ReaderChromeCircleButton(
+                            systemName: "xmark",
+                            title: L10n.string("common.close"),
+                            tint: readerChromeButtonTint(for: colorScheme),
+                            action: onClose
                         )
+                        .frame(width: chromeButtonSize, height: chromeButtonSize)
                     }
-
-                    Spacer(minLength: 0)
-
-                    if canNavigateForward {
-                        ReaderChromeHistoryButton(
-                            direction: .forward,
-                            title: L10n.string("common.forward"),
-                            isGlassBacked: true,
-                            action: onNavigateForward
-                        )
-                    }
-
-                    ReaderChromeCircleButton(
-                        systemName: "xmark",
-                        title: L10n.string("common.close"),
-                        tint: readerChromeButtonTint(for: colorScheme),
-                        action: onClose
-                    )
-                    .frame(width: chromeButtonSize, height: chromeButtonSize)
                 }
+                .frame(maxWidth: .infinity, minHeight: chromeButtonSize)
+                .padding(.horizontal, 4)
             }
-            .frame(maxWidth: .infinity, minHeight: chromeButtonSize)
-            .padding(.horizontal, 4)
+            .frame(maxWidth: .infinity)
+
+            if isPreview {
+                ReaderPreviewModeBadge()
+            }
         }
-        .frame(maxWidth: .infinity)
         .padding(.top, max(topInset + 8, 20))
         .padding(.horizontal, 12)
         .padding(.bottom, 8)

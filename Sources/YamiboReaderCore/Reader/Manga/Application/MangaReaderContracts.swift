@@ -16,6 +16,10 @@ public struct MangaLaunchContext: Hashable, Identifiable, Sendable {
     public var initialPage: Int
     public var directoryName: String?
     public var offlineCacheFavoriteID: String?
+    /// When true, this reader session must not persist reading progress,
+    /// resume route, or Favorite Library recency. See Reader Preview Mode in
+    /// docs/contexts/reader-navigation/CONTEXT.md.
+    public var isPreview: Bool
 
     public var id: String {
         originalThreadID
@@ -29,7 +33,8 @@ public struct MangaLaunchContext: Hashable, Identifiable, Sendable {
         chapterView: Int = 1,
         initialPage: Int = 0,
         directoryName: String? = nil,
-        offlineCacheFavoriteID: String? = nil
+        offlineCacheFavoriteID: String? = nil,
+        isPreview: Bool = false
     ) {
         self.originalThreadID = Self.normalizedThreadID(originalThreadID, field: "originalThreadID")
         self.chapterTID = Self.normalizedThreadID(chapterTID, field: "chapterTID")
@@ -39,6 +44,7 @@ public struct MangaLaunchContext: Hashable, Identifiable, Sendable {
         self.initialPage = max(0, initialPage)
         self.directoryName = directoryName
         self.offlineCacheFavoriteID = offlineCacheFavoriteID?.mangaReaderTrimmedNonEmpty
+        self.isPreview = isPreview
     }
 
     private static func normalizedThreadID(_ value: String, field: String) -> String {
@@ -58,6 +64,7 @@ extension MangaLaunchContext: Codable {
         case initialPage
         case directoryName
         case offlineCacheFavoriteID
+        case isPreview
     }
 
     public func encode(to encoder: any Encoder) throws {
@@ -70,6 +77,7 @@ extension MangaLaunchContext: Codable {
         try container.encode(initialPage, forKey: .initialPage)
         try container.encodeIfPresent(directoryName, forKey: .directoryName)
         try container.encodeIfPresent(offlineCacheFavoriteID, forKey: .offlineCacheFavoriteID)
+        try container.encode(isPreview, forKey: .isPreview)
     }
 
     public init(from decoder: any Decoder) throws {
@@ -82,7 +90,8 @@ extension MangaLaunchContext: Codable {
             chapterView: try container.decodeIfPresent(Int.self, forKey: .chapterView) ?? 1,
             initialPage: try container.decodeIfPresent(Int.self, forKey: .initialPage) ?? 0,
             directoryName: try container.decodeIfPresent(String.self, forKey: .directoryName),
-            offlineCacheFavoriteID: try container.decodeIfPresent(String.self, forKey: .offlineCacheFavoriteID)
+            offlineCacheFavoriteID: try container.decodeIfPresent(String.self, forKey: .offlineCacheFavoriteID),
+            isPreview: try container.decodeIfPresent(Bool.self, forKey: .isPreview) ?? false
         )
     }
 }
