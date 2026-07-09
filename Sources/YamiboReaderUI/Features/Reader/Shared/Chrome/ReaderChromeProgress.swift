@@ -87,16 +87,22 @@ public struct ReaderChromeProgress: Equatable, Sendable {
     }
 
     public func title(forTargetIndex targetIndex: Int) -> String? {
+        currentTick(forTargetIndex: targetIndex)?.title
+    }
+
+    /// The tick whose chapter currently covers `targetIndex` — i.e. the
+    /// closest tick at or before it, not an exact-position match. This lets
+    /// callers detect that a chapter boundary was *crossed* even when a fast
+    /// drag jumps `targetIndex` past the tick's exact position in one step.
+    public func tickTargetIndex(forTargetIndex targetIndex: Int) -> Int? {
+        currentTick(forTargetIndex: targetIndex)?.targetIndex
+    }
+
+    private func currentTick(forTargetIndex targetIndex: Int) -> ReaderChromeProgressTick? {
         let normalizedTarget = min(max(targetIndex, 0), max(itemCount - 1, 0))
         return ticks
             .filter { $0.targetIndex <= normalizedTarget }
-            .max { lhs, rhs in lhs.targetIndex < rhs.targetIndex }?
-            .title
-    }
-
-    public func tickTargetIndex(forTargetIndex targetIndex: Int) -> Int? {
-        let normalizedTarget = min(max(targetIndex, 0), max(itemCount - 1, 0))
-        return ticks.first { $0.targetIndex == normalizedTarget }?.targetIndex
+            .max { lhs, rhs in lhs.targetIndex < rhs.targetIndex }
     }
 
     public func positionFraction(forTargetIndex targetIndex: Int) -> Double {
