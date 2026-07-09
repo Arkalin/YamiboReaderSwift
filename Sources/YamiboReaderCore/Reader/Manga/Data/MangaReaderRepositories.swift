@@ -82,8 +82,32 @@ public protocol MangaDirectoryRepository: Sendable {
 public protocol MangaDirectoryPersisting: Sendable {
     func directory(named name: String) async throws -> MangaDirectory?
     func directory(containingTID tid: String) async throws -> MangaDirectory?
+    /// Bulk tid → owning-directory lookup (smart-comic-mode Phase E): tids
+    /// that resolve to a directory are present in the result keyed by the
+    /// tid itself; tids with no resolved directory are simply absent — never
+    /// an error. Conformers should implement this as a single batched query
+    /// rather than looping `directory(containingTID:)` once per tid (the
+    /// design doc's "现算分组的性能要求" hard constraint #1) — see
+    /// `MangaDirectoryStore`'s override for the real single-query
+    /// implementation. The default below is a naive per-tid fallback that
+    /// exists only so lightweight test fakes don't all need updating; it
+    /// must never be the implementation favorites grouping actually runs
+    /// against in the shipping app.
+    func directories(containingTIDs tids: [String]) async throws -> [String: MangaDirectory]
     func saveDirectory(_ directory: MangaDirectory) async throws
     func deleteDirectory(named name: String) async throws
+}
+
+public extension MangaDirectoryPersisting {
+    func directories(containingTIDs tids: [String]) async throws -> [String: MangaDirectory] {
+        var result: [String: MangaDirectory] = [:]
+        for tid in tids {
+            if let directory = try await directory(containingTID: tid) {
+                result[tid] = directory
+            }
+        }
+        return result
+    }
 }
 
 protocol MangaDirectoryRenaming: Sendable {

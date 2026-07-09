@@ -268,30 +268,67 @@ public actor ReadingProgressStore {
         return record
     }
 
+    /// Saves manga reading progress, branching on Smart Comic Mode
+    /// (smart-comic-mode design decision #15) rather than on
+    /// `position.directoryName != nil` — a mode-off synthesized
+    /// single-chapter pseudo-directory also produces a non-nil
+    /// `directoryName`, so that signal can no longer be trusted to mean
+    /// "mode is on" (see the Phase B warning in the design doc).
+    ///
+    /// Mode on: writes only the directory-level `.mangaTitle` record
+    /// (unchanged mechanism — one row per directory, tracking the current
+    /// chapter/page across the whole manga). Deliberately a single write, not
+    /// a dual write into `.mangaThread` too — two dependent writes for one
+    /// logical progress update is a split-brain risk if the second write
+    /// never happens (e.g. the calling Task is cancelled between the two
+    /// `await`s), and every mode-on reader
+    /// (`LocalFavoriteOpenTargetResolver.mangaDirectoryResumeTarget`,
+    /// `ForumMangaDetailViewModel`, `AppContinuityWorkflow`'s mode-on branch)
+    /// already resolves progress via `.mangaTitle`, not `.mangaThread` — so a
+    /// mode-on `.mangaThread` row would have no reader. Accepted trade-off:
+    /// if a board's mode is later toggled off, mode-off resume for a chapter
+    /// that was only ever read while mode was on will start at page 0 rather
+    /// than the last-read page, since no `.mangaThread` row was ever written
+    /// for it.
+    ///
+    /// Mode off: writes only the `.mangaThread` record and returns it; the
+    /// `.mangaTitle` record (if one exists from a prior mode-on session) is
+    /// left completely untouched/stale, per decision #15.
     @discardableResult
     public func saveManga(_ position: MangaProgressReadingPosition, date: Date = .now) async throws -> ReadingProgressRecord {
-        if let directoryName = position.directoryName {
-            return try await saveMangaTitle(
-                cleanBookName: directoryName,
-                threadID: position.threadID,
-                chapterThreadID: position.chapterThreadID,
-                chapterView: position.chapterView,
-                chapterTitle: position.chapterTitle,
-                pageIndex: position.pageIndex,
-                pageCount: position.pageCount,
-                mangaID: position.mangaID,
-                date: date
-            )
+        guard position.isSmartModeEnabled else {
+            return try await saveMangaThread(position, date: date)
         }
 
-        let threadID = position.threadID
-        let target = FavoriteContentTarget(
-            mangaID: "thread:\(threadID)",
-            mangaCleanBookName: position.chapterTitle
+        let cleanBookName = position.directoryName ?? position.chapterTitle
+        return try await saveMangaTitle(
+            cleanBookName: cleanBookName,
+            threadID: position.threadID,
+            chapterThreadID: position.chapterThreadID,
+            chapterView: position.chapterView,
+            chapterTitle: position.chapterTitle,
+            pageIndex: position.pageIndex,
+            pageCount: position.pageCount,
+            mangaID: position.mangaID,
+            date: date
         )
+    }
+
+    /// Saves this chapter thread's own manga reading progress, independent of
+    /// any directory-level `.mangaTitle` record — one upserted row per
+    /// thread, mirroring the shape of `saveNovel`'s `.novelThread` record
+    /// (smart-comic-mode design decision #15). Keyed by
+    /// `position.chapterThreadID` (the specific chapter currently being
+    /// read), not `position.threadID` (which stays fixed to whichever
+    /// chapter this reader session originally launched with and can diverge
+    /// from the current chapter after in-session chapter jumps) — so each
+    /// chapter thread the user reads gets its own independent row.
+    @discardableResult
+    public func saveMangaThread(_ position: MangaProgressReadingPosition, date: Date = .now) async throws -> ReadingProgressRecord {
+        let target = FavoriteContentTarget.mangaThread(threadID: position.chapterThreadID)
         let record = ReadingProgressRecord(
             contentTarget: target,
-            threadID: threadID,
+            threadID: position.chapterThreadID,
             kind: .manga,
             updatedAt: date,
             lastReadAt: date,
@@ -447,6 +484,9 @@ public actor ReadingProgressStore {
         case .mangaTitle:
             guard let cleanBookName = trimmedNonEmpty(cleanBookName) else { return nil }
             return FavoriteContentTarget(mangaID: mangaID ?? cleanBookName, mangaCleanBookName: cleanBookName)
+        case .mangaThread:
+            guard let threadID = trimmedNonEmpty(threadID) else { return nil }
+            return .mangaThread(threadID: threadID)
         }
     }
 
@@ -548,6 +588,8 @@ public actor ReadingProgressStore {
             return (.novelThread, threadID, nil, nil)
         case let .mangaTitle(mangaID, cleanBookName):
             return (.mangaTitle, nil, mangaID, cleanBookName)
+        case let .mangaThread(threadID):
+            return (.mangaThread, threadID, nil, nil)
         case nil:
             return (.mangaTitle, nil, nil, nil)
         }

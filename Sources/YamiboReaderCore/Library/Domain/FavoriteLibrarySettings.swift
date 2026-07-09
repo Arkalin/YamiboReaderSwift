@@ -202,6 +202,17 @@ public enum FavoriteRemoteSyncWarning: Codable, Hashable, Sendable {
     case reconcileFailed(reason: String)
     case remoteFavoritesEmptyBeforeBulkUpload(count: Int)
     case importedWithUnresolvedSource(title: String)
+    /// A newly-imported `.mangaThread` chapter turned out to share a
+    /// `MangaDirectory` with a chapter the user had already favorited before
+    /// this sync run started — the Favorites page will show them merged into
+    /// one card (smart-comic-mode design decision #8's remote-sync half).
+    /// Only recorded when *both* the new chapter's board and the
+    /// already-favorited sibling's board currently have Smart Comic Mode on —
+    /// mirrors the two-sided check `ForumThreadReaderViewModel
+    /// .autoAttributionDirectoryTitle` uses for the local star-favorite half,
+    /// since a `MangaDirectory` can span boards and either side's toggle
+    /// being off means the Favorites page keeps them as separate cards.
+    case importedIntoExistingMangaDirectory(title: String, cleanBookName: String)
 }
 
 public struct FavoriteRemoteSyncSnapshot: Codable, Hashable, Identifiable, Sendable {

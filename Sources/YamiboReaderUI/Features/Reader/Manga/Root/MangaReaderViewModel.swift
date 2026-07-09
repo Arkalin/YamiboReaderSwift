@@ -11,6 +11,12 @@ struct MangaReaderViewModelDependencies {
     var makeChapterCommentsRepository: (@Sendable () async -> ReaderChapterCommentsRepository)?
     var makeContentCoverStore: @Sendable () -> ContentCoverStore?
     var makeLikeDependencies: @Sendable () -> LikeDependencies?
+    /// Smart Comic Mode off (design decision #16): drives the reader's
+    /// auto-resolved `.thread(tid:)` cover for the chapter being read, via
+    /// `ThreadCoverResolver`. `nil` by default so callers that don't care
+    /// (tests, previews) don't need to supply one — the auto-resolution is
+    /// simply skipped when unavailable.
+    var makeThreadCoverPageRepository: @Sendable () async -> (any ThreadCoverPageResolving)?
     var directoryWorkflowConfiguration: MangaDirectoryWorkflowConfiguration
     var progressSync: ProgressSyncModule
     /// Migrates the favorite item's target and reading-progress records to a
@@ -30,6 +36,7 @@ struct MangaReaderViewModelDependencies {
         makeChapterCommentsRepository: (@Sendable () async -> ReaderChapterCommentsRepository)? = nil,
         makeContentCoverStore: @escaping @Sendable () -> ContentCoverStore? = { nil },
         makeLikeDependencies: @escaping @Sendable () -> LikeDependencies? = { nil },
+        makeThreadCoverPageRepository: @escaping @Sendable () async -> (any ThreadCoverPageResolving)? = { nil },
         directoryWorkflowConfiguration: MangaDirectoryWorkflowConfiguration = MangaDirectoryWorkflowConfiguration(),
         progressSync: ProgressSyncModule,
         migrateMangaTitleReferences: @escaping @Sendable (_ oldCleanBookName: String, _ newCleanBookName: String) async -> Void = { _, _ in }
@@ -43,6 +50,7 @@ struct MangaReaderViewModelDependencies {
         self.makeChapterCommentsRepository = makeChapterCommentsRepository
         self.makeContentCoverStore = makeContentCoverStore
         self.makeLikeDependencies = makeLikeDependencies
+        self.makeThreadCoverPageRepository = makeThreadCoverPageRepository
         self.directoryWorkflowConfiguration = directoryWorkflowConfiguration
         self.progressSync = progressSync
         self.migrateMangaTitleReferences = migrateMangaTitleReferences
@@ -59,19 +67,24 @@ struct MangaReaderViewModelDependencies {
             makeChapterCommentsRepository: { await dependencies.makeChapterCommentsRepository() },
             makeContentCoverStore: { dependencies.contentCoverStore },
             makeLikeDependencies: { dependencies.like },
+            makeThreadCoverPageRepository: { await dependencies.makeForumThreadReaderRepository() },
             progressSync: ProgressSyncModule(
                 adapter: FavoriteLibraryProgressSyncAdapter(
                     readingProgressStore: dependencies.readingProgressStore
                 )
             ),
             migrateMangaTitleReferences: { oldName, newName in
-                do {
-                    try await dependencies.localFavoriteLibraryStore.update { document in
-                        document.renameMangaTitle(from: oldName, to: newName)
-                    }
-                } catch {
-                    YamiboLog.persistence.error("Failed to save favorite library after manga title rename: \(error.localizedDescription)")
-                }
+                // Favorites no longer need a rename cascade here: a
+                // `.mangaThread` favorite is keyed by the chapter's own
+                // thread id, not by the directory's cleanBookName, so
+                // renaming the directory can never change a favorite's
+                // identity (smart-comic-mode Phase A decision #3/#9 —
+                // `FavoriteLibraryDocument.renameMangaTitle` was removed
+                // along with the merged-directory favorite mechanism it
+                // served). Only the reading-progress side still has a
+                // cleanBookName-keyed identity (the directory-level
+                // `.mangaTitle` record, untouched by this refactor) and
+                // needs migrating.
                 do {
                     try await dependencies.readingProgressStore.migrateMangaTitleKey(from: oldName, to: newName)
                 } catch {
@@ -118,6 +131,7 @@ public final class MangaReaderViewModel: ObservableObject {
     private var chapterJumpGeneration = 0
     private var offlineCacheOwnerName: String?
     private var likeChangeObservationTask: Task<Void, Never>?
+    private var autoThreadCoverResolutionTask: Task<Void, Never>?
     private lazy var chapterCommentsModule = ReaderChapterCommentsModule(
         adapter: ReaderChapterCommentsModule.Adapter(
             loadInitial: { [weak self] target in
@@ -151,6 +165,7 @@ public final class MangaReaderViewModel: ObservableObject {
         chapterJumpTask?.cancel()
         adjacentPrefetchTask?.cancel()
         likeChangeObservationTask?.cancel()
+        autoThreadCoverResolutionTask?.cancel()
     }
 
     public convenience init(
@@ -216,6 +231,7 @@ public final class MangaReaderViewModel: ObservableObject {
         }
         await refreshLikedPageIDs()
         observeLikeChangesIfNeeded()
+        startAutoThreadCoverResolutionIfNeeded()
     }
 
     public func retryInitialLoad() async {
@@ -380,12 +396,27 @@ public final class MangaReaderViewModel: ObservableObject {
     // MARK: - Manga cover
 
     private var mangaCoverKey: ContentCoverKey? {
+        // Smart Comic Mode off (design decisions #2's 总原则 and #16): this
+        // chapter is read exactly like a normal thread, so the cover entry
+        // writes the same `.thread(tid:)` key `ImageBrowserCoverActions`
+        // uses for a normal thread's "设为封面" action, keyed by this
+        // chapter's own thread id. This branches on `context
+        // .isSmartModeEnabled` directly rather than, say, whether
+        // `workflow?.currentDirectoryCleanBookName()` happens to be
+        // non-nil — the mode-off synthesized single-chapter pseudo-
+        // directory (`MangaReaderWorkflow.standaloneDirectory`) has a
+        // non-nil cleanBookName too, which is exactly the proxy-signal trap
+        // that caused the Like-feature and AppContinuityWorkflow bugs in
+        // earlier phases.
+        guard context.isSmartModeEnabled else {
+            return .thread(tid: context.chapterTID)
+        }
         guard let cleanBookName = workflow?.currentDirectoryCleanBookName()?
             .trimmingCharacters(in: .whitespacesAndNewlines),
             !cleanBookName.isEmpty else {
             return nil
         }
-        return .mangaTitle(cleanBookName: cleanBookName)
+        return .smartManga(cleanBookName: cleanBookName)
     }
 
     var canSetMangaCover: Bool {
@@ -419,9 +450,61 @@ public final class MangaReaderViewModel: ObservableObject {
         }
     }
 
+    /// Smart Comic Mode off (design decisions #2's 总原则 and #16): this
+    /// chapter is read exactly like a normal thread, so it gets the same
+    /// automatic `.thread(tid:)` cover resolution `ForumThreadReaderViewModel`
+    /// already performs for normal threads — reusing the same
+    /// `ThreadCoverResolver` mechanism. `ForumThreadReaderViewModel` hangs its
+    /// call off adding the thread to favorites (it has no other lifecycle
+    /// hook); the manga reader has no favorite-toggle action of its own, so
+    /// opening the reader (a successful `prepare()`) is its closest
+    /// equivalent trigger. Like that reference call site, this doesn't check
+    /// for an existing cover first — it unconditionally overwrites the
+    /// automatic cover, same as `setAutomaticCover` always does.
+    ///
+    /// Mode-on chapters never do this: their cover comes from the existing
+    /// smartManga backfill mechanism elsewhere (design decision #13, a later
+    /// phase), not from the reader itself.
+    private func startAutoThreadCoverResolutionIfNeeded() {
+        guard !context.isSmartModeEnabled,
+              case .loaded = presentation.state,
+              autoThreadCoverResolutionTask == nil else {
+            return
+        }
+        autoThreadCoverResolutionTask = Task { @MainActor [weak self] in
+            await self?.performAutoThreadCoverResolution()
+        }
+    }
+
+    private func performAutoThreadCoverResolution() async {
+        defer { autoThreadCoverResolutionTask = nil }
+        guard let coverStore = dependencies.makeContentCoverStore(),
+              let repository = await dependencies.makeThreadCoverPageRepository() else {
+            return
+        }
+        let tid = context.chapterTID
+        guard let coverCandidate = await ThreadCoverResolver().resolve(
+            thread: ThreadIdentity(tid: tid),
+            title: context.displayTitle,
+            repository: repository
+        ) else {
+            return
+        }
+        do {
+            _ = try await coverStore.setAutomaticCover(coverCandidate, for: .thread(tid: tid))
+        } catch {
+            YamiboLog.library.error("Failed to set automatic cover for manga chapter thread \(tid) while Smart Comic Mode is off: \(error.localizedDescription)")
+        }
+    }
+
     // MARK: - Like
 
     private var likeWorkKey: LikeWorkKey? {
+        // Smart Comic Mode off means this chapter is treated exactly like a normal thread
+        // (see smart-comic-mode-design-decisions #2's 总原则) — the reader's directory in that
+        // state is a synthesized single-chapter stand-in (MangaReaderWorkflow.standaloneDirectory),
+        // not a real MangaDirectory, so it must not be usable as a manga-title Like identity.
+        guard context.isSmartModeEnabled else { return nil }
         guard let cleanBookName = workflow?.currentDirectoryCleanBookName()?
             .trimmingCharacters(in: .whitespacesAndNewlines),
             !cleanBookName.isEmpty else {
@@ -963,6 +1046,8 @@ public final class MangaReaderViewModel: ObservableObject {
         adjacentPrefetchTask = nil
         likeChangeObservationTask?.cancel()
         likeChangeObservationTask = nil
+        autoThreadCoverResolutionTask?.cancel()
+        autoThreadCoverResolutionTask = nil
         readerContentGeneration += 1
     }
 
@@ -1209,7 +1294,8 @@ public final class MangaReaderViewModel: ObservableObject {
             pageIndex: currentPage.localIndex,
             pageCount: currentPage.chapterPageCount,
             mangaID: workflow?.currentDirectoryFavoriteIdentity(),
-            directoryName: directoryName
+            directoryName: directoryName,
+            isSmartModeEnabled: context.isSmartModeEnabled
         )
         let resumeContext = MangaLaunchContext(
             originalThreadID: context.originalThreadID,
@@ -1220,7 +1306,8 @@ public final class MangaReaderViewModel: ObservableObject {
             initialPage: currentPage.localIndex,
             directoryName: directoryName,
             offlineCacheFavoriteID: context.offlineCacheFavoriteID,
-            isPreview: context.isPreview
+            isPreview: context.isPreview,
+            isSmartModeEnabled: context.isSmartModeEnabled
         )
         return MangaReaderProgressSnapshot(
             progress: progress,

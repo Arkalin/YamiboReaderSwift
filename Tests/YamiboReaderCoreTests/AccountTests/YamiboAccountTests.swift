@@ -165,7 +165,7 @@ private enum YamiboAccountTestError: Error {
     )
     var favoriteLibrary = FavoriteLibraryDocument()
     let favoriteItem = try FavoriteItem(
-        target: FavoriteContentTarget(kind: .normalThread, threadID: "970"),
+        target: FavoriteItemTarget(kind: .normalThread, threadID: "970"),
         title: "退出保留漫画",
         locations: [.category(favoriteLibrary.defaultCategory.id)]
     )

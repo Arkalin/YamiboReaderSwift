@@ -7,17 +7,53 @@ enum LocalFavoriteOpenTarget: Sendable {
     case nativeThread(url: URL, title: String)
 }
 
-/// Semantic open failures; the presentation layer supplies the localized
-/// description (see `FavoritePresentation.swift`).
-enum LocalFavoriteOpenError: Error {
-    case mangaTitleUnresolved
-}
-
 /// Resolves a favorite item into a concrete reader launch target, combining
 /// the latest stored item with its reading progress.
+///
+/// `.mangaThread` favorites always resolve to the reader directly (mirroring
+/// the pre-refactor `.mangaTitle` behavior of skipping the forum detail page)
+/// — see smart-comic-mode design decision #7. Per decision #15's 2026-07-08
+/// update, which progress record backs the resume position depends on
+/// whether the favorite's board currently has Smart Comic Mode on:
+/// - Mode on: resume via the directory-level `.mangaTitle` record. The
+///   `MangaDirectory` this thread belongs to is looked up by tid (a bare
+///   `.mangaThread(threadID:)` favorite doesn't itself carry a
+///   cleanBookName/mangaID); falls back to the directory's earliest chapter
+///   if the directory has no progress record yet, or to this thread's own
+///   `.mangaThread` progress if the directory has never even been resolved
+///   locally (e.g. a favorite synced in from another device that was never
+///   opened here — decision #12 never triggers resolution on its own).
+/// - Mode off: resume via this thread's own `.mangaThread` progress record
+///   directly — no directory lookup at all, exactly like a normal thread.
+///
+/// TODO(Phase F): favorites now compute virtual merged-directory grouping
+/// (`LocalFavoriteLibraryProjection.cards`/`FavoriteCardProjection
+/// .mangaDirectory`/`.mergedMembers`), but this resolver still only knows
+/// about individual `FavoriteItem`s. A tap on a *merged card* should
+/// presumably resolve through here using `mangaDirectory`'s identity
+/// directly (`FavoriteContentTarget(mangaID: directory.favoriteIdentity,
+/// mangaCleanBookName: directory.cleanBookName)`, the same key
+/// `mangaDirectoryResumeTarget` below already reads) rather than picking one
+/// member's tid and going through the existing single-item path — Phase F's
+/// UI work needs to decide how it calls into this resolver for a merged card
+/// before this can be filled in.
 struct LocalFavoriteOpenTargetResolver {
     let libraryStore: FavoriteLibraryStore
     let readingProgressStore: ReadingProgressStore
+    let mangaDirectoryStore: any MangaDirectoryPersisting
+    let settingsStore: SettingsStore
+
+    init(
+        libraryStore: FavoriteLibraryStore,
+        readingProgressStore: ReadingProgressStore,
+        mangaDirectoryStore: any MangaDirectoryPersisting,
+        settingsStore: SettingsStore = SettingsStore()
+    ) {
+        self.libraryStore = libraryStore
+        self.readingProgressStore = readingProgressStore
+        self.mangaDirectoryStore = mangaDirectoryStore
+        self.settingsStore = settingsStore
+    }
 
     func openTarget(for item: FavoriteItem, mode: FavoriteLaunchMode = .resume) async throws -> LocalFavoriteOpenTarget? {
         let latestDocument = try await libraryStore.load()
@@ -25,10 +61,9 @@ struct LocalFavoriteOpenTargetResolver {
             return nil
         }
 
-        let progress = await progressRecord(for: latestItem)
         switch latestItem.target {
         case let .novelThread(threadID):
-            let novel = progress?.novel
+            let novel = await readingProgressStore.load(threadID: threadID)?.novel
             let resumePoint = mode == .start ? nil : novel?.novelResumePoint
             return .novelReader(
                 NovelLaunchContext(
@@ -44,40 +79,114 @@ struct LocalFavoriteOpenTargetResolver {
             guard let threadID = latestItem.target.threadID else { return nil }
             let url = YamiboRoute.threadByID(tid: threadID, page: 1, authorID: nil, reverse: false).url
             return .nativeThread(url: url, title: latestItem.resolvedDisplayTitle)
-        case let .mangaTitle(_, cleanBookName):
-            let progressManga = mode == .start ? nil : progress?.manga
-            let metadata = latestItem.mangaChapterMetadata
-            guard let chapterTID = progressManga?.chapterThreadID ?? metadata?.chapterTID else {
-                throw LocalFavoriteOpenError.mangaTitleUnresolved
-            }
-            let originalThreadID = metadata?.chapterTID ?? chapterTID
-            return .mangaReader(
-                MangaLaunchContext(
-                    originalThreadID: originalThreadID,
-                    chapterTID: chapterTID,
-                    displayTitle: latestItem.resolvedDisplayTitle,
-                    source: .favorites,
-                    chapterView: progressManga?.chapterView ?? metadata?.chapterView ?? 1,
-                    initialPage: mode == .start ? 0 : (progress?.manga?.mangaPageIndex ?? 0),
-                    directoryName: cleanBookName,
-                    offlineCacheFavoriteID: latestItem.id
+        case let .mangaThread(threadID):
+            // Unlike the old `.mangaTitle` merged identity, every
+            // `.mangaThread` favorite already carries a real chapter tid, so
+            // there is always a chapter to open — falling back to this
+            // favorite's own thread at page 0 replaces the old
+            // `mangaTitleUnresolved` failure mode, which can no longer occur.
+            guard mode != .start else {
+                return .mangaReader(
+                    MangaLaunchContext(
+                        originalThreadID: threadID,
+                        chapterTID: threadID,
+                        displayTitle: latestItem.resolvedDisplayTitle,
+                        source: .favorites,
+                        initialPage: 0,
+                        directoryName: nil,
+                        offlineCacheFavoriteID: latestItem.id,
+                        isSmartModeEnabled: await isSmartComicModeEnabled(forItem: latestItem)
+                    )
                 )
+            }
+            // Deliberately an exact id lookup (`FavoriteContentTarget
+            // .mangaThread(threadID:)`, not the generic OR-based
+            // `load(threadID:)`): a directory-level `.mangaTitle` record can
+            // legitimately share this same tid in its `thread_id`/
+            // `manga_chapter_thread_id` columns (e.g. this was the
+            // currently-read chapter during a prior mode-on session), and
+            // `load(threadID:)` would happily return whichever row was
+            // updated more recently regardless of kind. Mode-off resume must
+            // never pick up that stale directory-level record even by
+            // coincidence — see smart-comic-mode design decision #15's note
+            // that the two `.mangaThread` id formats are kept identical
+            // specifically so this lookup is precise.
+            let ownThreadProgress = await readingProgressStore.load(for: .mangaThread(threadID: threadID))?.manga
+            guard await isSmartComicModeEnabled(forItem: latestItem) else {
+                return .mangaReader(
+                    MangaLaunchContext(
+                        originalThreadID: threadID,
+                        chapterTID: ownThreadProgress?.chapterThreadID ?? threadID,
+                        displayTitle: latestItem.resolvedDisplayTitle,
+                        source: .favorites,
+                        chapterView: ownThreadProgress?.chapterView ?? 1,
+                        initialPage: ownThreadProgress?.mangaPageIndex ?? 0,
+                        directoryName: nil,
+                        offlineCacheFavoriteID: latestItem.id,
+                        isSmartModeEnabled: false
+                    )
+                )
+            }
+            return await mangaDirectoryResumeTarget(
+                threadID: threadID,
+                item: latestItem,
+                ownThreadProgress: ownThreadProgress
             )
         }
     }
 
-    private func progressRecord(for item: FavoriteItem) async -> ReadingProgressRecord? {
-        switch item.target {
-        case let .normalThread(threadID), let .novelThread(threadID):
-            return await readingProgressStore.load(threadID: threadID)
-        case .mangaTitle:
-            if let progress = await readingProgressStore.load(for: item.target) {
-                return progress
-            }
-            if let threadID = item.mangaChapterMetadata?.chapterTID {
-                return await readingProgressStore.load(threadID: threadID)
-            }
-            return nil
+    /// Mode-on `.mangaThread` resume (decision #15/#7): looks up the
+    /// `MangaDirectory` this chapter thread belongs to and resumes via its
+    /// single upserted `.mangaTitle` record, falling back to the directory's
+    /// earliest chapter when there's no progress yet. If the directory has
+    /// never been resolved locally at all, falls back to this thread's own
+    /// `.mangaThread` progress (still launching with `isSmartModeEnabled:
+    /// true` so the reader resolves a real directory on this open).
+    private func mangaDirectoryResumeTarget(
+        threadID: String,
+        item: FavoriteItem,
+        ownThreadProgress: MangaReadingProgressRecord?
+    ) async -> LocalFavoriteOpenTarget {
+        guard let directory = try? await mangaDirectoryStore.directory(containingTID: threadID),
+              let firstChapter = directory.chapters.first else {
+            return .mangaReader(
+                MangaLaunchContext(
+                    originalThreadID: threadID,
+                    chapterTID: ownThreadProgress?.chapterThreadID ?? threadID,
+                    displayTitle: item.resolvedDisplayTitle,
+                    source: .favorites,
+                    chapterView: ownThreadProgress?.chapterView ?? 1,
+                    initialPage: ownThreadProgress?.mangaPageIndex ?? 0,
+                    directoryName: nil,
+                    offlineCacheFavoriteID: item.id,
+                    isSmartModeEnabled: true
+                )
+            )
         }
+
+        let directoryTarget = FavoriteContentTarget(mangaID: directory.favoriteIdentity, mangaCleanBookName: directory.cleanBookName)
+        let directoryProgress = await readingProgressStore.load(for: directoryTarget)?.manga
+        return .mangaReader(
+            MangaLaunchContext(
+                originalThreadID: threadID,
+                chapterTID: directoryProgress?.chapterThreadID ?? firstChapter.tid,
+                displayTitle: directory.cleanBookName,
+                source: .favorites,
+                chapterView: directoryProgress?.chapterView ?? firstChapter.view,
+                initialPage: directoryProgress?.mangaPageIndex ?? 0,
+                directoryName: directory.cleanBookName,
+                offlineCacheFavoriteID: item.id,
+                isSmartModeEnabled: true
+            )
+        )
+    }
+
+    /// `FavoriteItem.forumID` is only populated once metadata for the item
+    /// has been resolved (remote sync probing or a healed unknown source
+    /// group), so this can legitimately be `nil` for older/unresolved items
+    /// — `isSmartComicModeEnabled` treats a missing forumID as enabled,
+    /// matching this resolver's pre-Phase-B unconditional behavior.
+    private func isSmartComicModeEnabled(forItem item: FavoriteItem) async -> Bool {
+        await settingsStore.load().isSmartComicModeEnabled(forumID: item.forumID)
     }
 }

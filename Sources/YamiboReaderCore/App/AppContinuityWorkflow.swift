@@ -230,8 +230,17 @@ public final class AppContinuityWorkflow: Sendable {
             }
             return nil
         case let .manga(context):
-            if let progress = await appContext.readingProgressStore.load(threadID: context.originalThreadID),
-               progress.hasMangaReadingProgress {
+            // Smart Comic Mode off means this thread is treated exactly like a normal
+            // thread (smart-comic-mode-design-decisions #2's 总原则): its progress lives
+            // ONLY in the precise per-thread `.mangaThread` record. The coincidental
+            // `load(threadID:)` OR-match (thread_id = ? OR manga_chapter_thread_id = ?)
+            // can otherwise pick up an unrelated directory-level `.mangaTitle` row whose
+            // `manga_chapter_thread_id` happens to equal this thread id, silently
+            // reconciling the restored route onto a different forum thread.
+            let progress = context.isSmartModeEnabled
+                ? await appContext.readingProgressStore.load(threadID: context.originalThreadID)
+                : await appContext.readingProgressStore.load(for: .mangaThread(threadID: context.originalThreadID))
+            if let progress, progress.hasMangaReadingProgress {
                 return .manga(context.reconciledWithReadingProgress(
                     progress,
                     favoriteItem: await favoriteItem(forMangaContext: context)
@@ -242,7 +251,7 @@ public final class AppContinuityWorkflow: Sendable {
     }
 
     private func favoriteItem(forThreadID threadID: String) async -> FavoriteItem? {
-        let target = FavoriteContentTarget.novelThread(threadID: threadID)
+        let target = FavoriteItemTarget.novelThread(threadID: threadID)
         return (try? await appContext.localFavoriteLibraryStore.load())?.items.first { item in
             item.target.id == target.id || item.target.threadID == target.threadID
         }
@@ -250,15 +259,12 @@ public final class AppContinuityWorkflow: Sendable {
 
     private func favoriteItem(forMangaContext context: MangaLaunchContext) async -> FavoriteItem? {
         guard let document = try? await appContext.localFavoriteLibraryStore.load() else { return nil }
-        if let directoryName = context.directoryName?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !directoryName.isEmpty {
-            let target = FavoriteContentTarget(mangaCleanBookName: directoryName)
-            if let item = document.items.first(where: { $0.target.id == target.id }) {
-                return item
-            }
-        }
+        // A `.mangaThread` favorite is keyed by its own chapter thread id now
+        // (no merged-directory identity left to look up by directoryName —
+        // smart-comic-mode Phase A decision #3/#9), so a direct threadID
+        // match is the only lookup that still applies.
         return document.items.first { item in
-            item.target.threadID == context.originalThreadID || item.mangaChapterMetadata?.chapterTID == context.chapterTID
+            item.target.threadID == context.originalThreadID
         }
     }
 }
@@ -336,7 +342,8 @@ private extension MangaLaunchContext {
             initialPage: manga.mangaPageIndex,
             directoryName: directoryName,
             offlineCacheFavoriteID: favoriteItem?.id ?? offlineCacheFavoriteID,
-            isPreview: isPreview
+            isPreview: isPreview,
+            isSmartModeEnabled: isSmartModeEnabled
         )
     }
 }

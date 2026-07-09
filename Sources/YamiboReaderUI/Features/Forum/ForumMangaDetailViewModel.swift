@@ -72,7 +72,16 @@ final class ForumMangaDetailViewModel {
                 chapterTID: context.thread.tid,
                 displayTitle: context.title,
                 source: .forum,
-                directoryName: context.directoryNameHint
+                directoryName: context.directoryNameHint,
+                // `ForumMangaDetailView` (and this view model) is only ever
+                // reached via `YamiboThreadRouteTarget.manga`, which
+                // `YamiboThreadRouteResolver` only produces when the board's
+                // Smart Comic Mode is on — the mode-off case routes to
+                // `.mangaDirect` instead and never reaches here. Hardcoding
+                // `true` (rather than re-querying `AppSettings`) keeps this
+                // view model from needing its own settings dependency for a
+                // fact its caller already established.
+                isSmartModeEnabled: true
             )
             let resolution = try await workflow.resolveInitialDirectory(
                 context: launchContext,
@@ -111,7 +120,10 @@ final class ForumMangaDetailViewModel {
             source: manga == nil ? .forum : .resume,
             chapterView: manga?.chapterView ?? fallbackChapterView,
             initialPage: manga?.mangaPageIndex ?? 0,
-            directoryName: directory.cleanBookName
+            directoryName: directory.cleanBookName,
+            // See the comment in `reload()`: this view model only exists
+            // for mode-on boards.
+            isSmartModeEnabled: true
         )
     }
 
@@ -122,7 +134,10 @@ final class ForumMangaDetailViewModel {
             displayTitle: directory?.cleanBookName ?? context.title,
             source: .forum,
             chapterView: chapter.view,
-            directoryName: directory?.cleanBookName ?? context.directoryNameHint
+            directoryName: directory?.cleanBookName ?? context.directoryNameHint,
+            // See the comment in `reload()`: this view model only exists
+            // for mode-on boards.
+            isSmartModeEnabled: true
         )
     }
 

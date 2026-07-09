@@ -760,7 +760,7 @@ final class ForumNovelDetailViewModel {
     }
 
     private func localFavoriteItem(from store: FavoriteLibraryStore) async -> FavoriteItem? {
-        let target = FavoriteContentTarget.novelThread(threadID: context.thread.tid)
+        let target = FavoriteItemTarget.novelThread(threadID: context.thread.tid)
         return (try? await store.load())?.items.first { item in
             item.target.id == target.id || item.target.threadID == target.threadID
         }

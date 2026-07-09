@@ -76,12 +76,12 @@ import YamiboReaderTestSupport
     let sync = ProgressSyncModule(adapter: adapter, debounceNanoseconds: 0)
     var favoriteLibrary = FavoriteLibraryDocument()
     favoriteLibrary.addItem(try FavoriteItem(
-        target: FavoriteContentTarget(kind: .novelThread, threadID: "7"),
+        target: FavoriteItemTarget(kind: .novelThread, threadID: "7"),
         title: "小说",
         locations: [.category(favoriteLibrary.defaultCategory.id)]
     ))
     favoriteLibrary.addItem(try FavoriteItem(
-        target: FavoriteContentTarget(kind: .normalThread, threadID: "8"),
+        target: FavoriteItemTarget(kind: .normalThread, threadID: "8"),
         title: "漫画",
         locations: [.category(favoriteLibrary.defaultCategory.id)]
     ))

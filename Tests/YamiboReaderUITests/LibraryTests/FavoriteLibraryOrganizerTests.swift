@@ -20,10 +20,10 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
         let boardB = FavoriteSourceGroup.forumBoard(id: "20", label: "版区B")
         let boardAFilter = LocalFavoriteSourceFilter.forumBoard(id: "10", label: "版区A")
         let boardBFilter = LocalFavoriteSourceFilter.forumBoard(id: "20", label: "版区B")
-        let firstTarget = FavoriteContentTarget(kind: .normalThread, threadID: "940")
-        let secondTarget = FavoriteContentTarget(kind: .normalThread, threadID: "941")
-        let thirdTarget = FavoriteContentTarget(kind: .normalThread, threadID: "942")
-        let fourthTarget = FavoriteContentTarget(kind: .normalThread, threadID: "943")
+        let firstTarget = FavoriteItemTarget(kind: .normalThread, threadID: "940")
+        let secondTarget = FavoriteItemTarget(kind: .normalThread, threadID: "941")
+        let thirdTarget = FavoriteItemTarget(kind: .normalThread, threadID: "942")
+        let fourthTarget = FavoriteItemTarget(kind: .normalThread, threadID: "943")
         var document = try await localFavoriteLibraryStore.load()
         let tag = document.createTag(name: "筛选", color: .blue)
         document.addItem(try FavoriteItem(
@@ -77,6 +77,166 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
         XCTAssertEqual(organizer.derived.sourceFilterEntryCounts[boardBFilter], 1)
     }
 
+    /// Smart-comic-mode decision #9: the "智能漫画" filter chip's visibility
+    /// is gated purely on `SmartComicModeSettings` — at least one of the 3
+    /// manageable boards being on — never on whether a `.mangaThread`
+    /// favorite happens to exist. This deliberately checks both directions:
+    /// available with zero manga favorites (mode on by default), and NOT
+    /// available even with an existing manga favorite once every manageable
+    /// board is switched off.
+    func testMangaSourceFilterAvailabilityIsGatedOnSmartComicModeSettingsNotFavoriteExistence() async throws {
+        let suiteName = YamiboTestDefaults.suiteName(prefix: "local-favorites-manga-filter-availability")
+        _ = try YamiboTestDefaults.make(suiteName: suiteName)
+        let settingsStore = SettingsStore(
+            defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
+            key: "settings"
+        )
+        let localFavoriteLibraryStore = FavoriteLibraryStore(
+            defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
+            key: "local-favorites"
+        )
+        let organizer = try makeOrganizer(
+            libraryStore: localFavoriteLibraryStore,
+            settingsStore: settingsStore
+        )
+        await organizer.load()
+        // `load()` assigning `selectedCategoryID`/`selectedCollectionID`
+        // fires `persistNavigationState()`, which spawns its own
+        // unstructured load-modify-save `Task` against this same
+        // `settingsStore`. Letting that settle before this test does its
+        // own concurrent load-modify-save below avoids a lost-update race
+        // where that Task's save (started from a `settings` snapshot it
+        // read before this test's own save below) would clobber this
+        // test's change with stale data — mirrors the settle delay other
+        // tests in this file already use around `persistNavigationState`.
+        try await Task.sleep(nanoseconds: 100_000_000)
+
+        // Default settings: fid 30 on, zero favorites of any kind yet — the
+        // chip must still be offered.
+        XCTAssertTrue(organizer.derived.isMangaSourceFilterAvailable)
+        XCTAssertNil(organizer.derived.sourceFilterEntryCounts[.manga])
+
+        // Turn every manageable board off, then favorite a manga thread on
+        // one of them: the favorite exists, but the chip must stay hidden.
+        var settings = await settingsStore.load()
+        settings.smartComicMode.enabledForumIDs = []
+        try await settingsStore.save(settings)
+
+        var document = try await localFavoriteLibraryStore.load()
+        document.addItem(try FavoriteItem(
+            target: .mangaThread(threadID: "950"),
+            title: "关闭板块漫画",
+            forumID: "46",
+            locations: [.category(document.defaultCategory.id)]
+        ))
+        try await localFavoriteLibraryStore.save(document)
+        await organizer.reload()
+
+        XCTAssertFalse(organizer.derived.isMangaSourceFilterAvailable)
+        XCTAssertEqual(organizer.derived.sourceFilterEntryCounts[.manga], 1)
+
+        // Turning that same board back on makes the chip available again.
+        settings = await settingsStore.load()
+        settings.smartComicMode.enabledForumIDs = ["46"]
+        try await settingsStore.save(settings)
+        await organizer.reload()
+
+        XCTAssertTrue(organizer.derived.isMangaSourceFilterAvailable)
+        XCTAssertEqual(organizer.derived.sourceFilterEntryCounts[.manga], 1)
+    }
+
+    /// Fix for the stale-state gap this file's Phase H review flagged:
+    /// `FavoriteLibraryOrganizer` did not subscribe to
+    /// `SettingsStore.didChangeNotification`, so toggling Smart Comic Mode
+    /// while the Favorites tab was already loaded left the merged-card
+    /// grouping stale until an unrelated favorite/progress/cover change
+    /// happened to trigger a reload. This proves the live subscription
+    /// re-derives grouping from a bare `settingsStore.save(...)` alone, with
+    /// no explicit `organizer.reload()` call in between.
+    func testSettingsStoreChangeLiveRefreshesMangaDirectoryGroupingWithoutManualReload() async throws {
+        let suiteName = YamiboTestDefaults.suiteName(prefix: "local-favorites-settings-live-refresh")
+        _ = try YamiboTestDefaults.make(suiteName: suiteName)
+        let settingsStore = SettingsStore(
+            defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
+            key: "settings"
+        )
+        let localFavoriteLibraryStore = FavoriteLibraryStore(
+            defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
+            key: "local-favorites"
+        )
+        let mangaDirectoryStore = try makeMangaDirectoryStore(suiteName: suiteName)
+        let directory = MangaDirectory(
+            cleanBookName: "实时刷新测试漫画",
+            strategy: .links,
+            sourceKey: "chapter:980",
+            chapters: [
+                MangaChapter(tid: "980", rawTitle: "第一话", chapterNumber: 1),
+                MangaChapter(tid: "981", rawTitle: "第二话", chapterNumber: 2),
+            ]
+        )
+        try await mangaDirectoryStore.saveDirectory(directory)
+
+        let firstTarget = FavoriteItemTarget(kind: .mangaThread, threadID: "980")
+        let secondTarget = FavoriteItemTarget(kind: .mangaThread, threadID: "981")
+        var document = try await localFavoriteLibraryStore.load()
+        let firstItem = try FavoriteItem(
+            target: firstTarget,
+            title: "第一话",
+            forumID: "46",
+            forumName: "关闭板块",
+            locations: [.category(document.defaultCategory.id)]
+        )
+        let secondItem = try FavoriteItem(
+            target: secondTarget,
+            title: "第二话",
+            forumID: "46",
+            forumName: "关闭板块",
+            locations: [.category(document.defaultCategory.id)]
+        )
+        document.addItem(firstItem)
+        document.addItem(secondItem)
+        try await localFavoriteLibraryStore.save(document)
+
+        // Board 30 is on by default (unrelated to this test's fid "46"
+        // favorites), so it alone would already make the "智能漫画" chip
+        // available — disable it up front so this test's chip assertions
+        // isolate the fid "46" toggle being exercised below. Seeded before
+        // the organizer exists, so there is no load-modify-save race with
+        // its own `persistNavigationState()` background Task.
+        try await settingsStore.save(AppSettings(smartComicMode: SmartComicModeSettings(enabledForumIDs: [])))
+
+        let organizer = try makeOrganizer(
+            libraryStore: localFavoriteLibraryStore,
+            settingsStore: settingsStore,
+            mangaDirectoryStore: mangaDirectoryStore
+        )
+        await organizer.load()
+        // See the sibling availability test's identical comment: let
+        // `load()`'s own `persistNavigationState()` background Task settle
+        // before this test does its own concurrent settings save below.
+        try await Task.sleep(nanoseconds: 100_000_000)
+
+        // fid "46" is off by default: no merge yet, two standalone cards.
+        XCTAssertEqual(organizer.derived.cards.count, 2)
+        XCTAssertFalse(organizer.derived.cards.contains { $0.isMergedGroup })
+        XCTAssertFalse(organizer.derived.isMangaSourceFilterAvailable)
+
+        // Flip the board on directly through the settings store — exactly
+        // what the new Settings UI's toggle does — with no call to
+        // `organizer.reload()` in between.
+        var settings = await settingsStore.load()
+        settings.smartComicMode.enabledForumIDs.insert("46")
+        try await settingsStore.save(settings)
+
+        try await waitForOrganizerCondition {
+            organizer.derived.cards.count == 1
+        }
+        let mergedCard = try XCTUnwrap(organizer.derived.cards.first { $0.id == firstItem.id })
+        XCTAssertTrue(mergedCard.isMergedGroup)
+        XCTAssertEqual(mergedCard.mergedMembers?.map(\.target), [firstTarget, secondTarget])
+        XCTAssertTrue(organizer.derived.isMangaSourceFilterAvailable)
+    }
+
     func testLocalFirstTagsFilterDisplayAndBatchAssignment() async throws {
         let suiteName = YamiboTestDefaults.suiteName(prefix: "local-favorites-tags")
         _ = try YamiboTestDefaults.make(suiteName: suiteName)
@@ -87,8 +247,8 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
         let organizer = try makeOrganizer(libraryStore: localFavoriteLibraryStore)
         await organizer.load()
 
-        let firstTarget = FavoriteContentTarget(kind: .normalThread, threadID: "930")
-        let secondTarget = FavoriteContentTarget(kind: .normalThread, threadID: "931")
+        let firstTarget = FavoriteItemTarget(kind: .normalThread, threadID: "930")
+        let secondTarget = FavoriteItemTarget(kind: .normalThread, threadID: "931")
         var document = try await localFavoriteLibraryStore.load()
         document.addItem(try FavoriteItem(
             target: firstTarget,
@@ -147,8 +307,8 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
         let existingCollection = try XCTUnwrap(createdExistingCollection)
         organizer.closeCollection()
 
-        let firstTarget = FavoriteContentTarget(kind: .normalThread, threadID: "920")
-        let secondTarget = FavoriteContentTarget(kind: .normalThread, threadID: "921")
+        let firstTarget = FavoriteItemTarget(kind: .normalThread, threadID: "920")
+        let secondTarget = FavoriteItemTarget(kind: .normalThread, threadID: "921")
         var document = try await localFavoriteLibraryStore.load()
         document.addItem(try FavoriteItem(
             target: firstTarget,
@@ -215,7 +375,7 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
         organizer.selectedCategoryID = sourceCategory.id
         organizer.closeCollection()
 
-        let target = FavoriteContentTarget(kind: .normalThread, threadID: "940")
+        let target = FavoriteItemTarget(kind: .normalThread, threadID: "940")
         var document = try await localFavoriteLibraryStore.load()
         document.addItem(try FavoriteItem(
             target: target,
@@ -272,7 +432,7 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
         let sourceCategory = try XCTUnwrap(createdSourceCategory)
         let createdDestinationCategory = await organizer.createCategory(name: "分类B")
         let destinationCategory = try XCTUnwrap(createdDestinationCategory)
-        let target = FavoriteContentTarget(kind: .normalThread, threadID: "952")
+        let target = FavoriteItemTarget(kind: .normalThread, threadID: "952")
         var document = try await localFavoriteLibraryStore.load()
         document.addItem(try FavoriteItem(
             target: target,
@@ -310,7 +470,7 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
         let createdCollection = await organizer.createCollection(name: "合集A", color: .blue)
         let collection = try XCTUnwrap(createdCollection)
         organizer.closeCollection()
-        let target = FavoriteContentTarget(kind: .normalThread, threadID: "956")
+        let target = FavoriteItemTarget(kind: .normalThread, threadID: "956")
         var document = try await localFavoriteLibraryStore.load()
         document.addItem(try FavoriteItem(
             target: target,
@@ -351,7 +511,7 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
         )
         await organizer.load()
 
-        let target = FavoriteContentTarget(kind: .normalThread, threadID: "953")
+        let target = FavoriteItemTarget(kind: .normalThread, threadID: "953")
         var document = try await localFavoriteLibraryStore.load()
         document.addItem(try FavoriteItem(
             target: target,
@@ -387,7 +547,7 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
         )
         await organizer.load()
 
-        let target = FavoriteContentTarget(kind: .normalThread, threadID: "955")
+        let target = FavoriteItemTarget(kind: .normalThread, threadID: "955")
         var document = try await localFavoriteLibraryStore.load()
         let item = try FavoriteItem(
             target: target,
@@ -417,7 +577,7 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
         let organizer = try makeOrganizer(libraryStore: localFavoriteLibraryStore)
         await organizer.load()
 
-        let target = FavoriteContentTarget(kind: .normalThread, threadID: "954")
+        let target = FavoriteItemTarget(kind: .normalThread, threadID: "954")
         var document = try await localFavoriteLibraryStore.load()
         let item = try FavoriteItem(
             target: target,
@@ -433,6 +593,124 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
         let storedItem = try await localFavoriteLibraryStore.load().items.first { $0.target == target }
         XCTAssertNil(storedItem)
         XCTAssertNil(organizer.errorMessage)
+    }
+
+    /// Smart-comic-mode decision #6: a merged card's unfavorite removes every
+    /// member, not just the one it was invoked with, and leaves unrelated
+    /// favorites untouched.
+    func testDeleteMergedGroupRemovesEveryMemberAndAttemptsRemoteDeleteForEach() async throws {
+        let suiteName = YamiboTestDefaults.suiteName(prefix: "local-favorites-delete-merged-group")
+        _ = try YamiboTestDefaults.make(suiteName: suiteName)
+        let localFavoriteLibraryStore = FavoriteLibraryStore(
+            defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
+            key: "local-favorites"
+        )
+        let recorder = FavoriteDeleteTestRecorder()
+        let organizer = try makeOrganizer(
+            libraryStore: localFavoriteLibraryStore,
+            remoteFavoriteDeleteHandler: { items in
+                try await recorder.record(items)
+            }
+        )
+        await organizer.load()
+
+        let firstTarget = FavoriteItemTarget(kind: .mangaThread, threadID: "960")
+        let secondTarget = FavoriteItemTarget(kind: .mangaThread, threadID: "961")
+        let unrelatedTarget = FavoriteItemTarget(kind: .normalThread, threadID: "962")
+        var document = try await localFavoriteLibraryStore.load()
+        let firstItem = try FavoriteItem(target: firstTarget, title: "第一话", locations: [.category(document.defaultCategory.id)])
+        let secondItem = try FavoriteItem(target: secondTarget, title: "第二话", locations: [.category(document.defaultCategory.id)])
+        document.addItem(firstItem)
+        document.addItem(secondItem)
+        document.addItem(try FavoriteItem(target: unrelatedTarget, title: "无关收藏", locations: [.category(document.defaultCategory.id)]))
+        try await localFavoriteLibraryStore.save(document)
+        await organizer.reload()
+
+        await organizer.deleteMergedGroup([firstItem, secondItem])
+
+        let remainingTargets = Set(try await localFavoriteLibraryStore.load().items.map(\.target))
+        let recordedTargetIDs = await recorder.recordedTargetIDs()
+        XCTAssertEqual(remainingTargets, [unrelatedTarget])
+        XCTAssertNil(organizer.errorMessage)
+        XCTAssertEqual(Set(recordedTargetIDs), [firstTarget.id, secondTarget.id])
+    }
+
+    /// Phase E gap (smart-comic-mode design doc, Phase E's "两个不构成缺陷、
+    /// 但记录供参考的观察" note ①): every other test in this file builds its
+    /// organizer via `makeOrganizer` with `mangaDirectoryStore: nil`, so
+    /// `resolveMangaDirectories`/`scheduleMangaCoverBackfill` always
+    /// short-circuit on the nil dependency and are only ever exercised by
+    /// `LocalFavoriteLibraryProjectionTests`' pure-function tests, never
+    /// through the organizer's real `load()`/`reload()` wiring. This test
+    /// injects a genuine GRDB-backed `MangaDirectoryStore` (mirroring
+    /// `LocalFavoriteOpenTargetResolverTests`' own helper) with real chapter
+    /// data, favorites two `.mangaThread` chapters on a Smart-Comic-Mode-on
+    /// board (fid "30", on by `SmartComicModeSettings`'s own default) sharing
+    /// that directory, and proves the full path from `load()`/`reload()`
+    /// through to a merged `FavoriteCardProjection` actually resolves end to
+    /// end — not just that the pure grouping function works when handed a
+    /// pre-built `mangaDirectoriesByTID` dictionary directly.
+    func testLoadWiresRealMangaDirectoryStoreIntoMergedFavoriteCardProjection() async throws {
+        let suiteName = YamiboTestDefaults.suiteName(prefix: "local-favorites-manga-directory-wiring")
+        _ = try YamiboTestDefaults.make(suiteName: suiteName)
+        let localFavoriteLibraryStore = FavoriteLibraryStore(
+            defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
+            key: "local-favorites"
+        )
+        let mangaDirectoryStore = try makeMangaDirectoryStore(suiteName: suiteName)
+        let directory = MangaDirectory(
+            cleanBookName: "组织者集成测试漫画",
+            strategy: .links,
+            sourceKey: "chapter:970",
+            chapters: [
+                MangaChapter(tid: "970", rawTitle: "第一话", chapterNumber: 1),
+                MangaChapter(tid: "971", rawTitle: "第二话", chapterNumber: 2),
+            ]
+        )
+        try await mangaDirectoryStore.saveDirectory(directory)
+
+        let firstTarget = FavoriteItemTarget(kind: .mangaThread, threadID: "970")
+        let secondTarget = FavoriteItemTarget(kind: .mangaThread, threadID: "971")
+        var document = try await localFavoriteLibraryStore.load()
+        let firstItem = try FavoriteItem(
+            target: firstTarget,
+            title: "第一话",
+            forumID: "30",
+            forumName: "中文百合漫画区",
+            locations: [.category(document.defaultCategory.id)]
+        )
+        let secondItem = try FavoriteItem(
+            target: secondTarget,
+            title: "第二话",
+            forumID: "30",
+            forumName: "中文百合漫画区",
+            locations: [.category(document.defaultCategory.id)]
+        )
+        document.addItem(firstItem)
+        document.addItem(secondItem)
+        try await localFavoriteLibraryStore.save(document)
+
+        let organizer = try makeOrganizer(
+            libraryStore: localFavoriteLibraryStore,
+            mangaDirectoryStore: mangaDirectoryStore
+        )
+        await organizer.load()
+
+        XCTAssertEqual(organizer.derived.cards.count, 1)
+        let mergedCard = try XCTUnwrap(organizer.derived.cards.first { $0.id == firstItem.id })
+        XCTAssertTrue(mergedCard.isMergedGroup)
+        XCTAssertEqual(mergedCard.mangaDirectory?.cleanBookName, "组织者集成测试漫画")
+        XCTAssertEqual(mergedCard.mergedMembers?.map(\.target), [firstTarget, secondTarget])
+
+        // `reload()` re-resolves directories independently of `load()` — a
+        // background reload (e.g. from a favorite-store change notification)
+        // must keep showing the merged card, not silently drop back to two
+        // standalone favorites.
+        await organizer.reload()
+        XCTAssertEqual(organizer.derived.cards.count, 1)
+        let reloadedCard = try XCTUnwrap(organizer.derived.cards.first { $0.id == firstItem.id })
+        XCTAssertTrue(reloadedCard.isMergedGroup)
+        XCTAssertEqual(reloadedCard.mergedMembers?.map(\.target), [firstTarget, secondTarget])
     }
 
     func testCollectionManagementFiltersMovesAndDissolvesFavorites() async throws {
@@ -452,8 +730,8 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
         let createdSecondCollection = await organizer.createCollection(name: "合集B", color: .gray)
         let secondCollection = try XCTUnwrap(createdSecondCollection)
 
-        let firstTarget = FavoriteContentTarget(kind: .normalThread, threadID: "910")
-        let secondTarget = FavoriteContentTarget(kind: .normalThread, threadID: "911")
+        let firstTarget = FavoriteItemTarget(kind: .normalThread, threadID: "910")
+        let secondTarget = FavoriteItemTarget(kind: .normalThread, threadID: "911")
         var document = try await localFavoriteLibraryStore.load()
         document.addItem(try FavoriteItem(
             target: firstTarget,
@@ -586,7 +864,7 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
 
         var document = try await localFavoriteLibraryStore.load()
         let item = try FavoriteItem(
-            target: FavoriteContentTarget(kind: .normalThread, threadID: "904"),
+            target: FavoriteItemTarget(kind: .normalThread, threadID: "904"),
             title: "主题",
             locations: [.category(category.id)]
         )
@@ -717,7 +995,7 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
             remoteRepository: nil
         )
 
-        let target = FavoriteContentTarget(kind: .normalThread, threadID: "902")
+        let target = FavoriteItemTarget(kind: .normalThread, threadID: "902")
         let storedItem = try await localFavoriteLibraryStore.load().items.first { $0.target == target }
         XCTAssertEqual(storedItem?.forumID, "60")
         XCTAssertEqual(storedItem?.forumName, "图文区")
@@ -746,7 +1024,7 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
             remoteRepository: nil
         )
 
-        let target = FavoriteContentTarget(kind: .novelThread, threadID: "903")
+        let target = FavoriteItemTarget(kind: .novelThread, threadID: "903")
         let storedItem = try await localFavoriteLibraryStore.load().items.first { $0.target == target }
         XCTAssertEqual(storedItem?.target.kind, .novelThread)
         XCTAssertEqual(storedItem?.forumID, "49")
@@ -766,7 +1044,7 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
             defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
             key: "content-covers"
         )
-        let target = FavoriteContentTarget(kind: .normalThread, threadID: "903")
+        let target = FavoriteItemTarget(kind: .normalThread, threadID: "903")
         let coverURL = try XCTUnwrap(URL(string: "https://img.example.com/store-cover.jpg"))
         var document = FavoriteLibraryDocument()
         let item = try FavoriteItem(
@@ -801,7 +1079,7 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
             defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
             key: "content-covers"
         )
-        let target = FavoriteContentTarget(kind: .novelThread, threadID: "905")
+        let target = FavoriteItemTarget(kind: .novelThread, threadID: "905")
         let resolvedCoverURL = try XCTUnwrap(URL(string: "https://img.example.com/resolved-novel-cover.jpg"))
         var document = FavoriteLibraryDocument()
         document.addItem(try FavoriteItem(
@@ -878,9 +1156,9 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
         let secondCategory = document.createCategory(name: "分类B")
         let matchingCollection = document.createCollection(categoryID: document.defaultCategory.id, name: "命中合集")
         _ = document.createCollection(categoryID: document.defaultCategory.id, name: "其他合集")
-        let firstTarget = FavoriteContentTarget(kind: .normalThread, threadID: "950")
-        let secondTarget = FavoriteContentTarget(kind: .normalThread, threadID: "951")
-        let thirdTarget = FavoriteContentTarget(kind: .normalThread, threadID: "952")
+        let firstTarget = FavoriteItemTarget(kind: .normalThread, threadID: "950")
+        let secondTarget = FavoriteItemTarget(kind: .normalThread, threadID: "951")
+        let thirdTarget = FavoriteItemTarget(kind: .normalThread, threadID: "952")
         document.addItem(try FavoriteItem(
             target: firstTarget,
             title: "命中默认分类",
@@ -1034,6 +1312,8 @@ private func makeOrganizer(
     readingProgressStore: ReadingProgressStore? = nil,
     settingsStore: SettingsStore? = nil,
     contentCoverStore: ContentCoverStore? = nil,
+    mangaDirectoryStore: MangaDirectoryStore? = nil,
+    makeForumThreadReaderRepository: (@Sendable () async -> ForumThreadReaderRepository)? = nil,
     session: URLSession? = nil,
     remoteFavoriteDeleteHandler: (([FavoriteItem]) async throws -> Void)? = nil
 ) throws -> FavoriteLibraryOrganizer {
@@ -1046,6 +1326,8 @@ private func makeOrganizer(
         readingProgressStore: readingProgressStore ?? ReadingProgressStore(defaults: defaults, key: "reading-progress"),
         settingsStore: settingsStore ?? SettingsStore(defaults: defaults, key: "settings"),
         contentCoverStore: contentCoverStore ?? ContentCoverStore(defaults: defaults, key: "content-covers"),
+        mangaDirectoryStore: mangaDirectoryStore,
+        makeForumThreadReaderRepository: makeForumThreadReaderRepository,
         makeFavoriteRepository: {
             let sessionState = await sessionStore.load()
             return FavoriteRepository(client: YamiboClient(
@@ -1056,4 +1338,36 @@ private func makeOrganizer(
         },
         remoteFavoriteDeleteHandler: remoteFavoriteDeleteHandler
     )
+}
+
+/// Real GRDB-backed `MangaDirectoryStore` for a test, mirroring
+/// `LocalFavoriteOpenTargetResolverTests`' own helper — the Phase E gap this
+/// file's integration test closes is specifically that `makeOrganizer` never
+/// injected a real store, so a fake/in-memory double would not prove
+/// anything a mock couldn't already; this needs the genuine GRDB-backed type.
+private func makeMangaDirectoryStore(suiteName: String) throws -> MangaDirectoryStore {
+    let root = FileManager.default.temporaryDirectory
+        .appendingPathComponent("favorite-library-organizer-tests", isDirectory: true)
+        .appendingPathComponent(suiteName, isDirectory: true)
+    let database = try YamiboDatabase.openPool(rootDirectory: root)
+    return MangaDirectoryStore(databasePool: database)
+}
+
+/// Polls a `@MainActor` condition until it's true or the timeout elapses —
+/// for asserting on state that only updates asynchronously in response to a
+/// `NotificationCenter` subscription (e.g. `FavoriteLibraryOrganizer`'s
+/// `SettingsStore.didChangeNotification` listener), where a fixed
+/// `Task.sleep` would be a flaky guess at how long that takes.
+@MainActor
+private func waitForOrganizerCondition(
+    timeoutNanoseconds: UInt64 = 2_000_000_000,
+    condition: @escaping @MainActor () -> Bool
+) async throws {
+    let start = ContinuousClock.now
+    while condition() == false {
+        if start.duration(to: .now) > .nanoseconds(Int64(timeoutNanoseconds)) {
+            throw YamiboError.underlying("Timed out waiting for condition")
+        }
+        try await Task.sleep(nanoseconds: 10_000_000)
+    }
 }

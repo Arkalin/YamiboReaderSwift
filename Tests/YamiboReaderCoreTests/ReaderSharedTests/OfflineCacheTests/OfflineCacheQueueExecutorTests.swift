@@ -164,7 +164,7 @@ struct ReaderSharedTestsOfflineCacheQueueExecutor {
         let resumeRouteStore = ReaderResumeRouteStore(defaults: try #require(UserDefaults(suiteName: suiteName)), key: "resume-route")
         var favoriteLibrary = FavoriteLibraryDocument()
         let favorite = try FavoriteItem(
-            target: FavoriteContentTarget(kind: .normalThread, threadID: "350"),
+            target: FavoriteItemTarget(kind: .normalThread, threadID: "350"),
             title: "阅读进度漫画",
             locations: [.category(favoriteLibrary.defaultCategory.id)]
         )

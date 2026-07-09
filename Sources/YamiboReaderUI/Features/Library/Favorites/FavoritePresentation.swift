@@ -9,7 +9,7 @@ extension FavoriteSourceGroup {
         switch self {
         case let .forumBoard(_, label):
             label
-        case let .mangaTitle(_, cleanBookName):
+        case let .smartManga(_, cleanBookName):
             cleanBookName
         case .unknown:
             L10n.string("favorites.source_group.unknown")
@@ -108,15 +108,6 @@ extension [FavoriteCategory] {
     }
 }
 
-extension LocalFavoriteOpenError: LocalizedError {
-    var errorDescription: String? {
-        switch self {
-        case .mangaTitleUnresolved:
-            L10n.string("favorite_library.manga_title_resolution_failed")
-        }
-    }
-}
-
 extension FavoriteRemoteSyncPhase {
     var displayTitle: String {
         switch self {
@@ -198,6 +189,8 @@ extension FavoriteRemoteSyncWarning {
             L10n.string("favorites.sync.warning.remote_favorites_empty_before_upload", count)
         case let .importedWithUnresolvedSource(title):
             L10n.string("favorites.sync.warning.imported_with_unresolved_source", title)
+        case let .importedIntoExistingMangaDirectory(title, cleanBookName):
+            L10n.string("favorites.sync.warning.imported_into_existing_manga_directory", title, cleanBookName)
         }
     }
 }

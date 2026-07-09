@@ -19,11 +19,9 @@ public struct ThreadIdentity: Codable, Hashable, Sendable {
 
 public struct YamiboThreadTapContext: Codable, Hashable, Sendable {
     public var containingFid: String?
-    public var isTagMangaMode: Bool
 
-    public init(containingFid: String? = nil, isTagMangaMode: Bool = false) {
+    public init(containingFid: String? = nil) {
         self.containingFid = containingFid?.nilIfBlank
-        self.isTagMangaMode = isTagMangaMode
     }
 }
 
@@ -152,6 +150,12 @@ public struct YamiboThreadRoutePayload: Hashable, Sendable {
 public enum YamiboThreadRouteTarget: Hashable, Sendable {
     case novel(YamiboThreadRoutePayload)
     case manga(YamiboThreadRoutePayload)
+    /// Same classification as `.manga` (still a manga-board thread — see
+    /// decision #4, classification is independent of the mode toggle), but
+    /// the board's Smart Comic Mode is off, so the caller should open the
+    /// manga reader directly for this one thread instead of routing through
+    /// `ForumMangaDetailView` (decision #2/#12).
+    case mangaDirect(YamiboThreadRoutePayload)
     case thread(YamiboThreadRoutePayload)
     case webFallback(URL)
 }

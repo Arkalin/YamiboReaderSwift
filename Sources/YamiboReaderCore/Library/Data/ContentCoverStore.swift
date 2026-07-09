@@ -7,7 +7,10 @@ public enum ContentCoverTargetType: String, Codable, Hashable, Sendable, CaseIte
     /// this type.
     case thread = "Thread"
     /// Manga directory content, keyed by the directory's `cleanBookName`.
-    case mangaTitle = "MangaTitle"
+    /// Renamed from `.mangaTitle`/`"MangaTitle"` (smart-comic-mode design
+    /// decision #9) — pure rename, no behavior change, no data migration (no
+    /// shipped user data exists yet, see [[yamiboreader-no-data-compat]]).
+    case smartManga = "SmartManga"
 }
 
 public struct ContentCoverKey: Codable, Hashable, Sendable {
@@ -23,22 +26,34 @@ public struct ContentCoverKey: Codable, Hashable, Sendable {
         ContentCoverKey(targetType: .thread, targetID: tid)
     }
 
-    public static func mangaTitle(cleanBookName: String) -> ContentCoverKey {
-        ContentCoverKey(targetType: .mangaTitle, targetID: cleanBookName)
+    public static func smartManga(cleanBookName: String) -> ContentCoverKey {
+        ContentCoverKey(targetType: .smartManga, targetID: cleanBookName)
     }
 
-    /// Canonical cover key for a favorite target. Normal and novel threads
-    /// share the `.thread` key: how a thread reads is presentation, not
-    /// content identity.
+    /// Canonical cover key for a reading-progress target. Normal and novel
+    /// threads share the `.thread` key: how a thread reads is presentation,
+    /// not content identity.
     public init?(target: FavoriteContentTarget) {
         switch target.kind {
-        case .normalThread, .novelThread:
+        case .normalThread, .novelThread, .mangaThread:
             guard let threadID = target.threadID else { return nil }
             self = .thread(tid: threadID)
         case .mangaTitle:
             guard let cleanBookName = target.mangaCleanBookName else { return nil }
-            self = .mangaTitle(cleanBookName: cleanBookName)
+            self = .smartManga(cleanBookName: cleanBookName)
         }
+    }
+
+    /// Canonical cover key for a favorite target. Every `FavoriteItemTarget`
+    /// case is thread-based (there is no merged-directory identity on this
+    /// type at all), so a favorite's own cover key is always `.thread(tid:)`
+    /// — including for `.mangaThread` favorites. Reattributing a merged
+    /// manga card's cover to the `.smartManga` key is a later phase's job
+    /// (smart-comic-mode design decision #13); this only covers the
+    /// per-favorite case that already existed for normal/novel threads.
+    public init?(target: FavoriteItemTarget) {
+        guard let threadID = target.threadID else { return nil }
+        self = .thread(tid: threadID)
     }
 }
 
@@ -224,11 +239,11 @@ public actor ContentCoverStore {
         return YamiboDomain.url(forSitePath: value)
     }
 
-    /// Moves a manga-title cover row to a renamed directory inside the caller's
-    /// transaction, so directory renames keep their cover atomically.
-    static func renameMangaTitleCover(from oldName: String, to newName: String, in db: Database) throws {
-        let oldKey = ContentCoverKey.mangaTitle(cleanBookName: oldName)
-        let newKey = ContentCoverKey.mangaTitle(cleanBookName: newName)
+    /// Moves a smart-manga cover row to a renamed directory inside the
+    /// caller's transaction, so directory renames keep their cover atomically.
+    static func renameSmartMangaCover(from oldName: String, to newName: String, in db: Database) throws {
+        let oldKey = ContentCoverKey.smartManga(cleanBookName: oldName)
+        let newKey = ContentCoverKey.smartManga(cleanBookName: newName)
         guard !oldKey.targetID.isEmpty, !newKey.targetID.isEmpty, oldKey != newKey else { return }
         guard var cover = try fetchCover(for: oldKey, in: db) else { return }
         // The renamed directory may already have a row; the moved row wins only

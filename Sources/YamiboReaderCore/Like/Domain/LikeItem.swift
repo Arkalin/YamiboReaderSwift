@@ -24,14 +24,18 @@ public struct LikeWorkKey: Codable, Hashable, Sendable {
         LikeWorkKey(kind: .manga, id: cleanBookName)
     }
 
-    /// Normal forum threads are not capture sources, so they have no Like work key.
+    /// Normal forum threads are not capture sources, so they have no Like
+    /// work key. Nor is the per-thread `.mangaThread` reading-progress record
+    /// (smart-comic-mode design decision #15): Like work keys for manga are
+    /// keyed by the directory's `cleanBookName`, which a bare per-thread
+    /// record doesn't carry — only the merged `.mangaTitle` record does.
     public init?(target: FavoriteContentTarget) {
         switch target {
         case let .novelThread(threadID):
             self = .novel(threadID: threadID)
         case let .mangaTitle(_, cleanBookName):
             self = .mangaTitle(cleanBookName: cleanBookName)
-        case .normalThread:
+        case .normalThread, .mangaThread:
             return nil
         }
     }

@@ -26,6 +26,8 @@ struct LocalFavoritesRootView: View {
             libraryStore: dependencies.localFavoriteLibraryStore,
             runStore: dependencies.favoriteSyncRunStore,
             contentCoverStore: dependencies.contentCoverStore,
+            mangaDirectoryStore: dependencies.mangaDirectoryStore,
+            settingsStore: dependencies.settingsStore,
             makeFavoriteRepository: dependencies.makeFavoriteRepository,
             makeForumThreadReaderRepository: dependencies.makeForumThreadReaderRepository,
             makeThreadRouteResolver: dependencies.makeThreadRouteResolver
@@ -38,7 +40,9 @@ struct LocalFavoritesRootView: View {
         ))
         openTargetResolver = LocalFavoriteOpenTargetResolver(
             libraryStore: dependencies.localFavoriteLibraryStore,
-            readingProgressStore: dependencies.readingProgressStore
+            readingProgressStore: dependencies.readingProgressStore,
+            mangaDirectoryStore: dependencies.mangaDirectoryStore,
+            settingsStore: dependencies.settingsStore
         )
         self.appModel = appModel
     }

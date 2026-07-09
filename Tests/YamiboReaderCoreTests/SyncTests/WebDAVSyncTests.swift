@@ -73,7 +73,7 @@ private enum WebDAVTestError: Error {
 
     let threadID = "940"
     var document = FavoriteLibraryDocument()
-    let target = FavoriteContentTarget(kind: .novelThread, threadID: threadID)
+    let target = FavoriteItemTarget(kind: .novelThread, threadID: threadID)
     try document.addItem(
         FavoriteItem(
             target: target,
@@ -224,7 +224,7 @@ private enum WebDAVTestError: Error {
     var document = FavoriteLibraryDocument()
     try document.addItem(
         FavoriteItem(
-            target: FavoriteContentTarget(kind: .normalThread, threadID: "965"),
+            target: FavoriteItemTarget(kind: .normalThread, threadID: "965"),
             title: "自动同步收藏",
             locations: [.category(document.defaultCategory.id)]
         )

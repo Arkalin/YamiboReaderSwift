@@ -23,7 +23,14 @@ enum ImageBrowserThreadCoverActions {
     static func provider(
         tid: String,
         contentCoverStore: @escaping @Sendable () async -> ContentCoverStore?,
-        mangaDirectoryStore: @escaping @Sendable () async -> (any MangaDirectoryPersisting)? = { nil }
+        mangaDirectoryStore: @escaping @Sendable () async -> (any MangaDirectoryPersisting)? = { nil },
+        // Smart Comic Mode off (design decision #16): the tapped thread's
+        // board has no manga-directory-aware UI at all, even if a
+        // `MangaDirectory` technically still exists for this tid (e.g. a
+        // leftover from when the board was previously on). Defaults to
+        // always-enabled so callers that never deal with manga boards
+        // (novel reader today) keep today's behavior unchanged.
+        isSmartComicModeEnabled: @escaping @Sendable () async -> Bool = { true }
     ) -> ImageBrowserCoverActionsProvider {
         {
             let trimmedTID = tid.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -40,12 +47,12 @@ enum ImageBrowserThreadCoverActions {
 
             var mangaKey: ContentCoverKey?
             var mangaBookName: String?
-            if let directoryStore = await mangaDirectoryStore() {
+            if await isSmartComicModeEnabled(), let directoryStore = await mangaDirectoryStore() {
                 do {
                     if let directory = try await directoryStore.directory(containingTID: trimmedTID) {
                         let cleanBookName = directory.cleanBookName.trimmingCharacters(in: .whitespacesAndNewlines)
                         if !cleanBookName.isEmpty {
-                            let key = ContentCoverKey.mangaTitle(cleanBookName: cleanBookName)
+                            let key = ContentCoverKey.smartManga(cleanBookName: cleanBookName)
                             mangaKey = key
                             mangaBookName = cleanBookName
                             actions.append(setAction(

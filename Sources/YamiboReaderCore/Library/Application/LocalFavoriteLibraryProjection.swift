@@ -72,7 +72,7 @@ public enum LocalFavoriteSourceFilter: Hashable, Sendable {
 
     /// Canonical filter bucket an item belongs to.
     public static func key(for item: FavoriteItem) -> LocalFavoriteSourceFilter {
-        if item.target.kind == .mangaTitle {
+        if item.target.kind == .mangaThread {
             return .manga
         }
         if let forumID = item.forumID ?? item.sourceGroup.forumID {
@@ -86,7 +86,7 @@ public enum LocalFavoriteSourceFilter: Hashable, Sendable {
         case let .forumBoard(id, _):
             item.forumID == id || item.sourceGroup.forumID == id
         case .manga:
-            item.target.kind == .mangaTitle
+            item.target.kind == .mangaThread
         case .unknown:
             LocalFavoriteSourceFilter.key(for: item) == .unknown
         }
@@ -176,7 +176,63 @@ public struct FavoriteCardProjection: Equatable, Identifiable, Sendable {
     /// target, suppressing `coverURL` even when a real cover resolves.
     public var textCoverForced: Bool
 
+    /// Non-nil only when `item.target` (a `.mangaThread` favorite) resolved
+    /// to a `MangaDirectory` — i.e. its board currently has Smart Comic Mode
+    /// on (smart-comic-mode decision #5's 2026-07-08 addendum) and the
+    /// chapter tid was found in a locally-known directory. Set regardless of
+    /// whether any *other* favorite shares this directory yet: it backs the
+    /// directory-level ("third level") progress match (decision #14) and is
+    /// the identity a later phase's open handler / cover backfill should key
+    /// off, independent of `mergedMembers`/`isMergedGroup`.
+    ///
+    /// `item.title`/`item.displayName` are deliberately left as `item`'s own
+    /// (the representative member's real post title) rather than overwritten
+    /// with `mangaDirectory?.cleanBookName` — `item` stays a genuine,
+    /// individually valid `FavoriteItem` so any single-item affordance that
+    /// still reads it directly keeps working. UI that wants the manga's own
+    /// title for a resolved-directory card should prefer
+    /// `mangaDirectory?.cleanBookName` over `item.resolvedDisplayTitle`.
+    public var mangaDirectory: MangaDirectory? = nil
+
+    /// Every `.mangaThread` favorite this card actually merges display for —
+    /// non-nil (and always 2+ items) only once at least one *other*
+    /// favorite shares `mangaDirectory` with `item`. `item` is always one of
+    /// these members (the earliest-chapter one, chosen deterministically —
+    /// see `LocalFavoriteLibraryProjection`'s grouping). `nil` here — even
+    /// when `mangaDirectory` is set — means this card is still visually a
+    /// lone favorite; a merge-badge/unfavorite-all confirmation should gate
+    /// on this, not on `mangaDirectory` alone.
+    public var mergedMembers: [FavoriteItem]? = nil
+
+    public var isMergedGroup: Bool { mergedMembers != nil }
+
+    /// Deliberately still `item.id` — the representative member's own real
+    /// id — even for a merged card, *not* a synthetic directory-based id.
+    /// The existing (unmodified by this phase) selection/bulk-action UI
+    /// already reads `card.id` as a real `FavoriteItem.id` to look items up
+    /// in `document.items` (`LocalFavoriteGridCard`/`LocalFavoriteListContent`
+    /// pass `card.id` straight into `selection.toggleFavoriteSelection`,
+    /// and `FavoriteLibraryOrganizer`'s bulk actions filter
+    /// `document.items` by `favoriteIDs.contains($0.id)`) — a made-up id
+    /// with no matching item would make a merged card's selection silently
+    /// unpickable (pruned by `LocalFavoriteBrowseSession.prune` on the very
+    /// next derive, since it'd never appear in `validFavoriteIDs`) with no
+    /// corresponding Phase F work having happened yet to handle that. The
+    /// cost is that this id can change if a new, earlier-chapter favorite
+    /// later joins the group and displaces the current representative
+    /// member — an occasional SwiftUI identity churn, not a correctness bug.
     public var id: String { item.id }
+}
+
+/// One `MangaDirectory` with every mode-on `.mangaThread` favorite currently
+/// resolved to it — the same grouping `FavoriteCardProjection`'s merged
+/// cards are built from, exposed standalone for callers (cover backfill)
+/// that need the raw group rather than a display card.
+public struct MangaDirectoryFavoriteGroup: Equatable, Sendable {
+    public var directory: MangaDirectory
+    /// Ordered to match `directory.chapters` (earliest first); `.first` is
+    /// the earliest-chapter favorite, used as the cover-backfill anchor.
+    public var members: [FavoriteItem]
 }
 
 public enum LocalFavoriteLibraryProjection {
@@ -187,31 +243,49 @@ public enum LocalFavoriteLibraryProjection {
     public static func cards(
         in document: FavoriteLibraryDocument,
         query: LocalFavoriteLibraryQuery = LocalFavoriteLibraryQuery(),
-        readingProgress: [ReadingProgressRecord] = []
+        readingProgress: [ReadingProgressRecord] = [],
+        // Both default to "nothing resolved locally yet" so every existing
+        // caller (in particular the whole pre-Phase-E test suite) keeps
+        // building exclusively standalone cards without passing anything
+        // new — `groupedCardEntries` short-circuits to "everything
+        // standalone" whenever `mangaDirectoriesByTID` is empty, before ever
+        // consulting `smartComicModeSettings`.
+        mangaDirectoriesByTID: [String: MangaDirectory] = [:],
+        smartComicModeSettings: SmartComicModeSettings = SmartComicModeSettings()
     ) -> [FavoriteCardProjection] {
         let categoryID = query.categoryID ?? document.defaultCategory.id
         let progressByKey = readingProgressLookup(readingProgress)
-        let progressByMangaCleanBookName = mangaReadingProgressLookup(readingProgress)
         let trimmedSearch = query.searchText.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        let cards = document.items
-            .filter { item in
+        // Grouping runs over the *entire* unfiltered item list (smart-comic-
+        // mode decision #5: a merged card's membership/scope is global,
+        // independent of which category/collection the query is currently
+        // looking at) — only after grouping do category/collection/source/
+        // tag filters apply, to the resulting entries' *union* locations/
+        // tags rather than any one member's own.
+        let entries = groupedCardEntries(
+            for: document.items,
+            mangaDirectoriesByTID: mangaDirectoriesByTID,
+            smartComicModeSettings: smartComicModeSettings
+        )
+
+        let cards = entries
+            .filter { entry in
                 if let collectionID = query.collectionID {
-                    return item.locations.contains(.collection(categoryID: categoryID, collectionID: collectionID))
+                    return entry.representativeItem.locations.contains(.collection(categoryID: categoryID, collectionID: collectionID))
                 }
-                return item.locations.contains(.category(categoryID))
+                return entry.representativeItem.locations.contains(.category(categoryID))
             }
-            .filter { item in
+            .filter { entry in
                 query.selectedSourceFilters.isEmpty
-                    || query.selectedSourceFilters.contains { $0.matches(item) }
+                    || query.selectedSourceFilters.contains { $0.matches(entry.representativeItem) }
             }
-            .filter { item in
-                query.selectedTagIDs.isEmpty || query.selectedTagIDs.isSubset(of: Set(item.tagIDs))
+            .filter { entry in
+                query.selectedTagIDs.isEmpty || query.selectedTagIDs.isSubset(of: Set(entry.representativeItem.tagIDs))
             }
-            .map { item in
-                let progress = progressByKey[progressKey(for: item)]
-                    ?? item.target.mangaCleanBookName.flatMap { progressByMangaCleanBookName[$0] }
-                return card(for: item, document: document, progress: progress)
+            .map { entry -> FavoriteCardProjection in
+                let resolvedProgress = progress(for: entry, progressByKey: progressByKey)
+                return card(for: entry, document: document, progress: resolvedProgress)
             }
             .filter { card in
                 guard !trimmedSearch.isEmpty else { return true }
@@ -221,6 +295,27 @@ public enum LocalFavoriteLibraryProjection {
             }
 
         return sorted(cards, by: query.sortOrder, descending: query.sortsDescending)
+    }
+
+    /// Every mode-on `.mangaThread` favorite resolved to a `MangaDirectory`,
+    /// grouped by that directory (smart-comic-mode decision #13's cover
+    /// backfill trigger). Includes groups of exactly one favorite — a lone
+    /// resolved-directory favorite still needs its `.smartManga` cover
+    /// resolved even before any sibling favorite joins it into a visible
+    /// merge — so this is deliberately *not* filtered down to `count >= 2`
+    /// the way `FavoriteCardProjection.mergedMembers` is.
+    public static func mangaDirectoryGroups(
+        for items: [FavoriteItem],
+        mangaDirectoriesByTID: [String: MangaDirectory],
+        smartComicModeSettings: SmartComicModeSettings
+    ) -> [MangaDirectoryFavoriteGroup] {
+        rawGroupedFavorites(
+            for: items,
+            mangaDirectoriesByTID: mangaDirectoriesByTID,
+            smartComicModeSettings: smartComicModeSettings
+        ).groups.map { raw in
+            MangaDirectoryFavoriteGroup(directory: raw.directory, members: raw.members)
+        }
     }
 
     /// Merges collections and cards into one ordering. `.organization` is
@@ -256,29 +351,201 @@ public enum LocalFavoriteLibraryProjection {
     public static func displayedEntryCount(
         in document: FavoriteLibraryDocument,
         query: LocalFavoriteLibraryQuery = LocalFavoriteLibraryQuery(),
-        readingProgress: [ReadingProgressRecord] = []
+        readingProgress: [ReadingProgressRecord] = [],
+        mangaDirectoriesByTID: [String: MangaDirectory] = [:],
+        smartComicModeSettings: SmartComicModeSettings = SmartComicModeSettings()
     ) -> Int {
-        cards(in: document, query: query, readingProgress: readingProgress).count
+        cards(
+            in: document,
+            query: query,
+            readingProgress: readingProgress,
+            mangaDirectoriesByTID: mangaDirectoriesByTID,
+            smartComicModeSettings: smartComicModeSettings
+        ).count
+    }
+
+    // MARK: - Virtual merged-directory grouping (smart-comic-mode decision #3/#5)
+
+    /// One resolved-and-possibly-merged card's worth of pre-card data: either
+    /// a standalone favorite untouched (`members == nil`, `mangaDirectory ==
+    /// nil`) or a directory-resolved `.mangaThread` favorite/group with its
+    /// representative item's `locations`/`tagIDs` already rewritten to the
+    /// *union* across every member (decision #5: a merged card appears in
+    /// every location any member belongs to). Never persisted — this only
+    /// ever backs a display card for the current `cards(...)` call.
+    private struct GroupedFavoriteEntry {
+        var representativeItem: FavoriteItem
+        var members: [FavoriteItem]?
+        var mangaDirectory: MangaDirectory?
+    }
+
+    private struct RawMangaDirectoryGroup {
+        var directory: MangaDirectory
+        var members: [FavoriteItem]
+    }
+
+    /// Partitions `items` into favorites that stay standalone and favorites
+    /// resolved to a shared `MangaDirectory`, using the *explicit*
+    /// `SmartComicModeSettings.isEnabled(forumID:)` check — not any proxy
+    /// signal (`directoryName != nil`, `cleanBookName.isEmpty`, etc. — see
+    /// the design doc's three prior same-class bugs) — as the sole
+    /// mode-on/off gate. This is the cheap in-memory pre-filter the design
+    /// doc's performance constraint #1 calls for: only mode-on `.mangaThread`
+    /// items with a resolved directory even reach the grouping dictionaries
+    /// below; everything else is appended to `standalone` without touching
+    /// `mangaDirectoriesByTID` again.
+    private static func rawGroupedFavorites(
+        for items: [FavoriteItem],
+        mangaDirectoriesByTID: [String: MangaDirectory],
+        smartComicModeSettings: SmartComicModeSettings
+    ) -> (standalone: [FavoriteItem], groups: [RawMangaDirectoryGroup]) {
+        guard !mangaDirectoriesByTID.isEmpty else {
+            return (items, [])
+        }
+
+        var standalone: [FavoriteItem] = []
+        var membersByDirectoryID: [String: [FavoriteItem]] = [:]
+        var directoryByID: [String: MangaDirectory] = [:]
+
+        for item in items {
+            guard item.target.kind == .mangaThread,
+                  let threadID = item.target.threadID,
+                  smartComicModeSettings.isEnabled(forumID: item.forumID),
+                  let directory = mangaDirectoriesByTID[threadID] else {
+                standalone.append(item)
+                continue
+            }
+            directoryByID[directory.id] = directory
+            membersByDirectoryID[directory.id, default: []].append(item)
+        }
+
+        let groups = membersByDirectoryID.compactMap { directoryID, members -> RawMangaDirectoryGroup? in
+            guard let directory = directoryByID[directoryID] else { return nil }
+            return RawMangaDirectoryGroup(directory: directory, members: orderedByChapter(members, in: directory))
+        }
+        return (standalone, groups)
+    }
+
+    /// Orders `members` to match `directory.chapters` (earliest chapter
+    /// first). Every member's own tid is guaranteed present in
+    /// `directory.chapters` by construction — `mangaDirectoriesByTID` only
+    /// ever resolves a directory whose chapter list contains that tid — so
+    /// `members` and the ordered result should always be the same length;
+    /// the equal-length check is a defensive fallback only, so a stale/edited
+    /// directory can never silently drop a favorite from its own card.
+    private static func orderedByChapter(_ members: [FavoriteItem], in directory: MangaDirectory) -> [FavoriteItem] {
+        let membersByThreadID = Dictionary(uniqueKeysWithValues: members.compactMap { item -> (String, FavoriteItem)? in
+            guard let threadID = item.target.threadID else { return nil }
+            return (threadID, item)
+        })
+        let ordered = directory.chapters.compactMap { membersByThreadID[$0.tid] }
+        return ordered.count == members.count ? ordered : members
+    }
+
+    private static func groupedCardEntries(
+        for items: [FavoriteItem],
+        mangaDirectoriesByTID: [String: MangaDirectory],
+        smartComicModeSettings: SmartComicModeSettings
+    ) -> [GroupedFavoriteEntry] {
+        let raw = rawGroupedFavorites(
+            for: items,
+            mangaDirectoriesByTID: mangaDirectoriesByTID,
+            smartComicModeSettings: smartComicModeSettings
+        )
+        let standaloneEntries = raw.standalone.map {
+            GroupedFavoriteEntry(representativeItem: $0, members: nil, mangaDirectory: nil)
+        }
+        let resolvedEntries = raw.groups.map(cardEntry(for:))
+        return standaloneEntries + resolvedEntries
+    }
+
+    /// Builds one display entry from a raw directory group: the
+    /// earliest-chapter member becomes `representativeItem` (a deterministic,
+    /// reload-stable choice — also the anchor cover backfill resolves from),
+    /// its `locations`/`tagIDs` rewritten in place to the union across every
+    /// member. `members` on the result is nil (not a 1-element array) when
+    /// the group has exactly one favorite, matching `mergedMembers`'s "only
+    /// non-nil for an actual merge" contract.
+    private static func cardEntry(for group: RawMangaDirectoryGroup) -> GroupedFavoriteEntry {
+        let members = group.members
+        // `rawGroupedFavorites` only ever creates a `membersByDirectoryID`
+        // entry by appending to it, so every group it produces has at least
+        // one member — this can never actually fire.
+        precondition(!members.isEmpty, "RawMangaDirectoryGroup must have at least one member")
+        var representative = members[0]
+        var unionLocations: [FavoriteLocation] = []
+        var seenLocationIDs: Set<String> = []
+        var unionTagIDs: [String] = []
+        var seenTagIDs: Set<String> = []
+        for member in members {
+            for location in member.locations where seenLocationIDs.insert(location.id).inserted {
+                unionLocations.append(location)
+            }
+            for tagID in member.tagIDs where seenTagIDs.insert(tagID).inserted {
+                unionTagIDs.append(tagID)
+            }
+        }
+        representative.locations = FavoriteItem.normalizedLocations(unionLocations)
+        representative.tagIDs = FavoriteItem.normalizedIDs(unionTagIDs)
+
+        return GroupedFavoriteEntry(
+            representativeItem: representative,
+            members: members.count > 1 ? members : nil,
+            mangaDirectory: group.directory
+        )
+    }
+
+    /// Progress third-level match (design decision #14): a directory-resolved
+    /// entry (merged or a lone favorite alike) prefers the directory-level
+    /// `.mangaTitle` reading-progress record — the same record decision #7's
+    /// mode-on resume path reads via `LocalFavoriteOpenTargetResolver` — over
+    /// its representative member's own per-thread `.mangaThread` record,
+    /// since the whole point is showing the manga's current position rather
+    /// than whichever specific chapter happens to be the earliest one
+    /// favorited. Falls back to the direct id match only when the directory
+    /// has no progress record of its own yet (e.g. resolved via sync/cover
+    /// backfill but never actually opened locally).
+    private static func progress(
+        for entry: GroupedFavoriteEntry,
+        progressByKey: [String: ReadingProgressRecord]
+    ) -> ReadingProgressRecord? {
+        if let directory = entry.mangaDirectory,
+           let directoryProgress = progressByKey[directoryProgressKey(for: directory)] {
+            return directoryProgress
+        }
+        return progressByKey[progressKey(for: entry.representativeItem)]
+    }
+
+    private static func directoryProgressKey(for directory: MangaDirectory) -> String {
+        FavoriteContentTarget(mangaID: directory.favoriteIdentity, mangaCleanBookName: directory.cleanBookName).id
     }
 
     private static func card(
-        for item: FavoriteItem,
+        for entry: GroupedFavoriteEntry,
         document: FavoriteLibraryDocument,
         progress: ReadingProgressRecord?
     ) -> FavoriteCardProjection {
-        FavoriteCardProjection(
+        let item = entry.representativeItem
+        return FavoriteCardProjection(
             item: item,
             sourceGroupLabel: label(for: item.sourceGroup),
             collectionNames: collectionNames(for: item, in: document),
             tags: tags(for: item, in: document),
             recentReadingAt: progress?.lastReadAt,
-            lastUpdatedAt: item.contentUpdatedAt,
+            // A merged card's "content updated" proxy is the freshest of any
+            // member's own content update, not just the representative
+            // (earliest-chapter) member's — otherwise a manga that just got a
+            // brand-new favorited chapter wouldn't visibly bubble up under
+            // the "recently updated" sort.
+            lastUpdatedAt: entry.members?.compactMap(\.contentUpdatedAt).max() ?? item.contentUpdatedAt,
             progressPercent: progressPercent(from: progress),
             chapterPageProgress: chapterPageProgress(from: progress),
             // Filled from ContentCoverStore by the library derivation; items
             // deliberately carry no cover of their own.
             coverURL: nil,
-            textCoverForced: false
+            textCoverForced: false,
+            mangaDirectory: entry.mangaDirectory,
+            mergedMembers: entry.members
         )
     }
 
@@ -443,11 +710,26 @@ public enum LocalFavoriteLibraryProjection {
     }
 
     private static func searchFields(for card: FavoriteCardProjection) -> [String] {
-        [
+        var fields = [
             card.item.displayName,
             card.item.title,
             card.sourceGroupLabel
         ].compactMap(\.self) + card.tags.map(\.name)
+        // A resolved-directory card's `item.title` is deliberately still its
+        // representative member's own post title (see `FavoriteCardProjection
+        // .mangaDirectory`'s doc comment), so without this the manga's own
+        // name would never be searchable — only whichever specific chapter
+        // happened to become the representative. Merged members' own titles
+        // are included too so searching by a *specific* favorited chapter's
+        // title still finds the merged card it belongs to.
+        if let mangaDirectory = card.mangaDirectory {
+            fields.append(mangaDirectory.cleanBookName)
+        }
+        if let members = card.mergedMembers {
+            fields += members.map(\.title)
+            fields += members.compactMap(\.displayName)
+        }
+        return fields
     }
 
     private static func collectionNames(for item: FavoriteItem, in document: FavoriteLibraryDocument) -> [String] {
@@ -470,19 +752,16 @@ public enum LocalFavoriteLibraryProjection {
         }
     }
 
-    /// Manga has no forum metadata, so its sort key falls back to the clean
-    /// book name directly rather than `sourceGroupLabel`, which shows the
-    /// fixed "智能漫画" category text and would collapse every manga card
-    /// into one bucket.
+    /// `.mangaThread` favorites are plain per-thread favorites of one of the
+    /// three manga forums now (smart-comic-mode design decision #4), so they
+    /// carry real forum metadata just like any other thread; this falls back
+    /// to the source group label only if that metadata is somehow missing.
     private static func sourceGroupSortKey(for card: FavoriteCardProjection) -> String {
         if let forumName = card.item.forumName {
             return forumName
         }
         if let forumID = card.item.forumID {
             return forumID
-        }
-        if let cleanBookName = card.item.target.mangaCleanBookName {
-            return cleanBookName
         }
         return card.sourceGroupLabel
     }
@@ -491,7 +770,7 @@ public enum LocalFavoriteLibraryProjection {
         switch sourceGroup {
         case let .forumBoard(_, label):
             label
-        case .mangaTitle:
+        case .smartManga:
             L10n.string("favorites.filter.manga")
         case .unknown:
             L10n.string("favorites.source_group.unknown")
@@ -530,23 +809,6 @@ public enum LocalFavoriteLibraryProjection {
 
     private static func readingProgressLookup(_ records: [ReadingProgressRecord]) -> [String: ReadingProgressRecord] {
         Dictionary(uniqueKeysWithValues: records.map { ($0.id, $0) })
-    }
-
-    /// Fallback lookup for manga progress by book title: the favorite item's
-    /// mangaID and the live progress record's mangaID are computed
-    /// independently (different ID schemes) and drift apart, but both
-    /// reliably carry the same cleanBookName. Picks the most recently
-    /// updated record per title.
-    private static func mangaReadingProgressLookup(_ records: [ReadingProgressRecord]) -> [String: ReadingProgressRecord] {
-        var result: [String: ReadingProgressRecord] = [:]
-        for record in records {
-            guard record.kind == .manga, let cleanBookName = record.contentTarget?.mangaCleanBookName else { continue }
-            if let existing = result[cleanBookName], existing.updatedAt >= record.updatedAt {
-                continue
-            }
-            result[cleanBookName] = record
-        }
-        return result
     }
 
     private static func progressKey(for item: FavoriteItem) -> String {

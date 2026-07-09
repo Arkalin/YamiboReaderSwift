@@ -26,6 +26,17 @@ final class FavoriteRemoteSyncSession: ObservableObject {
     private let libraryStore: FavoriteLibraryStore
     private let runStore: FavoriteSyncRunStore
     private let contentCoverStore: ContentCoverStore
+    /// Backs the sync-time "imported into an already-favorited manga
+    /// directory" warning (smart-comic-mode Phase G, design decision #8's
+    /// remote-sync half). Concrete type, not the `MangaDirectoryPersisting`
+    /// existential — mirrors `FavoriteLibraryOrganizer`'s equivalent
+    /// property so production code can never accidentally fall onto the
+    /// protocol's naive per-tid default implementation. `nil` (as in most
+    /// existing tests, which don't exercise this feature) just disables it.
+    private let mangaDirectoryStore: MangaDirectoryStore?
+    /// Backs the per-item Smart Comic Mode board check the same warning
+    /// needs.
+    private let settingsStore: SettingsStore?
     private let makeFavoriteRepository: @Sendable () async -> FavoriteRepository
     private let makeForumThreadReaderRepository: @Sendable () async -> ForumThreadReaderRepository
     private let makeThreadRouteResolver: @Sendable () async -> YamiboThreadRouteResolver
@@ -47,6 +58,8 @@ final class FavoriteRemoteSyncSession: ObservableObject {
         libraryStore: FavoriteLibraryStore,
         runStore: FavoriteSyncRunStore,
         contentCoverStore: ContentCoverStore,
+        mangaDirectoryStore: MangaDirectoryStore? = nil,
+        settingsStore: SettingsStore? = nil,
         makeFavoriteRepository: @escaping @Sendable () async -> FavoriteRepository,
         makeForumThreadReaderRepository: @escaping @Sendable () async -> ForumThreadReaderRepository,
         makeThreadRouteResolver: @escaping @Sendable () async -> YamiboThreadRouteResolver,
@@ -55,6 +68,8 @@ final class FavoriteRemoteSyncSession: ObservableObject {
         self.libraryStore = libraryStore
         self.runStore = runStore
         self.contentCoverStore = contentCoverStore
+        self.mangaDirectoryStore = mangaDirectoryStore
+        self.settingsStore = settingsStore
         self.makeFavoriteRepository = makeFavoriteRepository
         self.makeForumThreadReaderRepository = makeForumThreadReaderRepository
         self.makeThreadRouteResolver = makeThreadRouteResolver
@@ -172,6 +187,8 @@ final class FavoriteRemoteSyncSession: ObservableObject {
     private func makeEngineRunner() -> EngineRunner {
         let libraryStore = libraryStore
         let contentCoverStore = contentCoverStore
+        let mangaDirectoryStore = mangaDirectoryStore
+        let settingsStore = settingsStore
         let makeFavoriteRepository = makeFavoriteRepository
         let makeForumThreadReaderRepository = makeForumThreadReaderRepository
         let makeThreadRouteResolver = makeThreadRouteResolver
@@ -221,7 +238,12 @@ final class FavoriteRemoteSyncSession: ObservableObject {
                     )
                 }
             )
-            let engine = FavoriteYamiboSyncEngine(libraryStore: libraryStore, client: client)
+            let engine = FavoriteYamiboSyncEngine(
+                libraryStore: libraryStore,
+                client: client,
+                mangaDirectoryStore: mangaDirectoryStore,
+                settingsStore: settingsStore
+            )
             return await engine.run(
                 snapshot: snapshot,
                 interruptionReason: interruptionReason,
@@ -314,13 +336,33 @@ final class FavoriteRemoteSyncSession: ObservableObject {
                 authorID: payload.authorID,
                 sourceMetadataFetchFailed: metadata.fetchFailed
             )
-        case let .manga(payload):
+        case .manga(let payload), .mangaDirect(let payload):
+            // A manga chapter thread now imports as a plain `.mangaThread`
+            // favorite of its own thread id — there is no merged-directory
+            // identity to resolve here anymore (smart-comic-mode Phase A
+            // decision #3/#9). Fetching the thread's own metadata (forum,
+            // cover, content-updated-at) mirrors the `.novel`/`.thread` cases
+            // above instead of the old dedicated no-metadata manga path.
+            //
+            // `.mangaDirect` (the board's Smart Comic Mode is off) is folded
+            // into this same case on purpose: classification into
+            // `.mangaThread` only depends on the board's thread kind, never
+            // on the mode toggle (decision #4) — the toggle only changes
+            // which UI a *live tap* routes to, not how a *synced* favorite
+            // is classified.
             let cleanBookName = MangaTitleCleaner.cleanBookName(payload.title)
-            let mangaID = payload.thread.tid
+            let metadata = await threadMetadata(
+                thread: ThreadIdentity(tid: payload.thread.tid),
+                title: payload.title,
+                repository: coverRepository
+            )
             return FavoriteThreadProbeResult(
-                target: FavoriteContentTarget(mangaID: "thread:\(mangaID)", mangaCleanBookName: cleanBookName),
-                title: cleanBookName,
-                sourceGroup: .mangaTitle(mangaID: "thread:\(mangaID)", cleanBookName: cleanBookName)
+                target: .mangaThread(threadID: payload.thread.tid),
+                title: cleanBookName.isEmpty ? payload.title : cleanBookName,
+                sourceGroup: metadata.sourceGroup,
+                coverURL: metadata.coverURL,
+                contentUpdatedAt: metadata.contentUpdatedAt,
+                sourceMetadataFetchFailed: metadata.fetchFailed
             )
         case let .thread(payload):
             let metadata = await threadMetadata(

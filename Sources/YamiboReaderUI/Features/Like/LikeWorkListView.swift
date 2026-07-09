@@ -96,7 +96,7 @@ struct LikeWorkListView: View {
                 covers[key] = await contentCoverStore.cover(for: .thread(tid: key.id))?.resolvedURL
             case .manga:
                 titles[key] = key.id
-                covers[key] = await contentCoverStore.cover(for: .mangaTitle(cleanBookName: key.id))?.resolvedURL
+                covers[key] = await contentCoverStore.cover(for: .smartManga(cleanBookName: key.id))?.resolvedURL
             }
         }
         titlesByWorkKey = titles
@@ -145,7 +145,14 @@ struct LikeWorkListView: View {
                     source: .like,
                     initialPage: mangaAnchor.pageLocalIndex,
                     directoryName: work.id,
-                    isPreview: true
+                    isPreview: true,
+                    // Likes are keyed by `LikeWorkKey.mangaTitle(cleanBookName:)`
+                    // (a `MangaDirectory`-level identity, `work.id` above),
+                    // which can only exist once a directory has actually been
+                    // resolved — and per decision #12, that only ever happens
+                    // for a mode-on board. So every liked manga image
+                    // necessarily came from a mode-on read.
+                    isSmartModeEnabled: true
                 )
             )
         }

@@ -69,10 +69,30 @@ public struct FavoriteYamiboSyncClient: Sendable {
 public struct FavoriteYamiboSyncEngine: Sendable {
     private let libraryStore: FavoriteLibraryStore
     private let client: FavoriteYamiboSyncClient
+    /// Backs the batched tid → directory lookup phase 3 uses for the
+    /// "imported into an already-favorited manga directory" warning
+    /// (smart-comic-mode Phase G, design decision #8's remote-sync half).
+    /// Concrete type, not the `MangaDirectoryPersisting` existential — same
+    /// reasoning as `FavoriteLibraryOrganizer`'s equivalent property: it
+    /// rules out ever accidentally running the protocol's naive per-tid
+    /// default implementation in production. `nil` (e.g. in engine tests that
+    /// don't exercise this feature) simply disables the warning.
+    private let mangaDirectoryStore: MangaDirectoryStore?
+    /// Backs the per-item "is Smart Comic Mode on for this board" check the
+    /// same warning needs. `nil` falls back to `SmartComicModeSettings()`'s
+    /// defaults.
+    private let settingsStore: SettingsStore?
 
-    public init(libraryStore: FavoriteLibraryStore, client: FavoriteYamiboSyncClient) {
+    public init(
+        libraryStore: FavoriteLibraryStore,
+        client: FavoriteYamiboSyncClient,
+        mangaDirectoryStore: MangaDirectoryStore? = nil,
+        settingsStore: SettingsStore? = nil
+    ) {
         self.libraryStore = libraryStore
         self.client = client
+        self.mangaDirectoryStore = mangaDirectoryStore
+        self.settingsStore = settingsStore
     }
 
     /// Runs the five phases starting from `initial` (typically phase .queued).
@@ -80,7 +100,6 @@ public struct FavoriteYamiboSyncEngine: Sendable {
     /// snapshot is terminal (completed, failed, or interrupted).
     public func run(
         snapshot initial: FavoriteRemoteSyncSnapshot,
-        directories: [MangaDirectory] = [],
         interruptionReason: @escaping @Sendable () -> FavoriteRemoteSyncWarning? = { nil },
         persist: @escaping @Sendable (FavoriteRemoteSyncSnapshot) async -> Void
     ) async -> FavoriteRemoteSyncSnapshot {
@@ -180,6 +199,49 @@ public struct FavoriteYamiboSyncEngine: Sendable {
             await commit { $0.phase = .importing }
             var skippedPathCounts: [(path: String, count: Int)] = []
             let importTotal = remoteEntries.count
+
+            // Attribution detection setup (smart-comic-mode Phase G, design
+            // decision #8's remote-sync half). Two pieces of state captured
+            // once, up front, before any item in this run is imported:
+            //
+            // 1. `preImportMangaThreadFavoritesByTID` — a snapshot of every
+            //    `.mangaThread` favorite already in the document *before this
+            //    run imports anything*. Deliberately frozen here rather than
+            //    re-read from `workingDocument` inside the loop below: if two
+            //    sibling chapters both happen to be newly imported within
+            //    this same run, neither existed "before this sync run started
+            //    importing", so importing one must not trigger the warning
+            //    for the other.
+            // 2. `candidateDirectoriesByTID` — the tid → `MangaDirectory`
+            //    lookup for every entry that isn't already a local favorite
+            //    (i.e. every entry that will go through the fresh-import path
+            //    below, whatever target kind it turns out to probe as). This
+            //    is the single batched `directories(containingTIDs:)` round
+            //    trip the design doc's "现算分组的性能要求" hard constraint
+            //    requires — never one `directory(containingTID:)` call per
+            //    item in the loop.
+            var preImportMangaThreadFavoritesByTID: [String: FavoriteItem] = [:]
+            for item in workingDocument.items where item.target.kind == .mangaThread {
+                if let tid = item.target.threadID {
+                    preImportMangaThreadFavoritesByTID[tid] = item
+                }
+            }
+            let existingThreadIDs = Set(workingDocument.items.compactMap(\.target.threadID))
+            let candidateThreadIDs = remoteEntries.map(\.threadID).filter { !existingThreadIDs.contains($0) }
+            var candidateDirectoriesByTID: [String: MangaDirectory] = [:]
+            if let mangaDirectoryStore, !candidateThreadIDs.isEmpty {
+                do {
+                    candidateDirectoriesByTID = try await mangaDirectoryStore.directories(containingTIDs: candidateThreadIDs)
+                } catch is CancellationError {
+                    // Don't swallow cancellation into a mere warning — let it
+                    // propagate to the run's own cancellation handling below.
+                    throw CancellationError()
+                } catch {
+                    YamiboLog.sync.warning("Failed to batch-resolve manga directories for sync attribution detection; this run will skip attribution warnings: \(error.localizedDescription)")
+                }
+            }
+            let smartComicModeSettings = await settingsStore?.load().smartComicMode ?? SmartComicModeSettings()
+
             for (offset, entry) in remoteEntries.enumerated() {
                 try Task.checkCancellation()
                 let label = Self.postLabel(threadID: entry.threadID, title: entry.title)
@@ -225,51 +287,63 @@ public struct FavoriteYamiboSyncEngine: Sendable {
                         yamiboRemoteOrder: entry.remoteOrder,
                         lastSeenAt: .now
                     )
-                    if case let .mangaTitle(_, cleanBookName) = probeResult.target {
-                        let chapterTitle = entry.title ?? probeResult.title
-                        _ = try workingDocument.importMangaChapterFavorite(
-                            chapterTID: entry.threadID,
-                            chapterTitle: chapterTitle,
-                            directories: directories,
-                            fallbackCleanBookName: cleanBookName,
-                            location: targetLocation,
-                            remoteMapping: mapping
-                        )
-                        record { doc in
-                            do {
-                                _ = try doc.importMangaChapterFavorite(
-                                    chapterTID: entry.threadID,
-                                    chapterTitle: chapterTitle,
-                                    directories: directories,
-                                    fallbackCleanBookName: cleanBookName,
-                                    location: targetLocation,
-                                    remoteMapping: mapping
-                                )
-                            } catch {
-                                YamiboLog.sync.error("Failed to replay manga chapter favorite import for thread \(entry.threadID, privacy: .public) onto reloaded document: \(error)")
-                            }
-                        }
-                    } else {
-                        _ = try workingDocument.importThreadFavorite(
-                            probeResult: probeResult,
-                            location: targetLocation,
-                            remoteMapping: mapping
-                        )
-                        record { doc in
-                            do {
-                                _ = try doc.importThreadFavorite(
-                                    probeResult: probeResult,
-                                    location: targetLocation,
-                                    remoteMapping: mapping
-                                )
-                            } catch {
-                                YamiboLog.sync.error("Failed to replay thread favorite import for thread \(entry.threadID, privacy: .public) onto reloaded document: \(error)")
-                            }
+                    // A manga chapter thread imports through the same generic
+                    // path as any other thread now: `FavoriteItemTarget` has
+                    // no merged-directory kind left to special-case (the old
+                    // dedicated `importMangaChapterFavorite` mechanism was
+                    // removed — see smart-comic-mode Phase A decision #3/#9).
+                    let importedItem = try workingDocument.importThreadFavorite(
+                        probeResult: probeResult,
+                        location: targetLocation,
+                        remoteMapping: mapping
+                    )
+                    record { doc in
+                        do {
+                            _ = try doc.importThreadFavorite(
+                                probeResult: probeResult,
+                                location: targetLocation,
+                                remoteMapping: mapping
+                            )
+                        } catch {
+                            YamiboLog.sync.error("Failed to replay thread favorite import for thread \(entry.threadID, privacy: .public) onto reloaded document: \(error)")
                         }
                     }
                     await commit { $0.importedCount += 1 }
                     if probeResult.sourceMetadataFetchFailed {
                         await commit { $0.warnings.append(.importedWithUnresolvedSource(title: label)) }
+                    }
+                    // `importedItem.forumID` (not `probeResult.forumID`,
+                    // which the manga probe path leaves nil) is read here
+                    // because `FavoriteItem.init` resolves the real forumID
+                    // from `sourceGroup` when the explicit parameter is nil —
+                    // reading the item that actually landed in the document
+                    // is correct regardless of which of the two carried it.
+                    if importedItem.target.kind == .mangaThread,
+                       let directory = candidateDirectoriesByTID[entry.threadID],
+                       smartComicModeSettings.isEnabled(forumID: importedItem.forumID) {
+                        // Check EVERY already-favorited sibling chapter, not just the
+                        // first one encountered in chapter order (`manual_order`/`tid`,
+                        // unrelated to which sibling is favorited or its board's mode) —
+                        // a directory can span multiple boards, and the sibling that
+                        // happens to sort first may have Smart Comic Mode off while a
+                        // later sibling has it on and would actually merge on the
+                        // Favorites page. Stopping at the first candidate risks a false
+                        // negative (silently dropping a warning for a real merge).
+                        let hasAttributedSibling = directory.chapters.contains { chapter in
+                            guard chapter.tid != entry.threadID,
+                                  let sibling = preImportMangaThreadFavoritesByTID[chapter.tid] else {
+                                return false
+                            }
+                            return smartComicModeSettings.isEnabled(forumID: sibling.forumID)
+                        }
+                        if hasAttributedSibling {
+                            await commit {
+                                $0.warnings.append(.importedIntoExistingMangaDirectory(
+                                    title: label,
+                                    cleanBookName: directory.cleanBookName
+                                ))
+                            }
+                        }
                     }
                 } catch is CancellationError {
                     throw CancellationError()

@@ -35,14 +35,14 @@ import Testing
     var document = FavoriteLibraryDocument()
     let categoryID = document.defaultCategory.id
     let first = try FavoriteItem(
-        target: FavoriteContentTarget(kind: .normalThread, threadID: "711"),
+        target: FavoriteItemTarget(kind: .normalThread, threadID: "711"),
         title: "第一条",
         sourceGroup: .forumBoard(id: "10", label: "旧标签Z"),
         forumName: "版块A",
         locations: [.category(categoryID)]
     )
     let second = try FavoriteItem(
-        target: FavoriteContentTarget(kind: .normalThread, threadID: "712"),
+        target: FavoriteItemTarget(kind: .normalThread, threadID: "712"),
         title: "第二条",
         sourceGroup: .forumBoard(id: "20", label: "旧标签A"),
         forumName: "版块B",
@@ -64,13 +64,13 @@ import Testing
     var document = FavoriteLibraryDocument()
     let categoryID = document.defaultCategory.id
     let current = try FavoriteItem(
-        target: FavoriteContentTarget(kind: .normalThread, threadID: "713"),
+        target: FavoriteItemTarget(kind: .normalThread, threadID: "713"),
         title: "当前版名",
         sourceGroup: .forumBoard(id: "30", label: "新版名"),
         locations: [.category(categoryID)]
     )
     let legacy = try FavoriteItem(
-        target: FavoriteContentTarget(kind: .normalThread, threadID: "714"),
+        target: FavoriteItemTarget(kind: .normalThread, threadID: "714"),
         title: "旧版名",
         sourceGroup: .forumBoard(id: "30", label: "旧版名"),
         locations: [.category(categoryID)]
@@ -106,9 +106,15 @@ import Testing
 
 @Test func localFavoriteProjectionSupportsExpectedSortModesWithoutProgressSort() throws {
     let (document, items) = try makeProjectionDocument()
+    // `items.normal.target`/`items.novel.target` are `FavoriteItemTarget`
+    // values now (favorites-side type); `ReadingProgressRecord.contentTarget`
+    // is the separate reading-progress-side `FavoriteContentTarget` type
+    // (smart-comic-mode design decision #9's second correction), so these
+    // are rebuilt directly rather than reused — the id format is identical
+    // for `.normalThread`/`.novelThread` on both types.
     let progress = [
         ReadingProgressRecord(
-            contentTarget: items.normal.target,
+            contentTarget: .normalThread(threadID: "701"),
             threadID: "701",
             kind: .novel,
             updatedAt: Date(timeIntervalSince1970: 10),
@@ -116,7 +122,7 @@ import Testing
             novel: NovelReadingProgressRecord(novelDocumentSurfaceProgressPercent: 30)
         ),
         ReadingProgressRecord(
-            contentTarget: items.novel.target,
+            contentTarget: .novelThread(threadID: "702"),
             threadID: "702",
             kind: .novel,
             updatedAt: Date(timeIntervalSince1970: 20),
@@ -139,8 +145,13 @@ import Testing
 
 @Test func localFavoriteProjectionBuildsCardMetadataFromReadingProgressWithoutMutatingItems() throws {
     let (document, items) = try makeProjectionDocument()
+    // `.mangaThread(threadID:)` is deliberately formatted with the same id
+    // on both the favorites-side `FavoriteItemTarget` (items.manga.target)
+    // and this reading-progress-side `FavoriteContentTarget`, so the direct
+    // id lookup (`progressKey(for:)`) finds this record without any
+    // cleanBookName fallback (smart-comic-mode design decision #15).
     let mangaProgress = ReadingProgressRecord(
-        contentTarget: items.manga.target,
+        contentTarget: .mangaThread(threadID: "703"),
         threadID: "703",
         kind: .manga,
         updatedAt: Date(timeIntervalSince1970: 50),
@@ -164,7 +175,186 @@ import Testing
     // Items carry no cover of their own; the library derivation fills card
     // covers from ContentCoverStore.
     #expect(mangaCard.coverURL == nil)
-    #expect(document.items.first { $0.id == items.manga.id }?.mangaChapterMetadata == items.manga.mangaChapterMetadata)
+}
+
+@Test func localFavoriteProjectionMergesModeOnMangaThreadFavoritesSharingADirectory() throws {
+    var document = FavoriteLibraryDocument()
+    let categoryID = document.defaultCategory.id
+    let collection = document.createCollection(categoryID: categoryID, name: "追番")
+
+    let directory = MangaDirectory(
+        cleanBookName: "测试漫画",
+        strategy: .links,
+        sourceKey: "chapter:801",
+        chapters: [
+            MangaChapter(tid: "801", rawTitle: "第1话", chapterNumber: 1),
+            MangaChapter(tid: "802", rawTitle: "第2话", chapterNumber: 2),
+        ]
+    )
+
+    let firstChapterFavorite = try FavoriteItem(
+        target: .mangaThread(threadID: "801"),
+        title: "第1话",
+        forumID: "30",
+        locations: [.category(categoryID)]
+    )
+    let secondChapterFavorite = try FavoriteItem(
+        target: .mangaThread(threadID: "802"),
+        title: "第2话",
+        forumID: "30",
+        locations: [.collection(categoryID: categoryID, collectionID: collection.id)]
+    )
+    document.addItem(firstChapterFavorite)
+    document.addItem(secondChapterFavorite)
+
+    let mangaDirectoriesByTID = ["801": directory, "802": directory]
+    // Board 30 is mode-on by `SmartComicModeSettings`'s own default.
+    let settings = SmartComicModeSettings()
+
+    let categoryCards = LocalFavoriteLibraryProjection.cards(
+        in: document,
+        query: LocalFavoriteLibraryQuery(categoryID: categoryID),
+        mangaDirectoriesByTID: mangaDirectoriesByTID,
+        smartComicModeSettings: settings
+    )
+    // Decision #5: the merged card appears in the category view even though
+    // only one of its two members has that location directly — the union.
+    #expect(categoryCards.count == 1)
+    let mergedCard = try #require(categoryCards.first)
+    #expect(mergedCard.mangaDirectory?.cleanBookName == "测试漫画")
+    #expect(mergedCard.isMergedGroup)
+    #expect(mergedCard.mergedMembers?.map(\.target.threadID) == ["801", "802"])
+    // Earliest chapter (801) is the representative.
+    #expect(mergedCard.item.target.threadID == "801")
+    // The card's id is deliberately still the representative (earliest-
+    // chapter) member's own real id, not a synthetic directory-based one —
+    // see `FavoriteCardProjection.id`'s doc comment for why.
+    #expect(mergedCard.id == firstChapterFavorite.id)
+
+    let collectionCards = LocalFavoriteLibraryProjection.cards(
+        in: document,
+        query: LocalFavoriteLibraryQuery(categoryID: categoryID, collectionID: collection.id),
+        mangaDirectoriesByTID: mangaDirectoriesByTID,
+        smartComicModeSettings: settings
+    )
+    // Same merged card also surfaces in the collection view (the other
+    // member's own location) — same stable id as the category view's card.
+    #expect(collectionCards.map(\.id) == [mergedCard.id])
+}
+
+@Test func localFavoriteProjectionKeepsModeOffMangaThreadFavoritesStandaloneEvenWithAResolvedDirectory() throws {
+    var document = FavoriteLibraryDocument()
+    let categoryID = document.defaultCategory.id
+
+    let directory = MangaDirectory(
+        cleanBookName: "关闭板块漫画",
+        strategy: .links,
+        sourceKey: "chapter:811",
+        chapters: [
+            MangaChapter(tid: "811", rawTitle: "第1话", chapterNumber: 1),
+            MangaChapter(tid: "812", rawTitle: "第2话", chapterNumber: 2),
+        ]
+    )
+    let first = try FavoriteItem(
+        target: .mangaThread(threadID: "811"),
+        title: "第1话",
+        forumID: "46",
+        locations: [.category(categoryID)]
+    )
+    let second = try FavoriteItem(
+        target: .mangaThread(threadID: "812"),
+        title: "第2话",
+        forumID: "46",
+        locations: [.category(categoryID)]
+    )
+    document.addItem(first)
+    document.addItem(second)
+
+    // fid 46 is off by `SmartComicModeSettings`'s own default — the
+    // directory resolves locally (e.g. leftover from when the board used to
+    // be on), but decision #5's addendum says mode-off favorites never merge.
+    let cards = LocalFavoriteLibraryProjection.cards(
+        in: document,
+        mangaDirectoriesByTID: ["811": directory, "812": directory],
+        smartComicModeSettings: SmartComicModeSettings()
+    )
+
+    #expect(Set(cards.map(\.id)) == [first.id, second.id])
+    #expect(cards.allSatisfy { $0.mangaDirectory == nil && !$0.isMergedGroup })
+}
+
+@Test func localFavoriteProjectionUsesDirectoryLevelProgressForMergedAndLoneResolvedCards() throws {
+    var document = FavoriteLibraryDocument()
+    let categoryID = document.defaultCategory.id
+
+    let mergedDirectory = MangaDirectory(
+        cleanBookName: "合并进度漫画",
+        strategy: .links,
+        sourceKey: "chapter:821",
+        chapters: [
+            MangaChapter(tid: "821", rawTitle: "第1话", chapterNumber: 1),
+            MangaChapter(tid: "822", rawTitle: "第2话", chapterNumber: 2),
+        ]
+    )
+    let firstMember = try FavoriteItem(target: .mangaThread(threadID: "821"), title: "第1话", forumID: "30", locations: [.category(categoryID)])
+    let secondMember = try FavoriteItem(target: .mangaThread(threadID: "822"), title: "第2话", forumID: "30", locations: [.category(categoryID)])
+    document.addItem(firstMember)
+    document.addItem(secondMember)
+
+    let loneDirectory = MangaDirectory(
+        cleanBookName: "单独进度漫画",
+        strategy: .links,
+        sourceKey: "chapter:831",
+        chapters: [MangaChapter(tid: "831", rawTitle: "第1话", chapterNumber: 1)]
+    )
+    let loneMember = try FavoriteItem(target: .mangaThread(threadID: "831"), title: "第1话", forumID: "30", locations: [.category(categoryID)])
+    document.addItem(loneMember)
+
+    // The merged card's own representative (821)'s per-thread progress is a
+    // stale earlier page; the directory-level record is the manga's actual
+    // current position and must win.
+    let staleOwnThreadProgress = ReadingProgressRecord(
+        contentTarget: .mangaThread(threadID: "821"),
+        threadID: "821",
+        kind: .manga,
+        updatedAt: Date(timeIntervalSince1970: 10),
+        manga: MangaReadingProgressRecord(chapterThreadID: "821", lastChapter: "第1话", mangaPageIndex: 0, mangaPageCount: 10)
+    )
+    let directoryLevelProgress = ReadingProgressRecord(
+        contentTarget: FavoriteContentTarget(mangaID: mergedDirectory.favoriteIdentity, mangaCleanBookName: mergedDirectory.cleanBookName),
+        threadID: "822",
+        kind: .manga,
+        updatedAt: Date(timeIntervalSince1970: 20),
+        manga: MangaReadingProgressRecord(chapterThreadID: "822", lastChapter: "第2话", mangaPageIndex: 9, mangaPageCount: 10)
+    )
+    let loneDirectoryLevelProgress = ReadingProgressRecord(
+        contentTarget: FavoriteContentTarget(mangaID: loneDirectory.favoriteIdentity, mangaCleanBookName: loneDirectory.cleanBookName),
+        threadID: "831",
+        kind: .manga,
+        updatedAt: Date(timeIntervalSince1970: 30),
+        manga: MangaReadingProgressRecord(chapterThreadID: "831", lastChapter: "第1话", mangaPageIndex: 4, mangaPageCount: 5)
+    )
+
+    let cards = LocalFavoriteLibraryProjection.cards(
+        in: document,
+        readingProgress: [staleOwnThreadProgress, directoryLevelProgress, loneDirectoryLevelProgress],
+        mangaDirectoriesByTID: [
+            "821": mergedDirectory, "822": mergedDirectory,
+            "831": loneDirectory,
+        ],
+        smartComicModeSettings: SmartComicModeSettings()
+    )
+
+    let mergedCard = try #require(cards.first { $0.mangaDirectory?.cleanBookName == "合并进度漫画" })
+    #expect(mergedCard.progressPercent == 100)
+    #expect(mergedCard.chapterPageProgress == L10n.string("favorites.progress.manga_page_total", "第2话", 10, 10))
+
+    // A lone resolved-directory favorite (no sibling yet) still prefers its
+    // directory-level record over its own per-thread progress.
+    let loneCard = try #require(cards.first { $0.mangaDirectory?.cleanBookName == "单独进度漫画" })
+    #expect(loneCard.mergedMembers == nil)
+    #expect(loneCard.progressPercent == 100)
+    #expect(loneCard.chapterPageProgress == L10n.string("favorites.progress.manga_page_total", "第1话", 5, 5))
 }
 
 @Test func localFavoriteMixedEntriesKeepsCollectionsPinnedInOrganizationOrder() throws {
@@ -222,7 +412,7 @@ import Testing
     let (document, items, collection) = try makeMixedEntryDocument()
     let progress = [
         ReadingProgressRecord(
-            contentTarget: items.first.target,
+            contentTarget: .normalThread(threadID: "801"),
             threadID: "801",
             kind: .novel,
             updatedAt: Date(timeIntervalSince1970: 10),
@@ -230,7 +420,7 @@ import Testing
             novel: NovelReadingProgressRecord(novelDocumentSurfaceProgressPercent: 10)
         ),
         ReadingProgressRecord(
-            contentTarget: items.second.target,
+            contentTarget: .normalThread(threadID: "802"),
             threadID: "802",
             kind: .novel,
             updatedAt: Date(timeIntervalSince1970: 20),
@@ -263,7 +453,7 @@ import Testing
     // collection (no collectionSummaries entry) have no read history.
     let progress = [
         ReadingProgressRecord(
-            contentTarget: items.first.target,
+            contentTarget: .normalThread(threadID: "801"),
             threadID: "801",
             kind: .novel,
             updatedAt: Date(timeIntervalSince1970: 10),
@@ -297,13 +487,13 @@ private func makeMixedEntryDocument() throws -> (FavoriteLibraryDocument, MixedE
     let categoryID = document.defaultCategory.id
     let collection = document.createCollection(categoryID: categoryID, name: "条目M")
     let first = try FavoriteItem(
-        target: FavoriteContentTarget(kind: .normalThread, threadID: "801"),
+        target: FavoriteItemTarget(kind: .normalThread, threadID: "801"),
         title: "条目A",
         contentUpdatedAt: Date(timeIntervalSince1970: 100),
         locations: [.category(categoryID)]
     )
     let second = try FavoriteItem(
-        target: FavoriteContentTarget(kind: .normalThread, threadID: "802"),
+        target: FavoriteItemTarget(kind: .normalThread, threadID: "802"),
         title: "条目Z",
         contentUpdatedAt: Date(timeIntervalSince1970: 200),
         locations: [.category(categoryID)]
@@ -323,7 +513,7 @@ private func makeProjectionDocument() throws -> (FavoriteLibraryDocument, Projec
     let categoryID = document.defaultCategory.id
     let collection = document.createCollection(categoryID: categoryID, name: "合集A")
     let normal = try FavoriteItem(
-        target: FavoriteContentTarget(kind: .normalThread, threadID: "701"),
+        target: FavoriteItemTarget(kind: .normalThread, threadID: "701"),
         title: "普通主题",
         displayName: "本地名",
         sourceGroup: .forumBoard(id: "fid-1", label: "版块A"),
@@ -333,7 +523,7 @@ private func makeProjectionDocument() throws -> (FavoriteLibraryDocument, Projec
         updatedAt: Date(timeIntervalSince1970: 10)
     )
     let novel = try FavoriteItem(
-        target: FavoriteContentTarget(kind: .novelThread, threadID: "702"),
+        target: FavoriteItemTarget(kind: .novelThread, threadID: "702"),
         title: "小说主题",
         sourceGroup: .forumBoard(id: "fid-1", label: "版块A"),
         contentUpdatedAt: Date(timeIntervalSince1970: 200),
@@ -342,19 +532,15 @@ private func makeProjectionDocument() throws -> (FavoriteLibraryDocument, Projec
         updatedAt: Date(timeIntervalSince1970: 20)
     )
     let manga = try FavoriteItem(
-        target: FavoriteContentTarget(mangaCleanBookName: "漫画A"),
+        target: .mangaThread(threadID: "703"),
         title: "漫画A",
-        sourceGroup: .mangaTitle(cleanBookName: "漫画A"),
+        sourceGroup: .smartManga(cleanBookName: "漫画A"),
         contentUpdatedAt: Date(timeIntervalSince1970: 300),
-        mangaChapterMetadata: FavoriteMangaChapterMetadata(
-            chapterTID: "703",
-            chapterView: 1
-        ),
         locations: [.category(categoryID)],
         updatedAt: Date(timeIntervalSince1970: 30)
     )
     let unknown = try FavoriteItem(
-        target: FavoriteContentTarget(kind: .normalThread, threadID: "704"),
+        target: FavoriteItemTarget(kind: .normalThread, threadID: "704"),
         title: "未知来源",
         sourceGroup: .unknown,
         locations: [.category(categoryID)],

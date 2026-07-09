@@ -42,6 +42,12 @@ final class LocalFavoritesRoutes: ObservableObject {
     enum Dialog: Identifiable {
         case dissolveCollection(LocalFavoriteCollection)
         case deleteItem(FavoriteItem)
+        /// A merged (`FavoriteCardProjection.isMergedGroup`) card's delete
+        /// confirmation — smart-comic-mode decision #6: no per-chapter
+        /// removal UI, unfavoriting removes every member, so the dialog
+        /// carries the full member list to display their titles before the
+        /// user confirms (not just a count).
+        case deleteMergedGroup(members: [FavoriteItem])
         case deleteSelection
         case dissolveSelectedCollections
 
@@ -51,6 +57,8 @@ final class LocalFavoritesRoutes: ObservableObject {
                 "dissolveCollection-\(collection.id)"
             case let .deleteItem(item):
                 "deleteItem-\(item.id)"
+            case let .deleteMergedGroup(members):
+                "deleteMergedGroup-\(members.map(\.id).joined(separator: ","))"
             case .deleteSelection:
                 "deleteSelection"
             case .dissolveSelectedCollections:

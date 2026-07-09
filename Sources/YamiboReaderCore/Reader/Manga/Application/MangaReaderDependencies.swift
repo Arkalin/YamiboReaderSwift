@@ -14,6 +14,12 @@ public struct MangaReaderDependencies: Sendable {
     public let makeDirectoryRepository: @Sendable () async -> any MangaDirectoryRepository
     public let makeChapterCommentsRepository: @Sendable () async -> ReaderChapterCommentsRepository
     public let makeOfflineCacheQueueExecutor: @Sendable () async -> OfflineCacheQueueExecutor
+    /// Smart Comic Mode off (design decision #16): the reader reuses
+    /// `ThreadCoverResolver` to auto-resolve a `.thread(tid:)` cover for the
+    /// chapter being read, the same mechanism
+    /// `ForumThreadReaderViewModel`/`ForumNovelDetailViewModel` already use
+    /// for normal threads — this is what drives it.
+    public let makeForumThreadReaderRepository: @Sendable () async -> ForumThreadReaderRepository
     /// The cache sheet embeds the account feature's offline queue view model.
     public let account: AccountDependencies
     public let like: LikeDependencies
@@ -30,6 +36,7 @@ public struct MangaReaderDependencies: Sendable {
         makeDirectoryRepository: @escaping @Sendable () async -> any MangaDirectoryRepository,
         makeChapterCommentsRepository: @escaping @Sendable () async -> ReaderChapterCommentsRepository,
         makeOfflineCacheQueueExecutor: @escaping @Sendable () async -> OfflineCacheQueueExecutor,
+        makeForumThreadReaderRepository: @escaping @Sendable () async -> ForumThreadReaderRepository,
         account: AccountDependencies,
         like: LikeDependencies
     ) {
@@ -44,6 +51,7 @@ public struct MangaReaderDependencies: Sendable {
         self.makeDirectoryRepository = makeDirectoryRepository
         self.makeChapterCommentsRepository = makeChapterCommentsRepository
         self.makeOfflineCacheQueueExecutor = makeOfflineCacheQueueExecutor
+        self.makeForumThreadReaderRepository = makeForumThreadReaderRepository
         self.account = account
         self.like = like
     }

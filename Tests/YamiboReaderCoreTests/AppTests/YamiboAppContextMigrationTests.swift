@@ -318,7 +318,7 @@ private func saveMigratedAppState(
     imageURL: URL
 ) async throws {
     var library = FavoriteLibraryDocument()
-    let favoriteTarget = FavoriteContentTarget(kind: .novelThread, threadID: chapterTID)
+    let favoriteTarget = FavoriteItemTarget(kind: .novelThread, threadID: chapterTID)
     library.addItem(
         try FavoriteItem(
             target: favoriteTarget,

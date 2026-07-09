@@ -12,6 +12,7 @@ final class SystemSettingsViewModel: ObservableObject {
     @Published var favoriteShowsCategoryCounts = true
     @Published var novelOfflineCache = NovelOfflineCacheSettings()
     @Published var applePencilPageTurn = ApplePencilPageTurnSettings()
+    @Published var smartComicMode = SmartComicModeSettings()
     @Published private(set) var novelCacheBytes = 0
     @Published private(set) var mangaIndexCacheBytes = 0
     @Published private(set) var offlineCacheBytes = 0
@@ -74,6 +75,7 @@ final class SystemSettingsViewModel: ObservableObject {
         favoriteShowsCategoryCounts = settings.favorites.showsCategoryCounts
         novelOfflineCache = settings.novelOfflineCache
         applePencilPageTurn = settings.system.applePencilPageTurn
+        smartComicMode = settings.smartComicMode
         await refreshStorageUsage()
     }
 
@@ -301,6 +303,21 @@ final class SystemSettingsViewModel: ObservableObject {
         updateNovelOfflineCache(updated)
     }
 
+    /// Toggles Smart Comic Mode for one of the 3 manageable boards
+    /// (smart-comic-mode design decision #1). `forumID` outside
+    /// `SmartComicModeSettings.manageableForumIDs` is a no-op — there is no
+    /// toggle for it.
+    func setSmartComicModeEnabled(_ isEnabled: Bool, forumID: String) {
+        guard SmartComicModeSettings.manageableForumIDs.contains(forumID) else { return }
+        var updated = smartComicMode
+        if isEnabled {
+            updated.enabledForumIDs.insert(forumID)
+        } else {
+            updated.enabledForumIDs.remove(forumID)
+        }
+        updateSmartComicMode(updated)
+    }
+
     func clearNovelCache() async -> Bool {
         activeAction = .clearingNovelCache
         defer { activeAction = nil }
@@ -350,6 +367,7 @@ final class SystemSettingsViewModel: ObservableObject {
             favoriteBackground = .init()
             novelOfflineCache = .init()
             applePencilPageTurn = .init()
+            smartComicMode = .init()
             novelCacheBytes = 0
             mangaIndexCacheBytes = 0
             offlineCacheBytes = 0
@@ -554,6 +572,27 @@ final class SystemSettingsViewModel: ObservableObject {
                 await MainActor.run {
                     if applePencilPageTurn == updated {
                         applePencilPageTurn = previous
+                    }
+                    errorMessage = error.localizedDescription
+                }
+            }
+        }
+    }
+
+    private func updateSmartComicMode(_ updated: SmartComicModeSettings) {
+        let previous = smartComicMode
+        smartComicMode = updated
+
+        Task {
+            var settings = await dependencies.settingsStore.load()
+            settings.smartComicMode = updated
+
+            do {
+                try await dependencies.settingsStore.save(settings)
+            } catch {
+                await MainActor.run {
+                    if smartComicMode == updated {
+                        smartComicMode = previous
                     }
                     errorMessage = error.localizedDescription
                 }

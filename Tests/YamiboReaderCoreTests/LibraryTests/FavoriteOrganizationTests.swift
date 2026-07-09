@@ -8,7 +8,7 @@ import Testing
     let second = document.createCategory(name: "第二类")
     document.renameCategory(id: first.id, name: "重命名")
     document.reorderCategories(orderedIDs: [second.id, first.id])
-    let target = FavoriteContentTarget(kind: .normalThread, threadID: "620")
+    let target = FavoriteItemTarget(kind: .normalThread, threadID: "620")
     let item = try FavoriteItem(target: target, title: "主题", locations: [.category(second.id)])
     document.addItem(item)
 
@@ -29,7 +29,7 @@ import Testing
     document.renameCollection(id: first.id, name: "新合集")
     document.recolorCollection(id: first.id, color: .red)
     document.reorderCollections(categoryID: categoryID, orderedIDs: [second.id, first.id])
-    let target = FavoriteContentTarget(kind: .normalThread, threadID: "621")
+    let target = FavoriteItemTarget(kind: .normalThread, threadID: "621")
     let item = try FavoriteItem(
         target: target,
         title: "主题",
@@ -50,7 +50,7 @@ import Testing
     let categoryID = document.defaultCategory.id
     let firstCollection = document.createCollection(categoryID: categoryID, name: "合集一")
     let secondCollection = document.createCollection(categoryID: categoryID, name: "合集二")
-    let target = FavoriteContentTarget(kind: .normalThread, threadID: "622")
+    let target = FavoriteItemTarget(kind: .normalThread, threadID: "622")
     let item = try FavoriteItem(target: target, title: "主题", locations: [.category(categoryID)])
     document.addItem(item)
 
@@ -69,7 +69,7 @@ import Testing
 
 @Test func favoriteTagsCanBeManagedWithoutChangingLocations() throws {
     var document = FavoriteLibraryDocument()
-    let target = FavoriteContentTarget(kind: .normalThread, threadID: "623")
+    let target = FavoriteItemTarget(kind: .normalThread, threadID: "623")
     let item = try FavoriteItem(target: target, title: "主题", locations: [.category(document.defaultCategory.id)])
     document.addItem(item)
     let tag = document.createTag(name: "标签", color: .green, date: Date(timeIntervalSince1970: 1))

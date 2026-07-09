@@ -16,7 +16,7 @@ final class FavoriteUpdateMonitorTests: XCTestCase {
             defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
             key: "favorite-updates"
         )
-        let target = FavoriteContentTarget(kind: .normalThread, threadID: "960")
+        let target = FavoriteItemTarget(kind: .normalThread, threadID: "960")
         var document = FavoriteLibraryDocument()
         let category = document.createCategory(name: "更新检测")
         document.addItem(try FavoriteItem(
@@ -84,7 +84,7 @@ final class FavoriteUpdateMonitorTests: XCTestCase {
             defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
             key: "favorite-updates"
         )
-        let target = FavoriteContentTarget(kind: .normalThread, threadID: "961")
+        let target = FavoriteItemTarget(kind: .normalThread, threadID: "961")
         var document = FavoriteLibraryDocument()
         let category = document.createCategory(name: "更新检测失败")
         document.addItem(try FavoriteItem(

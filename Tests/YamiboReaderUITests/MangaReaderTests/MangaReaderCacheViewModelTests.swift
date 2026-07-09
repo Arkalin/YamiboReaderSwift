@@ -247,7 +247,16 @@ private func makeCacheFixture(
     )
     if saveFavorite {
         var document = FavoriteLibraryDocument()
-        try document.addMangaTitleFavorite(cleanBookName: "测试漫画", title: "测试漫画")
+        // `MangaReaderCacheModule.localFavoriteItem()` now matches purely by
+        // `item.target.threadID == context.originalThreadID` (smart-comic-mode
+        // Phase A decision #3/#9 — there is no cleanBookName-keyed identity
+        // left to look up by directory title), so the seeded favorite must be
+        // `.mangaThread`-targeted at the launch context's own thread id.
+        document.addItem(try FavoriteItem(
+            target: .mangaThread(threadID: "900"),
+            title: "测试漫画",
+            locations: [.category(document.defaultCategory.id)]
+        ))
         try await localFavoriteLibraryStore.save(document)
     }
 

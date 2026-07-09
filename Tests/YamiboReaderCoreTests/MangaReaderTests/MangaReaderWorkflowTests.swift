@@ -40,6 +40,47 @@ struct MangaReaderTestsWorkflow {
         #expect(await store.savedDirectories.count == 1)
     }
 
+    // Smart Comic Mode off (smart-comic-mode design decision #12): the
+    // workflow must skip `resolveInitialDirectory` entirely rather than
+    // resolve-then-ignore, and fall back to a single-chapter pseudo
+    // directory with no siblings.
+    @Test func workflowSkipsDirectoryResolutionWhenSmartModeIsDisabled() async throws {
+        let document = try makeWorkflowDocument(tid: "700", pageCount: 2)
+        let loader = RecordingMangaReaderProjectionLoader(output: .document(document))
+        let repository = RecordingMangaDirectoryRepository(
+            output: .seed(makeWorkflowSeed(currentTID: "700", tagIDs: ["12"]))
+        )
+        let store = RecordingMangaDirectoryStore()
+        let context = try makeWorkflowContext(tid: "700", initialPage: 1, isSmartModeEnabled: false)
+        let workflow = MangaReaderWorkflow(
+            context: context,
+            projectionLoader: loader,
+            directoryRepository: repository,
+            directoryStore: store
+        )
+
+        let presentation = await workflow.prepare()
+
+        guard case let .loaded(loaded) = presentation.state else {
+            Issue.record("Expected loaded presentation")
+            return
+        }
+        #expect(loaded.directoryTitle == "测试漫画")
+        #expect(loaded.pages.map(\.id) == ["700#0", "700#1"])
+        #expect(loaded.currentPage?.id == "700#1")
+        #expect(loaded.readingPosition == MangaReadingPosition(tid: "700", localIndex: 1))
+        // No directory-related network/persistence activity at all — not
+        // resolved-then-discarded, never called.
+        #expect(await repository.seedThreadIDs.isEmpty)
+        #expect(await store.requestedNames.isEmpty)
+        #expect(await store.requestedTIDs.isEmpty)
+        #expect(await store.savedDirectories.isEmpty)
+        // The pseudo-directory has no siblings, so chapter-jump affordances
+        // are naturally unavailable without any extra gating.
+        #expect(workflow.canJumpToAdjacentChapter(from: loaded.readingPosition, delta: 1) == false)
+        #expect(workflow.canJumpToAdjacentChapter(from: loaded.readingPosition, delta: -1) == false)
+    }
+
     @Test func initialPageIsClampedThroughChapterWindow() async throws {
         let document = try makeWorkflowDocument(tid: "700", pageCount: 2)
         let seed = makeWorkflowSeed(currentTID: "700", tagIDs: ["12"])
@@ -1328,7 +1369,8 @@ private func makeWorkflowContext(
     tid: String,
     initialPage: Int = 0,
     directoryName: String? = nil,
-    offlineCacheFavoriteID: String? = nil
+    offlineCacheFavoriteID: String? = nil,
+    isSmartModeEnabled: Bool = true
 ) throws -> MangaLaunchContext {
     MangaLaunchContext(
         originalThreadID: tid,
@@ -1337,7 +1379,8 @@ private func makeWorkflowContext(
         source: .forum,
         initialPage: initialPage,
         directoryName: directoryName,
-        offlineCacheFavoriteID: offlineCacheFavoriteID
+        offlineCacheFavoriteID: offlineCacheFavoriteID,
+        isSmartModeEnabled: isSmartModeEnabled
     )
 }
 

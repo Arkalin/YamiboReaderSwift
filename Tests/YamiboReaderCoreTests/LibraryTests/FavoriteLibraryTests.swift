@@ -46,19 +46,24 @@ import Testing
 
 @Test func favoriteItemIdentityDecodesLegacyMangaTitlePayloads() throws {
     let decoder = JSONDecoder()
+    // The reading-progress-side `FavoriteContentTarget.mangaTitle` kind/wire
+    // format is untouched by smart-comic-mode — still "mangaTitle".
     let targetData = Data(#"{"kind":"mangaTitle","cleanBookName":"Legacy Manga"}"#.utf8)
-    let sourceGroupData = Data(#"{"mangaTitle":{"cleanBookName":"Legacy Manga"}}"#.utf8)
+    // `FavoriteSourceGroup.mangaTitle` was renamed to `.smartManga`, and its
+    // wire format was renamed along with it (design decision #9) — no
+    // shipped user data exists yet to stay backward-compatible with.
+    let sourceGroupData = Data(#"{"smartManga":{"cleanBookName":"Legacy Manga"}}"#.utf8)
 
     let target = try decoder.decode(FavoriteContentTarget.self, from: targetData)
     let sourceGroup = try decoder.decode(FavoriteSourceGroup.self, from: sourceGroupData)
 
     #expect(target == FavoriteContentTarget(mangaCleanBookName: "Legacy Manga"))
     #expect(target.mangaCleanBookName == "Legacy Manga")
-    #expect(sourceGroup == .mangaTitle(cleanBookName: "Legacy Manga"))
+    #expect(sourceGroup == .smartManga(cleanBookName: "Legacy Manga"))
 }
 
 @Test func favoriteItemRequiresAtLeastOneFavoriteLocation() throws {
-    let target = FavoriteContentTarget(kind: .normalThread, threadID: "320")
+    let target = FavoriteItemTarget(kind: .normalThread, threadID: "320")
 
     #expect(throws: YamiboError.self) {
         _ = try FavoriteItem(target: target, title: "No location", locations: [])
@@ -69,7 +74,7 @@ import Testing
     let suiteName = "LocalFirstFavoriteLibraryTests.\(UUID().uuidString)"
     let suite = try #require(UserDefaults(suiteName: suiteName))
     let store = FavoriteLibraryStore(defaults: suite, key: "library")
-    let target = FavoriteContentTarget(kind: .normalThread, threadID: "321")
+    let target = FavoriteItemTarget(kind: .normalThread, threadID: "321")
     var document = FavoriteLibraryDocument()
     let category = document.defaultCategory
     let tag = document.createTag(name: "本地标签", color: .blue)
@@ -97,7 +102,7 @@ import Testing
 }
 
 @Test func updateRemoteMappingRefreshesKnownValuesAndKeepsPreviousOnNil() throws {
-    let target = FavoriteContentTarget(kind: .normalThread, threadID: "324")
+    let target = FavoriteItemTarget(kind: .normalThread, threadID: "324")
     var document = FavoriteLibraryDocument()
     let item = try FavoriteItem(
         target: target,
@@ -138,7 +143,7 @@ import Testing
     let category = document.createCategory(name: "阅读")
     let collection = document.createCollection(categoryID: category.id, name: "合集", color: .blue)
     let tag = document.createTag(name: "标签", color: .green, date: Date(timeIntervalSince1970: 10))
-    let target = FavoriteContentTarget(
+    let target = FavoriteItemTarget(
         kind: .novelThread,
         threadID: "321"
     )
@@ -206,7 +211,7 @@ import Testing
     }
 
     #expect(databaseRows.itemID == "thread:novel:321")
-    #expect(databaseRows.targetKind == FavoriteContentTargetKind.novelThread.rawValue)
+    #expect(databaseRows.targetKind == FavoriteItemTargetKind.novelThread.rawValue)
     #expect(databaseRows.threadID == "321")
     #expect(databaseRows.itemJSON?.contains("canonicalURL") == false)
     #expect(databaseRows.locationCategoryIDs == [category.id, category.id])
@@ -219,7 +224,7 @@ import Testing
     let suiteName = "FavoriteLibraryStoreUpdateTests.\(UUID().uuidString)"
     let suite = try #require(UserDefaults(suiteName: suiteName))
     let store = FavoriteLibraryStore(defaults: suite, key: "library")
-    let target = FavoriteContentTarget(kind: .normalThread, threadID: "610")
+    let target = FavoriteItemTarget(kind: .normalThread, threadID: "610")
 
     let created = try await store.update { document in
         let item = try FavoriteItem(
@@ -241,7 +246,7 @@ import Testing
     let suiteName = "FavoriteLibraryStoreUpdateRollbackTests.\(UUID().uuidString)"
     let suite = try #require(UserDefaults(suiteName: suiteName))
     let store = FavoriteLibraryStore(defaults: suite, key: "library")
-    let target = FavoriteContentTarget(kind: .normalThread, threadID: "611")
+    let target = FavoriteItemTarget(kind: .normalThread, threadID: "611")
     try await store.update { document in
         let item = try FavoriteItem(
             target: target,
@@ -278,7 +283,7 @@ import Testing
             group.addTask {
                 try await store.update { document in
                     let item = try FavoriteItem(
-                        target: FavoriteContentTarget(kind: .normalThread, threadID: threadID),
+                        target: FavoriteItemTarget(kind: .normalThread, threadID: threadID),
                         title: "并发收藏 \(threadID)",
                         locations: [.category(document.defaultCategory.id)]
                     )
