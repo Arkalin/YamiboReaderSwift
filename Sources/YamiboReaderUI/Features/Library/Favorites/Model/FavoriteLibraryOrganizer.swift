@@ -639,8 +639,23 @@ final class FavoriteLibraryOrganizer: ObservableObject {
 
     // MARK: - Selection operations
 
+    /// True only while browsing the unscoped root list — false while either
+    /// a pushed collection detail (`selectedCollectionID`) or a merged smart
+    /// card's "查看归档收藏" archive detail (`selectedMergedGroupCleanBookName`)
+    /// is open. Collections never appear inside either scoped detail page
+    /// (no nested collections in the domain model), so every call site
+    /// deciding whether to fold `derived.visibleCollections` into scope or
+    /// selection must gate on both — checking only `selectedCollectionID`
+    /// (as every one of these call sites once did) let the archive page leak
+    /// the current category's sibling collections into its own content and
+    /// "select all", since opening it directly from the root list (the
+    /// common path) leaves `selectedCollectionID` `nil`.
+    private var isBrowsingUnscopedRoot: Bool {
+        selectedCollectionID == nil && selectedMergedGroupCleanBookName == nil
+    }
+
     func toggleCollectionSelection(id: String) {
-        guard selectedCollectionID == nil else { return }
+        guard isBrowsingUnscopedRoot else { return }
         selection.toggleCollectionSelection(id: id)
     }
 
@@ -744,7 +759,7 @@ final class FavoriteLibraryOrganizer: ObservableObject {
     func selectAllVisible() {
         selection.selectAll(
             favoriteIDs: selectableFavoriteIDs,
-            collectionIDs: selectedCollectionID == nil ? derived.visibleCollections.map(\.id) : []
+            collectionIDs: isBrowsingUnscopedRoot ? derived.visibleCollections.map(\.id) : []
         )
     }
 
@@ -754,7 +769,7 @@ final class FavoriteLibraryOrganizer: ObservableObject {
     /// .isAllSelected` in the cache sheets' own select-all button).
     var isAllVisibleSelected: Bool {
         let favoriteIDs = selectableFavoriteIDs
-        let collectionIDs = selectedCollectionID == nil ? derived.visibleCollections.map(\.id) : []
+        let collectionIDs = isBrowsingUnscopedRoot ? derived.visibleCollections.map(\.id) : []
         let totalCount = favoriteIDs.count + collectionIDs.count
         guard totalCount > 0 else { return false }
         let selectedCount = favoriteIDs.filter(selection.selectedFavoriteIDs.contains).count
@@ -763,7 +778,7 @@ final class FavoriteLibraryOrganizer: ObservableObject {
     }
 
     var hasVisibleSelectableEntries: Bool {
-        !selectableFavoriteIDs.isEmpty || (selectedCollectionID == nil && !derived.visibleCollections.isEmpty)
+        !selectableFavoriteIDs.isEmpty || (isBrowsingUnscopedRoot && !derived.visibleCollections.isEmpty)
     }
 
     /// Select-all ↔ clear-all toggle (cache-sheet select-all button parity):
@@ -1056,11 +1071,12 @@ final class FavoriteLibraryOrganizer: ObservableObject {
         // `derived` can now be scoped by an open merged group even while no
         // collection is open, so the old `selectedCollectionID == nil`
         // shortcut alone is no longer sufficient — it must also gate on
-        // `selectedMergedGroupCleanBookName`, or `rootDerived` would
-        // silently inherit the merged-group scope in that case (opening a
-        // merged group's detail page directly from the root, not from
-        // inside a collection) and defeat the whole point of `rootDerived`.
-        rootDerived = (selectedCollectionID == nil && selectedMergedGroupCleanBookName == nil)
+        // `selectedMergedGroupCleanBookName` (see `isBrowsingUnscopedRoot`),
+        // or `rootDerived` would silently inherit the merged-group scope in
+        // that case (opening a merged group's detail page directly from the
+        // root, not from inside a collection) and defeat the whole point of
+        // `rootDerived`.
+        rootDerived = isBrowsingUnscopedRoot
             ? derived
             : LocalFavoriteLibraryDerivation.derive(
                 LocalFavoriteLibraryDerivation.Inputs(

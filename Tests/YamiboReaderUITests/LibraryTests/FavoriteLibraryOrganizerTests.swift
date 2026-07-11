@@ -982,6 +982,91 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
         XCTAssertEqual(organizer.rootDerived.cards[0].mergedMembers?.map(\.target), [firstTarget, secondTarget])
     }
 
+    /// Regression test for the user-reported bug: opening a smart card's
+    /// "查看归档收藏" archive detail page directly from the root list (the
+    /// common path — `selectedCollectionID` stays `nil` throughout, unlike
+    /// `testDeleteItemWhileMergedGroupDetailIsOpenRemovesOnlyThatMemberLeaving
+    /// SiblingFavorited` below, which never opens a collection either but
+    /// doesn't probe collections) must not leak the current category's
+    /// sibling collections into the archive page's content or "select all" —
+    /// mirrors `testRootDerivedStaysUnscopedWhileCollectionIsOpen`'s own
+    /// collection-presence assertions, but for `selectedMergedGroupCleanBookName`
+    /// instead of `selectedCollectionID`.
+    func testOpenMergedGroupFromRootExcludesSiblingCollectionFromArchivePage() async throws {
+        let suiteName = YamiboTestDefaults.suiteName(prefix: "local-favorites-merged-group-excludes-collection")
+        _ = try YamiboTestDefaults.make(suiteName: suiteName)
+        let localFavoriteLibraryStore = FavoriteLibraryStore(
+            defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
+            key: "local-favorites"
+        )
+        let mangaDirectoryStore = try makeMangaDirectoryStore(suiteName: suiteName)
+        let directory = MangaDirectory(
+            cleanBookName: "归档收藏排除合集测试漫画",
+            strategy: .links,
+            sourceKey: "chapter:970",
+            chapters: [
+                MangaChapter(tid: "970", rawTitle: "第一话", chapterNumber: 1),
+                MangaChapter(tid: "971", rawTitle: "第二话", chapterNumber: 2),
+            ]
+        )
+        try await mangaDirectoryStore.saveDirectory(directory)
+
+        let organizer = try makeOrganizer(
+            libraryStore: localFavoriteLibraryStore,
+            mangaDirectoryStore: mangaDirectoryStore
+        )
+        await organizer.load()
+
+        // A sibling collection in the same (default) category as the smart
+        // card below — this is exactly what must NOT show up once the
+        // archive page is open.
+        let createdCollection = await organizer.createCollection(name: "同分类合集", color: .blue)
+        let collection = try XCTUnwrap(createdCollection)
+        organizer.closeCollection()
+
+        let firstTarget = FavoriteItemTarget(kind: .mangaThread, threadID: "970")
+        let secondTarget = FavoriteItemTarget(kind: .mangaThread, threadID: "971")
+        var document = try await localFavoriteLibraryStore.load()
+        document.addItem(try FavoriteItem(
+            target: firstTarget,
+            title: "第一话",
+            forumID: "30",
+            forumName: "中文百合漫画区",
+            locations: [.category(document.defaultCategory.id)]
+        ))
+        document.addItem(try FavoriteItem(
+            target: secondTarget,
+            title: "第二话",
+            forumID: "30",
+            forumName: "中文百合漫画区",
+            locations: [.category(document.defaultCategory.id)]
+        ))
+        try await localFavoriteLibraryStore.save(document)
+        await organizer.reload()
+
+        // Sanity: before opening the archive page, the collection is part of
+        // the normal root scope.
+        XCTAssertTrue(organizer.rootDerived.mixedEntries.contains { if case let .collection(c) = $0 { c.id == collection.id } else { false } })
+
+        // Opened directly from the root list — `selectedCollectionID` never
+        // becomes non-nil, only `selectedMergedGroupCleanBookName` does.
+        organizer.openMergedGroup(cleanBookName: directory.cleanBookName)
+        XCTAssertNil(organizer.selectedCollectionID)
+        XCTAssertEqual(organizer.selectedMergedGroupCleanBookName, directory.cleanBookName)
+
+        // The archive page's content must be exactly the two archived
+        // members — no sibling collection mixed in.
+        XCTAssertEqual(organizer.derived.cards.count, 2)
+        XCTAssertFalse(organizer.derived.mixedEntries.contains { if case .collection = $0 { true } else { false } })
+
+        // "Select all" on the archive page must only pick up the two
+        // archived members, never the sibling collection.
+        organizer.selectAllVisible()
+        XCTAssertEqual(organizer.selection.selectedFavoriteIDs, Set([firstTarget.id, secondTarget.id]))
+        XCTAssertTrue(organizer.selection.selectedCollectionIDs.isEmpty)
+        XCTAssertTrue(organizer.isAllVisibleSelected)
+    }
+
     /// Once a merged group's detail page is open, per-item management must
     /// actually work through the same single-item delete entry point every
     /// other favorite uses — deleting one member removes only that member,
