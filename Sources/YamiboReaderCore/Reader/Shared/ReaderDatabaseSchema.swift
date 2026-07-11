@@ -160,6 +160,17 @@ enum ReaderDatabaseSchema: DatabaseSchemaModule {
                 table.column("value", .text).notNull()
             }
         }
+
+        // Normal-thread reading progress (browsing-history decisions #6/#7):
+        // page + floor-level anchor for `.normalThread` rows, the first real
+        // writer that target kind has ever had.
+        migrator.registerMigration("reader.v2.normal-thread-progress") { db in
+            try db.alter(table: "reading_progress") { table in
+                table.add(column: "thread_last_page", .integer)
+                table.add(column: "thread_page_count", .integer)
+                table.add(column: "thread_anchor_post_id", .text)
+            }
+        }
     }
 
     static func erase(in db: Database) throws {

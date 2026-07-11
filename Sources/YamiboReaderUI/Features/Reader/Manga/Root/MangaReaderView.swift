@@ -514,6 +514,7 @@ public struct MangaReaderView: View {
                 source: .like,
                 initialPage: mangaAnchor.pageLocalIndex,
                 directoryName: context.directoryName,
+                forumID: context.forumID,
                 offlineCacheFavoriteID: context.offlineCacheFavoriteID,
                 isSmartModeEnabled: context.isSmartModeEnabled
             )

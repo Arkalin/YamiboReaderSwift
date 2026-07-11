@@ -6,6 +6,9 @@ public struct NovelReaderDependencies: Sendable {
     public let sessionStore: SessionStore
     public let settingsStore: SettingsStore
     public let readingProgressStore: ReadingProgressStore
+    /// Optional so test/preview compositions without a history database keep
+    /// working; the app composition root always supplies one.
+    public let browsingHistoryStore: BrowsingHistoryStore?
     public let offlineCacheStore: any OfflineCacheStoring
     public let contentCoverStore: ContentCoverStore
     public let makeNovelReaderRepository: @Sendable () async -> NovelReaderRepository
@@ -18,6 +21,7 @@ public struct NovelReaderDependencies: Sendable {
         sessionStore: SessionStore,
         settingsStore: SettingsStore,
         readingProgressStore: ReadingProgressStore,
+        browsingHistoryStore: BrowsingHistoryStore? = nil,
         offlineCacheStore: any OfflineCacheStoring,
         contentCoverStore: ContentCoverStore,
         makeNovelReaderRepository: @escaping @Sendable () async -> NovelReaderRepository,
@@ -29,6 +33,7 @@ public struct NovelReaderDependencies: Sendable {
         self.sessionStore = sessionStore
         self.settingsStore = settingsStore
         self.readingProgressStore = readingProgressStore
+        self.browsingHistoryStore = browsingHistoryStore
         self.offlineCacheStore = offlineCacheStore
         self.contentCoverStore = contentCoverStore
         self.makeNovelReaderRepository = makeNovelReaderRepository

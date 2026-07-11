@@ -101,6 +101,12 @@ public struct ThreadNovelLaunchContext: Codable, Hashable, Sendable {
     public var initialPage: Int
     public var targetPostID: String?
     public var authorID: String?
+    /// True when this reader session is a novel/manga detail page's
+    /// "查看讨论" companion view: it shares the work's tid, so it must not
+    /// produce its own browsing-history row — the work's main-form row is
+    /// the only history entry for that tid (browsing-history decision #14).
+    /// Anchor reading progress is still written and restored as usual.
+    public var isDiscussionView: Bool
 
     public var loadsAllPosts: Bool { true }
 
@@ -109,13 +115,36 @@ public struct ThreadNovelLaunchContext: Codable, Hashable, Sendable {
         title: String,
         initialPage: Int = 1,
         targetPostID: String? = nil,
-        authorID: String? = nil
+        authorID: String? = nil,
+        isDiscussionView: Bool = false
     ) {
         self.thread = thread
         self.title = title.nilIfBlank ?? L10n.string("forum.default_title")
         self.initialPage = max(1, initialPage)
         self.targetPostID = targetPostID?.nilIfBlank
         self.authorID = authorID?.nilIfBlank
+        self.isDiscussionView = isDiscussionView
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case thread
+        case title
+        case initialPage
+        case targetPostID
+        case authorID
+        case isDiscussionView
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            thread: try container.decode(ThreadIdentity.self, forKey: .thread),
+            title: try container.decode(String.self, forKey: .title),
+            initialPage: try container.decodeIfPresent(Int.self, forKey: .initialPage) ?? 1,
+            targetPostID: try container.decodeIfPresent(String.self, forKey: .targetPostID),
+            authorID: try container.decodeIfPresent(String.self, forKey: .authorID),
+            isDiscussionView: try container.decodeIfPresent(Bool.self, forKey: .isDiscussionView) ?? false
+        )
     }
 }
 

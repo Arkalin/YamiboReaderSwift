@@ -40,6 +40,7 @@ enum FavoriteQuickActions {
         forumID: String? = nil,
         forumName: String? = nil,
         contentUpdatedAt: Date? = nil,
+        localTargetKindOverride: FavoriteItemTargetKind? = nil,
         formHash: String?,
         syncToRemote: Bool,
         localFavoriteLibraryStore: FavoriteLibraryStore,
@@ -51,6 +52,7 @@ enum FavoriteQuickActions {
             forumID: forumID,
             forumName: forumName,
             contentUpdatedAt: contentUpdatedAt,
+            localTargetKindOverride: localTargetKindOverride,
             localFavoriteLibraryStore: localFavoriteLibraryStore
         )
         guard syncToRemote, let remoteRepository else {
@@ -148,9 +150,20 @@ enum FavoriteQuickActions {
         forumID: String?,
         forumName: String?,
         contentUpdatedAt: Date?,
+        localTargetKindOverride: FavoriteItemTargetKind? = nil,
         localFavoriteLibraryStore: FavoriteLibraryStore
     ) async throws -> FavoriteItem {
-        let target = try localTarget(for: favorite, forumID: forumID)
+        let target: FavoriteItemTarget
+        if let localTargetKindOverride {
+            // Callers that already know the content's form (the browsing
+            // history page: its rows carry the identity kind recorded at
+            // read time) skip the fid-based classification below — a manga
+            // history row has no fid to classify with, and re-deriving would
+            // misfile it as `.normalThread`.
+            target = FavoriteItemTarget(kind: localTargetKindOverride, threadID: favorite.threadID)
+        } else {
+            target = try localTarget(for: favorite, forumID: forumID)
+        }
         return try await localFavoriteLibraryStore.update { document in
             let item = try FavoriteItem(
                 target: target,

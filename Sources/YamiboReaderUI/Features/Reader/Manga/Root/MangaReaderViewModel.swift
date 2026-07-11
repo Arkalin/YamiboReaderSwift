@@ -10,6 +10,7 @@ struct MangaReaderViewModelDependencies {
     var makeDirectorySearchCooldownState: @Sendable () -> MangaDirectorySearchCooldownState
     var makeChapterCommentsRepository: (@Sendable () async -> ReaderChapterCommentsRepository)?
     var makeContentCoverStore: @Sendable () -> ContentCoverStore?
+    var makeBrowsingHistoryStore: @Sendable () -> BrowsingHistoryStore?
     var makeLikeDependencies: @Sendable () -> LikeDependencies?
     /// Smart Comic Mode off (design decision #16): drives the reader's
     /// auto-resolved `.thread(tid:)` cover for the chapter being read, via
@@ -35,6 +36,7 @@ struct MangaReaderViewModelDependencies {
         },
         makeChapterCommentsRepository: (@Sendable () async -> ReaderChapterCommentsRepository)? = nil,
         makeContentCoverStore: @escaping @Sendable () -> ContentCoverStore? = { nil },
+        makeBrowsingHistoryStore: @escaping @Sendable () -> BrowsingHistoryStore? = { nil },
         makeLikeDependencies: @escaping @Sendable () -> LikeDependencies? = { nil },
         makeThreadCoverPageRepository: @escaping @Sendable () async -> (any ThreadCoverPageResolving)? = { nil },
         directoryWorkflowConfiguration: MangaDirectoryWorkflowConfiguration = MangaDirectoryWorkflowConfiguration(),
@@ -49,6 +51,7 @@ struct MangaReaderViewModelDependencies {
         self.makeDirectorySearchCooldownState = makeDirectorySearchCooldownState
         self.makeChapterCommentsRepository = makeChapterCommentsRepository
         self.makeContentCoverStore = makeContentCoverStore
+        self.makeBrowsingHistoryStore = makeBrowsingHistoryStore
         self.makeLikeDependencies = makeLikeDependencies
         self.makeThreadCoverPageRepository = makeThreadCoverPageRepository
         self.directoryWorkflowConfiguration = directoryWorkflowConfiguration
@@ -66,11 +69,13 @@ struct MangaReaderViewModelDependencies {
             makeDirectorySearchCooldownState: { dependencies.mangaDirectorySearchCooldownState },
             makeChapterCommentsRepository: { await dependencies.makeChapterCommentsRepository() },
             makeContentCoverStore: { dependencies.contentCoverStore },
+            makeBrowsingHistoryStore: { dependencies.browsingHistoryStore },
             makeLikeDependencies: { dependencies.like },
             makeThreadCoverPageRepository: { await dependencies.makeForumThreadReaderRepository() },
             progressSync: ProgressSyncModule(
                 adapter: FavoriteLibraryProgressSyncAdapter(
-                    readingProgressStore: dependencies.readingProgressStore
+                    readingProgressStore: dependencies.readingProgressStore,
+                    browsingHistoryStore: dependencies.browsingHistoryStore
                 )
             ),
             migrateMangaTitleReferences: { oldName, newName in
@@ -132,6 +137,12 @@ public final class MangaReaderViewModel: ObservableObject {
     private var offlineCacheOwnerName: String?
     private var likeChangeObservationTask: Task<Void, Never>?
     private var autoThreadCoverResolutionTask: Task<Void, Never>?
+    /// `"\(entry.id)|\(entry.title)"` of the last browsing-history row this
+    /// session recorded — re-records when the directory identity or title
+    /// changes mid-session (synthetic directory resolving into a real one,
+    /// or an in-reader rename), absorbing the superseded row by its old id.
+    private var recordedBrowsingHistoryKey: String?
+    private var recordedBrowsingHistoryEntryID: String?
     private lazy var chapterCommentsModule = ReaderChapterCommentsModule(
         adapter: ReaderChapterCommentsModule.Adapter(
             loadInitial: { [weak self] target in
@@ -232,6 +243,89 @@ public final class MangaReaderViewModel: ObservableObject {
         await refreshLikedPageIDs()
         observeLikeChangesIfNeeded()
         startAutoThreadCoverResolutionIfNeeded()
+        syncBrowsingHistoryRecordIfNeeded()
+    }
+
+    /// Records this session's browsing-history row once `.loaded` (decision
+    /// #5's "打开即记"), then keeps the row's *identity* in sync: the
+    /// directory identity can change mid-session (a synthetic
+    /// single-chapter directory resolving into a real one via the automatic
+    /// update, or an in-reader rename), and the debounced
+    /// `updatePosition` refreshes would otherwise target a row id that no
+    /// longer matches — freezing the old row and spawning a duplicate on
+    /// the next open. Re-recording under the new identity absorbs the
+    /// superseded row by its old id. Called from `prepare()` and from
+    /// `publishPresentation` (identity-stable page turns early-return on the
+    /// key check).
+    ///
+    /// Identity forks on `context.isSmartModeEnabled` — never on a proxy
+    /// signal like a non-nil directory name, which a mode-off
+    /// pseudo-directory also produces (the trap three smart-comic-mode
+    /// phases each hit once):
+    /// - Mode on: one directory-level `.mangaTitle` row per manga (decision
+    ///   #2), absorbing the directory members' single-thread rows (decision
+    ///   #13) — the loaded directory panel has the member list.
+    /// - Mode off: this thread's own `.mangaThread` row, exactly like a
+    ///   normal post (smart-comic-mode "mode off = plain thread" principle).
+    /// Position/chapter refreshes ride the debounced progress saves via
+    /// `FavoriteLibraryProgressSyncAdapter`. Preview sessions never record.
+    private func syncBrowsingHistoryRecordIfNeeded() {
+        guard !context.isPreview,
+              case let .loaded(loaded) = presentation.state else {
+            return
+        }
+        let currentPage = loaded.currentPage
+        let entry: BrowsingHistoryEntry
+        let absorbedThreadIDs: [String]
+        if context.isSmartModeEnabled {
+            let cleanBookName = normalizedDirectoryName(loaded.directoryTitle)
+                ?? normalizedDirectoryName(context.directoryName)
+                ?? context.displayTitle
+            let target = FavoriteContentTarget(
+                mangaID: workflow?.currentDirectoryFavoriteIdentity() ?? cleanBookName,
+                mangaCleanBookName: cleanBookName
+            )
+            entry = BrowsingHistoryEntry(
+                target: target,
+                title: cleanBookName,
+                forumID: context.forumID,
+                pageIndex: currentPage?.localIndex,
+                pageCount: currentPage?.chapterPageCount,
+                chapterTitle: currentPage?.chapterTitle,
+                chapterThreadID: currentPage?.tid ?? context.chapterTID,
+                lastVisitTime: .now
+            )
+            absorbedThreadIDs = loaded.directoryPanel.displayChapters.map(\.tid)
+        } else {
+            entry = BrowsingHistoryEntry(
+                target: .mangaThread(threadID: context.chapterTID),
+                title: context.displayTitle,
+                forumID: context.forumID,
+                pageIndex: currentPage?.localIndex,
+                pageCount: currentPage?.chapterPageCount,
+                chapterTitle: currentPage?.chapterTitle,
+                lastVisitTime: .now
+            )
+            absorbedThreadIDs = []
+        }
+
+        let recordKey = "\(entry.id)|\(entry.title)"
+        guard recordKey != recordedBrowsingHistoryKey else { return }
+        let supersededEntryID = recordedBrowsingHistoryEntryID.flatMap { $0 == entry.id ? nil : $0 }
+        recordedBrowsingHistoryKey = recordKey
+        recordedBrowsingHistoryEntryID = entry.id
+        guard let browsingHistoryStore = dependencies.makeBrowsingHistoryStore() else { return }
+        Task {
+            do {
+                try await browsingHistoryStore.record(
+                    entry,
+                    absorbingThreadIDs: absorbedThreadIDs,
+                    absorbingEntryIDs: supersededEntryID.map { [$0] } ?? []
+                )
+            } catch {
+                YamiboLog.reader.warning("Failed to record manga browsing-history visit for \(entry.id, privacy: .public): \(error)")
+            }
+        }
     }
 
     public func retryInitialLoad() async {
@@ -243,6 +337,8 @@ public final class MangaReaderViewModel: ObservableObject {
         resetNavigationHistory()
         currentStableReadingPosition = nil
         lastQueuedProgressSnapshot = nil
+        recordedBrowsingHistoryKey = nil
+        recordedBrowsingHistoryEntryID = nil
         directoryCooldownExpiresAt = nil
         forcedSearchShortcutExpiresAt = nil
         presentation = presentationWithCommittedSettings(
@@ -1079,6 +1175,10 @@ public final class MangaReaderViewModel: ObservableObject {
         }
         updateOfflineCacheOwnerName(from: nextPresentation)
         currentStableReadingPosition = stableReadingPosition(from: nextPresentation)
+        // Directory identity/title can change through any presentation
+        // update (automatic directory update, rename); identity-stable
+        // updates early-return on the record-key check inside.
+        syncBrowsingHistoryRecordIfNeeded()
         let nextProgressSnapshot = progressSnapshot(from: nextPresentation)
         guard nextProgressSnapshot != previousProgressSnapshot
             || nextProgressSnapshot != lastQueuedProgressSnapshot else {
@@ -1324,6 +1424,7 @@ public final class MangaReaderViewModel: ObservableObject {
             chapterView: currentPage.sourceIdentity.view,
             initialPage: currentPage.localIndex,
             directoryName: directoryName,
+            forumID: context.forumID,
             offlineCacheFavoriteID: context.offlineCacheFavoriteID,
             isPreview: context.isPreview,
             isSmartModeEnabled: context.isSmartModeEnabled

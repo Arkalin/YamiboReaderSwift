@@ -5,11 +5,15 @@ struct ForumThreadReaderBodyView: View {
     @State private var imageBrowserRequest: ForumThreadImageBrowserRequest?
     @State private var ratingResultsRequest: ForumThreadRatingResultsRequest?
     @State private var pollVotersRequest: ForumThreadPollVotersRequest?
+    @State private var visiblePostIDs: Set<String> = []
 
     let page: ForumThreadPage?
     let pageNavigation: ForumPageNavigation?
     let currentPage: Int
     let targetPostID: String?
+    let restoredAnchorPostID: String?
+    let onConsumeRestoredAnchor: () -> Void
+    let onVisibleAnchorChange: (String?) -> Void
     let isLoading: Bool
     let errorMessage: String?
     let isFavorited: Bool
@@ -93,6 +97,14 @@ struct ForumThreadReaderBodyView: View {
                                 onURLTap: onURLTap
                             )
                             .id(post.postID)
+                            .onAppear {
+                                visiblePostIDs.insert(post.postID)
+                                reportVisibleAnchor()
+                            }
+                            .onDisappear {
+                                visiblePostIDs.remove(post.postID)
+                                reportVisibleAnchor()
+                            }
                         }
 
                         ForumPageNavigationBar(
@@ -119,19 +131,40 @@ struct ForumThreadReaderBodyView: View {
                         .padding(.top, 8)
                 }
             }
-            .task(id: scrollTaskIdentity(page: page, targetPostID: targetPostID)) {
-                guard let targetPostID,
-                      page?.posts.contains(where: { $0.postID == targetPostID }) == true else {
+            .task(id: scrollTaskIdentity(page: page, targetPostID: targetPostID, restoredAnchorPostID: restoredAnchorPostID)) {
+                guard page != nil else { return }
+                if let targetPostID {
+                    guard page?.posts.contains(where: { $0.postID == targetPostID }) == true else {
+                        return
+                    }
+                    // SwiftUI offers no layout-completion callback for freshly loaded
+                    // LazyVStack content; scrolling immediately targets estimated row
+                    // positions and lands off-target. The 150ms settle delay is an
+                    // empirical workaround, not a synchronization mechanism.
+                    try? await Task.sleep(nanoseconds: 150_000_000)
+                    withAnimation(.snappy) {
+                        proxy.scrollTo(targetPostID, anchor: .center)
+                    }
                     return
                 }
-                // SwiftUI offers no layout-completion callback for freshly loaded
-                // LazyVStack content; scrolling immediately targets estimated row
-                // positions and lands off-target. The 150ms settle delay is an
-                // empirical workaround, not a synchronization mechanism.
-                try? await Task.sleep(nanoseconds: 150_000_000)
-                withAnimation(.snappy) {
-                    proxy.scrollTo(targetPostID, anchor: .center)
+                guard let restoredAnchorPostID else { return }
+                if page?.posts.contains(where: { $0.postID == restoredAnchorPostID }) == true {
+                    try? await Task.sleep(nanoseconds: 150_000_000)
+                    withAnimation(.snappy) {
+                        proxy.scrollTo(restoredAnchorPostID, anchor: .center)
+                    }
                 }
+                // Consume whether or not the anchor still exists on this
+                // page — a pending-but-unmatchable anchor would otherwise
+                // suppress anchor capture for the whole session. Deliberately
+                // no immediate re-report here: LazyVStack's realize window
+                // extends above the viewport, so "topmost realized post"
+                // right after the restore scroll sits 1–N floors above the
+                // restored anchor, and re-reporting it would drift the saved
+                // anchor upward on every no-scroll visit. The consume seeds
+                // the live anchor from the restored one; the next real
+                // scroll's onAppear/onDisappear events take over from there.
+                onConsumeRestoredAnchor()
             }
         }
         .forumPageBackground()
@@ -150,11 +183,24 @@ struct ForumThreadReaderBodyView: View {
         }
     }
 
-    private func scrollTaskIdentity(page: ForumThreadPage?, targetPostID: String?) -> String {
+    private func scrollTaskIdentity(page: ForumThreadPage?, targetPostID: String?, restoredAnchorPostID: String?) -> String {
         [
             targetPostID ?? "",
+            restoredAnchorPostID ?? "",
             page?.posts.map(\.postID).joined(separator: ",") ?? ""
         ].joined(separator: "|")
+    }
+
+    /// Reports the topmost rendered post (in page order) as the floor-level
+    /// reading anchor. `onAppear`/`onDisappear` track LazyVStack's realized
+    /// window rather than exact pixel visibility — floor-level precision is
+    /// the design target (browsing-history decision #6), not pixel offsets.
+    private func reportVisibleAnchor() {
+        guard let page else {
+            onVisibleAnchorChange(nil)
+            return
+        }
+        onVisibleAnchorChange(page.posts.first { visiblePostIDs.contains($0.postID) }?.postID)
     }
 
     private func openImageBrowser(_ imageID: String, _ url: URL, _ title: String?, _ refererURL: URL) {

@@ -400,6 +400,8 @@ private actor RecordingAdjacentPrefetchProgressAdapter: ProgressSyncAdapter {
     func saveMangaReadingPosition(_ position: MangaProgressReadingPosition) async throws {
         saved.append(position)
     }
+
+    func saveThreadReadingPosition(_ position: ThreadReadingPosition) async throws {}
 }
 
 private func makeAdjacentPrefetchDirectory(tids: [String]) -> MangaDirectory {

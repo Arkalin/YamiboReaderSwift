@@ -33,6 +33,7 @@ public final class NovelReaderViewModel: ObservableObject {
     }
     package var novelReaderPageDocumentNavigationStateDidChange: (@MainActor (Bool) -> Void)?
     private let progressSync: ProgressSyncModule
+    private var hasRecordedBrowsingHistoryVisit = false
     // The chapter-comments module is built by the composition root
     // (`NovelReaderDependencies`); the view model only sinks its snapshots.
     // It is driven exclusively from this main-actor view model, so its
@@ -153,7 +154,8 @@ public final class NovelReaderViewModel: ObservableObject {
         self.runtimeAdapter = runtimeAdapter
         progressSync = ProgressSyncModule(
             adapter: FavoriteLibraryProgressSyncAdapter(
-                readingProgressStore: dependencies.readingProgressStore
+                readingProgressStore: dependencies.readingProgressStore,
+                browsingHistoryStore: dependencies.browsingHistoryStore
             )
         )
         if let initialSettings {
@@ -860,6 +862,7 @@ public final class NovelReaderViewModel: ObservableObject {
             )
             syncFromWorkflowState(state)
             isLoading = false
+            recordBrowsingHistoryVisitIfNeeded()
             await cache.refresh()
 
             Task {
@@ -890,6 +893,7 @@ public final class NovelReaderViewModel: ObservableObject {
             )
             syncFromWorkflowState(state)
             isLoading = false
+            recordBrowsingHistoryVisitIfNeeded()
             await cache.refresh()
 
             Task {
@@ -898,6 +902,31 @@ public final class NovelReaderViewModel: ObservableObject {
         } catch {
             errorMessage = error.localizedDescription
             isLoading = false
+        }
+    }
+
+    /// One-shot browsing-history record for this reader session, fired on
+    /// the first successful content load (browsing-history decision #5's
+    /// "打开即记"). Position/chapter refreshes then ride the debounced
+    /// progress saves via `FavoriteLibraryProgressSyncAdapter`. Preview
+    /// sessions never record (Reader Preview Mode exemption).
+    private func recordBrowsingHistoryVisitIfNeeded() {
+        guard !hasRecordedBrowsingHistoryVisit, !context.isPreview else { return }
+        hasRecordedBrowsingHistoryVisit = true
+        guard let browsingHistoryStore = dependencies.browsingHistoryStore else { return }
+        let entry = BrowsingHistoryEntry(
+            target: .novelThread(threadID: context.threadID),
+            title: title,
+            authorID: context.authorID,
+            chapterTitle: context.initialResumePoint?.chapterTitle,
+            lastVisitTime: .now
+        )
+        Task {
+            do {
+                try await browsingHistoryStore.record(entry)
+            } catch {
+                YamiboLog.reader.warning("Failed to record novel browsing-history visit for thread \(self.context.threadID, privacy: .public): \(error)")
+            }
         }
     }
 

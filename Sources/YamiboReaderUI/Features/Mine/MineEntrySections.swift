@@ -65,13 +65,15 @@ struct MineLibraryEntriesSection: View {
     let offlineCacheQueueCount: Int
     let showOfflineCacheQueue: () -> Void
     let showMyLikes: () -> Void
+    let showHistory: () -> Void
 
     var body: some View {
         Section {
-            MineEntryDisplayRow(
+            MineEntryButtonRow(
                 title: L10n.string("forum.history"),
                 systemImage: "clock.arrow.circlepath",
-                tint: .blue
+                tint: .blue,
+                action: showHistory
             )
             MineEntryButtonRow(
                 title: L10n.string("mine.my_likes"),
@@ -87,16 +89,6 @@ struct MineLibraryEntriesSection: View {
                 action: showOfflineCacheQueue
             )
         }
-    }
-}
-
-private struct MineEntryDisplayRow: View {
-    let title: String
-    let systemImage: String
-    let tint: Color
-
-    var body: some View {
-        MineEntryRowContent(title: title, systemImage: systemImage, tint: tint)
     }
 }
 

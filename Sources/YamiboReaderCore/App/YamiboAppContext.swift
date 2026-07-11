@@ -30,6 +30,7 @@ public final class YamiboAppContext: Sendable {
     let favoriteSyncRunStore: FavoriteSyncRunStore
     /// Public for change-ID observation in the app-entry layer.
     public let readingProgressStore: ReadingProgressStore
+    let browsingHistoryStore: BrowsingHistoryStore
     let contentCoverStore: ContentCoverStore
     let novelReaderCacheStore: NovelReaderProjectionStore
     let favoriteBackgroundImageStore: FavoriteBackgroundImageStore
@@ -61,6 +62,7 @@ public final class YamiboAppContext: Sendable {
         favoriteUpdateStore: FavoriteUpdateStore = FavoriteUpdateStore(),
         favoriteSyncRunStore: FavoriteSyncRunStore? = nil,
         readingProgressStore: ReadingProgressStore? = nil,
+        browsingHistoryStore: BrowsingHistoryStore? = nil,
         contentCoverStore: ContentCoverStore? = nil,
         novelReaderCacheStore: NovelReaderProjectionStore? = nil,
         favoriteBackgroundImageStore: FavoriteBackgroundImageStore? = nil,
@@ -103,6 +105,7 @@ public final class YamiboAppContext: Sendable {
         self.favoriteUpdateStore = favoriteUpdateStore
         self.favoriteSyncRunStore = favoriteSyncRunStore ?? FavoriteSyncRunStore(databasePool: resolvedGRDBDatabasePool)
         self.readingProgressStore = readingProgressStore ?? ReadingProgressStore(databasePool: resolvedGRDBDatabasePool)
+        self.browsingHistoryStore = browsingHistoryStore ?? BrowsingHistoryStore(databasePool: resolvedGRDBDatabasePool)
         self.contentCoverStore = contentCoverStore ?? ContentCoverStore(databasePool: resolvedGRDBDatabasePool)
         self.novelReaderCacheStore = novelReaderCacheStore ?? NovelReaderProjectionStore(
             diskCacheStore: diskCacheStore
@@ -136,6 +139,7 @@ public final class YamiboAppContext: Sendable {
             profileStore: profileStore,
             localFavoriteLibraryStore: localFavoriteLibraryStore,
             readingProgressStore: readingProgressStore,
+            browsingHistoryStore: browsingHistoryStore,
             settingsStore: settingsStore,
             contentCoverStore: contentCoverStore,
             mangaDirectoryStore: mangaDirectoryStore,
@@ -159,6 +163,7 @@ public final class YamiboAppContext: Sendable {
             favoriteUpdateStore: favoriteUpdateStore,
             favoriteSyncRunStore: favoriteSyncRunStore,
             readingProgressStore: readingProgressStore,
+            browsingHistoryStore: browsingHistoryStore,
             settingsStore: settingsStore,
             contentCoverStore: contentCoverStore,
             mangaDirectoryStore: mangaDirectoryStore,
@@ -172,6 +177,7 @@ public final class YamiboAppContext: Sendable {
         MangaReaderDependencies(
             settingsStore: settingsStore,
             readingProgressStore: readingProgressStore,
+            browsingHistoryStore: browsingHistoryStore,
             localFavoriteLibraryStore: localFavoriteLibraryStore,
             mangaDirectoryStore: mangaDirectoryStore,
             mangaDirectorySearchCooldownState: mangaDirectorySearchCooldownState,
@@ -192,6 +198,7 @@ public final class YamiboAppContext: Sendable {
             sessionStore: sessionStore,
             settingsStore: settingsStore,
             readingProgressStore: readingProgressStore,
+            browsingHistoryStore: browsingHistoryStore,
             offlineCacheStore: offlineCacheStore,
             contentCoverStore: contentCoverStore,
             makeNovelReaderRepository: { [self] in await makeNovelReaderRepository() },
@@ -388,6 +395,7 @@ public final class YamiboAppContext: Sendable {
         await readerResumeRouteStore.clear()
         try await localFavoriteLibraryStore.clearAll()
         try await readingProgressStore.clearAll()
+        try await browsingHistoryStore.clearAll()
         try await contentCoverStore.clearAll()
         try await novelReaderCacheStore.clearAll()
         try await mangaDirectoryStore.clearAll()

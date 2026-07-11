@@ -23,6 +23,13 @@ struct ForumThreadReaderView: View {
             pageNavigation: model.pageNavigation,
             currentPage: model.currentPage,
             targetPostID: model.targetPostID,
+            restoredAnchorPostID: model.restoredAnchorPostID,
+            onConsumeRestoredAnchor: {
+                model.consumeRestoredAnchor()
+            },
+            onVisibleAnchorChange: { postID in
+                model.updateVisibleAnchor(postID: postID)
+            },
             isLoading: model.isLoading,
             errorMessage: model.errorMessage,
             isFavorited: model.isFavorited,
@@ -79,6 +86,9 @@ struct ForumThreadReaderView: View {
         )
         .task {
             await model.load()
+        }
+        .onDisappear {
+            model.flushReadingProgress()
         }
         .forumTransientMessage(model.transientMessage, bottomPadding: model.page == nil ? 24 : 82) {
             model.clearTransientMessage()

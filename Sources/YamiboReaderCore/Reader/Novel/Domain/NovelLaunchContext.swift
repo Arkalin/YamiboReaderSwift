@@ -5,6 +5,7 @@ public enum NovelLaunchSource: String, Codable, Hashable, Sendable {
     case favorites
     case resume
     case like
+    case history
 }
 
 public struct NovelLaunchContext: Codable, Hashable, Identifiable, Sendable {

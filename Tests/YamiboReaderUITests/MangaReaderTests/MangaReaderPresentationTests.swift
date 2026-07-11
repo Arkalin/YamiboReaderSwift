@@ -483,7 +483,10 @@ final class MangaReaderPresentationTests: XCTestCase {
         XCTAssertEqual(appModel.suspendedNovelContext, context)
         XCTAssertEqual(appModel.selectedTab, .forum)
         XCTAssertEqual(appModel.forumNavigationRequest?.url, originalURL)
-        XCTAssertEqual(appModel.forumNavigationRequest?.source, .readerOrigin)
+        // A reader's jump into its own thread is a discussion companion view
+        // (browsing-history decision #14): same native-thread routing as
+        // `.readerOrigin`, but exempt from history recording.
+        XCTAssertEqual(appModel.forumNavigationRequest?.source, .readerDiscussion)
     }
 
     func testOpenForumURLExitsActiveReaderAndCreatesNavigationRequest() {
@@ -604,7 +607,8 @@ final class MangaReaderPresentationTests: XCTestCase {
         XCTAssertEqual(appModel.suspendedNovelContext, latestContext)
         XCTAssertEqual(appModel.selectedTab, .forum)
         XCTAssertEqual(appModel.forumNavigationRequest?.url, originalURL)
-        XCTAssertEqual(appModel.forumNavigationRequest?.source, .readerOrigin)
+        // See testDismissReaderToOriginalPostSelectsForumAndCreatesNavigationRequest.
+        XCTAssertEqual(appModel.forumNavigationRequest?.source, .readerDiscussion)
     }
 
     func testSelectingFavoritesAfterReaderOpenedForumRestoresLatestSuspendedReader() {

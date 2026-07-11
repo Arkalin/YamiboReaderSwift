@@ -5,6 +5,7 @@ public enum MangaLaunchSource: String, Codable, Hashable, Sendable {
     case favorites
     case resume
     case like
+    case history
 }
 
 public struct MangaLaunchContext: Hashable, Identifiable, Sendable {
@@ -15,6 +16,13 @@ public struct MangaLaunchContext: Hashable, Identifiable, Sendable {
     public var source: MangaLaunchSource
     public var initialPage: Int
     public var directoryName: String?
+    /// Board fid of the chapter thread, when the launching surface knows it
+    /// (forum routing and the favorites resolver do; likes/previews don't).
+    /// Recorded into browsing-history rows so a later history-click can
+    /// re-evaluate the board's Smart Comic Mode with the same
+    /// `isSmartComicModeEnabled(forumID:)` semantics favorites use — a
+    /// missing fid falls back to that helper's permissive default.
+    public var forumID: String?
     public var offlineCacheFavoriteID: String?
     /// When true, this reader session must not persist reading progress,
     /// resume route, or Favorite Library recency. See Reader Preview Mode in
@@ -42,6 +50,7 @@ public struct MangaLaunchContext: Hashable, Identifiable, Sendable {
         chapterView: Int = 1,
         initialPage: Int = 0,
         directoryName: String? = nil,
+        forumID: String? = nil,
         offlineCacheFavoriteID: String? = nil,
         isPreview: Bool = false,
         isSmartModeEnabled: Bool = true
@@ -53,6 +62,7 @@ public struct MangaLaunchContext: Hashable, Identifiable, Sendable {
         self.source = source
         self.initialPage = max(0, initialPage)
         self.directoryName = directoryName
+        self.forumID = forumID?.mangaReaderTrimmedNonEmpty
         self.offlineCacheFavoriteID = offlineCacheFavoriteID?.mangaReaderTrimmedNonEmpty
         self.isPreview = isPreview
         self.isSmartModeEnabled = isSmartModeEnabled
@@ -74,6 +84,7 @@ extension MangaLaunchContext: Codable {
         case source
         case initialPage
         case directoryName
+        case forumID
         case offlineCacheFavoriteID
         case isPreview
         case isSmartModeEnabled
@@ -88,6 +99,7 @@ extension MangaLaunchContext: Codable {
         try container.encode(source, forKey: .source)
         try container.encode(initialPage, forKey: .initialPage)
         try container.encodeIfPresent(directoryName, forKey: .directoryName)
+        try container.encodeIfPresent(forumID, forKey: .forumID)
         try container.encodeIfPresent(offlineCacheFavoriteID, forKey: .offlineCacheFavoriteID)
         try container.encode(isPreview, forKey: .isPreview)
         try container.encode(isSmartModeEnabled, forKey: .isSmartModeEnabled)
@@ -103,6 +115,7 @@ extension MangaLaunchContext: Codable {
             chapterView: try container.decodeIfPresent(Int.self, forKey: .chapterView) ?? 1,
             initialPage: try container.decodeIfPresent(Int.self, forKey: .initialPage) ?? 0,
             directoryName: try container.decodeIfPresent(String.self, forKey: .directoryName),
+            forumID: try container.decodeIfPresent(String.self, forKey: .forumID),
             offlineCacheFavoriteID: try container.decodeIfPresent(String.self, forKey: .offlineCacheFavoriteID),
             isPreview: try container.decodeIfPresent(Bool.self, forKey: .isPreview) ?? false,
             // Existing persisted routes (reader-resume route store) predate

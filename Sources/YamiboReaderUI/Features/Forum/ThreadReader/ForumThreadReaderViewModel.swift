@@ -34,16 +34,26 @@ final class ForumThreadReaderViewModel {
     var favoriteErrorMessage: String?
     var favoriteAddPromptPresented = false
     var favoriteRemovePrompt: FavoriteRemovePrompt?
+    /// Floor anchor loaded from saved reading progress, pending its one
+    /// restore scroll (browsing-history decision #8). The body view scrolls
+    /// to it once the page renders, then calls `consumeRestoredAnchor()`.
+    /// While non-nil, incoming visible-anchor updates are ignored so the
+    /// initial top-of-page render can't overwrite the saved anchor before
+    /// the restore scroll happens.
+    var restoredAnchorPostID: String?
 
     let context: ThreadNovelLaunchContext
 
     @ObservationIgnored private let repositoryProvider: @Sendable () async -> any ForumThreadPageLoading
     @ObservationIgnored private let localFavoriteLibraryStoreProvider: @Sendable () async -> FavoriteLibraryStore?
     @ObservationIgnored private let readingProgressStoreProvider: @Sendable () async -> ReadingProgressStore?
+    @ObservationIgnored private let browsingHistoryStoreProvider: @Sendable () async -> BrowsingHistoryStore?
     @ObservationIgnored private let favoriteRepositoryProvider: @Sendable () async -> (any ForumThreadFavoriteRemoteOperating)?
     @ObservationIgnored private let contentCoverStoreProvider: @Sendable () async -> ContentCoverStore?
     @ObservationIgnored private let mangaDirectoryStoreProvider: @Sendable () async -> (any MangaDirectoryPersisting)?
     @ObservationIgnored private let settingsStoreProvider: @Sendable () async -> SettingsStore?
+    @ObservationIgnored private let progressSync: ProgressSyncModule?
+    @ObservationIgnored private var latestVisibleAnchorPostID: String?
 
     init(context: ThreadNovelLaunchContext, dependencies: ForumDependencies) {
         self.context = context
@@ -55,6 +65,9 @@ final class ForumThreadReaderViewModel {
         }
         readingProgressStoreProvider = {
             dependencies.readingProgressStore
+        }
+        browsingHistoryStoreProvider = {
+            dependencies.browsingHistoryStore
         }
         favoriteRepositoryProvider = {
             await dependencies.makeFavoriteRepository()
@@ -68,6 +81,12 @@ final class ForumThreadReaderViewModel {
         settingsStoreProvider = {
             dependencies.settingsStore
         }
+        progressSync = ProgressSyncModule(
+            adapter: FavoriteLibraryProgressSyncAdapter(
+                readingProgressStore: dependencies.readingProgressStore,
+                browsingHistoryStore: dependencies.browsingHistoryStore
+            )
+        )
     }
 
     init(
@@ -75,6 +94,7 @@ final class ForumThreadReaderViewModel {
         repository: any ForumThreadPageLoading,
         localFavoriteLibraryStore: FavoriteLibraryStore? = nil,
         readingProgressStore: ReadingProgressStore? = nil,
+        browsingHistoryStore: BrowsingHistoryStore? = nil,
         favoriteRepository: (any ForumThreadFavoriteRemoteOperating)? = nil,
         contentCoverStore: ContentCoverStore? = nil,
         mangaDirectoryStore: (any MangaDirectoryPersisting)? = nil,
@@ -90,6 +110,9 @@ final class ForumThreadReaderViewModel {
         readingProgressStoreProvider = {
             readingProgressStore
         }
+        browsingHistoryStoreProvider = {
+            browsingHistoryStore
+        }
         favoriteRepositoryProvider = {
             favoriteRepository
         }
@@ -101,6 +124,14 @@ final class ForumThreadReaderViewModel {
         }
         settingsStoreProvider = {
             settingsStore
+        }
+        progressSync = readingProgressStore.map { progressStore in
+            ProgressSyncModule(
+                adapter: FavoriteLibraryProgressSyncAdapter(
+                    readingProgressStore: progressStore,
+                    browsingHistoryStore: browsingHistoryStore
+                )
+            )
         }
     }
 
@@ -137,7 +168,17 @@ final class ForumThreadReaderViewModel {
     func load() async {
         guard page == nil else { return }
         await refreshFavoriteState()
-        await loadPage(context.initialPage)
+        var initialPage = context.initialPage
+        // Every entrance restores the saved position (browsing-history
+        // decision #8) unless the launch carries an explicit deep-link
+        // target — a specific post or a specific page wins over resume.
+        if context.targetPostID == nil, context.initialPage <= 1,
+           let progressStore = await readingProgressStoreProvider(),
+           let savedProgress = await progressStore.load(for: .normalThread(threadID: context.thread.tid))?.thread {
+            initialPage = max(1, savedProgress.lastPage)
+            restoredAnchorPostID = savedProgress.anchorPostID
+        }
+        await loadPage(initialPage)
     }
 
     func refresh() async {
@@ -477,6 +518,7 @@ final class ForumThreadReaderViewModel {
         errorMessage = nil
         transientMessage = nil
         defer { isLoading = false }
+        let previousLoadedPage = self.page == nil ? nil : currentPage
 
         do {
             let repository = await repositoryProvider()
@@ -487,6 +529,7 @@ final class ForumThreadReaderViewModel {
             }
             self.page = loaded
             currentPage = loaded.pageNavigation?.currentPage ?? page
+            handlePageLoadSuccess(previousLoadedPage: previousLoadedPage)
         } catch {
             let repository = await repositoryProvider()
             if usesCachedFallbackOnFailure,
@@ -495,6 +538,7 @@ final class ForumThreadReaderViewModel {
                 currentPage = cached.pageNavigation?.currentPage ?? page
                 errorMessage = nil
                 transientMessage = L10n.string("forum.thread.refresh_failed", error.localizedDescription)
+                handlePageLoadSuccess(previousLoadedPage: previousLoadedPage)
                 return
             }
 
@@ -505,6 +549,96 @@ final class ForumThreadReaderViewModel {
                 self.page = nil
                 currentPage = page
                 errorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    // MARK: - Reading progress + browsing history
+
+    /// Reported by the body view whenever the topmost rendered post changes
+    /// (floor-level anchor capture). Ignored while a restored anchor is
+    /// still pending its scroll, so the initial top-of-page render can't
+    /// clobber the saved position before the restore happens.
+    func updateVisibleAnchor(postID: String?) {
+        guard restoredAnchorPostID == nil else { return }
+        guard latestVisibleAnchorPostID != postID else { return }
+        latestVisibleAnchorPostID = postID
+        guard postID != nil else { return }
+        queueReadingProgressSave()
+    }
+
+    func consumeRestoredAnchor() {
+        // Seed the live anchor from the restored one so leaving without
+        // scrolling doesn't flush a nil anchor over the saved position.
+        if latestVisibleAnchorPostID == nil {
+            latestVisibleAnchorPostID = restoredAnchorPostID
+        }
+        restoredAnchorPostID = nil
+    }
+
+    /// Exit-time write-through, called from the view's `onDisappear`. Runs
+    /// in a fresh unstructured Task so view teardown can't cancel the GRDB
+    /// write mid-flight (the cancelled-Task write trap).
+    func flushReadingProgress() {
+        guard let progressSync, page != nil else { return }
+        let position = currentThreadReadingPosition()
+        Task {
+            do {
+                try await progressSync.flush(.thread(position))
+            } catch {
+                YamiboLog.forum.warning("Failed to flush normal-thread reading progress on exit; next visit resumes from the last debounced save: \(error)")
+            }
+        }
+    }
+
+    private func handlePageLoadSuccess(previousLoadedPage: Int?) {
+        if previousLoadedPage != currentPage {
+            // A different page renders different posts; the old anchor is
+            // meaningless there. Same-page reloads (refresh) keep it — the
+            // visible cards re-report momentarily anyway.
+            latestVisibleAnchorPostID = nil
+        }
+        recordBrowsingHistoryVisit()
+        queueReadingProgressSave()
+    }
+
+    private func queueReadingProgressSave() {
+        guard let progressSync, page != nil else { return }
+        let position = currentThreadReadingPosition()
+        Task {
+            await progressSync.queue(.thread(position))
+        }
+    }
+
+    private func currentThreadReadingPosition() -> ThreadReadingPosition {
+        ThreadReadingPosition(
+            threadID: context.thread.tid,
+            page: currentPage,
+            pageCount: pageNavigation?.totalPages,
+            anchorPostID: latestVisibleAnchorPostID ?? restoredAnchorPostID
+        )
+    }
+
+    /// Upserts this visit's history row on every successful page load
+    /// (browsing-history decision #5: open records, page turns refresh).
+    /// Discussion companion views never record (decision #14) — their tid
+    /// belongs to the novel/manga main-form row.
+    private func recordBrowsingHistoryVisit() {
+        guard !context.isDiscussionView, page != nil else { return }
+        let entry = BrowsingHistoryEntry(
+            target: .normalThread(threadID: context.thread.tid),
+            title: favoriteTitle,
+            forumID: resolvedForumID,
+            pageIndex: currentPage,
+            pageCount: pageNavigation?.totalPages,
+            lastVisitTime: .now
+        )
+        Task { [browsingHistoryStoreProvider] in
+            guard let store = await browsingHistoryStoreProvider() else { return }
+            do {
+                try await store.record(entry)
+            } catch {
+                YamiboLog.forum.warning("Failed to record browsing-history visit for \(entry.id, privacy: .public): \(error)")
             }
         }
     }
