@@ -46,9 +46,6 @@ struct LocalFavoriteCollectionRow: View {
 
     private var rowContent: some View {
         HStack(spacing: 12) {
-            if isSelectionMode {
-                LocalFavoriteSelectionIndicator(isSelected: isSelected)
-            }
             if showsCover {
                 // Matches the item row's cover box so collection and
                 // favorite rows come out the same height.
@@ -73,6 +70,7 @@ struct LocalFavoriteCollectionRow: View {
         }
         .contentShape(Rectangle())
         .padding(.vertical, 4)
+        .favoriteSelectionEmphasis(isSelectionMode: isSelectionMode, isSelected: isSelected, cornerRadius: 10)
     }
 }
 
@@ -95,9 +93,6 @@ struct LocalFavoriteCollectionGridCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            if isSelectionMode {
-                LocalFavoriteSelectionIndicator(isSelected: isSelected)
-            }
             LocalFavoriteCollectionMosaic(
                 color: collection.color.swiftUIColor,
                 tiles: previewTiles
@@ -117,6 +112,7 @@ struct LocalFavoriteCollectionGridCard: View {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .stroke(collection.color.swiftUIColor.opacity(0.45), lineWidth: 1.5)
         }
+        .favoriteSelectionEmphasis(isSelectionMode: isSelectionMode, isSelected: isSelected, cornerRadius: 8)
         .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         .onTapGesture {
             if isSelectionMode {

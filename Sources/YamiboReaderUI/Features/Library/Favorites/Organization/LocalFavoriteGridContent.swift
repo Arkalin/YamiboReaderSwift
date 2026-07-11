@@ -64,6 +64,8 @@ struct LocalFavoriteGridContent: View {
                 .padding(.vertical, 12)
             }
         }
+        .sensoryFeedback(.selection, trigger: selection.selectedFavoriteIDs)
+        .sensoryFeedback(.selection, trigger: selection.selectedCollectionIDs)
     }
 
     private var gridEntries: [FavoriteMixedEntry] {

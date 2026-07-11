@@ -79,5 +79,7 @@ struct LocalFavoriteListContent: View {
         .listStyle(.plain)
         .listSectionSpacing(12)
         .contentMargins(.top, 12, for: .scrollContent)
+        .sensoryFeedback(.selection, trigger: selection.selectedFavoriteIDs)
+        .sensoryFeedback(.selection, trigger: selection.selectedCollectionIDs)
     }
 }

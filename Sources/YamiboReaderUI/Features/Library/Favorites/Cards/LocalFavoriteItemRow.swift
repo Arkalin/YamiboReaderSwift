@@ -62,11 +62,6 @@ struct LocalFavoriteItemRow: View {
 
     private var rowContent: some View {
         HStack(spacing: 12) {
-            // A smart card shows the selection indicator like any other
-            // card — see the tap-gate above.
-            if isSelectionMode {
-                LocalFavoriteSelectionIndicator(isSelected: isSelected)
-            }
             if showsCover {
                 // Android row cards use a 92dp-wide 0.72-ratio cover.
                 LocalFavoriteCoverThumbnail(url: card.coverURL, title: card.resolvedTitle)
@@ -92,5 +87,8 @@ struct LocalFavoriteItemRow: View {
                 LocalFavoriteSmartCardBadge()
             }
         }
+        // A smart card is selectable just like any other card — see the
+        // tap-gate above.
+        .favoriteSelectionEmphasis(isSelectionMode: isSelectionMode, isSelected: isSelected, cornerRadius: 10)
     }
 }
