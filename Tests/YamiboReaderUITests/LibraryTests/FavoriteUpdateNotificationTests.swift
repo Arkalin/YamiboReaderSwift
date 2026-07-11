@@ -1,0 +1,299 @@
+import XCTest
+@testable import YamiboReaderCore
+import YamiboReaderTestSupport
+@testable import YamiboReaderUI
+
+@MainActor
+final class FavoriteUpdateNotificationTests: XCTestCase {
+    func testDetectionDeliversNotificationWhenEnabled() async throws {
+        let fixture = try NotificationFixture(prefix: "favorite-update-notify-enabled")
+        let monitor = try await fixture.makeLoadedMonitor(pages: [
+            try NotificationFixture.makeThreadPage(threadID: "960", postID: "p1", replyCount: 1, pageCount: 1),
+            try NotificationFixture.makeThreadPage(threadID: "960", postID: "p2", replyCount: 3, pageCount: 1)
+        ])
+        let enabled = await monitor.setNotificationsEnabled(true)
+        XCTAssertTrue(enabled)
+
+        _ = await monitor.startCheck()
+        try await fixture.waitForStatus(.completed, in: monitor)
+        XCTAssertTrue(fixture.notifier.delivered.isEmpty)
+
+        _ = await monitor.startCheck()
+        try await fixture.waitForStatus(.completed, in: monitor)
+
+        XCTAssertEqual(fixture.notifier.delivered.count, 1)
+        let notification = try XCTUnwrap(fixture.notifier.delivered.first)
+        XCTAssertEqual(notification.identifier, FavoriteUpdateNotification.identifier(forTargetID: fixture.target.id))
+        XCTAssertEqual(notification.targetID, fixture.target.id)
+        XCTAssertEqual(notification.title, "更新主题")
+        XCTAssertEqual(notification.subtitle, "测试板块")
+        XCTAssertEqual(notification.body, FavoriteUpdateSummary.newReplies(count: 2).displayText)
+        XCTAssertEqual(notification.badgeCount, 1)
+    }
+
+    func testDetectionSkipsNotificationWhenDisabled() async throws {
+        let fixture = try NotificationFixture(prefix: "favorite-update-notify-disabled")
+        let monitor = try await fixture.makeLoadedMonitor(pages: [
+            try NotificationFixture.makeThreadPage(threadID: "960", postID: "p1", replyCount: 1, pageCount: 1),
+            try NotificationFixture.makeThreadPage(threadID: "960", postID: "p2", replyCount: 3, pageCount: 1)
+        ])
+
+        _ = await monitor.startCheck()
+        try await fixture.waitForStatus(.completed, in: monitor)
+        _ = await monitor.startCheck()
+        try await fixture.waitForStatus(.completed, in: monitor)
+
+        XCTAssertEqual(monitor.events.count, 1)
+        XCTAssertTrue(fixture.notifier.delivered.isEmpty)
+        XCTAssertTrue(fixture.notifier.badgeCounts.isEmpty)
+    }
+
+    func testDetectionSkipsNotificationWhenAuthorizationRevoked() async throws {
+        let fixture = try NotificationFixture(prefix: "favorite-update-notify-revoked")
+        let monitor = try await fixture.makeLoadedMonitor(pages: [
+            try NotificationFixture.makeThreadPage(threadID: "960", postID: "p1", replyCount: 1, pageCount: 1),
+            try NotificationFixture.makeThreadPage(threadID: "960", postID: "p2", replyCount: 3, pageCount: 1)
+        ])
+        try await fixture.persistNotificationsEnabled(true)
+        fixture.notifier.authorizationState = .denied
+
+        _ = await monitor.startCheck()
+        try await fixture.waitForStatus(.completed, in: monitor)
+        _ = await monitor.startCheck()
+        try await fixture.waitForStatus(.completed, in: monitor)
+
+        XCTAssertEqual(monitor.events.count, 1)
+        XCTAssertTrue(fixture.notifier.delivered.isEmpty)
+        let blocked = await monitor.notificationsBlockedBySystem()
+        XCTAssertTrue(blocked)
+    }
+
+    func testEnablingNotificationsHonorsDeniedAuthorizationRequest() async throws {
+        let fixture = try NotificationFixture(prefix: "favorite-update-notify-denied")
+        let monitor = try await fixture.makeLoadedMonitor(pages: [])
+        fixture.notifier.authorizationState = .notDetermined
+        fixture.notifier.authorizationRequestResponse = false
+
+        let effective = await monitor.setNotificationsEnabled(true)
+
+        XCTAssertFalse(effective)
+        XCTAssertEqual(fixture.notifier.authorizationRequestCount, 1)
+        let persisted = await monitor.notificationsEnabled()
+        XCTAssertFalse(persisted)
+    }
+
+    func testDismissingEventRemovesDeliveredNotificationAndResetsBadge() async throws {
+        let fixture = try NotificationFixture(prefix: "favorite-update-notify-dismiss")
+        let monitor = try await fixture.makeLoadedMonitor(pages: [
+            try NotificationFixture.makeThreadPage(threadID: "960", postID: "p1", replyCount: 1, pageCount: 1),
+            try NotificationFixture.makeThreadPage(threadID: "960", postID: "p2", replyCount: 3, pageCount: 1)
+        ])
+        await monitor.setNotificationsEnabled(true)
+        _ = await monitor.startCheck()
+        try await fixture.waitForStatus(.completed, in: monitor)
+        _ = await monitor.startCheck()
+        try await fixture.waitForStatus(.completed, in: monitor)
+        let eventID = try XCTUnwrap(monitor.events.first?.id)
+
+        await monitor.dismissEvent(eventID)
+
+        XCTAssertTrue(monitor.events.isEmpty)
+        XCTAssertEqual(
+            fixture.notifier.removedIdentifiers,
+            [FavoriteUpdateNotification.identifier(forTargetID: fixture.target.id)]
+        )
+        XCTAssertEqual(fixture.notifier.badgeCounts.last, 0)
+    }
+
+    func testMarkingEventReadRemovesDeliveredNotificationAndResetsBadge() async throws {
+        let fixture = try NotificationFixture(prefix: "favorite-update-notify-read")
+        let monitor = try await fixture.makeLoadedMonitor(pages: [
+            try NotificationFixture.makeThreadPage(threadID: "960", postID: "p1", replyCount: 1, pageCount: 1),
+            try NotificationFixture.makeThreadPage(threadID: "960", postID: "p2", replyCount: 3, pageCount: 1)
+        ])
+        await monitor.setNotificationsEnabled(true)
+        _ = await monitor.startCheck()
+        try await fixture.waitForStatus(.completed, in: monitor)
+        _ = await monitor.startCheck()
+        try await fixture.waitForStatus(.completed, in: monitor)
+        let eventID = try XCTUnwrap(monitor.events.first?.id)
+
+        await monitor.markEventRead(eventID)
+
+        XCTAssertEqual(monitor.events.count, 1)
+        XCTAssertEqual(
+            fixture.notifier.removedIdentifiers,
+            [FavoriteUpdateNotification.identifier(forTargetID: fixture.target.id)]
+        )
+        XCTAssertEqual(fixture.notifier.badgeCounts.last, 0)
+    }
+
+    func testDisablingNotificationsClearsDeliveredNotifications() async throws {
+        let fixture = try NotificationFixture(prefix: "favorite-update-notify-off")
+        let monitor = try await fixture.makeLoadedMonitor(pages: [
+            try NotificationFixture.makeThreadPage(threadID: "960", postID: "p1", replyCount: 1, pageCount: 1),
+            try NotificationFixture.makeThreadPage(threadID: "960", postID: "p2", replyCount: 3, pageCount: 1)
+        ])
+        await monitor.setNotificationsEnabled(true)
+        _ = await monitor.startCheck()
+        try await fixture.waitForStatus(.completed, in: monitor)
+        _ = await monitor.startCheck()
+        try await fixture.waitForStatus(.completed, in: monitor)
+        XCTAssertEqual(fixture.notifier.delivered.count, 1)
+
+        let effective = await monitor.setNotificationsEnabled(false)
+
+        XCTAssertFalse(effective)
+        XCTAssertEqual(
+            fixture.notifier.removedIdentifiers,
+            [FavoriteUpdateNotification.identifier(forTargetID: fixture.target.id)]
+        )
+        XCTAssertEqual(fixture.notifier.badgeCounts.last, 0)
+        let persisted = await monitor.notificationsEnabled()
+        XCTAssertFalse(persisted)
+    }
+}
+
+/// Records notifier interactions instead of touching `UNUserNotificationCenter`.
+@MainActor
+private final class FavoriteUpdateNotifierSpy: FavoriteUpdateNotifying {
+    var authorizationState: FavoriteUpdateNotificationAuthorization = .granted
+    var authorizationRequestResponse = true
+    private(set) var authorizationRequestCount = 0
+    private(set) var delivered: [FavoriteUpdateNotification] = []
+    private(set) var removedIdentifiers: [String] = []
+    private(set) var badgeCounts: [Int] = []
+
+    func authorization() async -> FavoriteUpdateNotificationAuthorization {
+        authorizationState
+    }
+
+    func requestAuthorization() async -> Bool {
+        authorizationRequestCount += 1
+        authorizationState = authorizationRequestResponse ? .granted : .denied
+        return authorizationRequestResponse
+    }
+
+    func deliver(_ notification: FavoriteUpdateNotification) async {
+        delivered.append(notification)
+    }
+
+    func removeDelivered(identifiers: [String]) async {
+        removedIdentifiers.append(contentsOf: identifiers)
+    }
+
+    func setBadgeCount(_ count: Int) async {
+        badgeCounts.append(count)
+    }
+}
+
+/// Isolated per-test stores plus a spy notifier around one tracked favorite.
+@MainActor
+private final class NotificationFixture {
+    let target = FavoriteItemTarget(kind: .normalThread, threadID: "960")
+    let notifier = FavoriteUpdateNotifierSpy()
+    private let libraryStore: FavoriteLibraryStore
+    private let updateStore: FavoriteUpdateStore
+    private let settingsStore: SettingsStore
+
+    init(prefix: String) throws {
+        let suiteName = YamiboTestDefaults.suiteName(prefix: prefix)
+        _ = try YamiboTestDefaults.make(suiteName: suiteName)
+        let defaults = try YamiboTestDefaults.defaults(suiteName: suiteName)
+        libraryStore = FavoriteLibraryStore(defaults: defaults, key: "local-favorites")
+        updateStore = FavoriteUpdateStore(defaults: defaults, key: "favorite-updates")
+        settingsStore = SettingsStore(defaults: defaults, key: "settings")
+    }
+
+    func makeLoadedMonitor(pages: [ForumThreadPage]) async throws -> FavoriteUpdateMonitor {
+        var document = FavoriteLibraryDocument()
+        let category = document.createCategory(name: "更新通知")
+        document.addItem(try FavoriteItem(
+            target: target,
+            title: "更新主题",
+            sourceGroup: .forumBoard(id: "50", label: "测试板块"),
+            locations: [.category(category.id)]
+        ))
+        try await libraryStore.save(document)
+
+        var remainingPages = pages
+        let monitor = FavoriteUpdateMonitor(
+            updateStore: updateStore,
+            libraryStore: libraryStore,
+            makeForumThreadReaderRepository: {
+                let sessionState = await SessionStore(
+                    defaults: .standard,
+                    key: "favorite-update-notification-tests-session"
+                ).load()
+                let client = YamiboClient(
+                    session: YamiboNetworkConfiguration.makeSession(),
+                    cookie: sessionState.cookie,
+                    userAgent: sessionState.userAgent
+                )
+                return ForumThreadReaderRepository(
+                    client: client,
+                    cacheStore: ForumCacheStore(
+                        baseDirectory: FileManager.default.temporaryDirectory
+                            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+                    )
+                )
+            },
+            settingsStore: settingsStore,
+            notifier: notifier,
+            pageFetcher: { _ in
+                guard let page = remainingPages.first else {
+                    throw YamiboError.offline
+                }
+                if remainingPages.count > 1 {
+                    remainingPages.removeFirst()
+                }
+                return page
+            }
+        )
+        await monitor.load()
+        return monitor
+    }
+
+    func persistNotificationsEnabled(_ enabled: Bool) async throws {
+        var settings = await settingsStore.load()
+        settings.favorites.updateNotificationsEnabled = enabled
+        try await settingsStore.save(settings)
+    }
+
+    func waitForStatus(
+        _ status: FavoriteUpdateRunStatus,
+        in monitor: FavoriteUpdateMonitor
+    ) async throws {
+        for _ in 0..<100 {
+            if monitor.snapshot?.status == status {
+                return
+            }
+            try await Task.sleep(nanoseconds: 10_000_000)
+        }
+        XCTFail("Timed out waiting for favorite update status \(status)")
+    }
+
+    static func makeThreadPage(
+        threadID: String,
+        postID: String,
+        replyCount: Int,
+        pageCount: Int
+    ) throws -> ForumThreadPage {
+        ForumThreadPage(
+            thread: ThreadIdentity(tid: threadID, fid: "50"),
+            title: "更新主题",
+            posts: [
+                ForumThreadPost(
+                    postID: postID,
+                    author: BlogReaderUser(uid: "u1", name: "作者"),
+                    contentHTML: "<p>正文</p>",
+                    contentText: "正文"
+                )
+            ],
+            pageNavigation: ForumPageNavigation(currentPage: 1, totalPages: pageCount),
+            totalReplies: replyCount,
+            forumID: "50",
+            forumName: "测试板块"
+        )
+    }
+}

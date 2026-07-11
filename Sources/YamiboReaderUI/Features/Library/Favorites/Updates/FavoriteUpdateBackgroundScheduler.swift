@@ -70,7 +70,8 @@ public enum FavoriteUpdateBackgroundScheduler {
             updateStore: dependencies.favoriteUpdateStore,
             libraryStore: dependencies.localFavoriteLibraryStore,
             makeForumThreadReaderRepository: dependencies.makeForumThreadReaderRepository,
-            settingsStore: dependencies.settingsStore
+            settingsStore: dependencies.settingsStore,
+            notifier: UserNotificationFavoriteUpdateNotifier()
         )
     }
 }

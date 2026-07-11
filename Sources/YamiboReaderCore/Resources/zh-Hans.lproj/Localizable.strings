@@ -345,6 +345,12 @@
 "favorites.updates.loaded_targets" = "已载入 %d 个可检查收藏";
 "favorites.updates.mark_read" = "标为已读";
 "favorites.updates.no_events" = "暂无收藏更新";
+"favorites.updates.notifications" = "更新通知";
+"favorites.updates.notifications_blocked" = "通知权限已在系统设置中被关闭，更新通知暂时无法送达。";
+"favorites.updates.notifications_denied_message" = "通知权限未开启，请在系统设置中允许本应用发送通知。";
+"favorites.updates.notifications_denied_title" = "无法开启更新通知";
+"favorites.updates.notifications_footer" = "检测到收藏更新时发送系统通知。";
+"favorites.updates.notifications_open_settings" = "打开设置";
 "favorites.updates.run_counts" = "已检查 %d/%d 项，发现 %d 项更新";
 "favorites.updates.preparing" = "准备检查";
 "favorites.updates.status.canceled" = "收藏更新检查已取消";

@@ -199,7 +199,11 @@ public final class YamiboAppModel {
     }
 
     private func applyRestoredRoute(_ route: ReaderResumeRoute?) {
-        guard let route else { return }
+        // Re-checked at apply time, not just when bootstrap sampled it: a
+        // reader presented while bootstrap was still awaiting (e.g. from a
+        // favorite-update notification tap on cold start) must not be
+        // replaced by the restored resume route.
+        guard let route, canRestoreReaderRoute else { return }
         switch route {
         case let .novel(context):
             activeNovelContext = context

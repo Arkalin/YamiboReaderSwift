@@ -16,6 +16,7 @@ final class FavoriteUpdateMonitor: ObservableObject {
     private let libraryStore: FavoriteLibraryStore
     private let makeForumThreadReaderRepository: @Sendable () async -> ForumThreadReaderRepository
     private let settingsStore: SettingsStore?
+    private let notifier: (any FavoriteUpdateNotifying)?
     private let pageFetcher: ((FavoriteItem) async throws -> ForumThreadPage)?
 
     private var checkTask: Task<Void, Never>?
@@ -32,12 +33,14 @@ final class FavoriteUpdateMonitor: ObservableObject {
         libraryStore: FavoriteLibraryStore,
         makeForumThreadReaderRepository: @escaping @Sendable () async -> ForumThreadReaderRepository,
         settingsStore: SettingsStore? = nil,
+        notifier: (any FavoriteUpdateNotifying)? = nil,
         pageFetcher: ((FavoriteItem) async throws -> ForumThreadPage)? = nil
     ) {
         self.updateStore = updateStore
         self.libraryStore = libraryStore
         self.makeForumThreadReaderRepository = makeForumThreadReaderRepository
         self.settingsStore = settingsStore
+        self.notifier = notifier
         self.pageFetcher = pageFetcher
         storeUpdatesTask = Task { @MainActor [weak self, store = updateStore] in
             for await notification in NotificationCenter.default.notifications(named: FavoriteUpdateStore.didChangeNotification) {
@@ -194,6 +197,76 @@ final class FavoriteUpdateMonitor: ObservableObject {
         events.contains { $0.detectedAt > Date.now.addingTimeInterval(-7 * 24 * 3600) }
     }
 
+    // MARK: - Update notifications
+
+    /// Whether detected updates are delivered as local notifications.
+    func notificationsEnabled() async -> Bool {
+        guard let settingsStore else { return false }
+        return await settingsStore.load().favorites.updateNotificationsEnabled
+    }
+
+    /// Persists the notification toggle and returns the effective value.
+    /// Enabling requests system authorization first, so the stored setting
+    /// can only be true after a grant — a denied request leaves it off.
+    @discardableResult
+    func setNotificationsEnabled(_ enabled: Bool) async -> Bool {
+        guard let settingsStore, let notifier else { return false }
+        var effective = enabled
+        if enabled {
+            switch await notifier.authorization() {
+            case .granted:
+                break
+            case .notDetermined:
+                effective = await notifier.requestAuthorization()
+            case .denied:
+                effective = false
+            }
+        }
+        var settings = await settingsStore.load()
+        settings.favorites.updateNotificationsEnabled = effective
+        do {
+            try await settingsStore.save(settings)
+        } catch {
+            YamiboLog.persistence.error("Failed to persist favorite update notification toggle: \(error.localizedDescription)")
+        }
+        if !effective {
+            let identifiers = events.map { FavoriteUpdateNotification.identifier(forTargetID: $0.target.id) }
+            await notifier.removeDelivered(identifiers: identifiers)
+            await notifier.setBadgeCount(0)
+        }
+        return effective
+    }
+
+    /// True when the user's toggle is on but the system permission has since
+    /// been revoked — deliveries are silently skipped in that state.
+    func notificationsBlockedBySystem() async -> Bool {
+        guard let notifier, await notificationsEnabled() else { return false }
+        return await notifier.authorization() == .denied
+    }
+
+    /// Delivers a local notification for a freshly inserted event. Sharing
+    /// the event's target-keyed identifier means an accumulated re-detection
+    /// replaces the favorite's previous notification instead of stacking.
+    private func deliverNotificationIfEnabled(for event: FavoriteUpdateEvent) async {
+        guard let notifier, await notificationsEnabled() else { return }
+        guard await notifier.authorization() == .granted else { return }
+        let unreadCount = await updateStore.loadState().events
+            .filter { $0.dismissedAt == nil && $0.readAt == nil }
+            .count
+        await notifier.deliver(FavoriteUpdateNotification(event: event, badgeCount: unreadCount))
+    }
+
+    /// Removes the delivered notifications for events the user has handled
+    /// in-app and re-syncs the icon badge to the remaining unread count.
+    private func cleanUpNotifications(forTargetIDs targetIDs: [String]) async {
+        guard let notifier else { return }
+        if !targetIDs.isEmpty {
+            await notifier.removeDelivered(identifiers: targetIDs.map(FavoriteUpdateNotification.identifier(forTargetID:)))
+        }
+        guard await notificationsEnabled() else { return }
+        await notifier.setBadgeCount(events.filter { $0.readAt == nil }.count)
+    }
+
     /// Starts a check when the configured interval has elapsed since the last
     /// completed run — the foreground catch-up half of automatic checking
     /// (BGAppRefreshTask timing is only best-effort).
@@ -218,9 +291,11 @@ final class FavoriteUpdateMonitor: ObservableObject {
     // MARK: - Events and filters
 
     func markEventRead(_ eventID: String) async {
+        let targetIDs = events.filter { $0.id == eventID }.map(\.target.id)
         do {
             try await updateStore.markEventRead(eventID)
             await load()
+            await cleanUpNotifications(forTargetIDs: targetIDs)
         } catch {
             YamiboLog.persistence.error("Failed to mark favorite update event \(eventID) read: \(error.localizedDescription)")
             errorMessage = error.localizedDescription
@@ -228,9 +303,11 @@ final class FavoriteUpdateMonitor: ObservableObject {
     }
 
     func dismissEvent(_ eventID: String) async {
+        let targetIDs = events.filter { $0.id == eventID }.map(\.target.id)
         do {
             try await updateStore.dismissEvent(eventID)
             await load()
+            await cleanUpNotifications(forTargetIDs: targetIDs)
         } catch {
             YamiboLog.persistence.error("Failed to dismiss favorite update event \(eventID): \(error.localizedDescription)")
             errorMessage = error.localizedDescription
@@ -238,9 +315,11 @@ final class FavoriteUpdateMonitor: ObservableObject {
     }
 
     func dismissAllEvents() async {
+        let targetIDs = events.map(\.target.id)
         do {
             try await updateStore.dismissAllEvents()
             await load()
+            await cleanUpNotifications(forTargetIDs: targetIDs)
         } catch {
             YamiboLog.persistence.error("Failed to dismiss all favorite update events: \(error.localizedDescription)")
             errorMessage = error.localizedDescription
@@ -546,6 +625,7 @@ final class FavoriteUpdateMonitor: ObservableObject {
             // instead of silently losing the detected update.
             try await updateStore.insertEvent(event)
             try await updateStore.upsertTrackedTarget(target)
+            await deliverNotificationIfEnabled(for: event)
             return .checked(detected: 1)
         } catch {
             YamiboLog.persistence.error("Failed to persist tracked target or update event for \(item.target.id): \(error.localizedDescription)")

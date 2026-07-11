@@ -36,7 +36,8 @@ struct LocalFavoritesRootView: View {
             updateStore: dependencies.favoriteUpdateStore,
             libraryStore: dependencies.localFavoriteLibraryStore,
             makeForumThreadReaderRepository: dependencies.makeForumThreadReaderRepository,
-            settingsStore: dependencies.settingsStore
+            settingsStore: dependencies.settingsStore,
+            notifier: UserNotificationFavoriteUpdateNotifier()
         ))
         openTargetResolver = LocalFavoriteOpenTargetResolver(
             libraryStore: dependencies.localFavoriteLibraryStore,

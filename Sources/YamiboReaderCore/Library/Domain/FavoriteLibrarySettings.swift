@@ -352,6 +352,10 @@ public struct FavoriteLibrarySettings: Codable, Hashable, Sendable {
     public var removeRemotePromptEnabled: Bool
     public var removeRemoteDefault: Bool
     public var updateCheckInterval: FavoriteUpdateCheckInterval
+    /// Whether detected favorite updates are delivered as local system
+    /// notifications. Off by default; enabling it prompts for notification
+    /// permission, so the toggle only ever turns on after a grant.
+    public var updateNotificationsEnabled: Bool
 
     public init(
         appearance: FavoriteAppearanceSettings = .init(),
@@ -367,7 +371,8 @@ public struct FavoriteLibrarySettings: Codable, Hashable, Sendable {
         addSyncDefault: Bool = true,
         removeRemotePromptEnabled: Bool = true,
         removeRemoteDefault: Bool = false,
-        updateCheckInterval: FavoriteUpdateCheckInterval = .off
+        updateCheckInterval: FavoriteUpdateCheckInterval = .off,
+        updateNotificationsEnabled: Bool = false
     ) {
         self.appearance = appearance
         self.background = background
@@ -383,6 +388,7 @@ public struct FavoriteLibrarySettings: Codable, Hashable, Sendable {
         self.removeRemotePromptEnabled = removeRemotePromptEnabled
         self.removeRemoteDefault = removeRemoteDefault
         self.updateCheckInterval = updateCheckInterval
+        self.updateNotificationsEnabled = updateNotificationsEnabled
     }
 
     public init(from decoder: any Decoder) throws {
@@ -401,7 +407,8 @@ public struct FavoriteLibrarySettings: Codable, Hashable, Sendable {
             addSyncDefault: try container.decodeIfPresent(Bool.self, forKey: .addSyncDefault) ?? true,
             removeRemotePromptEnabled: try container.decodeIfPresent(Bool.self, forKey: .removeRemotePromptEnabled) ?? true,
             removeRemoteDefault: try container.decodeIfPresent(Bool.self, forKey: .removeRemoteDefault) ?? false,
-            updateCheckInterval: try container.decodeIfPresent(FavoriteUpdateCheckInterval.self, forKey: .updateCheckInterval) ?? .off
+            updateCheckInterval: try container.decodeIfPresent(FavoriteUpdateCheckInterval.self, forKey: .updateCheckInterval) ?? .off,
+            updateNotificationsEnabled: try container.decodeIfPresent(Bool.self, forKey: .updateNotificationsEnabled) ?? false
         )
     }
 
