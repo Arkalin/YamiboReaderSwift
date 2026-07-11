@@ -114,6 +114,7 @@ private struct ReadingProgressWebDAVRecord: Codable, Equatable, Sendable {
     var threadID: String?
     var novel: NovelReadingProgressRecord?
     var manga: MangaReadingProgressWebDAVRecord?
+    var thread: ThreadReadingProgressRecord?
 
     init(record: ReadingProgressRecord) throws {
         guard let contentTarget = record.contentTarget else {
@@ -142,6 +143,7 @@ private struct ReadingProgressWebDAVRecord: Codable, Equatable, Sendable {
         } else {
             self.manga = nil
         }
+        self.thread = record.thread
     }
 
     func record() throws -> ReadingProgressRecord {
@@ -174,7 +176,8 @@ private struct ReadingProgressWebDAVRecord: Codable, Equatable, Sendable {
             updatedAt: updatedAt,
             lastReadAt: lastReadAt,
             novel: novel,
-            manga: mangaRecord
+            manga: mangaRecord,
+            thread: thread
         )
     }
 }

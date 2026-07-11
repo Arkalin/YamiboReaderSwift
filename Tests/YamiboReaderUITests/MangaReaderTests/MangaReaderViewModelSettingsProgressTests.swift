@@ -938,6 +938,8 @@ private actor RecordingMangaProgressAdapter: ProgressSyncAdapter {
     func saveMangaReadingPosition(_ position: MangaProgressReadingPosition) async throws {
         saved.append(position)
     }
+
+    func saveThreadReadingPosition(_ position: ThreadReadingPosition) async throws {}
 }
 
 @MainActor

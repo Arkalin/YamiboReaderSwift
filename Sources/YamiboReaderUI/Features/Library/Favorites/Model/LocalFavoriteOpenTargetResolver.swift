@@ -114,6 +114,7 @@ struct LocalFavoriteOpenTargetResolver {
                         source: .favorites,
                         initialPage: 0,
                         directoryName: nil,
+                        forumID: latestItem.forumID,
                         offlineCacheFavoriteID: latestItem.id,
                         isSmartModeEnabled: smartModeEnabled
                     )
@@ -142,6 +143,7 @@ struct LocalFavoriteOpenTargetResolver {
                         chapterView: ownThreadProgress?.chapterView ?? 1,
                         initialPage: ownThreadProgress?.mangaPageIndex ?? 0,
                         directoryName: nil,
+                        forumID: latestItem.forumID,
                         offlineCacheFavoriteID: latestItem.id,
                         isSmartModeEnabled: false
                     )
@@ -178,6 +180,7 @@ struct LocalFavoriteOpenTargetResolver {
                     chapterView: ownThreadProgress?.chapterView ?? 1,
                     initialPage: ownThreadProgress?.mangaPageIndex ?? 0,
                     directoryName: nil,
+                    forumID: item.forumID,
                     offlineCacheFavoriteID: item.id,
                     isSmartModeEnabled: true
                 )
@@ -195,6 +198,7 @@ struct LocalFavoriteOpenTargetResolver {
                 chapterView: directoryProgress?.chapterView ?? firstChapter.view,
                 initialPage: directoryProgress?.mangaPageIndex ?? 0,
                 directoryName: directory.cleanBookName,
+                forumID: item.forumID,
                 offlineCacheFavoriteID: item.id,
                 isSmartModeEnabled: true
             )

@@ -3,6 +3,13 @@ import Foundation
 public enum ForumNavigationSource: String, Codable, Hashable, Sendable {
     case external
     case readerOrigin
+    /// A novel/manga reader's "查看原帖"-style jump into its own thread.
+    /// Same native-thread-reader routing as `.readerOrigin`, but the opened
+    /// reader is a discussion companion view for the work's tid, so it must
+    /// not produce its own browsing-history row (browsing-history decision
+    /// #14) — unlike `.readerOrigin` opens from favorites/history, which are
+    /// real visits and do record.
+    case readerDiscussion
 }
 
 public enum ForumResolvedRoute: Equatable, Hashable, Sendable {

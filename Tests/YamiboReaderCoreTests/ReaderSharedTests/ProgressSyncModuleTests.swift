@@ -148,6 +148,11 @@ private actor RecordingProgressSyncAdapter: ProgressSyncAdapter {
         saved.append(.manga(position))
     }
 
+    func saveThreadReadingPosition(_ position: ThreadReadingPosition) async throws {
+        try failIfNeeded()
+        saved.append(.thread(position))
+    }
+
     private func failIfNeeded() throws {
         guard remainingFailures > 0 else { return }
         remainingFailures -= 1

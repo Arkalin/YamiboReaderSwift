@@ -126,6 +126,51 @@ public actor ContentCoverStore {
         }
     }
 
+    /// Batch lookup for list surfaces (the browsing-history page): one read
+    /// transaction instead of one actor round-trip per row. Keys without a
+    /// stored cover are simply absent from the result.
+    public func covers(for keys: [ContentCoverKey]) async -> [ContentCoverKey: ContentCover] {
+        let validKeys = Array(Set(keys.filter { !$0.targetID.isEmpty }))
+        guard !validKeys.isEmpty else { return [:] }
+        do {
+            return try await database.read { db in
+                var covers: [ContentCoverKey: ContentCover] = [:]
+                // 200 keys * 2 bind parameters stays well under SQLite's
+                // 999-parameter limit.
+                for chunk in stride(from: 0, to: validKeys.count, by: 200).map({ Array(validKeys[$0..<min($0 + 200, validKeys.count)]) }) {
+                    let condition = Array(repeating: "(target_type = ? AND target_id = ?)", count: chunk.count)
+                        .joined(separator: " OR ")
+                    let arguments = chunk.flatMap { [$0.targetType.rawValue, $0.targetID] }
+                    let rows = try Row.fetchAll(
+                        db,
+                        sql: """
+                        SELECT target_type, target_id, automatic_url, manual_url, dynamic_enabled, text_cover_forced, updated_at
+                        FROM content_cover
+                        WHERE \(condition)
+                        """,
+                        arguments: StatementArguments(arguments)
+                    )
+                    for row in rows {
+                        guard let targetType = ContentCoverTargetType(rawValue: row["target_type"] as String) else { continue }
+                        let key = ContentCoverKey(targetType: targetType, targetID: row["target_id"])
+                        covers[key] = ContentCover(
+                            key: key,
+                            automaticCoverURL: (row["automatic_url"] as String?).flatMap(URL.init(string:)),
+                            manualCoverURL: (row["manual_url"] as String?).flatMap(URL.init(string:)),
+                            dynamicEnabled: row["dynamic_enabled"],
+                            textCoverForced: row["text_cover_forced"],
+                            updatedAt: Date(timeIntervalSince1970: row["updated_at"])
+                        )
+                    }
+                }
+                return covers
+            }
+        } catch {
+            YamiboLog.library.warning("Failed to batch-read \(validKeys.count) content covers: \(error)")
+            return [:]
+        }
+    }
+
     @discardableResult
     public func setAutomaticCover(_ url: URL, for key: ContentCoverKey, date: Date = .now) async throws -> Bool {
         guard let normalizedURL = Self.normalizedCoverURL(from: url.absoluteString),

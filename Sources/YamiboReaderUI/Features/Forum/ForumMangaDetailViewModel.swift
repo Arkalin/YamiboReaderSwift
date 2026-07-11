@@ -73,6 +73,7 @@ final class ForumMangaDetailViewModel {
                 displayTitle: context.title,
                 source: .forum,
                 directoryName: context.directoryNameHint,
+                forumID: context.thread.fid,
                 // `ForumMangaDetailView` (and this view model) is only ever
                 // reached via `YamiboThreadRouteTarget.manga`, which
                 // `YamiboThreadRouteResolver` only produces when the board's
@@ -125,6 +126,7 @@ final class ForumMangaDetailViewModel {
             chapterView: manga?.chapterView ?? fallbackChapterView,
             initialPage: manga?.mangaPageIndex ?? 0,
             directoryName: directory.cleanBookName,
+            forumID: context.thread.fid,
             // See the comment in `reload()`: this view model only exists
             // for mode-on boards.
             isSmartModeEnabled: true
@@ -139,6 +141,7 @@ final class ForumMangaDetailViewModel {
             source: .forum,
             chapterView: chapter.view,
             directoryName: directory?.cleanBookName ?? context.directoryNameHint,
+            forumID: context.thread.fid,
             // See the comment in `reload()`: this view model only exists
             // for mode-on boards.
             isSmartModeEnabled: true

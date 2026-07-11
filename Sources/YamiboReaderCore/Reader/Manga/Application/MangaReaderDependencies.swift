@@ -5,6 +5,9 @@ import Foundation
 public struct MangaReaderDependencies: Sendable {
     public let settingsStore: SettingsStore
     public let readingProgressStore: ReadingProgressStore
+    /// Optional so test/preview compositions without a history database keep
+    /// working; the app composition root always supplies one.
+    public let browsingHistoryStore: BrowsingHistoryStore?
     public let localFavoriteLibraryStore: FavoriteLibraryStore
     public let mangaDirectoryStore: any MangaDirectoryPersisting
     public let mangaDirectorySearchCooldownState: MangaDirectorySearchCooldownState
@@ -27,6 +30,7 @@ public struct MangaReaderDependencies: Sendable {
     public init(
         settingsStore: SettingsStore,
         readingProgressStore: ReadingProgressStore,
+        browsingHistoryStore: BrowsingHistoryStore? = nil,
         localFavoriteLibraryStore: FavoriteLibraryStore,
         mangaDirectoryStore: any MangaDirectoryPersisting,
         mangaDirectorySearchCooldownState: MangaDirectorySearchCooldownState,
@@ -42,6 +46,7 @@ public struct MangaReaderDependencies: Sendable {
     ) {
         self.settingsStore = settingsStore
         self.readingProgressStore = readingProgressStore
+        self.browsingHistoryStore = browsingHistoryStore
         self.localFavoriteLibraryStore = localFavoriteLibraryStore
         self.mangaDirectoryStore = mangaDirectoryStore
         self.mangaDirectorySearchCooldownState = mangaDirectorySearchCooldownState

@@ -8,6 +8,9 @@ public struct ForumDependencies: Sendable {
     public let profileStore: YamiboProfileStore
     public let localFavoriteLibraryStore: FavoriteLibraryStore
     public let readingProgressStore: ReadingProgressStore
+    /// Optional so test/preview compositions without a history database keep
+    /// working; the app composition root always supplies one.
+    public let browsingHistoryStore: BrowsingHistoryStore?
     public let settingsStore: SettingsStore
     public let contentCoverStore: ContentCoverStore
     public let mangaDirectoryStore: any MangaDirectoryPersisting
@@ -27,6 +30,7 @@ public struct ForumDependencies: Sendable {
         profileStore: YamiboProfileStore,
         localFavoriteLibraryStore: FavoriteLibraryStore,
         readingProgressStore: ReadingProgressStore,
+        browsingHistoryStore: BrowsingHistoryStore? = nil,
         settingsStore: SettingsStore,
         contentCoverStore: ContentCoverStore,
         mangaDirectoryStore: any MangaDirectoryPersisting,
@@ -45,6 +49,7 @@ public struct ForumDependencies: Sendable {
         self.profileStore = profileStore
         self.localFavoriteLibraryStore = localFavoriteLibraryStore
         self.readingProgressStore = readingProgressStore
+        self.browsingHistoryStore = browsingHistoryStore
         self.settingsStore = settingsStore
         self.contentCoverStore = contentCoverStore
         self.mangaDirectoryStore = mangaDirectoryStore

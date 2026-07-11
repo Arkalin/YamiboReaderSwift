@@ -4,6 +4,24 @@ import Foundation
 public enum ReadingProgressKind: String, Codable, Hashable, Sendable {
     case novel
     case manga
+    /// Normal forum threads (browsing-history decisions #6/#7): page +
+    /// floor-level anchor, restored on every entrance (decision #8).
+    case thread
+}
+
+public struct ThreadReadingProgressRecord: Codable, Hashable, Sendable {
+    public var lastPage: Int
+    public var pageCount: Int?
+    /// Topmost visible post id when the reader last saved — the floor-level
+    /// half of the resume position (the page is the coarse half).
+    public var anchorPostID: String?
+
+    public init(lastPage: Int = 1, pageCount: Int? = nil, anchorPostID: String? = nil) {
+        self.lastPage = max(1, lastPage)
+        self.pageCount = pageCount.map { max(1, $0) }
+        let trimmedAnchor = anchorPostID?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        self.anchorPostID = trimmedAnchor.isEmpty ? nil : trimmedAnchor
+    }
 }
 
 public struct NovelReadingProgressRecord: Codable, Hashable, Sendable {
@@ -68,6 +86,7 @@ public struct ReadingProgressRecord: Codable, Hashable, Identifiable, Sendable {
     public var lastReadAt: Date?
     public var novel: NovelReadingProgressRecord?
     public var manga: MangaReadingProgressRecord?
+    public var thread: ThreadReadingProgressRecord?
 
     public var id: String {
         contentTarget?.id
@@ -83,7 +102,8 @@ public struct ReadingProgressRecord: Codable, Hashable, Identifiable, Sendable {
         updatedAt: Date = .now,
         lastReadAt: Date? = nil,
         novel: NovelReadingProgressRecord? = nil,
-        manga: MangaReadingProgressRecord? = nil
+        manga: MangaReadingProgressRecord? = nil,
+        thread: ThreadReadingProgressRecord? = nil
     ) {
         self.contentTarget = contentTarget
         self.threadID = Self.normalizedThreadID(threadID) ?? contentTarget?.threadID
@@ -92,6 +112,7 @@ public struct ReadingProgressRecord: Codable, Hashable, Identifiable, Sendable {
         self.lastReadAt = lastReadAt
         self.novel = novel
         self.manga = manga
+        self.thread = thread
     }
 
     private static func normalizedThreadID(_ value: String?) -> String? {
@@ -131,6 +152,15 @@ public actor ReadingProgressStore {
         self.database = databasePool
     }
 
+    /// Fuzzy novel/manga lookup by tid. Deliberately excludes `.thread`
+    /// rows: every consumer of this method (`LocalFavoriteOpenTargetResolver`
+    /// novels, detail pages' continue-reading state, `AppContinuityWorkflow`,
+    /// the novel reader's self-restore) reads `.novel`/`.manga` payloads, and
+    /// a normal-thread anchor row for the same tid (e.g. written by a
+    /// "查看讨论" companion view) is always the freshest row — without the
+    /// exclusion it would shadow the real novel/manga record and silently
+    /// kill resume. Normal-thread restore uses the precise
+    /// `load(for: .normalThread(threadID:))` lookup instead.
     public func load(threadID: String) async -> ReadingProgressRecord? {
         guard let threadID = Self.trimmedNonEmpty(threadID) else { return nil }
         do {
@@ -139,11 +169,11 @@ public actor ReadingProgressStore {
                     in: db,
                     sql: """
                     SELECT * FROM reading_progress
-                    WHERE thread_id = ? OR manga_chapter_thread_id = ?
+                    WHERE (thread_id = ? OR manga_chapter_thread_id = ?) AND kind != ?
                     ORDER BY updated_at DESC, id ASC
                     LIMIT 1
                     """,
-                    arguments: [threadID, threadID]
+                    arguments: [threadID, threadID, ReadingProgressKind.thread.rawValue]
                 )
             }
         } catch {
@@ -243,6 +273,39 @@ public actor ReadingProgressStore {
             try db.execute(sql: "DELETE FROM reading_progress")
         }
         postChangeNotification()
+    }
+
+    /// Saves a normal thread's page + floor-anchor resume position — the
+    /// first real writer `.normalThread` has ever had (browsing-history
+    /// decisions #6/#7). Restored by `ForumThreadReaderViewModel` on every
+    /// entrance without an explicit deep-link target (decision #8).
+    @discardableResult
+    public func saveNormalThread(
+        threadID: String,
+        page: Int,
+        pageCount: Int? = nil,
+        anchorPostID: String? = nil,
+        date: Date = .now
+    ) async throws -> ReadingProgressRecord {
+        guard let threadID = Self.trimmedNonEmpty(threadID) else {
+            throw YamiboError.persistenceFailed("Normal thread reading progress requires a thread tid")
+        }
+        let record = ReadingProgressRecord(
+            contentTarget: .normalThread(threadID: threadID),
+            threadID: threadID,
+            kind: .thread,
+            updatedAt: date,
+            lastReadAt: date,
+            novel: nil,
+            manga: nil,
+            thread: ThreadReadingProgressRecord(
+                lastPage: page,
+                pageCount: pageCount,
+                anchorPostID: anchorPostID
+            )
+        )
+        try await save(record)
+        return record
     }
 
     @discardableResult
@@ -457,6 +520,7 @@ public actor ReadingProgressStore {
         )
         let novel = try novelRecord(from: row)
         let manga = mangaRecord(from: row)
+        let thread = threadRecord(from: row)
         return ReadingProgressRecord(
             contentTarget: target,
             threadID: row["thread_id"] as String?,
@@ -464,7 +528,17 @@ public actor ReadingProgressStore {
             updatedAt: date(from: row["updated_at"]),
             lastReadAt: optionalDate(from: row["last_read_at"] as Double?),
             novel: novel,
-            manga: manga
+            manga: manga,
+            thread: thread
+        )
+    }
+
+    private static func threadRecord(from row: Row) -> ThreadReadingProgressRecord? {
+        guard let lastPage = row["thread_last_page"] as Int? else { return nil }
+        return ThreadReadingProgressRecord(
+            lastPage: lastPage,
+            pageCount: row["thread_page_count"] as Int?,
+            anchorPostID: row["thread_anchor_post_id"] as String?
         )
     }
 
@@ -550,9 +624,10 @@ public actor ReadingProgressStore {
                 id, target_kind, thread_id, manga_id, clean_book_name, kind, updated_at, last_read_at,
                 novel_last_view, novel_last_chapter, novel_author_id, novel_resume_point_json,
                 novel_max_view, novel_document_surface_progress_percent,
-                manga_chapter_thread_id, manga_chapter_view, manga_last_chapter, manga_page_index, manga_page_count
+                manga_chapter_thread_id, manga_chapter_view, manga_last_chapter, manga_page_index, manga_page_count,
+                thread_last_page, thread_page_count, thread_anchor_post_id
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             arguments: [
                 record.id,
@@ -574,6 +649,9 @@ public actor ReadingProgressStore {
                 record.manga?.lastChapter,
                 record.manga?.mangaPageIndex,
                 record.manga?.mangaPageCount,
+                record.thread?.lastPage,
+                record.thread?.pageCount,
+                record.thread?.anchorPostID,
             ]
         )
     }
@@ -597,7 +675,8 @@ public actor ReadingProgressStore {
 
     private static func normalizedRecord(_ record: ReadingProgressRecord) -> ReadingProgressRecord {
         let contentTarget: FavoriteContentTarget?
-        if record.kind == .novel {
+        switch record.kind {
+        case .novel:
             if let existing = record.contentTarget {
                 contentTarget = existing
             } else if let threadID = trimmedNonEmpty(record.threadID) {
@@ -605,7 +684,15 @@ public actor ReadingProgressStore {
             } else {
                 contentTarget = nil
             }
-        } else {
+        case .thread:
+            if let existing = record.contentTarget {
+                contentTarget = existing
+            } else if let threadID = trimmedNonEmpty(record.threadID) {
+                contentTarget = .normalThread(threadID: threadID)
+            } else {
+                contentTarget = nil
+            }
+        case .manga:
             contentTarget = record.contentTarget ?? fallbackMangaTarget(for: record)
         }
         return ReadingProgressRecord(
@@ -615,7 +702,8 @@ public actor ReadingProgressStore {
             updatedAt: record.updatedAt,
             lastReadAt: record.lastReadAt,
             novel: record.novel,
-            manga: record.manga
+            manga: record.manga,
+            thread: record.thread
         )
     }
 

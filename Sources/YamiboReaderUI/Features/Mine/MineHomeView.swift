@@ -8,6 +8,7 @@ public struct MineHomeView: View {
     @State private var showingSignOutConfirmation = false
     @State private var showingOfflineCacheQueueSheet = false
     @State private var isMyLikesPushed = false
+    @State private var isHistoryPushed = false
 
     private let settingsDependencies: SettingsDependencies
     private let appModel: YamiboAppModel
@@ -67,6 +68,9 @@ public struct MineHomeView: View {
                     },
                     showMyLikes: {
                         isMyLikesPushed = true
+                    },
+                    showHistory: {
+                        isHistoryPushed = true
                     }
                 )
                 MineSettingsSection(
@@ -138,6 +142,12 @@ public struct MineHomeView: View {
                     likeDependencies: likeDependencies,
                     contentCoverStore: settingsDependencies.library.contentCoverStore,
                     favoriteLibraryStore: settingsDependencies.library.localFavoriteLibraryStore,
+                    appModel: appModel
+                )
+            }
+            .navigationDestination(isPresented: $isHistoryPushed) {
+                BrowsingHistoryView(
+                    dependencies: settingsDependencies.library,
                     appModel: appModel
                 )
             }

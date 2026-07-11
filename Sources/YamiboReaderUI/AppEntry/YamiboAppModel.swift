@@ -114,7 +114,7 @@ public final class YamiboAppModel {
     public func dismissNovelReader(
         openThreadInForum url: URL? = nil,
         suspendedNovelContext: NovelLaunchContext? = nil,
-        forumNavigationSource: ForumNavigationSource = .readerOrigin
+        forumNavigationSource: ForumNavigationSource = .readerDiscussion
     ) {
         if url != nil {
             self.suspendedNovelContext = suspendedNovelContext ?? activeNovelContext
@@ -132,7 +132,7 @@ public final class YamiboAppModel {
     public func dismissMangaReader(
         openThreadInForum url: URL? = nil,
         suspendedMangaContext: MangaLaunchContext? = nil,
-        forumNavigationSource: ForumNavigationSource = .readerOrigin
+        forumNavigationSource: ForumNavigationSource = .readerDiscussion
     ) {
         if url != nil {
             self.suspendedMangaContext = suspendedMangaContext ?? activeMangaContext

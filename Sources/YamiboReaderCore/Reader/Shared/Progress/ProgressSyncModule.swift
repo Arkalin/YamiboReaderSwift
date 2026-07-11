@@ -75,14 +75,34 @@ public struct MangaProgressReadingPosition: Hashable, Sendable {
     }
 }
 
+/// Normal-thread reading position (browsing-history decisions #6/#7): the
+/// current page plus the topmost visible post's id as the floor-level anchor.
+public struct ThreadReadingPosition: Hashable, Sendable {
+    public var threadID: String
+    public var page: Int
+    public var pageCount: Int?
+    public var anchorPostID: String?
+
+    public init(threadID: String, page: Int, pageCount: Int? = nil, anchorPostID: String? = nil) {
+        let normalizedThreadID = threadID.trimmingCharacters(in: .whitespacesAndNewlines)
+        precondition(!normalizedThreadID.isEmpty, "ThreadReadingPosition requires a Yamibo thread tid")
+        self.threadID = normalizedThreadID
+        self.page = max(1, page)
+        self.pageCount = pageCount.map { max(1, $0) }
+        self.anchorPostID = anchorPostID?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+    }
+}
+
 public enum ProgressSyncPosition: Hashable, Sendable {
     case novel(NovelReadingPosition)
     case manga(MangaProgressReadingPosition)
+    case thread(ThreadReadingPosition)
 }
 
 public protocol ProgressSyncAdapter: Sendable {
     func saveNovelReadingPosition(_ position: NovelReadingPosition) async throws
     func saveMangaReadingPosition(_ position: MangaProgressReadingPosition) async throws
+    func saveThreadReadingPosition(_ position: ThreadReadingPosition) async throws
 }
 
 public actor ProgressSyncModule {
@@ -144,6 +164,8 @@ public actor ProgressSyncModule {
                 try await adapter.saveNovelReadingPosition(position)
             case let .manga(position):
                 try await adapter.saveMangaReadingPosition(position)
+            case let .thread(position):
+                try await adapter.saveThreadReadingPosition(position)
             }
             lastSyncedPosition = position
             lastQueuedPosition = position
@@ -156,19 +178,78 @@ public actor ProgressSyncModule {
     }
 }
 
+/// Persists debounced reading positions and, when a `BrowsingHistoryStore`
+/// is attached, piggybacks a position refresh onto the matching history row
+/// (browsing-history decision #5's "翻页更新" cadence — the same debounce
+/// that paces progress writes paces history updates, no extra scheduling).
+///
+/// The history refresh is UPDATE-only and runs after the progress write; if
+/// the surrounding Task is cancelled between the two, the history row just
+/// keeps a slightly stale position until the next save — display metadata
+/// only, never resume state (decision #4). Preview sessions never reach this
+/// adapter at all: both readers gate their queue/flush calls on
+/// `context.isPreview` before anything is enqueued.
 public struct FavoriteLibraryProgressSyncAdapter: ProgressSyncAdapter {
     private let readingProgressStore: ReadingProgressStore
+    private let browsingHistoryStore: BrowsingHistoryStore?
 
-    public init(readingProgressStore: ReadingProgressStore) {
+    public init(
+        readingProgressStore: ReadingProgressStore,
+        browsingHistoryStore: BrowsingHistoryStore? = nil
+    ) {
         self.readingProgressStore = readingProgressStore
+        self.browsingHistoryStore = browsingHistoryStore
     }
 
     public func saveNovelReadingPosition(_ position: NovelReadingPosition) async throws {
         _ = try await readingProgressStore.saveNovel(position)
+        await browsingHistoryStore?.updatePosition(
+            targetID: FavoriteContentTarget.novelThread(threadID: position.threadID).id,
+            chapterTitle: position.chapterTitle
+        )
     }
 
     public func saveMangaReadingPosition(_ position: MangaProgressReadingPosition) async throws {
         _ = try await readingProgressStore.saveManga(position)
+        guard let browsingHistoryStore else { return }
+        if position.isSmartModeEnabled {
+            // Mirrors `ReadingProgressStore.saveManga`'s mode-on identity
+            // derivation so the history row id lines up with the row the
+            // manga reader recorded at open (browsing-history decision #2).
+            let cleanBookName = position.directoryName ?? position.chapterTitle
+            let target = FavoriteContentTarget(
+                mangaID: position.mangaID ?? cleanBookName,
+                mangaCleanBookName: cleanBookName
+            )
+            await browsingHistoryStore.updatePosition(
+                targetID: target.id,
+                pageIndex: position.pageIndex,
+                pageCount: position.pageCount,
+                chapterTitle: position.chapterTitle,
+                chapterThreadID: position.chapterThreadID
+            )
+        } else {
+            await browsingHistoryStore.updatePosition(
+                targetID: FavoriteContentTarget.mangaThread(threadID: position.chapterThreadID).id,
+                pageIndex: position.pageIndex,
+                pageCount: position.pageCount,
+                chapterTitle: position.chapterTitle
+            )
+        }
+    }
+
+    public func saveThreadReadingPosition(_ position: ThreadReadingPosition) async throws {
+        _ = try await readingProgressStore.saveNormalThread(
+            threadID: position.threadID,
+            page: position.page,
+            pageCount: position.pageCount,
+            anchorPostID: position.anchorPostID
+        )
+        await browsingHistoryStore?.updatePosition(
+            targetID: FavoriteContentTarget.normalThread(threadID: position.threadID).id,
+            pageIndex: position.page,
+            pageCount: position.pageCount
+        )
     }
 }
 

@@ -110,7 +110,7 @@ public struct ForumNavigationHostView: View {
                         },
                         onUserTap: openUserSpace,
                         onViewThread: {
-                            path.append(.threadReader(ThreadNovelLaunchContext(thread: context.thread, title: context.title, authorID: context.authorID)))
+                            path.append(.threadReader(ThreadNovelLaunchContext(thread: context.thread, title: context.title, authorID: context.authorID, isDiscussionView: true)))
                         }
                     )
                     .forumNavigationBarStyle()
@@ -121,7 +121,7 @@ public struct ForumNavigationHostView: View {
                             appModel.presentMangaReader(launchContext)
                         },
                         onViewThread: {
-                            path.append(.threadReader(ThreadNovelLaunchContext(thread: context.thread, title: context.title)))
+                            path.append(.threadReader(ThreadNovelLaunchContext(thread: context.thread, title: context.title, isDiscussionView: true)))
                         }
                     )
                     .forumNavigationBarStyle()
@@ -183,7 +183,8 @@ public struct ForumNavigationHostView: View {
                 threadURL,
                 title: title,
                 containingFid: nil,
-                intent: source == .readerOrigin ? .nativeThreadReader : .contentRoute
+                intent: source == .readerOrigin || source == .readerDiscussion ? .nativeThreadReader : .contentRoute,
+                isDiscussionView: source == .readerDiscussion
             )
         case let .userSpace(uid, name):
             path.append(.userSpace(uid: uid, name: name, section: .space, subPage: .profile))
@@ -212,7 +213,8 @@ public struct ForumNavigationHostView: View {
         _ url: URL,
         title: String?,
         containingFid: String?,
-        intent: YamiboThreadRouteIntent = .contentRoute
+        intent: YamiboThreadRouteIntent = .contentRoute,
+        isDiscussionView: Bool = false
     ) {
         Task {
             do {
@@ -225,7 +227,7 @@ public struct ForumNavigationHostView: View {
                         tapContext: YamiboThreadTapContext(containingFid: containingFid)
                     )
                 )
-                openYamiboThreadRouteTarget(target)
+                openYamiboThreadRouteTarget(target, isDiscussionView: isDiscussionView)
             } catch {
                 actionErrorMessage = error.localizedDescription
             }
@@ -253,7 +255,7 @@ public struct ForumNavigationHostView: View {
         }
     }
 
-    private func openYamiboThreadRouteTarget(_ target: YamiboThreadRouteTarget) {
+    private func openYamiboThreadRouteTarget(_ target: YamiboThreadRouteTarget, isDiscussionView: Bool = false) {
         switch target {
         case let .novel(payload):
             let context = NovelDetailLaunchContext(
@@ -289,6 +291,7 @@ public struct ForumNavigationHostView: View {
                 chapterTID: payload.thread.tid,
                 displayTitle: payload.title,
                 source: .forum,
+                forumID: payload.thread.fid,
                 isSmartModeEnabled: false
             )
             appModel.presentMangaReader(context)
@@ -298,7 +301,8 @@ public struct ForumNavigationHostView: View {
                 title: payload.title,
                 initialPage: payload.initialPage,
                 targetPostID: payload.targetPostID,
-                authorID: payload.authorID
+                authorID: payload.authorID,
+                isDiscussionView: isDiscussionView
             )
             path.append(.threadReader(context))
         case let .webFallback(url):

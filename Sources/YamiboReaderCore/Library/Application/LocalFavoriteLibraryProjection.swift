@@ -1073,6 +1073,16 @@ public enum LocalFavoriteLibraryProjection {
                 return nil
             }
             return min(max(Int(((Double(manga.mangaPageIndex) + 1) / Double(pageCount) * 100).rounded()), 0), 100)
+        case .thread:
+            // Normal threads gained page-level progress with browsing
+            // history (decision #8's all-entrance resume): a favorited
+            // normal thread's card now shows it too, for free.
+            guard let thread = record.thread,
+                  let pageCount = thread.pageCount,
+                  pageCount > 0 else {
+                return nil
+            }
+            return min(max(Int((Double(thread.lastPage) / Double(pageCount) * 100).rounded()), 0), 100)
         }
     }
 
@@ -1088,6 +1098,12 @@ public enum LocalFavoriteLibraryProjection {
                 return L10n.string("favorites.progress.manga_page_total", manga.lastChapter, manga.mangaPageIndex + 1, pageCount)
             }
             return L10n.string("favorites.progress.manga_page", manga.lastChapter, manga.mangaPageIndex + 1)
+        case .thread:
+            guard let thread = record.thread else { return nil }
+            if let pageCount = thread.pageCount {
+                return L10n.string("history.progress.page_of_total", String(thread.lastPage), String(pageCount))
+            }
+            return L10n.string("history.progress.page", String(thread.lastPage))
         }
     }
 

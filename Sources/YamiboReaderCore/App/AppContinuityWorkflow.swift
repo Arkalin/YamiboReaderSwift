@@ -341,6 +341,7 @@ private extension MangaLaunchContext {
             chapterView: manga.chapterView,
             initialPage: manga.mangaPageIndex,
             directoryName: directoryName,
+            forumID: forumID,
             offlineCacheFavoriteID: favoriteItem?.id ?? offlineCacheFavoriteID,
             isPreview: isPreview,
             isSmartModeEnabled: isSmartModeEnabled
