@@ -212,11 +212,11 @@ final class SystemSettingsViewModelTests: XCTestCase {
         XCTAssertFalse(viewModel.boardReader.isSmartComicModeEnabled(forumID: "37"))
     }
 
-    /// The per-board smart toggle's write side: turning fid 30 off and fid
-    /// 46 on persists through `SettingsStore`, exercised independently for
-    /// both directions (enabling and disabling) on two different
+    /// The overview's smart-bit write side: flipping fid 30 off and fid 46
+    /// on persists through `SettingsStore`, exercised independently for both
+    /// directions (enabling and disabling) on two different
     /// manga-configured boards.
-    func testSetSmartComicModeEnabledPersistsSettings() async throws {
+    func testSetBoardReaderModeFlipsSmartBitAndPersistsSettings() async throws {
         let fixture = try makeFixture()
         try await fixture.settingsStore.save(AppSettings())
 
@@ -225,8 +225,8 @@ final class SystemSettingsViewModelTests: XCTestCase {
         XCTAssertTrue(viewModel.boardReader.isSmartComicModeEnabled(forumID: "30"))
         XCTAssertFalse(viewModel.boardReader.isSmartComicModeEnabled(forumID: "46"))
 
-        viewModel.setSmartComicModeEnabled(false, forumID: "30")
-        viewModel.setSmartComicModeEnabled(true, forumID: "46")
+        viewModel.setBoardReaderMode(.manga(smartEnabled: false), forumID: "30", boardName: "中文百合漫画区")
+        viewModel.setBoardReaderMode(.manga(smartEnabled: true), forumID: "46", boardName: nil)
 
         try await waitFor {
             let loaded = await fixture.settingsStore.load()
@@ -235,6 +235,76 @@ final class SystemSettingsViewModelTests: XCTestCase {
         }
         XCTAssertFalse(viewModel.boardReader.isSmartComicModeEnabled(forumID: "30"))
         XCTAssertTrue(viewModel.boardReader.isSmartComicModeEnabled(forumID: "46"))
+        let loaded = await fixture.settingsStore.load()
+        XCTAssertEqual(loaded.boardReader.entry(forumID: "30")?.boardName, "中文百合漫画区")
+    }
+
+    /// Changing a board's mode from the overview overwrites the entry while
+    /// carrying the stored name snapshot through unchanged (the central
+    /// settings page never resolves real board names).
+    func testSetBoardReaderModePersistsModeChangeAndKeepsNameSnapshot() async throws {
+        let fixture = try makeFixture()
+        var seeded = BoardReaderSettings()
+        seeded.setEntry(.init(mode: .manga(smartEnabled: true), boardName: "中文百合漫画区"), forumID: "30")
+        try await fixture.settingsStore.save(AppSettings(boardReader: seeded))
+
+        let viewModel = SystemSettingsViewModel(dependencies: fixture.appContext.settingsDependencies)
+        await viewModel.load()
+        viewModel.setBoardReaderMode(.novel, forumID: "30", boardName: "中文百合漫画区")
+
+        try await waitFor {
+            let loaded = await fixture.settingsStore.load()
+            return loaded.boardReader.entry(forumID: "30")?.mode == .novel
+        }
+        let loaded = await fixture.settingsStore.load()
+        XCTAssertEqual(
+            loaded.boardReader.entry(forumID: "30"),
+            BoardReaderSettings.Entry(mode: .novel, boardName: "中文百合漫画区")
+        )
+        XCTAssertEqual(viewModel.boardReader.entry(forumID: "30")?.mode, .novel)
+    }
+
+    /// Removing an entry = back to the plain thread reader; the other
+    /// configured boards are untouched.
+    func testRemoveBoardEntryPersistsRemoval() async throws {
+        let fixture = try makeFixture()
+        try await fixture.settingsStore.save(AppSettings())
+
+        let viewModel = SystemSettingsViewModel(dependencies: fixture.appContext.settingsDependencies)
+        await viewModel.load()
+        XCTAssertNotNil(viewModel.boardReader.entry(forumID: "49"))
+
+        viewModel.removeBoardEntry(forumID: "49")
+
+        try await waitFor {
+            let loaded = await fixture.settingsStore.load()
+            return loaded.boardReader.entry(forumID: "49") == nil
+        }
+        XCTAssertNil(viewModel.boardReader.entry(forumID: "49"))
+        let loaded = await fixture.settingsStore.load()
+        XCTAssertEqual(loaded.boardReader.entry(forumID: "55")?.mode, .novel)
+        XCTAssertTrue(loaded.boardReader.isSmartComicModeEnabled(forumID: "30"))
+    }
+
+    /// The overview's "恢复默认配置" action: any customized configuration
+    /// snaps back to the factory default.
+    func testResetBoardReaderRestoresFactoryDefault() async throws {
+        let fixture = try makeFixture()
+        var customized = BoardReaderSettings(entries: [:])
+        customized.setEntry(.init(mode: .novel, boardName: "自定义板块"), forumID: "99")
+        try await fixture.settingsStore.save(AppSettings(boardReader: customized))
+
+        let viewModel = SystemSettingsViewModel(dependencies: fixture.appContext.settingsDependencies)
+        await viewModel.load()
+        XCTAssertEqual(viewModel.boardReader, customized)
+
+        viewModel.resetBoardReader()
+
+        try await waitFor {
+            let loaded = await fixture.settingsStore.load()
+            return loaded.boardReader == .factoryDefault
+        }
+        XCTAssertEqual(viewModel.boardReader, .factoryDefault)
     }
 
     func testResetApplicationRestoresDefaultApplePencilSettings() async throws {

@@ -303,17 +303,25 @@ final class SystemSettingsViewModel: ObservableObject {
         updateNovelOfflineCache(updated)
     }
 
-    /// Flips the Smart Comic Mode bit on a board's existing `.manga` entry.
-    /// A board without an entry, or configured as `.novel`, has no smart
-    /// bit to flip — no-op (the smart toggle is only ever surfaced for
-    /// manga-configured boards).
-    func setSmartComicModeEnabled(_ isEnabled: Bool, forumID: String) {
-        guard var entry = boardReader.entry(forumID: forumID),
-              case .manga = entry.mode else { return }
-        entry.mode = .manga(smartEnabled: isEnabled)
+    /// Overwrites the board's entry with `mode`. `boardName` must be the
+    /// entry's stored snapshot carried through unchanged — the central
+    /// settings page cannot resolve real board names; only the board page
+    /// ever writes or refreshes them.
+    func setBoardReaderMode(_ mode: BoardReaderSettings.ReaderMode, forumID: String, boardName: String?) {
         var updated = boardReader
-        updated.setEntry(entry, forumID: forumID)
+        updated.setEntry(.init(mode: mode, boardName: boardName), forumID: forumID)
         updateBoardReader(updated)
+    }
+
+    /// Removing the entry = back to the plain thread reader (PRD decision #3).
+    func removeBoardEntry(forumID: String) {
+        var updated = boardReader
+        updated.removeEntry(forumID: forumID)
+        updateBoardReader(updated)
+    }
+
+    func resetBoardReader() {
+        updateBoardReader(.factoryDefault)
     }
 
     func clearNovelCache() async -> Bool {

@@ -10,6 +10,7 @@ struct ForumBoardView: View {
     let onPostThreadTap: () -> Void
 
     @State private var model: ForumBoardViewModel
+    @State private var isReaderSettingsPresented = false
 
     init(
         model: ForumBoardViewModel,
@@ -90,11 +91,19 @@ struct ForumBoardView: View {
                         )
                     }
                     .disabled(model.isFavoriting)
+                    Button {
+                        isReaderSettingsPresented = true
+                    } label: {
+                        Label(L10n.string("forum.board.reader_settings"), systemImage: "book")
+                    }
                 } label: {
                     Image(systemName: "ellipsis.circle")
                 }
                 .accessibilityLabel(L10n.string("common.more"))
             }
+        }
+        .sheet(isPresented: $isReaderSettingsPresented) {
+            ForumBoardReaderSettingsSheet(model: model)
         }
         .alert(
             L10n.string("forum.board.favorite"),
