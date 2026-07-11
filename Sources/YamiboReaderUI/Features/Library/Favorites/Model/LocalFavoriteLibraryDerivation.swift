@@ -152,8 +152,16 @@ enum LocalFavoriteLibraryDerivation {
             mixedEntries: LocalFavoriteLibraryProjection.mixedEntries(
                 cards: cards,
                 // No nested collections in the domain model: a collection's
-                // own detail page never shows sibling collections.
-                collections: inputs.selectedCollectionID == nil ? collections : [],
+                // own detail page — or a merged smart card's "查看归档收藏"
+                // archive detail page — never shows sibling collections.
+                // Gating on `selectedCollectionID` alone missed the archive
+                // page's common case of being opened directly from the root
+                // list (where `selectedCollectionID` stays `nil`), which let
+                // the current category's collections leak into the archive
+                // page's content.
+                collections: (inputs.selectedCollectionID == nil && inputs.memberScopeCleanBookName == nil)
+                    ? collections
+                    : [],
                 collectionSummaries: aggregates.mapValues(\.sortSummary),
                 sortOrder: inputs.filter.sortOrder,
                 descending: inputs.filter.sortDescending
