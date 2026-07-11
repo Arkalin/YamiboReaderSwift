@@ -18,8 +18,6 @@ struct BrowsingHistoryView: View {
     var body: some View {
         historyList
         .listStyle(.insetGrouped)
-        .scrollContentBackground(.hidden)
-        .background(ForumColors.creamBackground.ignoresSafeArea())
         .navigationTitle(L10n.string("forum.history"))
         .yamiboInlineNavigationTitleDisplayMode()
         .searchable(text: searchTextBinding, prompt: L10n.string("history.search.prompt"))
@@ -279,7 +277,7 @@ private struct BrowsingHistoryRow: View {
                                 .lineLimit(1)
                         }
 
-                        Text(Self.relativeFormatter.localizedString(for: entry.lastVisitTime, relativeTo: .now))
+                        Text(Self.relativeTimeText(for: entry.lastVisitTime))
                             .font(.caption2)
                             .foregroundStyle(.tertiary)
                     }
@@ -336,4 +334,14 @@ private struct BrowsingHistoryRow: View {
         formatter.unitsStyle = .short
         return formatter
     }()
+
+    private static func relativeTimeText(for date: Date, now: Date = .now) -> String {
+        // Collapse the whole sub-minute range to "刚刚" instead of letting
+        // RelativeDateTimeFormatter spell out seconds (and, right at zero
+        // difference, misfire as "0秒后"). Mirrors LocalFavoriteRelativeDate.
+        guard now.timeIntervalSince(date) >= 60 else {
+            return L10n.string("common.just_now")
+        }
+        return relativeFormatter.localizedString(for: date, relativeTo: now)
+    }
 }
