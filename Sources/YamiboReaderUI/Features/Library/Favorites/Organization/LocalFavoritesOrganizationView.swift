@@ -465,7 +465,7 @@ struct LocalFavoritesOrganizationView: View {
 
     @ToolbarContentBuilder
     private var normalToolbarContent: some ToolbarContent {
-        ToolbarItem(placement: .topBarTrailing) {
+        ToolbarItem(placement: .topBarLeading) {
             Button {
                 routes.isUpdatesPagePushed = true
             } label: {
