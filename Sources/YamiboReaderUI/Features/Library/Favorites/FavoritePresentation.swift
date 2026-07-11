@@ -187,8 +187,6 @@ extension FavoriteRemoteSyncWarning {
             L10n.string("favorites.sync.warning.reconcile_failed", reason)
         case let .remoteFavoritesEmptyBeforeBulkUpload(count):
             L10n.string("favorites.sync.warning.remote_favorites_empty_before_upload", count)
-        case let .importedWithUnresolvedSource(title):
-            L10n.string("favorites.sync.warning.imported_with_unresolved_source", title)
         case let .importedIntoExistingMangaDirectory(title, cleanBookName):
             L10n.string("favorites.sync.warning.imported_into_existing_manga_directory", title, cleanBookName)
         }

@@ -307,7 +307,6 @@
 "favorites.sync.warning.duplicate_remote_entry" = "网站收藏列表出现重复帖子：%@";
 "favorites.sync.warning.import_failed_item" = "无法导入 %@：%@";
 "favorites.sync.warning.imported_into_existing_manga_directory" = "已导入 %@，与《%@》同属一部漫画，收藏页将自动合并显示。";
-"favorites.sync.warning.imported_with_unresolved_source" = "已导入 %@，但未能获取来源版块信息，稍后会自动补齐。";
 "favorites.sync.warning.interrupted" = "任务被中断，可从进度页继续。";
 "favorites.sync.warning.interrupted_by_user" = "你已手动中断同步，可稍后继续。";
 "favorites.sync.warning.page_count_changed" = "同步期间网站收藏页数发生变动，建议完成后再同步一次。";

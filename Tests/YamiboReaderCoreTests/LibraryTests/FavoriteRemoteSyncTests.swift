@@ -557,7 +557,7 @@ private func makeSettingsStore(_ smartComicMode: SmartComicModeSettings) async t
     #expect(probed.filter { $0 == "111" }.count == 3)
 }
 
-@Test func engineImportsItemWithUnresolvedSourceMetadataAndWarns() async throws {
+@Test func engineFailsItemWithUnresolvedSourceMetadataInsteadOfImporting() async throws {
     let store = makeLibraryStore()
     let document = try await store.load()
     let categoryID = document.defaultCategory.id
@@ -578,13 +578,14 @@ private func makeSettingsStore(_ smartComicMode: SmartComicModeSettings) async t
     let final = await runEngine(store: store, client: client, snapshot: makeSnapshot(categoryID: categoryID))
 
     #expect(final.status == .completed)
-    #expect(final.importedCount == 1)
+    #expect(final.importedCount == 0)
+    #expect(final.failedCount == 1)
     #expect(final.warnings.contains { warning in
-        if case .importedWithUnresolvedSource = warning { return true }
+        if case .importFailedItem = warning { return true }
         return false
     })
     let saved = try await store.load()
-    #expect(saved.items.count == 1)
+    #expect(saved.items.isEmpty)
 }
 
 // MARK: - Uploading & reconciling

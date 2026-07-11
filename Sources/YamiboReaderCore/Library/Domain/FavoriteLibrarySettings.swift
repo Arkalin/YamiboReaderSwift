@@ -201,7 +201,6 @@ public enum FavoriteRemoteSyncWarning: Codable, Hashable, Sendable {
     case uploadFailedItem(title: String, reason: String)
     case reconcileFailed(reason: String)
     case remoteFavoritesEmptyBeforeBulkUpload(count: Int)
-    case importedWithUnresolvedSource(title: String)
     /// A newly-imported `.mangaThread` chapter turned out to share a
     /// `MangaDirectory` with a chapter the user had already favorited before
     /// this sync run started — the Favorites page will show them merged into
