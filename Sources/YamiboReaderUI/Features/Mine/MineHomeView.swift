@@ -129,7 +129,7 @@ public struct MineHomeView: View {
             .sheet(isPresented: $showingSettingsSheet) {
                 SystemSettingsView(
                     dependencies: settingsDependencies,
-                    gamepadInput: appModel.gamepadInput
+                    peripheralInput: appModel.peripheralInput
                 ) {
                     await appModel.bootstrap()
                 }

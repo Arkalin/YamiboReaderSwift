@@ -35,8 +35,8 @@ public struct NovelReaderView: View {
     @State private var likedNovelImageAnchors: Set<NovelImageLikeAnchor> = []
     @State private var showingLikes = false
     @State private var likeFeedbackGenerator = UINotificationFeedbackGenerator()
-    @State private var gamepadHandlerToken: UUID?
-    @State private var gamepadPagedPagerIdentity: ReaderPagedPagerIdentity?
+    @State private var controlHandlerToken: UUID?
+    @State private var controlPagedPagerIdentity: ReaderPagedPagerIdentity?
     private let appModel: YamiboAppModel
     private let dependencies: NovelReaderDependencies
 
@@ -178,12 +178,12 @@ public struct NovelReaderView: View {
             .disabled(hasPresentedOverlay)
             .allowsHitTesting(!hasPresentedOverlay)
             .onChange(of: pagedPagerIdentity, initial: true) { _, newValue in
-                gamepadPagedPagerIdentity = newValue
+                controlPagedPagerIdentity = newValue
             }
             .onAppear {
-                guard gamepadHandlerToken == nil else { return }
-                gamepadHandlerToken = appModel.gamepadInput.pushHandler { event in
-                    handleGamepadEvent(event)
+                guard controlHandlerToken == nil else { return }
+                controlHandlerToken = appModel.peripheralInput.pushHandler { event in
+                    handleControlEvent(event)
                 }
             }
             .modifier(readerLifecycleModifier(currentLayout: currentLayout))
@@ -236,8 +236,8 @@ public struct NovelReaderView: View {
                 model.handleMemoryPressure()
             },
             onDisappear: {
-                appModel.gamepadInput.removeHandler(gamepadHandlerToken)
-                gamepadHandlerToken = nil
+                appModel.peripheralInput.removeHandler(controlHandlerToken)
+                controlHandlerToken = nil
                 verticalRestoreRetryTask?.cancel()
                 verticalViewportPositionUpdateTask?.cancel()
                 syncVerticalViewportBeforeSave()
@@ -261,7 +261,7 @@ public struct NovelReaderView: View {
             imageBrowserItem: $imageBrowserItem,
             chapterCommentsTarget: chapterCommentsTarget,
             likeDependencies: dependencies.like,
-            gamepadInput: appModel.gamepadInput,
+            peripheralInput: appModel.peripheralInput,
             onJumpToChapterDirectoryChapter: { chapter in
                 Task { await jumpToChapterDirectoryChapter(chapter) }
             },
@@ -784,7 +784,7 @@ public struct NovelReaderView: View {
         }
     }
 
-    private func handleGamepadEvent(_ event: GamepadEvent) {
+    private func handleControlEvent(_ event: ReaderControlEvent) {
         guard !isDismissing, !hasPresentedOverlay else { return }
         guard !model.novelReaderSurfaces.isEmpty, !readerLoadingOverlayPresentation.isPresented else {
             // Loading/error: Menu still flips the chrome state so a
@@ -797,10 +797,10 @@ public struct NovelReaderView: View {
             return
         }
 
-        let surface: GamepadReadingSurface = model.settings.readingMode == .paged
+        let surface: ReaderControlSurface = model.settings.readingMode == .paged
             ? .paged(isRightToLeft: model.settings.pageTurnDirection == .rightToLeft)
             : .vertical
-        guard let command = GamepadCommandResolver.readerCommand(for: event, surface: surface) else { return }
+        guard let command = ReaderControlCommandResolver.readerCommand(for: event, surface: surface) else { return }
 
         switch command {
         case .toggleChrome:
@@ -808,26 +808,26 @@ public struct NovelReaderView: View {
         case .openComments:
             openChapterComments()
         case let .turnPage(delta):
-            hideChromeForGamepadReading()
-            Task { await goRelativePage(delta, pagerIdentity: gamepadPagedPagerIdentity) }
+            hideChromeForControlReading()
+            Task { await goRelativePage(delta, pagerIdentity: controlPagedPagerIdentity) }
         case let .scrollStep(direction):
-            hideChromeForGamepadReading()
-            performGamepadVerticalScrollStep(direction)
+            hideChromeForControlReading()
+            performControlVerticalScrollStep(direction)
         }
     }
 
     /// A page turn while the chrome is up means "keep reading": perform it
     /// and tuck the chrome away, mirroring the tap-zone mental model.
-    private func hideChromeForGamepadReading() {
+    private func hideChromeForControlReading() {
         guard chromeState.showsChrome else { return }
         withAnimation(.easeInOut(duration: 0.2)) {
             chromeState.hideChrome()
         }
     }
 
-    private func performGamepadVerticalScrollStep(_ direction: GamepadScrollDirection) {
+    private func performControlVerticalScrollStep(_ direction: ReaderControlScrollDirection) {
         cancelVerticalRestoreForUserScroll()
-        switch verticalScrollCoordinator.performGamepadScrollStep(direction) {
+        switch verticalScrollCoordinator.performControlScrollStep(direction) {
         case .scrolled, .unavailable:
             break
         case .atEdge:
@@ -1522,7 +1522,7 @@ private struct NovelReaderPresentationModifier: ViewModifier {
 
     let chapterCommentsTarget: ReaderChapterCommentTarget?
     let likeDependencies: LikeDependencies
-    let gamepadInput: GamepadInputManager?
+    let peripheralInput: ReaderPeripheralInputManager?
     let onJumpToChapterDirectoryChapter: (NovelReaderChapter) -> Void
     let onPreviewChapterDirectoryWebView: (Int) -> Void
     let onOpenOriginalPostFromComments: (URL) -> Void
@@ -1554,7 +1554,7 @@ private struct NovelReaderPresentationModifier: ViewModifier {
                     refresh: model.refreshChapterComments(for:),
                     loadNext: model.loadNextChapterCommentsPage,
                     onOpenOriginalPost: onOpenOriginalPostFromComments,
-                    gamepadInput: gamepadInput
+                    peripheralInput: peripheralInput
                 )
             }
             .sheet(isPresented: $showingCachePanel) {

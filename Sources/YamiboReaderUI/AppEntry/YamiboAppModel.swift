@@ -40,7 +40,7 @@ public final class YamiboAppModel {
     public var clipboardForumLinkPrompt: ClipboardForumLinkPrompt?
 
     public let appContext: YamiboAppContext
-    public let gamepadInput: GamepadInputManager
+    public let peripheralInput: ReaderPeripheralInputManager
 
     @ObservationIgnored private let appContinuity: AppContinuityWorkflow
 
@@ -48,7 +48,7 @@ public final class YamiboAppModel {
         self.appContext = appContext
         selectedTab = initialTab
         appContinuity = AppContinuityWorkflow(appContext: appContext)
-        gamepadInput = GamepadInputManager(settingsStore: appContext.settingsStore)
+        peripheralInput = ReaderPeripheralInputManager(settingsStore: appContext.settingsStore)
     }
 
     public func bootstrapIfNeeded() async {

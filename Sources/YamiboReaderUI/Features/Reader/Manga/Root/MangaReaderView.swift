@@ -20,9 +20,9 @@ public struct MangaReaderView: View {
     @State private var imageSavePresentation = MangaImageSavePresentationState()
     @State private var canRestoreMangaCover = false
     @State private var isSavingImage = false
-    @State private var gamepadHandlerToken: UUID?
-    @State private var gamepadScrollStep: ReaderGamepadScrollStepRequest?
-    @State private var gamepadUsesTwoPageSpread = false
+    @State private var controlHandlerToken: UUID?
+    @State private var controlScrollStep: ReaderControlScrollStepRequest?
+    @State private var controlUsesTwoPageSpread = false
 
     public init(context: MangaLaunchContext, dependencies: MangaReaderDependencies, appModel: YamiboAppModel) {
         self.context = context
@@ -54,7 +54,7 @@ public struct MangaReaderView: View {
                 imageLoader: model.imageLoader,
                 isChromeVisible: isChromeVisible,
                 likedPageIDs: model.likedPageIDs,
-                gamepadScrollStep: gamepadScrollStep,
+                controlScrollStep: controlScrollStep,
                 onRetryInitialLoad: {
                     Task { await model.retryInitialLoad() }
                 },
@@ -67,7 +67,7 @@ public struct MangaReaderView: View {
                 onBoundaryPageTurn: { delta, usesTwoPageSpread in
                     Task { await model.jumpRelativePage(delta, usesTwoPageSpread: usesTwoPageSpread) }
                 },
-                onGamepadScrollEdgeReached: { direction in
+                onControlScrollEdgeReached: { direction in
                     Task {
                         await model.jumpToAdjacentChapterFromVerticalBoundary(direction == .down ? 1 : -1)
                     }
@@ -86,7 +86,7 @@ public struct MangaReaderView: View {
             )
             .ignoresSafeArea()
             .onChange(of: usesTwoPageSpread, initial: true) { _, newValue in
-                gamepadUsesTwoPageSpread = newValue
+                controlUsesTwoPageSpread = newValue
             }
             .overlay {
                 ApplePencilPageTurnInteractionOverlay(
@@ -155,14 +155,14 @@ public struct MangaReaderView: View {
                 await model.prepare()
             }
             .onAppear {
-                guard gamepadHandlerToken == nil else { return }
-                gamepadHandlerToken = appModel.gamepadInput.pushHandler { event in
-                    handleGamepadEvent(event)
+                guard controlHandlerToken == nil else { return }
+                controlHandlerToken = appModel.peripheralInput.pushHandler { event in
+                    handleControlEvent(event)
                 }
             }
             .onDisappear {
-                appModel.gamepadInput.removeHandler(gamepadHandlerToken)
-                gamepadHandlerToken = nil
+                appModel.peripheralInput.removeHandler(controlHandlerToken)
+                controlHandlerToken = nil
                 Task {
                     await model.saveProgress()
                 }
@@ -208,7 +208,7 @@ public struct MangaReaderView: View {
                 refresh: model.refreshChapterComments(for:),
                 loadNext: model.loadNextChapterCommentsPage,
                 onOpenOriginalPost: openOriginalPostFromComments(_:),
-                gamepadInput: appModel.gamepadInput
+                peripheralInput: appModel.peripheralInput
             )
         }
         .sheet(isPresented: $isSettingsPresented) {
@@ -337,9 +337,9 @@ public struct MangaReaderView: View {
             !isChromeVisible
     }
 
-    private var hasGamepadBlockingSheet: Bool {
+    private var hasControlBlockingSheet: Bool {
         // The comments sheet is absent here on purpose: while it is up it
-        // owns the top of the gamepad handler stack, so the reader handler
+        // owns the top of the control handler stack, so the reader handler
         // never fires; every other sheet was opened by touch and stays
         // touch-only.
         isDirectoryPresented ||
@@ -349,8 +349,8 @@ public struct MangaReaderView: View {
             isLikesPresented
     }
 
-    private func handleGamepadEvent(_ event: GamepadEvent) {
-        guard !isDismissing, !hasGamepadBlockingSheet else { return }
+    private func handleControlEvent(_ event: ReaderControlEvent) {
+        guard !isDismissing, !hasControlBlockingSheet else { return }
         guard case let .loaded(loaded) = model.presentation.state, !loaded.pages.isEmpty else {
             // Loading/error: Menu still toggles the chrome so a controller
             // user can always reach the close button.
@@ -363,10 +363,10 @@ public struct MangaReaderView: View {
         }
 
         let settings = model.presentation.settings
-        let surface: GamepadReadingSurface = settings.readingMode == .paged
+        let surface: ReaderControlSurface = settings.readingMode == .paged
             ? .paged(isRightToLeft: settings.pageTurnDirection == .rightToLeft)
             : .vertical
-        guard let command = GamepadCommandResolver.readerCommand(for: event, surface: surface) else { return }
+        guard let command = ReaderControlCommandResolver.readerCommand(for: event, surface: surface) else { return }
 
         switch command {
         case .toggleChrome:
@@ -374,20 +374,20 @@ public struct MangaReaderView: View {
         case .openComments:
             isChapterCommentsPresented = true
         case let .turnPage(delta):
-            hideChromeForGamepadReading()
-            Task { await model.jumpRelativePage(delta, usesTwoPageSpread: gamepadUsesTwoPageSpread) }
+            hideChromeForControlReading()
+            Task { await model.jumpRelativePage(delta, usesTwoPageSpread: controlUsesTwoPageSpread) }
         case let .scrollStep(direction):
-            hideChromeForGamepadReading()
-            gamepadScrollStep = ReaderGamepadScrollStepRequest(
+            hideChromeForControlReading()
+            controlScrollStep = ReaderControlScrollStepRequest(
                 direction: direction,
-                revision: (gamepadScrollStep?.revision ?? 0) + 1
+                revision: (controlScrollStep?.revision ?? 0) + 1
             )
         }
     }
 
     /// A page turn while the chrome is up means "keep reading": perform it
     /// and tuck the chrome away, mirroring the tap-zone mental model.
-    private func hideChromeForGamepadReading() {
+    private func hideChromeForControlReading() {
         guard isChromeVisible else { return }
         withAnimation(.easeInOut(duration: ReaderChromeVisibilityAnimationPresentation.fade.duration)) {
             isChromeVisible = false
