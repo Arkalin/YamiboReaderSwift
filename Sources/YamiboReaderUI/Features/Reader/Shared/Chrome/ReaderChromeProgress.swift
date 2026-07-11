@@ -32,6 +32,7 @@ public struct ReaderChromeProgress: Equatable, Sendable {
     public var primaryText: String
     public var secondaryText: String?
     public var ticks: [ReaderChromeProgressTick]
+    public var iconSystemName: String
 
     private var scrubTargetIndexes: [Int]
 
@@ -56,6 +57,7 @@ public struct ReaderChromeProgress: Equatable, Sendable {
         primaryText: String,
         secondaryText: String? = nil,
         ticks: [ReaderChromeProgressTick] = [],
+        iconSystemName: String = "list.bullet",
         scrubTargetIndexes: [Int]? = nil
     ) {
         self.itemCount = max(itemCount, 1)
@@ -70,6 +72,7 @@ public struct ReaderChromeProgress: Equatable, Sendable {
         self.primaryText = primaryText
         self.secondaryText = secondaryText
         self.ticks = ticks
+        self.iconSystemName = iconSystemName
         self.scrubTargetIndexes = Self.normalizedScrubTargetIndexes(
             scrubTargetIndexes,
             itemCount: self.itemCount

@@ -147,6 +147,7 @@ private struct MangaReaderDirectoryProgressControl: View {
             supportsScrub: progressChromePresentation.supportsHorizontalScrub && sliderHasAvailableRange,
             isScrubbing: scrubState.phase == .scrubbing,
             ticks: progress.ticks,
+            iconSystemName: progress.iconSystemName,
             onTapDirectory: onShowDirectory,
             onScrub: { locationX, width in
                 handleHorizontalCapsuleScrub(locationX: locationX, width: width)

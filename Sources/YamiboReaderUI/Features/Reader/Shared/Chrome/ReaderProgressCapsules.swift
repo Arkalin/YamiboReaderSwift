@@ -40,6 +40,7 @@ struct ReaderDirectoryProgressCapsule: View {
     let supportsScrub: Bool
     let isScrubbing: Bool
     let ticks: [ReaderChromeProgressTick]
+    let iconSystemName: String
     let onTapDirectory: () -> Void
     let onScrub: (CGFloat, CGFloat) -> Void
     let onEndScrub: () -> Void
@@ -54,6 +55,7 @@ struct ReaderDirectoryProgressCapsule: View {
         supportsScrub: Bool,
         isScrubbing: Bool,
         ticks: [ReaderChromeProgressTick],
+        iconSystemName: String = "list.bullet",
         onTapDirectory: @escaping () -> Void,
         onScrub: @escaping (CGFloat, CGFloat) -> Void,
         onEndScrub: @escaping () -> Void
@@ -65,6 +67,7 @@ struct ReaderDirectoryProgressCapsule: View {
         self.supportsScrub = supportsScrub
         self.isScrubbing = isScrubbing
         self.ticks = ticks
+        self.iconSystemName = iconSystemName
         self.onTapDirectory = onTapDirectory
         self.onScrub = onScrub
         self.onEndScrub = onEndScrub
@@ -103,7 +106,7 @@ struct ReaderDirectoryProgressCapsule: View {
                         .lineLimit(1)
                         .minimumScaleFactor(0.85)
                     Spacer(minLength: 12)
-                    Image(systemName: "list.bullet")
+                    Image(systemName: iconSystemName)
                         .font(.callout.weight(.semibold))
                 }
                 .foregroundStyle(layout.directoryCapsuleContentUsesAccentColor ? controlTint : Color.primary)

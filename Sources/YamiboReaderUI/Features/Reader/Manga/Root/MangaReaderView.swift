@@ -487,6 +487,8 @@ public struct MangaReaderView: View {
             guard page.tid == currentPage.tid else { return }
             result[page.localIndex] = page
         }
+        let capsuleTitleKey = context.isSmartModeEnabled ? "manga.directory" : "manga.progress"
+        let capsuleIconSystemName = context.isSmartModeEnabled ? "list.bullet" : "chart.bar.fill"
 
         return MangaReaderChromeSummary(
             headerTitle: headerTitle,
@@ -497,9 +499,10 @@ public struct MangaReaderView: View {
                 currentIndex: currentIndex,
                 progressFraction: progressFraction,
                 percentText: percentText,
-                primaryText: L10n.string("manga.directory") + " · \(percentText)",
+                primaryText: L10n.string(capsuleTitleKey) + " · \(percentText)",
                 secondaryText: pageSummary,
                 ticks: [],
+                iconSystemName: capsuleIconSystemName,
                 scrubTargetIndexes: Array(0 ..< itemCount)
             )
         )

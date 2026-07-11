@@ -606,6 +606,7 @@
 "manga.delete_current_chapter_failed" = "删除失败";
 "manga.delete_current_chapter_failed_message" = "不可删除正在阅读中的章节，请重新选择";
 "manga.directory" = "目录";
+"manga.progress" = "进度";
 "manga.global_search" = "全局搜索";
 "manga.global_search_countdown" = "全局搜索 %ds";
 "manga.ios_only" = "漫画阅读仅在 iOS 端启用";
