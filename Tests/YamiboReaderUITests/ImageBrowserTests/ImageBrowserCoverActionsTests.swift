@@ -65,22 +65,6 @@ final class ImageBrowserCoverActionsTests: XCTestCase {
         XCTAssertEqual(actions.map(\.id), ["cover.set.thread", "cover.restore.thread"])
     }
 
-    func testManualCoverActionsDefaultToEnabledWhenCallerDoesNotSupplyModeCheck() async throws {
-        // NovelReaderViewModel never supplies `mangaDirectoryStore`, so the
-        // default `isSmartComicModeEnabled` value should be a no-op here;
-        // this only exercises the parameter's own default.
-        let fixture = try await makeFixture(
-            directories: [makeDirectory(tid: "701", cleanBookName: "测试漫画")]
-        )
-
-        let actions = await ImageBrowserThreadCoverActions.provider(
-            tid: "701",
-            contentCoverStore: { fixture.contentCoverStore },
-            mangaDirectoryStore: { fixture.directoryStore }
-        )()
-
-        XCTAssertEqual(actions.map(\.id), ["cover.set.thread", "cover.set.manga"])
-    }
 }
 
 private struct ImageBrowserCoverActionsFixture {

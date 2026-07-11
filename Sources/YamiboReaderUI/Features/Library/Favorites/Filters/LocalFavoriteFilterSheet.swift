@@ -80,10 +80,10 @@ struct LocalFavoriteFilterSheet: View {
     }
 
     /// The "智能漫画" (`.manga`) entry is gated on `isMangaSourceFilterAvailable`
-    /// (smart-comic-mode decision #9: at least one manageable board's mode is
-    /// on), not on whether `sourceFilterEntryCounts` happens to include it —
-    /// so it can appear with a zero count, and it can be hidden even while
-    /// `.mangaThread` favorites exist if every manageable board is off.
+    /// (any board configured as `.manga(smartEnabled: true)`), not on whether
+    /// `sourceFilterEntryCounts` happens to include it — so it can appear
+    /// with a zero count, and it can be hidden even while `.mangaThread`
+    /// favorites exist if every board's smart bit is off.
     private var availableSourceFilters: [LocalFavoriteSourceFilter] {
         var filters = organizer.derived.sourceFilterEntryCounts.keys.filter { $0 != .manga }
         if organizer.derived.isMangaSourceFilterAvailable {

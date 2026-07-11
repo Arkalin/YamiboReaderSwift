@@ -120,7 +120,10 @@ final class ForumThreadReaderViewModel {
             contentCoverStore: contentCoverStoreProvider,
             mangaDirectoryStore: mangaDirectoryStoreProvider,
             isSmartComicModeEnabled: { [settingsStoreProvider] in
-                guard let settingsStore = await settingsStoreProvider() else { return true }
+                // Strict rule, no special cases: without a settings store
+                // there is no configured smart-enabled manga board, so the
+                // manga-cover entry stays hidden.
+                guard let settingsStore = await settingsStoreProvider() else { return false }
                 return await settingsStore.load().isSmartComicModeEnabled(forumID: forumID)
             }
         )
@@ -226,6 +229,7 @@ final class ForumThreadReaderViewModel {
                 contentUpdatedAt: Self.contentUpdatedAt(from: page),
                 formHash: page?.formHash,
                 syncToRemote: syncToRemote,
+                boardReaderSettings: await boardReaderSettings(),
                 localFavoriteLibraryStore: localFavoriteLibraryStore,
                 remoteRepository: await favoriteRepositoryProvider()
             )
@@ -257,6 +261,7 @@ final class ForumThreadReaderViewModel {
             try await FavoriteQuickActions.removeFavorite(
                 favorite,
                 removeRemote: removeRemote,
+                boardReaderSettings: await boardReaderSettings(),
                 localFavoriteLibraryStore: localFavoriteLibraryStore,
                 remoteRepository: await favoriteRepositoryProvider()
             )
@@ -302,7 +307,7 @@ final class ForumThreadReaderViewModel {
         guard let document = try? await localFavoriteLibraryStore.load() else { return nil }
         // A sibling favorite only actually merges on the Favorites page if ITS
         // OWN board also has Smart Comic Mode on (LocalFavoriteLibraryProjection's
-        // rawGroupedFavorites checks isEnabled(forumID:) per-member, not just for
+        // rawGroupedFavorites checks isSmartComicModeEnabled(forumID:) per-member, not just for
         // the item just favorited) — a MangaDirectory can span threads from
         // different boards (e.g. a `.searched` strategy match isn't fid-scoped).
         // Without this check the toast could claim "merged" for a sibling that
@@ -322,6 +327,13 @@ final class ForumThreadReaderViewModel {
             return FavoriteLibrarySettings()
         }
         return await settingsStore.load().favorites
+    }
+
+    private func boardReaderSettings() async -> BoardReaderSettings {
+        guard let settingsStore = await settingsStoreProvider() else {
+            return BoardReaderSettings()
+        }
+        return await settingsStore.load().boardReader
     }
 
     private func rememberAddSyncChoice(_ syncToRemote: Bool) async {

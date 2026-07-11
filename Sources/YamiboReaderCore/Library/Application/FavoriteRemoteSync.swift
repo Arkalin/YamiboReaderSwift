@@ -79,8 +79,9 @@ public struct FavoriteYamiboSyncEngine: Sendable {
     /// don't exercise this feature) simply disables the warning.
     private let mangaDirectoryStore: MangaDirectoryStore?
     /// Backs the per-item "is Smart Comic Mode on for this board" check the
-    /// same warning needs. `nil` falls back to `SmartComicModeSettings()`'s
-    /// defaults.
+    /// same warning needs. `nil` falls back to the factory-default
+    /// `BoardReaderSettings()` (not an empty configuration), so the
+    /// attribution warning stays functional in the default scenario.
     private let settingsStore: SettingsStore?
 
     public init(
@@ -240,7 +241,7 @@ public struct FavoriteYamiboSyncEngine: Sendable {
                     YamiboLog.sync.warning("Failed to batch-resolve manga directories for sync attribution detection; this run will skip attribution warnings: \(error.localizedDescription)")
                 }
             }
-            let smartComicModeSettings = await settingsStore?.load().smartComicMode ?? SmartComicModeSettings()
+            let boardReaderSettings = await settingsStore?.load().boardReader ?? BoardReaderSettings()
 
             for (offset, entry) in remoteEntries.enumerated() {
                 try Task.checkCancellation()
@@ -320,7 +321,7 @@ public struct FavoriteYamiboSyncEngine: Sendable {
                     // is correct regardless of which of the two carried it.
                     if importedItem.target.kind == .mangaThread,
                        let directory = candidateDirectoriesByTID[entry.threadID],
-                       smartComicModeSettings.isEnabled(forumID: importedItem.forumID) {
+                       boardReaderSettings.isSmartComicModeEnabled(forumID: importedItem.forumID) {
                         // Check EVERY already-favorited sibling chapter, not just the
                         // first one encountered in chapter order (`manual_order`/`tid`,
                         // unrelated to which sibling is favorited or its board's mode) —
@@ -334,7 +335,7 @@ public struct FavoriteYamiboSyncEngine: Sendable {
                                   let sibling = preImportMangaThreadFavoritesByTID[chapter.tid] else {
                                 return false
                             }
-                            return smartComicModeSettings.isEnabled(forumID: sibling.forumID)
+                            return boardReaderSettings.isSmartComicModeEnabled(forumID: sibling.forumID)
                         }
                         if hasAttributedSibling {
                             await commit {

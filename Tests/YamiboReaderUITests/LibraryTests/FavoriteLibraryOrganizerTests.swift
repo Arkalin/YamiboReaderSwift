@@ -77,14 +77,14 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
         XCTAssertEqual(organizer.derived.sourceFilterEntryCounts[boardBFilter], 1)
     }
 
-    /// Smart-comic-mode decision #9: the "智能漫画" filter chip's visibility
-    /// is gated purely on `SmartComicModeSettings` — at least one of the 3
-    /// manageable boards being on — never on whether a `.mangaThread`
+    /// The "智能漫画" filter chip's visibility is gated purely on
+    /// `BoardReaderSettings` — any board configured as
+    /// `.manga(smartEnabled: true)` — never on whether a `.mangaThread`
     /// favorite happens to exist. This deliberately checks both directions:
-    /// available with zero manga favorites (mode on by default), and NOT
-    /// available even with an existing manga favorite once every manageable
-    /// board is switched off.
-    func testMangaSourceFilterAvailabilityIsGatedOnSmartComicModeSettingsNotFavoriteExistence() async throws {
+    /// available with zero manga favorites (fid 30 smart-on by factory
+    /// default), and NOT available even with an existing manga favorite once
+    /// every board's smart bit is off.
+    func testMangaSourceFilterAvailabilityIsGatedOnBoardReaderSettingsNotFavoriteExistence() async throws {
         let suiteName = YamiboTestDefaults.suiteName(prefix: "local-favorites-manga-filter-availability")
         _ = try YamiboTestDefaults.make(suiteName: suiteName)
         let settingsStore = SettingsStore(
@@ -116,10 +116,12 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
         XCTAssertTrue(organizer.derived.isMangaSourceFilterAvailable)
         XCTAssertNil(organizer.derived.sourceFilterEntryCounts[.manga])
 
-        // Turn every manageable board off, then favorite a manga thread on
-        // one of them: the favorite exists, but the chip must stay hidden.
+        // Turn every board's smart bit off (only fid 30 is smart-on by
+        // factory default; the boards stay manga-classified), then favorite
+        // a manga thread on one of them: the favorite exists, but the chip
+        // must stay hidden.
         var settings = await settingsStore.load()
-        settings.smartComicMode.enabledForumIDs = []
+        settings.boardReader.setEntry(.init(mode: .manga(smartEnabled: false)), forumID: "30")
         try await settingsStore.save(settings)
 
         var document = try await localFavoriteLibraryStore.load()
@@ -135,13 +137,14 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
         XCTAssertFalse(organizer.derived.isMangaSourceFilterAvailable)
         // Smart-comic-mode decision #2: while board 46's mode is off, its
         // favorite must bucket exactly like an ordinary forum-board favorite
-        // (not `.manga`) — see `LocalFavoriteSourceFilter.key(for:smartComicModeSettings:)`.
+        // (not `.manga`) — see `LocalFavoriteSourceFilter.key(for:boardReaderSettings:)`.
         XCTAssertNil(organizer.derived.sourceFilterEntryCounts[.manga])
         XCTAssertEqual(organizer.derived.sourceFilterEntryCounts[.forumBoard(id: "46", label: "46")], 1)
 
-        // Turning that same board back on makes the chip available again.
+        // Turning that same board's smart bit on makes the chip available
+        // again.
         settings = await settingsStore.load()
-        settings.smartComicMode.enabledForumIDs = ["46"]
+        settings.boardReader.setEntry(.init(mode: .manga(smartEnabled: true)), forumID: "46")
         try await settingsStore.save(settings)
         await organizer.reload()
 
@@ -201,13 +204,16 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
         document.addItem(secondItem)
         try await localFavoriteLibraryStore.save(document)
 
-        // Board 30 is on by default (unrelated to this test's fid "46"
-        // favorites), so it alone would already make the "智能漫画" chip
-        // available — disable it up front so this test's chip assertions
-        // isolate the fid "46" toggle being exercised below. Seeded before
-        // the organizer exists, so there is no load-modify-save race with
-        // its own `persistNavigationState()` background Task.
-        try await settingsStore.save(AppSettings(smartComicMode: SmartComicModeSettings(enabledForumIDs: [])))
+        // Board 30 is smart-on by factory default (unrelated to this test's
+        // fid "46" favorites), so it alone would already make the "智能漫画"
+        // chip available — flip its smart bit off up front so this test's
+        // chip assertions isolate the fid "46" toggle being exercised below.
+        // Seeded before the organizer exists, so there is no
+        // load-modify-save race with its own `persistNavigationState()`
+        // background Task.
+        var seededBoardReader = BoardReaderSettings()
+        seededBoardReader.setEntry(.init(mode: .manga(smartEnabled: false)), forumID: "30")
+        try await settingsStore.save(AppSettings(boardReader: seededBoardReader))
 
         let organizer = try makeOrganizer(
             libraryStore: localFavoriteLibraryStore,
@@ -225,11 +231,11 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
         XCTAssertFalse(organizer.derived.cards.contains { $0.isMergedGroup })
         XCTAssertFalse(organizer.derived.isMangaSourceFilterAvailable)
 
-        // Flip the board on directly through the settings store — exactly
-        // what the new Settings UI's toggle does — with no call to
+        // Flip the board's smart bit on directly through the settings store
+        // — exactly what the Settings UI's toggle does — with no call to
         // `organizer.reload()` in between.
         var settings = await settingsStore.load()
-        settings.smartComicMode.enabledForumIDs.insert("46")
+        settings.boardReader.setEntry(.init(mode: .manga(smartEnabled: true)), forumID: "46")
         try await settingsStore.save(settings)
 
         try await waitForOrganizerCondition {
@@ -777,7 +783,7 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
     /// injects a genuine GRDB-backed `MangaDirectoryStore` (mirroring
     /// `LocalFavoriteOpenTargetResolverTests`' own helper) with real chapter
     /// data, favorites two `.mangaThread` chapters on a Smart-Comic-Mode-on
-    /// board (fid "30", on by `SmartComicModeSettings`'s own default) sharing
+    /// board (fid "30", on by `BoardReaderSettings`'s own default) sharing
     /// that directory, and proves the full path from `load()`/`reload()`
     /// through to a merged `FavoriteCardProjection` actually resolves end to
     /// end — not just that the pure grouping function works when handed a
@@ -1436,7 +1442,7 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
 
     /// Regression test for the actual user-reported bug ("查看归档收藏内显示的
     /// 不是原贴而是相同的智能卡片"): `card(for:...)` used to recompute
-    /// `isModeOnMangaThread` from the raw item/`smartComicModeSettings`
+    /// `isModeOnMangaThread` from the raw item/`boardReaderSettings`
     /// regardless of which query path built the entry, so every card on the
     /// "查看归档收藏" archive page — despite being deliberately built as a
     /// forced-standalone `GroupedFavoriteEntry` (nil `members`/
@@ -2467,6 +2473,7 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
             contentUpdatedAt: Date(timeIntervalSince1970: 600),
             formHash: nil,
             syncToRemote: false,
+            boardReaderSettings: BoardReaderSettings(),
             localFavoriteLibraryStore: localFavoriteLibraryStore,
             remoteRepository: nil
         )
@@ -2496,6 +2503,7 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
             contentUpdatedAt: Date(timeIntervalSince1970: 700),
             formHash: nil,
             syncToRemote: false,
+            boardReaderSettings: BoardReaderSettings(),
             localFavoriteLibraryStore: localFavoriteLibraryStore,
             remoteRepository: nil
         )

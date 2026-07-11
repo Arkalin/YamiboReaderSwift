@@ -210,7 +210,7 @@ import Testing
         mangaDirectoryStore: ForumThreadReaderTestMangaDirectoryStore(directories: [directory])
     )
     var settings = await fixture.settingsStore.load()
-    settings.smartComicMode.enabledForumIDs.remove("30")
+    settings.boardReader.setEntry(.init(mode: .manga(smartEnabled: false)), forumID: "30")
     try await fixture.settingsStore.save(settings)
     var seedDocument = try await fixture.localFavoriteLibraryStore.load()
     seedDocument.addItem(try FavoriteItem(

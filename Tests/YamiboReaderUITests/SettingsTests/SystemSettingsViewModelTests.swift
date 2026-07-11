@@ -195,61 +195,46 @@ final class SystemSettingsViewModelTests: XCTestCase {
         ))
     }
 
-    /// Phase I fix: `SmartComicModeSettings.enabledForumIDs` (Phase B) had no
-    /// UI to change it anywhere — this exercises the new Settings screen's
-    /// read side loading the persisted per-board toggle state.
-    func testLoadReadsSmartComicModeSettings() async throws {
+    /// The Settings screen's read side: loading the persisted per-board
+    /// reader configuration into the view model.
+    func testLoadReadsBoardReaderSettings() async throws {
         let fixture = try makeFixture()
-        try await fixture.settingsStore.save(AppSettings(
-            smartComicMode: SmartComicModeSettings(enabledForumIDs: ["46"])
-        ))
+        var seeded = BoardReaderSettings()
+        seeded.setEntry(.init(mode: .manga(smartEnabled: false)), forumID: "30")
+        seeded.setEntry(.init(mode: .manga(smartEnabled: true)), forumID: "46")
+        try await fixture.settingsStore.save(AppSettings(boardReader: seeded))
 
         let viewModel = SystemSettingsViewModel(dependencies: fixture.appContext.settingsDependencies)
         await viewModel.load()
 
-        XCTAssertFalse(viewModel.smartComicMode.isEnabled(forumID: "30"))
-        XCTAssertTrue(viewModel.smartComicMode.isEnabled(forumID: "46"))
-        XCTAssertFalse(viewModel.smartComicMode.isEnabled(forumID: "37"))
+        XCTAssertFalse(viewModel.boardReader.isSmartComicModeEnabled(forumID: "30"))
+        XCTAssertTrue(viewModel.boardReader.isSmartComicModeEnabled(forumID: "46"))
+        XCTAssertFalse(viewModel.boardReader.isSmartComicModeEnabled(forumID: "37"))
     }
 
-    /// The new per-board toggle's write side: turning fid 30 off and fid 46
-    /// on persists through `SettingsStore`, exercised independently for both
-    /// directions (enabling and disabling) on two different boards.
+    /// The per-board smart toggle's write side: turning fid 30 off and fid
+    /// 46 on persists through `SettingsStore`, exercised independently for
+    /// both directions (enabling and disabling) on two different
+    /// manga-configured boards.
     func testSetSmartComicModeEnabledPersistsSettings() async throws {
         let fixture = try makeFixture()
         try await fixture.settingsStore.save(AppSettings())
 
         let viewModel = SystemSettingsViewModel(dependencies: fixture.appContext.settingsDependencies)
         await viewModel.load()
-        XCTAssertTrue(viewModel.smartComicMode.isEnabled(forumID: "30"))
-        XCTAssertFalse(viewModel.smartComicMode.isEnabled(forumID: "46"))
+        XCTAssertTrue(viewModel.boardReader.isSmartComicModeEnabled(forumID: "30"))
+        XCTAssertFalse(viewModel.boardReader.isSmartComicModeEnabled(forumID: "46"))
 
         viewModel.setSmartComicModeEnabled(false, forumID: "30")
         viewModel.setSmartComicModeEnabled(true, forumID: "46")
 
         try await waitFor {
             let loaded = await fixture.settingsStore.load()
-            return !loaded.smartComicMode.isEnabled(forumID: "30")
-                && loaded.smartComicMode.isEnabled(forumID: "46")
+            return !loaded.boardReader.isSmartComicModeEnabled(forumID: "30")
+                && loaded.boardReader.isSmartComicModeEnabled(forumID: "46")
         }
-        XCTAssertFalse(viewModel.smartComicMode.isEnabled(forumID: "30"))
-        XCTAssertTrue(viewModel.smartComicMode.isEnabled(forumID: "46"))
-    }
-
-    /// `manageableForumIDs` is fixed to fid 30/46/37 (decision #1: no free
-    /// board picker) — a fid outside that set must be a no-op, not silently
-    /// stored as a new manageable board.
-    func testSetSmartComicModeEnabledIgnoresUnmanageableForumID() async throws {
-        let fixture = try makeFixture()
-        try await fixture.settingsStore.save(AppSettings())
-
-        let viewModel = SystemSettingsViewModel(dependencies: fixture.appContext.settingsDependencies)
-        await viewModel.load()
-        let before = viewModel.smartComicMode
-
-        viewModel.setSmartComicModeEnabled(true, forumID: "99")
-
-        XCTAssertEqual(viewModel.smartComicMode, before)
+        XCTAssertFalse(viewModel.boardReader.isSmartComicModeEnabled(forumID: "30"))
+        XCTAssertTrue(viewModel.boardReader.isSmartComicModeEnabled(forumID: "46"))
     }
 
     func testResetApplicationRestoresDefaultApplePencilSettings() async throws {
@@ -263,7 +248,13 @@ final class SystemSettingsViewModelTests: XCTestCase {
                 isEnabled: true,
                 behavior: .doubleTapNextSqueezePrevious
             )),
-            smartComicMode: SmartComicModeSettings(enabledForumIDs: ["46", "37"])
+            boardReader: {
+                var custom = BoardReaderSettings()
+                custom.setEntry(.init(mode: .manga(smartEnabled: true)), forumID: "46")
+                custom.setEntry(.init(mode: .manga(smartEnabled: true)), forumID: "37")
+                custom.setEntry(.init(mode: .manga(smartEnabled: false)), forumID: "30")
+                return custom
+            }()
         ))
 
         let viewModel = SystemSettingsViewModel(dependencies: fixture.appContext.settingsDependencies)
@@ -273,7 +264,7 @@ final class SystemSettingsViewModelTests: XCTestCase {
         XCTAssertTrue(didReset)
         XCTAssertEqual(viewModel.novelOfflineCache, NovelOfflineCacheSettings())
         XCTAssertEqual(viewModel.applePencilPageTurn, ApplePencilPageTurnSettings())
-        XCTAssertEqual(viewModel.smartComicMode, SmartComicModeSettings())
+        XCTAssertEqual(viewModel.boardReader, BoardReaderSettings())
         let loaded = await fixture.settingsStore.load()
         XCTAssertEqual(loaded.novelOfflineCache, NovelOfflineCacheSettings())
         XCTAssertEqual(loaded.system.applePencilPageTurn, ApplePencilPageTurnSettings())

@@ -49,12 +49,12 @@ final class LocalFavoriteOpenTargetResolverTests: XCTestCase {
     // there is no reading-progress record yet — the old `mangaTitleUnresolved`
     // failure mode can no longer occur (see LocalFavoriteOpenTargetResolver).
     //
-    // This item has no `forumID`, which `isSmartComicModeEnabled` treats as
-    // mode-on (matching the resolver's pre-Phase-B unconditional behavior),
-    // and its `MangaDirectory` has never been resolved locally, so this
-    // exercises the mode-on "directory unresolved" fallback branch of
-    // decision #15's resume logic — resuming via this thread's own
-    // `.mangaThread` progress (here, none at all) rather than a directory.
+    // This item has no `forumID`, which reports mode-off under the strict
+    // rule (only a board currently configured as `.manga(smartEnabled:
+    // true)` is on — a missing fid can never match), so this exercises the
+    // mode-off single-thread resume branch: the favorite's own
+    // `.mangaThread` progress (here, none at all), never a merged
+    // directory.
     func testMangaThreadOpenTargetFallsBackToOwnThreadWithoutReadingProgress() async throws {
         let suiteName = YamiboTestDefaults.suiteName(prefix: "local-favorites-open-target-manga")
         _ = try YamiboTestDefaults.make(suiteName: suiteName)
@@ -89,7 +89,7 @@ final class LocalFavoriteOpenTargetResolverTests: XCTestCase {
         XCTAssertEqual(context.chapterTID, "902")
         XCTAssertEqual(context.initialPage, 0)
         XCTAssertNil(context.directoryName)
-        XCTAssertTrue(context.isSmartModeEnabled)
+        XCTAssertFalse(context.isSmartModeEnabled)
     }
 
     // Mode-on resume (smart-comic-mode design decision #15/#7): the favorite

@@ -150,11 +150,11 @@ public struct YamiboThreadRoutePayload: Hashable, Sendable {
 public enum YamiboThreadRouteTarget: Hashable, Sendable {
     case novel(YamiboThreadRoutePayload)
     case manga(YamiboThreadRoutePayload)
-    /// Same classification as `.manga` (still a manga-board thread — see
-    /// decision #4, classification is independent of the mode toggle), but
-    /// the board's Smart Comic Mode is off, so the caller should open the
-    /// manga reader directly for this one thread instead of routing through
-    /// `ForumMangaDetailView` (decision #2/#12).
+    /// Same classification as `.manga` (still a thread on a board the user
+    /// configured as manga in `BoardReaderSettings`), but the board's Smart
+    /// Comic Mode bit is off, so the caller should open the manga reader
+    /// directly for this one thread instead of routing through
+    /// `ForumMangaDetailView`.
     case mangaDirect(YamiboThreadRoutePayload)
     case thread(YamiboThreadRoutePayload)
     case webFallback(URL)

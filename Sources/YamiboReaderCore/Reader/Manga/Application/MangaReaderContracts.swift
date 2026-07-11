@@ -24,10 +24,10 @@ public struct MangaLaunchContext: Hashable, Identifiable, Sendable {
     /// Comic Mode on. Computed by the caller (forum routing or the
     /// favorites open-target resolver — both know the `forumID`) at launch
     /// time; the reader itself never looks this up independently
-    /// (smart-comic-mode design decision #15). Defaults to `true` so every
-    /// pre-Phase-B call site (tests, previews, and callers not yet updated
-    /// for this feature) keeps today's unconditional directory-resolution
-    /// behavior unless it explicitly opts out.
+    /// (smart-comic-mode design decision #15). Every production caller
+    /// stamps this explicitly from a `BoardReaderSettings` query or an
+    /// existing snapshot; the init default exists solely for test-construction
+    /// convenience (pluggable-reader-config R3).
     public var isSmartModeEnabled: Bool
 
     public var id: String {

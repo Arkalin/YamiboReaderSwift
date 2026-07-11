@@ -83,7 +83,10 @@ struct YamiboThreadRouteResolverTests {
     #expect(context.authorID == "705217")
 }
 
-@Test func yamiboThreadRouteResolverUsesKnownMangaKindWhenTaxonomyMisses() async throws {
+// `knownThreadKind` still classifies a fid the configuration doesn't cover,
+// but an unconfigured board never reports Smart Comic Mode on (one rule, no
+// special cases), so the route is the direct single-thread manga reader.
+@Test func yamiboThreadRouteResolverUsesKnownMangaKindWhenConfigurationMisses() async throws {
     let resolver = YamiboThreadRouteResolver(client: yamiboThreadRouteTestClient())
     let request = YamiboThreadRouteRequest(
         threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=200&mobile=2")),
@@ -94,8 +97,8 @@ struct YamiboThreadRouteResolverTests {
 
     let target = try await resolver.resolve(request)
 
-    guard case let .manga(context) = target else {
-        Issue.record("Expected manga detail target, got \(target)")
+    guard case let .mangaDirect(context) = target else {
+        Issue.record("Expected direct-to-reader manga target, got \(target)")
         return
     }
     #expect(context.thread.tid == "200")
@@ -134,7 +137,7 @@ struct YamiboThreadRouteResolverTests {
     let suiteName = YamiboTestDefaults.suiteName(prefix: "route-resolver-smart-comic-mode-enabled")
     let settingsStore = try SettingsStore(testSuiteName: suiteName, key: "settings")
     var settings = await settingsStore.load()
-    settings.smartComicMode.enabledForumIDs.insert("46")
+    settings.boardReader.setEntry(.init(mode: .manga(smartEnabled: true)), forumID: "46")
     try await settingsStore.save(settings)
     let resolver = YamiboThreadRouteResolver(client: yamiboThreadRouteTestClient(), settingsStore: settingsStore)
     let request = YamiboThreadRouteRequest(
@@ -154,11 +157,10 @@ struct YamiboThreadRouteResolverTests {
     #expect(payload.thread.fid == "46")
 }
 
-// Boards outside the manageable set (30/46/37) have no toggle at all and
-// must keep today's unconditional manga routing even when explicitly
-// classified via `knownThreadKind` (decision #1's scope is exactly these
-// three boards).
-@Test func yamiboThreadRouteResolverRoutesToMangaDetailForOutOfScopeBoardRegardlessOfSettings() async throws {
+// A board with no configuration entry never reports Smart Comic Mode on —
+// even a thread explicitly classified as manga via `knownThreadKind` opens
+// the reader directly instead of `ForumMangaDetailView`.
+@Test func yamiboThreadRouteResolverRoutesDirectlyToMangaReaderForUnconfiguredBoard() async throws {
     let suiteName = YamiboTestDefaults.suiteName(prefix: "route-resolver-smart-comic-mode-out-of-scope")
     let settingsStore = try SettingsStore(testSuiteName: suiteName, key: "settings")
     let resolver = YamiboThreadRouteResolver(client: yamiboThreadRouteTestClient(), settingsStore: settingsStore)
@@ -171,8 +173,8 @@ struct YamiboThreadRouteResolverTests {
 
     let target = try await resolver.resolve(request)
 
-    guard case .manga = target else {
-        Issue.record("Expected manga detail target, got \(target)")
+    guard case .mangaDirect = target else {
+        Issue.record("Expected direct-to-reader manga target, got \(target)")
         return
     }
 }

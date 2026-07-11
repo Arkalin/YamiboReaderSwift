@@ -439,7 +439,7 @@ public struct SystemSettingsView: View {
 
     private func smartComicModeBinding(forumID: String) -> Binding<Bool> {
         Binding(
-            get: { viewModel.smartComicMode.isEnabled(forumID: forumID) },
+            get: { viewModel.boardReader.isSmartComicModeEnabled(forumID: forumID) },
             set: { viewModel.setSmartComicModeEnabled($0, forumID: forumID) }
         )
     }
@@ -582,13 +582,13 @@ private enum FavoriteBackgroundPickerPurpose {
     case replacement
 }
 
-/// The 3 manageable boards' toggle rows, in a fixed display order (smart-
-/// comic-mode design decision #1: fid 30/46/37, not a free board picker).
-/// fid 30's `中文百合漫画区` name is confirmed (test fixtures,
-/// `MangaDirectoryWorkflowConfiguration.searchForumID`'s default). fid 46/37
-/// have no confirmed display name anywhere in the app (no cached forum board
-/// list is wired into the settings composition root), so they fall back to
-/// a generic "板块 <fid>" label.
+/// Interim toggle rows for the factory-default manga boards (fid 30/46/37),
+/// pending the pluggable-reader-config settings overview that will list all
+/// configured boards by name snapshot. The smart toggle only applies to
+/// boards whose `BoardReaderSettings` entry is `.manga`, which these three
+/// are by factory default. fid 30's `中文百合漫画区` name is confirmed;
+/// fid 46/37 have no confirmed display name anywhere in the app, so they
+/// fall back to a generic "板块 <fid>" label.
 private struct SystemSettingsSmartComicModeBoard: Identifiable {
     let id: String
     let forumID: String

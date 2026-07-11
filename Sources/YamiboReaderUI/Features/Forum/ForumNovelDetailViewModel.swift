@@ -426,6 +426,7 @@ final class ForumNovelDetailViewModel {
                 contentUpdatedAt: Self.contentUpdatedAt(from: threadPage),
                 formHash: threadPage?.formHash,
                 syncToRemote: syncToRemote,
+                boardReaderSettings: await dependencies.settingsStore.load().boardReader,
                 localFavoriteLibraryStore: dependencies.localFavoriteLibraryStore,
                 remoteRepository: await dependencies.makeFavoriteRepository()
             )
@@ -444,6 +445,7 @@ final class ForumNovelDetailViewModel {
             try await FavoriteQuickActions.removeFavorite(
                 favorite,
                 removeRemote: removeRemote,
+                boardReaderSettings: await dependencies.settingsStore.load().boardReader,
                 localFavoriteLibraryStore: dependencies.localFavoriteLibraryStore,
                 remoteRepository: await dependencies.makeFavoriteRepository()
             )

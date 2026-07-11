@@ -1,0 +1,113 @@
+import Foundation
+
+/// Per-board reader-mode configuration (板块阅读方式可插拔配置).
+///
+/// A single `[fid: Entry]` map is the whole model: a board with no entry uses
+/// the plain thread reader, `.novel` opens the novel reader, and `.manga`
+/// opens the manga reader with an embedded Smart Comic Mode bit. The smart
+/// bit only exists on `.manga` — the type cannot express "novel board with
+/// smart on".
+///
+/// One rule, no special cases (pluggable-reader-config decision #4): a board
+/// is smart-enabled iff it is currently configured as `.manga(smartEnabled:
+/// true)`. Unconfigured boards, `.novel` boards, and a missing/blank fid all
+/// report `false` — they behave exactly like plain threads. Callers must
+/// query this configuration (or a launch-context snapshot stamped from it)
+/// explicitly; never infer mode from proxy signals such as a resolved
+/// directory or a non-nil clean book name.
+public struct BoardReaderSettings: Codable, Hashable, Sendable {
+    public enum ReaderMode: Codable, Hashable, Sendable {
+        case novel
+        case manga(smartEnabled: Bool)
+    }
+
+    public struct Entry: Codable, Hashable, Sendable {
+        public var mode: ReaderMode
+        /// Display-only snapshot of the board name, refreshed whenever the
+        /// user visits the board page. `nil` means no snapshot yet — the
+        /// presentation layer falls back to a "板块 N" placeholder; never
+        /// bake that placeholder string into storage.
+        public var boardName: String?
+
+        public init(mode: ReaderMode, boardName: String? = nil) {
+            self.mode = mode
+            self.boardName = boardName
+        }
+    }
+
+    /// fid -> entry. No entry = plain thread reader.
+    public var entries: [String: Entry]
+
+    /// Factory default carried over from the previous hardcoded taxonomy:
+    /// 49/55 novel, 30 manga with smart on (board name built in), 46/37
+    /// manga with smart off (no verified name snapshot — UI shows the
+    /// placeholder until the user visits those boards).
+    public static let factoryDefault = BoardReaderSettings(entries: [
+        "49": Entry(mode: .novel),
+        "55": Entry(mode: .novel),
+        "30": Entry(mode: .manga(smartEnabled: true), boardName: "中文百合漫画区"),
+        "46": Entry(mode: .manga(smartEnabled: false)),
+        "37": Entry(mode: .manga(smartEnabled: false))
+    ])
+
+    /// The default init IS the factory default (non-empty map), so decode
+    /// fallback / reset / fresh install all keep the carried-over behavior.
+    public init(entries: [String: Entry] = Self.factoryDefault.entries) {
+        self.entries = entries
+    }
+
+    public func entry(forumID: String?) -> Entry? {
+        guard let normalized = Self.normalizedForumID(forumID) else { return nil }
+        return entries[normalized]
+    }
+
+    /// One rule, no special cases: only a board currently configured as
+    /// `.manga(smartEnabled: true)` reports `true`.
+    public func isSmartComicModeEnabled(forumID: String?) -> Bool {
+        guard case .manga(smartEnabled: true) = entry(forumID: forumID)?.mode else {
+            return false
+        }
+        return true
+    }
+
+    /// Configuration-driven classification: `.novel`/`.manga` from the
+    /// configured entry, `.unknown` for unconfigured boards and missing fids.
+    public func threadKind(forumID: String?) -> YamiboThreadKind {
+        switch entry(forumID: forumID)?.mode {
+        case .novel:
+            return .novel
+        case .manga:
+            return .manga
+        case nil:
+            return .unknown
+        }
+    }
+
+    /// Whether any board is configured as `.manga(smartEnabled: true)` —
+    /// gates the "智能漫画" source-filter chip's visibility (decision #9
+    /// translation); matching stays per-favorite-board.
+    public var hasAnySmartEnabledBoard: Bool {
+        entries.values.contains { entry in
+            if case .manga(smartEnabled: true) = entry.mode { return true }
+            return false
+        }
+    }
+
+    public mutating func setEntry(_ entry: Entry, forumID: String?) {
+        guard let normalized = Self.normalizedForumID(forumID) else { return }
+        entries[normalized] = entry
+    }
+
+    public mutating func removeEntry(forumID: String?) {
+        guard let normalized = Self.normalizedForumID(forumID) else { return }
+        entries.removeValue(forKey: normalized)
+    }
+
+    private static func normalizedForumID(_ forumID: String?) -> String? {
+        guard let normalized = forumID?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !normalized.isEmpty else {
+            return nil
+        }
+        return normalized
+    }
+}

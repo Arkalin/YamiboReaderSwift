@@ -81,12 +81,12 @@ private func runEngine(
     return await engine.run(snapshot: snapshot, persist: { _ in })
 }
 
-private func makeSettingsStore(_ smartComicMode: SmartComicModeSettings) async throws -> SettingsStore {
+private func makeSettingsStore(_ boardReader: BoardReaderSettings) async throws -> SettingsStore {
     let suiteName = "favorite-sync-engine-settings-\(UUID().uuidString)"
     let defaults = try #require(UserDefaults(suiteName: suiteName))
     let store = SettingsStore(defaults: defaults, key: "settings")
     var settings = AppSettings()
-    settings.smartComicMode = smartComicMode
+    settings.boardReader = boardReader
     try await store.save(settings)
     return store
 }
@@ -236,7 +236,7 @@ private func makeSettingsStore(_ smartComicMode: SmartComicModeSettings) async t
     // even though the sibling's board (30) has it on, the two-sided check
     // (design decision #8, mirroring Phase F's `autoAttributionDirectoryTitle`
     // fix) must suppress the warning.
-    let settingsStore = try await makeSettingsStore(SmartComicModeSettings(enabledForumIDs: ["30"]))
+    let settingsStore = try await makeSettingsStore(BoardReaderSettings())
 
     let recorder = SyncCallRecorder()
     let client = singlePageClient(
@@ -292,7 +292,7 @@ private func makeSettingsStore(_ smartComicMode: SmartComicModeSettings) async t
             MangaChapter(tid: "911", rawTitle: "第2话", chapterNumber: 2),
         ]
     ))
-    let settingsStore = try await makeSettingsStore(SmartComicModeSettings(enabledForumIDs: ["30"]))
+    let settingsStore = try await makeSettingsStore(BoardReaderSettings())
 
     let recorder = SyncCallRecorder()
     let client = singlePageClient(
@@ -377,7 +377,7 @@ private func makeSettingsStore(_ smartComicMode: SmartComicModeSettings) async t
             MangaChapter(tid: "942", rawTitle: "第3话", chapterNumber: 3),
         ]
     ))
-    let settingsStore = try await makeSettingsStore(SmartComicModeSettings(enabledForumIDs: ["30"]))
+    let settingsStore = try await makeSettingsStore(BoardReaderSettings())
 
     // New import (tid "942", chapter 3) also lands on a Smart-Comic-Mode-on
     // board (30).

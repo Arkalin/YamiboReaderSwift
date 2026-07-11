@@ -57,15 +57,14 @@ struct LocalFavoriteDerivedState: Equatable {
     var collectionEntryCounts: [String: Int] = [:]
     var sourceFilterEntryCounts: [LocalFavoriteSourceFilter: Int] = [:]
     /// Whether the "智能漫画" (`.manga`) source filter should be offered in
-    /// the filter sheet at all (smart-comic-mode decision #9). This is
-    /// gated purely on `SmartComicModeSettings` — true iff at least one of
-    /// the 3 manageable boards currently has the mode on — and deliberately
-    /// NOT on whether `sourceFilterEntryCounts` happens to contain `.manga`
-    /// (i.e. not on whether any `.mangaThread` favorite currently exists).
-    /// Once shown, the filter's matching scope is unaffected by this flag:
-    /// it still matches every `.mangaThread` favorite regardless of that
-    /// favorite's own board's mode state — visibility and matching scope
-    /// are two separate concerns and must not be conflated.
+    /// the filter sheet at all. This is gated purely on
+    /// `BoardReaderSettings` — true iff any board is currently configured
+    /// as `.manga(smartEnabled: true)` — and deliberately NOT on whether
+    /// `sourceFilterEntryCounts` happens to contain `.manga` (i.e. not on
+    /// whether any `.mangaThread` favorite currently exists). Once shown,
+    /// the filter's matching stays per-favorite: each `.mangaThread`
+    /// favorite matches by its OWN board's configuration — visibility and
+    /// matching scope are two separate concerns and must not be conflated.
     var isMangaSourceFilterAvailable = false
     /// Up to four preview tiles per visible collection for the preview
     /// mosaic, resolved from the collection's own members (not the filtered
@@ -89,10 +88,10 @@ enum LocalFavoriteLibraryDerivation {
         /// `FavoriteLibraryOrganizer.load()`/`reload()` time (smart-comic-mode
         /// design doc's performance constraint #2) — never recomputed here.
         var mangaDirectoriesByTID: [String: MangaDirectory] = [:]
-        /// Snapshot of the per-board toggle taken at the same load/reload
-        /// time as `mangaDirectoriesByTID`, so grouping and the settings it
-        /// was computed against never disagree mid-derivation.
-        var smartComicModeSettings: SmartComicModeSettings = SmartComicModeSettings()
+        /// Snapshot of the per-board reader configuration taken at the same
+        /// load/reload time as `mangaDirectoriesByTID`, so grouping and the
+        /// settings it was computed against never disagree mid-derivation.
+        var boardReaderSettings: BoardReaderSettings = BoardReaderSettings()
         /// `.smartManga(cleanBookName:)` covers, keyed by `cleanBookName` —
         /// the cover source for any card with a resolved `mangaDirectory`
         /// (merged or a lone resolved favorite alike), as opposed to
@@ -126,7 +125,7 @@ enum LocalFavoriteLibraryDerivation {
         let mangaThreadItemsByEffectiveTitle = LocalFavoriteLibraryProjection.mangaThreadItemsByEffectiveTitle(
             in: inputs.document.items,
             mangaDirectoriesByTID: inputs.mangaDirectoriesByTID,
-            smartComicModeSettings: inputs.smartComicModeSettings
+            boardReaderSettings: inputs.boardReaderSettings
         )
         let cards = resolvedCards(
             in: inputs.document,
@@ -188,7 +187,7 @@ enum LocalFavoriteLibraryDerivation {
             query: query,
             readingProgress: inputs.readingProgress,
             mangaDirectoriesByTID: inputs.mangaDirectoriesByTID,
-            smartComicModeSettings: inputs.smartComicModeSettings,
+            boardReaderSettings: inputs.boardReaderSettings,
             mangaThreadItemsByEffectiveTitle: mangaThreadItemsByEffectiveTitle
         )
         .map { card in
@@ -299,7 +298,7 @@ enum LocalFavoriteLibraryDerivation {
             var seenEffectiveTitles: Set<String> = []
             for item in members {
                 let isModeOnMangaThread = item.target.kind == .mangaThread
-                    && inputs.smartComicModeSettings.isEnabled(forumID: item.forumID)
+                    && inputs.boardReaderSettings.isSmartComicModeEnabled(forumID: item.forumID)
                 guard isModeOnMangaThread else {
                     candidates.append(CollectionPreviewCandidate(
                         sortDate: item.updatedAt,
@@ -377,19 +376,17 @@ enum LocalFavoriteLibraryDerivation {
             mangaThreadItemsByEffectiveTitle: mangaThreadItemsByEffectiveTitle
         )
         return Dictionary(grouping: allCards) { card in
-            LocalFavoriteSourceFilter.key(for: card.item, smartComicModeSettings: inputs.smartComicModeSettings)
+            LocalFavoriteSourceFilter.key(for: card.item, boardReaderSettings: inputs.boardReaderSettings)
         }
         .mapValues(\.count)
     }
 
-    /// Smart-comic-mode decision #9: visible iff at least one of the 3
-    /// manageable boards currently has the mode on — purely a settings
-    /// check, independent of `sourceFilterEntryCounts`/whether any
-    /// `.mangaThread` favorite currently exists.
+    /// Visible iff any board is currently configured as
+    /// `.manga(smartEnabled: true)` — purely a settings check, independent
+    /// of `sourceFilterEntryCounts`/whether any `.mangaThread` favorite
+    /// currently exists. Matching stays per-favorite-board once visible.
     private static func isMangaSourceFilterAvailable(_ inputs: Inputs) -> Bool {
-        SmartComicModeSettings.manageableForumIDs.contains {
-            inputs.smartComicModeSettings.isEnabled(forumID: $0)
-        }
+        inputs.boardReaderSettings.hasAnySmartEnabledBoard
     }
 
     // MARK: - Collections

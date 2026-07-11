@@ -94,7 +94,7 @@ final class LocalFavoriteLibraryDerivationTests: XCTestCase {
                 "2001": directory,
                 "2002": directory
             ],
-            smartComicModeSettings: SmartComicModeSettings(),
+            boardReaderSettings: BoardReaderSettings(),
             smartMangaCoverURLsByCleanBookName: [
                 directory.cleanBookName: sharedMangaCoverURL
             ]
@@ -183,7 +183,7 @@ final class LocalFavoriteLibraryDerivationTests: XCTestCase {
             // No `mangaDirectoriesByTID` entries at all — neither favorite's
             // directory has resolved locally.
             mangaDirectoriesByTID: [:],
-            smartComicModeSettings: SmartComicModeSettings(),
+            boardReaderSettings: BoardReaderSettings(),
             smartMangaCoverURLsByCleanBookName: [:]
         )
 
