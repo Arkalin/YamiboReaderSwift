@@ -68,8 +68,10 @@ struct LocalFavoriteCollectionRow: View {
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.tertiary)
         }
+        // Matches `LocalFavoriteGridCard`'s own padding so the selection
+        // border below clears the text by the same margin in every layout.
+        .padding(10)
         .contentShape(Rectangle())
-        .padding(.vertical, 4)
         .favoriteSelectionEmphasis(isSelectionMode: isSelectionMode, isSelected: isSelected, cornerRadius: 10)
     }
 }

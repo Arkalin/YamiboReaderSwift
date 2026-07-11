@@ -80,8 +80,10 @@ struct LocalFavoriteItemRow: View {
             }
             Spacer(minLength: 0)
         }
+        // Matches `LocalFavoriteGridCard`'s own padding so the selection
+        // border below clears the text by the same margin in every layout.
+        .padding(10)
         .contentShape(Rectangle())
-        .padding(.vertical, 4)
         // A smart card is selectable just like any other card — see the
         // tap-gate above.
         .favoriteSelectionEmphasis(isSelectionMode: isSelectionMode, isSelected: isSelected, cornerRadius: 10)
