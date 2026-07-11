@@ -11,15 +11,6 @@ struct LocalFavoriteGridCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            // A smart card is selectable like any other card — selecting it
-            // is equivalent to selecting every favorite archived under it,
-            // expanded transparently at bulk-operation time by
-            // `FavoriteLibraryOrganizer.expandedSelectionFavoriteIDs`; the id
-            // that lands in `selection.selectedFavoriteIDs` here is still
-            // just its own representative id.
-            if selection.isSelectionMode {
-                LocalFavoriteSelectionIndicator(isSelected: selection.selectedFavoriteIDs.contains(card.id))
-            }
             LocalFavoriteGridCover(url: card.coverURL, title: card.resolvedTitle)
             Text(card.resolvedTitle)
                 .font(.subheadline.weight(.semibold))
@@ -39,13 +30,20 @@ struct LocalFavoriteGridCard: View {
                 LocalFavoriteSmartCardBadge()
             }
         }
+        // A smart card is selectable like any other card — selecting it is
+        // equivalent to selecting every favorite archived under it, expanded
+        // transparently at bulk-operation time by
+        // `FavoriteLibraryOrganizer.expandedSelectionFavoriteIDs`; the id
+        // that lands in `selection.selectedFavoriteIDs` here is still just
+        // its own representative id.
+        .favoriteSelectionEmphasis(isSelectionMode: selection.isSelectionMode, isSelected: isSelected, cornerRadius: 8)
         .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         .onTapGesture {
             if selection.isSelectionMode {
                 // A smart card toggles into `selection.selectedFavoriteIDs`
                 // just like any other card — bulk operations expand it to
                 // every archived member at execution time (see the
-                // selection-indicator comment above). `deleteSelection`
+                // selection-emphasis comment above). `deleteSelection`
                 // deliberately excludes it there instead of here, so it
                 // still requires the dedicated "查看归档收藏" archive page.
                 selection.toggleFavoriteSelection(id: card.id)
@@ -58,6 +56,10 @@ struct LocalFavoriteGridCard: View {
                 LocalFavoriteCardContextMenu(card: card, actions: actions)
             }
         }
+    }
+
+    private var isSelected: Bool {
+        selection.selectedFavoriteIDs.contains(card.id)
     }
 }
 

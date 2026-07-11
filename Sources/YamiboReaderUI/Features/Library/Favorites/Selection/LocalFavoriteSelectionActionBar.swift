@@ -132,15 +132,30 @@ private struct LocalFavoriteGlassBarBackground: ViewModifier {
     }
 }
 
-/// Round check indicator shown next to rows and cards in selection mode.
-struct LocalFavoriteSelectionIndicator: View {
+/// Marks selection state on a whole row/card instead of a leading circle:
+/// an unselected item dims while multi-selection is active, and a selected
+/// one stays full-color with an accent-color border (Android card-selection
+/// parity).
+struct LocalFavoriteSelectionEmphasis: ViewModifier {
+    let isSelectionMode: Bool
     let isSelected: Bool
+    var cornerRadius: CGFloat = 8
 
-    var body: some View {
-        Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-            .font(.system(size: 22, weight: .semibold))
-            .foregroundStyle(isSelected ? Color.accentColor : Color.secondary)
-            .frame(width: 28, height: 28)
-            .accessibilityLabel(isSelected ? L10n.string("common.current") : L10n.string("common.select"))
+    func body(content: Content) -> some View {
+        content
+            .overlay {
+                if isSelectionMode, isSelected {
+                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                        .stroke(Color.accentColor, lineWidth: 2.5)
+                }
+            }
+            .opacity(isSelectionMode && !isSelected ? 0.45 : 1)
+            .accessibilityAddTraits(isSelectionMode && isSelected ? .isSelected : [])
+    }
+}
+
+extension View {
+    func favoriteSelectionEmphasis(isSelectionMode: Bool, isSelected: Bool, cornerRadius: CGFloat = 8) -> some View {
+        modifier(LocalFavoriteSelectionEmphasis(isSelectionMode: isSelectionMode, isSelected: isSelected, cornerRadius: cornerRadius))
     }
 }
