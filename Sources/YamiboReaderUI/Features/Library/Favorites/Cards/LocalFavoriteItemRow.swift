@@ -82,13 +82,16 @@ struct LocalFavoriteItemRow: View {
         }
         .contentShape(Rectangle())
         .padding(.vertical, 4)
+        // A smart card is selectable just like any other card — see the
+        // tap-gate above.
+        .favoriteSelectionEmphasis(isSelectionMode: isSelectionMode, isSelected: isSelected, cornerRadius: 10)
+        // Layered after `favoriteSelectionEmphasis`, not before: see
+        // `LocalFavoriteGridCard` — its `.opacity()` would otherwise clip
+        // this badge's outward corner offset.
         .overlay(alignment: .topTrailing) {
             if card.isModeOnMangaThread {
                 LocalFavoriteSmartCardBadge()
             }
         }
-        // A smart card is selectable just like any other card — see the
-        // tap-gate above.
-        .favoriteSelectionEmphasis(isSelectionMode: isSelectionMode, isSelected: isSelected, cornerRadius: 10)
     }
 }
