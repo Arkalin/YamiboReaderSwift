@@ -4,9 +4,9 @@ import YamiboReaderCore
 #if os(iOS)
 import UIKit
 
-/// Result of a gamepad "scroll one viewport" request against the vertical
+/// Result of a controller "scroll one viewport" request against the vertical
 /// scroll view.
-enum NovelReaderGamepadScrollOutcome {
+enum NovelReaderControlScrollOutcome {
     case scrolled
     /// Already clamped at the requested edge when pressed; the caller
     /// crosses to the adjacent web page instead.
@@ -37,10 +37,10 @@ final class NovelReaderVerticalScrollCoordinator: NSObject, UIGestureRecognizerD
     private var lastMotionTime = CACurrentMediaTime()
     private var isRestoringOffset = false
     private let motionSuppressionInterval: CFTimeInterval = 0.35
-    private var pendingGamepadScrollTarget: (y: CGFloat, timestamp: CFTimeInterval)?
+    private var pendingControlScrollTarget: (y: CGFloat, timestamp: CFTimeInterval)?
     /// Grace window in which a still-animating step's target keeps serving as
     /// the base for the next one, so rapid presses compound predictably.
-    private static let gamepadScrollAnimationGrace: CFTimeInterval = 0.45
+    private static let controlScrollAnimationGrace: CFTimeInterval = 0.45
 
     func attach(scrollView: UIScrollView?) {
         guard self.scrollView !== scrollView else { return }
@@ -72,7 +72,7 @@ final class NovelReaderVerticalScrollCoordinator: NSObject, UIGestureRecognizerD
             return false
         }
 
-        pendingGamepadScrollTarget = nil
+        pendingControlScrollTarget = nil
         let offset = scrollView.contentOffset
         scrollView.setContentOffset(offset, animated: false)
         lastMotionTime = CACurrentMediaTime()
@@ -102,7 +102,7 @@ final class NovelReaderVerticalScrollCoordinator: NSObject, UIGestureRecognizerD
         )
         let targetOffsetY = min(max(desiredY, minOffsetY), maxOffsetY)
         isRestoringOffset = true
-        pendingGamepadScrollTarget = nil
+        pendingControlScrollTarget = nil
         scrollView.setContentOffset(CGPoint(x: scrollView.contentOffset.x, y: targetOffsetY), animated: false)
         isRestoringOffset = false
         Task { @MainActor [weak self] in
@@ -113,10 +113,10 @@ final class NovelReaderVerticalScrollCoordinator: NSObject, UIGestureRecognizerD
         return true
     }
 
-    /// Scrolls one gamepad step (85% of the viewport) with animation,
+    /// Scrolls one controller step (85% of the viewport) with animation,
     /// clamping at the content edges. Returns `.atEdge` without moving when
     /// the press lands while already clamped, so the caller can cross pages.
-    func performGamepadScrollStep(_ direction: GamepadScrollDirection) -> NovelReaderGamepadScrollOutcome {
+    func performControlScrollStep(_ direction: ReaderControlScrollDirection) -> NovelReaderControlScrollOutcome {
         guard let scrollView, scrollView.bounds.height > 0 else { return .unavailable }
 
         let minOffsetY = -scrollView.adjustedContentInset.top
@@ -136,14 +136,14 @@ final class NovelReaderVerticalScrollCoordinator: NSObject, UIGestureRecognizerD
 
         let now = CACurrentMediaTime()
         var baseY = currentY
-        if let pending = pendingGamepadScrollTarget,
-           now - pending.timestamp < Self.gamepadScrollAnimationGrace {
+        if let pending = pendingControlScrollTarget,
+           now - pending.timestamp < Self.controlScrollAnimationGrace {
             baseY = pending.y
         }
-        let step = scrollView.bounds.height * CGFloat(GamepadCommandResolver.verticalScrollViewportFraction)
+        let step = scrollView.bounds.height * CGFloat(ReaderControlCommandResolver.verticalScrollViewportFraction)
         let desiredTargetY = direction == .down ? baseY + step : baseY - step
         let targetY = min(max(desiredTargetY, minOffsetY), maxOffsetY)
-        pendingGamepadScrollTarget = (targetY, now)
+        pendingControlScrollTarget = (targetY, now)
         scrollView.setContentOffset(CGPoint(x: scrollView.contentOffset.x, y: targetY), animated: true)
         return .scrolled
     }

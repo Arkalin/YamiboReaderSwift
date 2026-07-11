@@ -4,18 +4,25 @@ import UIKit
 
 struct SystemSettingsPeripheralPageTurnView: View {
     @ObservedObject var viewModel: SystemSettingsViewModel
-    var gamepadInput: GamepadInputManager?
+    var peripheralInput: ReaderPeripheralInputManager?
     @State private var showsApplePencilHelp = false
-    @State private var capturingAction: GamepadAction?
+    @State private var capturingAction: ReaderControlAction?
     @State private var showsCaptureRejectedNotice = false
     @State private var captureRejectionDismissTask: Task<Void, Never>?
+    @State private var capturingKeyboardAction: ReaderControlAction?
+    @State private var showsKeyboardCaptureRejectedNotice = false
+    @State private var keyboardCaptureRejectionDismissTask: Task<Void, Never>?
 
     private var showsApplePencilSection: Bool {
         UIDevice.current.userInterfaceIdiom == .pad
     }
 
     private var isControllerConnected: Bool {
-        gamepadInput?.isControllerConnected == true
+        peripheralInput?.isControllerConnected == true
+    }
+
+    private var isKeyboardConnected: Bool {
+        peripheralInput?.isKeyboardConnected == true
     }
 
     var body: some View {
@@ -72,7 +79,7 @@ struct SystemSettingsPeripheralPageTurnView: View {
                     set: { viewModel.updateGamepadEnabled($0) }
                 ))
                 .disabled(viewModel.isBusy)
-                ForEach(GamepadAction.userBindableActions, id: \.self) { action in
+                ForEach(ReaderControlAction.userBindableActions, id: \.self) { action in
                     gamepadBindingRow(action)
                 }
                 fixedMenuRow
@@ -86,10 +93,33 @@ struct SystemSettingsPeripheralPageTurnView: View {
             } footer: {
                 Text(gamepadFooterText)
             }
+
+            Section {
+                keyboardConnectionStatusRow
+                Toggle(L10n.string("settings.keyboard.enabled"), isOn: Binding(
+                    get: { viewModel.keyboard.isEnabled },
+                    set: { viewModel.updateKeyboardEnabled($0) }
+                ))
+                .disabled(viewModel.isBusy)
+                ForEach(ReaderControlAction.userBindableActions, id: \.self) { action in
+                    keyboardBindingRow(action)
+                }
+                fixedKeyboardMenuRow
+                Button(L10n.string("settings.keyboard.restore_defaults")) {
+                    cancelKeyboardCaptureIfNeeded()
+                    viewModel.restoreKeyboardDefaultBindings()
+                }
+                .disabled(viewModel.isBusy)
+            } header: {
+                Text(L10n.string("settings.keyboard"))
+            } footer: {
+                Text(keyboardFooterText)
+            }
         }
         .navigationTitle(L10n.string("settings.peripheral_behavior"))
         .onDisappear {
             cancelCaptureIfNeeded()
+            cancelKeyboardCaptureIfNeeded()
         }
     }
 
@@ -104,18 +134,18 @@ struct SystemSettingsPeripheralPageTurnView: View {
     }
 
     private var connectionStatusText: String {
-        guard let gamepadInput, gamepadInput.isControllerConnected else {
+        guard let peripheralInput, peripheralInput.isControllerConnected else {
             return L10n.string("settings.gamepad.status.disconnected")
         }
         return L10n.string(
             "settings.gamepad.status.connected",
-            gamepadInput.connectedControllerNames.joined(separator: "、")
+            peripheralInput.connectedControllerNames.joined(separator: "、")
         )
     }
 
     private var fixedMenuRow: some View {
         HStack(spacing: 12) {
-            Text(GamepadAction.toggleChrome.title)
+            Text(ReaderControlAction.toggleChrome.title)
                 .foregroundStyle(.primary)
             Spacer(minLength: 0)
             Text(L10n.string("settings.gamepad.menu_fixed"))
@@ -132,7 +162,7 @@ struct SystemSettingsPeripheralPageTurnView: View {
     }
 
     @ViewBuilder
-    private func gamepadBindingRow(_ action: GamepadAction) -> some View {
+    private func gamepadBindingRow(_ action: ReaderControlAction) -> some View {
         if capturingAction == action {
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 12) {
@@ -177,9 +207,9 @@ struct SystemSettingsPeripheralPageTurnView: View {
     }
 
     @ViewBuilder
-    private func bindingValueLabel(for action: GamepadAction) -> some View {
+    private func bindingValueLabel(for action: ReaderControlAction) -> some View {
         if let alias = viewModel.gamepad.bindings[action] {
-            let display = gamepadInput?.displayInfo(forElementAlias: alias)
+            let display = peripheralInput?.displayInfo(forElementAlias: alias)
             HStack(spacing: 6) {
                 if let symbolName = display?.sfSymbolsName {
                     Image(systemName: symbolName)
@@ -193,11 +223,11 @@ struct SystemSettingsPeripheralPageTurnView: View {
         }
     }
 
-    private func beginCapture(for action: GamepadAction) {
-        guard let gamepadInput else { return }
+    private func beginCapture(for action: ReaderControlAction) {
+        guard let peripheralInput else { return }
         capturingAction = action
         showsCaptureRejectedNotice = false
-        gamepadInput.beginCapture { feedback in
+        peripheralInput.beginCapture { feedback in
             switch feedback {
             case let .captured(element):
                 captureRejectionDismissTask?.cancel()
@@ -219,8 +249,133 @@ struct SystemSettingsPeripheralPageTurnView: View {
     private func cancelCaptureIfNeeded() {
         captureRejectionDismissTask?.cancel()
         captureRejectionDismissTask = nil
-        gamepadInput?.cancelCapture()
+        peripheralInput?.cancelCapture()
         capturingAction = nil
         showsCaptureRejectedNotice = false
+    }
+
+    // MARK: - Keyboard
+
+    private var keyboardConnectionStatusRow: some View {
+        HStack(spacing: 12) {
+            Text(L10n.string("settings.keyboard.status"))
+            Spacer(minLength: 0)
+            Text(keyboardConnectionStatusText)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.trailing)
+        }
+    }
+
+    private var keyboardConnectionStatusText: String {
+        guard let peripheralInput, peripheralInput.isKeyboardConnected else {
+            return L10n.string("settings.keyboard.status.disconnected")
+        }
+        return L10n.string("settings.keyboard.status.connected")
+    }
+
+    private var fixedKeyboardMenuRow: some View {
+        HStack(spacing: 12) {
+            Text(ReaderControlAction.toggleChrome.title)
+                .foregroundStyle(.primary)
+            Spacer(minLength: 0)
+            Text(L10n.string("settings.keyboard.menu_fixed"))
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var keyboardFooterText: String {
+        var lines = [L10n.string("settings.keyboard.dpad_note")]
+        if !isKeyboardConnected {
+            lines.append(L10n.string("settings.keyboard.connect_hint"))
+        }
+        return lines.joined(separator: "\n")
+    }
+
+    @ViewBuilder
+    private func keyboardBindingRow(_ action: ReaderControlAction) -> some View {
+        if capturingKeyboardAction == action {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 12) {
+                    Text(action.title)
+                    Spacer(minLength: 8)
+                    Text(showsKeyboardCaptureRejectedNotice
+                        ? L10n.string("settings.keyboard.capture_rejected")
+                        : L10n.string("settings.keyboard.capture_prompt"))
+                        .font(.footnote)
+                        .foregroundStyle(showsKeyboardCaptureRejectedNotice ? AnyShapeStyle(.orange) : AnyShapeStyle(.secondary))
+                }
+                HStack(spacing: 20) {
+                    Button(L10n.string("common.cancel")) {
+                        cancelKeyboardCaptureIfNeeded()
+                    }
+                    if viewModel.keyboard.bindings[action] != nil {
+                        Button(L10n.string("settings.keyboard.clear_binding"), role: .destructive) {
+                            cancelKeyboardCaptureIfNeeded()
+                            viewModel.clearKeyboardBinding(for: action)
+                        }
+                    }
+                }
+                .font(.footnote)
+                .buttonStyle(.borderless)
+            }
+            .padding(.vertical, 2)
+        } else {
+            Button {
+                beginKeyboardCapture(for: action)
+            } label: {
+                HStack(spacing: 12) {
+                    Text(action.title)
+                        .foregroundStyle(.primary)
+                    Spacer(minLength: 0)
+                    keyboardBindingValueLabel(for: action)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(viewModel.isBusy || !isKeyboardConnected || capturingKeyboardAction != nil)
+        }
+    }
+
+    @ViewBuilder
+    private func keyboardBindingValueLabel(for action: ReaderControlAction) -> some View {
+        if let code = viewModel.keyboard.bindings[action] {
+            let name = peripheralInput?.displayName(forKeyCode: code)
+            Text(name ?? "键码 \(code)")
+                .foregroundStyle(.secondary)
+        } else {
+            Text(L10n.string("settings.keyboard.unset"))
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private func beginKeyboardCapture(for action: ReaderControlAction) {
+        guard let peripheralInput else { return }
+        capturingKeyboardAction = action
+        showsKeyboardCaptureRejectedNotice = false
+        peripheralInput.beginKeyboardCapture { feedback in
+            switch feedback {
+            case let .captured(key):
+                keyboardCaptureRejectionDismissTask?.cancel()
+                capturingKeyboardAction = nil
+                showsKeyboardCaptureRejectedNotice = false
+                viewModel.bindKeyboardAction(action, toKeyCode: key.keyCode)
+            case .rejected:
+                showsKeyboardCaptureRejectedNotice = true
+                keyboardCaptureRejectionDismissTask?.cancel()
+                keyboardCaptureRejectionDismissTask = Task {
+                    try? await Task.sleep(for: .seconds(1.5))
+                    guard !Task.isCancelled else { return }
+                    showsKeyboardCaptureRejectedNotice = false
+                }
+            }
+        }
+    }
+
+    private func cancelKeyboardCaptureIfNeeded() {
+        keyboardCaptureRejectionDismissTask?.cancel()
+        keyboardCaptureRejectionDismissTask = nil
+        peripheralInput?.cancelKeyboardCapture()
+        capturingKeyboardAction = nil
+        showsKeyboardCaptureRejectedNotice = false
     }
 }

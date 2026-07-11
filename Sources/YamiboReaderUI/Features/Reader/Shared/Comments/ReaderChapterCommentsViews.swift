@@ -23,7 +23,7 @@ struct ReaderChapterCommentsContent: View {
     }
 
     // The comment list is a hand-rolled inset-grouped ScrollView instead of a
-    // List: `scrollPosition(id:)` (needed for drift-free gamepad scrolling)
+    // List: `scrollPosition(id:)` (needed for drift-free controller scrolling)
     // only works on ScrollView + scrollTargetLayout.
     @ViewBuilder
     private var content: some View {
@@ -165,11 +165,11 @@ struct ReaderChapterCommentsSheet: View {
     let refresh: (ReaderChapterCommentTarget?) async -> Void
     let loadNext: () async -> Void
     let onOpenOriginalPost: (URL) -> Void
-    var gamepadInput: GamepadInputManager?
+    var peripheralInput: ReaderPeripheralInputManager?
     var emptyTitle = L10n.string("reader.chapter_comments_empty")
 
     @State private var scrollTarget: String?
-    @State private var gamepadHandlerToken: UUID?
+    @State private var controlHandlerToken: UUID?
 
     var body: some View {
         NavigationStack {
@@ -210,19 +210,19 @@ struct ReaderChapterCommentsSheet: View {
             await loadInitial(target)
         }
         .onAppear {
-            guard let gamepadInput, gamepadHandlerToken == nil else { return }
-            gamepadHandlerToken = gamepadInput.pushHandler { event in
-                handleGamepadEvent(event)
+            guard let peripheralInput, controlHandlerToken == nil else { return }
+            controlHandlerToken = peripheralInput.pushHandler { event in
+                handleControlEvent(event)
             }
         }
         .onDisappear {
-            gamepadInput?.removeHandler(gamepadHandlerToken)
-            gamepadHandlerToken = nil
+            peripheralInput?.removeHandler(controlHandlerToken)
+            controlHandlerToken = nil
         }
     }
 
-    private func handleGamepadEvent(_ event: GamepadEvent) {
-        switch GamepadCommandResolver.commentsCommand(for: event) {
+    private func handleControlEvent(_ event: ReaderControlEvent) {
+        switch ReaderControlCommandResolver.commentsCommand(for: event) {
         case .close:
             dismiss()
         case let .scroll(direction):
@@ -232,7 +232,7 @@ struct ReaderChapterCommentsSheet: View {
         }
     }
 
-    private func scrollComments(_ direction: GamepadScrollDirection) {
+    private func scrollComments(_ direction: ReaderControlScrollDirection) {
         guard case let .loaded(_, page) = state, !page.comments.isEmpty else { return }
         let ids = page.comments.map(\.id)
         let currentIndex: Int = if let scrollTarget, let index = ids.firstIndex(of: scrollTarget) {
@@ -242,7 +242,7 @@ struct ReaderChapterCommentsSheet: View {
         } else {
             0
         }
-        let stride = GamepadCommandResolver.commentsScrollStride
+        let stride = ReaderControlCommandResolver.commentsScrollStride
         let desiredIndex = direction == .down ? currentIndex + stride : currentIndex - stride
         let clampedIndex = min(max(desiredIndex, 0), ids.count - 1)
         withAnimation(.easeInOut(duration: 0.25)) {

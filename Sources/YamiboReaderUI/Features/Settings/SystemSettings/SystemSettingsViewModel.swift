@@ -13,6 +13,7 @@ final class SystemSettingsViewModel: ObservableObject {
     @Published var novelOfflineCache = NovelOfflineCacheSettings()
     @Published var applePencilPageTurn = ApplePencilPageTurnSettings()
     @Published var gamepad = GamepadSettings()
+    @Published var keyboard = KeyboardSettings()
     @Published var smartComicMode = SmartComicModeSettings()
     @Published private(set) var novelCacheBytes = 0
     @Published private(set) var mangaIndexCacheBytes = 0
@@ -77,6 +78,7 @@ final class SystemSettingsViewModel: ObservableObject {
         novelOfflineCache = settings.novelOfflineCache
         applePencilPageTurn = settings.system.applePencilPageTurn
         gamepad = settings.system.gamepad
+        keyboard = settings.system.keyboard
         smartComicMode = settings.smartComicMode
         await refreshStorageUsage()
     }
@@ -299,13 +301,13 @@ final class SystemSettingsViewModel: ObservableObject {
         updateGamepad(updated)
     }
 
-    func bindGamepadAction(_ action: GamepadAction, toElementAlias alias: String) {
+    func bindGamepadAction(_ action: ReaderControlAction, toElementAlias alias: String) {
         var updated = gamepad
         updated.bind(action, toElementAlias: alias)
         updateGamepad(updated)
     }
 
-    func clearGamepadBinding(for action: GamepadAction) {
+    func clearGamepadBinding(for action: ReaderControlAction) {
         var updated = gamepad
         updated.clearBinding(for: action)
         updateGamepad(updated)
@@ -315,6 +317,30 @@ final class SystemSettingsViewModel: ObservableObject {
         var updated = gamepad
         updated.restoreDefaultBindings()
         updateGamepad(updated)
+    }
+
+    func updateKeyboardEnabled(_ isEnabled: Bool) {
+        var updated = keyboard
+        updated.isEnabled = isEnabled
+        updateKeyboard(updated)
+    }
+
+    func bindKeyboardAction(_ action: ReaderControlAction, toKeyCode code: Int) {
+        var updated = keyboard
+        updated.bind(action, toKeyCode: code)
+        updateKeyboard(updated)
+    }
+
+    func clearKeyboardBinding(for action: ReaderControlAction) {
+        var updated = keyboard
+        updated.clearBinding(for: action)
+        updateKeyboard(updated)
+    }
+
+    func restoreKeyboardDefaultBindings() {
+        var updated = keyboard
+        updated.restoreDefaultBindings()
+        updateKeyboard(updated)
     }
 
     func updateNovelOfflineCacheRetainsInlineImages(_ retainsInlineImages: Bool) {
@@ -394,6 +420,7 @@ final class SystemSettingsViewModel: ObservableObject {
             novelOfflineCache = .init()
             applePencilPageTurn = .init()
             gamepad = .init()
+            keyboard = .init()
             smartComicMode = .init()
             novelCacheBytes = 0
             mangaIndexCacheBytes = 0
@@ -620,6 +647,27 @@ final class SystemSettingsViewModel: ObservableObject {
                 await MainActor.run {
                     if gamepad == updated {
                         gamepad = previous
+                    }
+                    errorMessage = error.localizedDescription
+                }
+            }
+        }
+    }
+
+    private func updateKeyboard(_ updated: KeyboardSettings) {
+        let previous = keyboard
+        keyboard = updated
+
+        Task {
+            var settings = await dependencies.settingsStore.load()
+            settings.system.keyboard = updated
+
+            do {
+                try await dependencies.settingsStore.save(settings)
+            } catch {
+                await MainActor.run {
+                    if keyboard == updated {
+                        keyboard = previous
                     }
                     errorMessage = error.localizedDescription
                 }

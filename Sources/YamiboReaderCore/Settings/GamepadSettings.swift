@@ -2,7 +2,7 @@ import Foundation
 
 /// Logical reader actions a game controller can trigger. The raw values are
 /// persisted inside ``GamepadSettings/bindings``.
-public enum GamepadAction: String, Codable, Hashable, CaseIterable, Sendable {
+public enum ReaderControlAction: String, Codable, Hashable, CaseIterable, Sendable {
     case nextPage
     case previousPage
     case openComments
@@ -14,7 +14,7 @@ public enum GamepadAction: String, Codable, Hashable, CaseIterable, Sendable {
         self != .toggleChrome
     }
 
-    public static var userBindableActions: [GamepadAction] {
+    public static var userBindableActions: [ReaderControlAction] {
         allCases.filter(\.isUserBindable)
     }
 
@@ -79,11 +79,11 @@ public struct GamepadSettings: Codable, Hashable, Sendable {
     /// Maps user-bindable actions to a GameController element alias. Menu and
     /// the direction pad are fixed in code and never stored here. An absent
     /// key means the action is unbound.
-    public var bindings: [GamepadAction: String]
+    public var bindings: [ReaderControlAction: String]
 
     public init(
         isEnabled: Bool = true,
-        bindings: [GamepadAction: String] = Self.defaultBindings
+        bindings: [ReaderControlAction: String] = Self.defaultBindings
     ) {
         self.isEnabled = isEnabled
         self.bindings = bindings
@@ -91,13 +91,13 @@ public struct GamepadSettings: Codable, Hashable, Sendable {
 
     /// Defaults follow physical positions (bottom/left/top face button); the
     /// UI renders per-controller glyphs so Nintendo-labelled pads stay honest.
-    public static let defaultBindings: [GamepadAction: String] = [
+    public static let defaultBindings: [ReaderControlAction: String] = [
         .nextPage: GamepadElementAlias.buttonA,
         .previousPage: GamepadElementAlias.buttonX,
         .openComments: GamepadElementAlias.buttonY,
     ]
 
-    public func action(boundToAnyOf aliases: Set<String>) -> GamepadAction? {
+    public func action(boundToAnyOf aliases: Set<String>) -> ReaderControlAction? {
         bindings.first { action, alias in
             action.isUserBindable && aliases.contains(alias)
         }?.key
@@ -105,7 +105,7 @@ public struct GamepadSettings: Codable, Hashable, Sendable {
 
     /// Binds `action` to `alias`, stealing the alias from any action that
     /// currently holds it (last write wins; the losing action becomes unbound).
-    public mutating func bind(_ action: GamepadAction, toElementAlias alias: String) {
+    public mutating func bind(_ action: ReaderControlAction, toElementAlias alias: String) {
         guard action.isUserBindable else { return }
         for (existingAction, existingAlias) in bindings where existingAlias == alias {
             bindings.removeValue(forKey: existingAction)
@@ -113,7 +113,114 @@ public struct GamepadSettings: Codable, Hashable, Sendable {
         bindings[action] = alias
     }
 
-    public mutating func clearBinding(for action: GamepadAction) {
+    public mutating func clearBinding(for action: ReaderControlAction) {
+        bindings.removeValue(forKey: action)
+    }
+
+    public mutating func restoreDefaultBindings() {
+        bindings = Self.defaultBindings
+    }
+}
+
+/// Stable USB HID keyboard usage IDs ("Keyboard/Keypad Page 0x07" of the USB
+/// HID Usage Tables) — the same raw values GameController's `GCKeyCode.rawValue`
+/// reports. Kept as plain Int constants so the settings layer stays free of
+/// GameController imports, mirroring ``GamepadElementAlias``.
+public enum KeyboardKeyCode {
+    public static let escape = 0x29
+    public static let tab = 0x2B
+    public static let capsLock = 0x39
+    public static let leftControl = 0xE0
+    public static let leftShift = 0xE1
+    public static let leftAlt = 0xE2
+    public static let leftGUI = 0xE3
+    public static let rightControl = 0xE4
+    public static let rightShift = 0xE5
+    public static let rightAlt = 0xE6
+    public static let rightGUI = 0xE7
+    public static let upArrow = 0x52
+    public static let downArrow = 0x51
+    public static let leftArrow = 0x50
+    public static let rightArrow = 0x4F
+    public static let spacebar = 0x2C
+    public static let deleteOrBackspace = 0x2A
+    public static let keyC = 0x06
+
+    /// The arrow keys carry fixed directional semantics, like the gamepad's
+    /// direction pad; they never appear in ``KeyboardSettings/bindings``.
+    public static let fixedDirectionCodes: Set<Int> = [upArrow, downArrow, leftArrow, rightArrow]
+
+    /// Capture blacklist of fixed-direction and modifier/navigation keys that
+    /// must keep their system meaning. Unlike the gamepad's small, enumerable
+    /// whitelist (``GamepadElementAlias/userBindableAliases``), a keyboard has
+    /// too many legitimately bindable keys to whitelist, so bindability is
+    /// defined by exclusion instead.
+    public static let excludedFromBinding: Set<Int> = fixedDirectionCodes.union([
+        escape, tab, capsLock,
+        leftControl, leftShift, leftAlt, leftGUI,
+        rightControl, rightShift, rightAlt, rightGUI,
+    ])
+
+    public static func isUserBindable(_ code: Int) -> Bool {
+        !excludedFromBinding.contains(code)
+    }
+
+    /// Maps an arrow key code to its fixed ``ReaderControlDirection``, or `nil`
+    /// if `code` isn't one of the four arrow keys.
+    public static func fixedDirection(forArrowCode code: Int) -> ReaderControlDirection? {
+        switch code {
+        case upArrow: .up
+        case downArrow: .down
+        case leftArrow: .left
+        case rightArrow: .right
+        default: nil
+        }
+    }
+}
+
+public struct KeyboardSettings: Codable, Hashable, Sendable {
+    /// Master switch, independent of ``GamepadSettings/isEnabled`` — the two
+    /// peripherals are enabled and disabled separately.
+    public var isEnabled: Bool
+
+    /// Maps user-bindable actions to a USB HID usage ID (``KeyboardKeyCode``).
+    /// An absent key means the action is unbound.
+    public var bindings: [ReaderControlAction: Int]
+
+    public init(
+        isEnabled: Bool = true,
+        bindings: [ReaderControlAction: Int] = Self.defaultBindings
+    ) {
+        self.isEnabled = isEnabled
+        self.bindings = bindings
+    }
+
+    public static let defaultBindings: [ReaderControlAction: Int] = [
+        .nextPage: KeyboardKeyCode.spacebar,
+        .previousPage: KeyboardKeyCode.deleteOrBackspace,
+        .openComments: KeyboardKeyCode.keyC,
+    ]
+
+    /// A physical key press reports exactly one `GCKeyCode`, unlike a gamepad
+    /// button which can report several simultaneous aliases, so lookup takes a
+    /// single code rather than ``GamepadSettings/action(boundToAnyOf:)``'s set.
+    public func action(boundTo code: Int) -> ReaderControlAction? {
+        bindings.first { action, boundCode in
+            action.isUserBindable && boundCode == code
+        }?.key
+    }
+
+    /// Binds `action` to `code`, stealing the code from any action that
+    /// currently holds it (last write wins; the losing action becomes unbound).
+    public mutating func bind(_ action: ReaderControlAction, toKeyCode code: Int) {
+        guard action.isUserBindable else { return }
+        for (existingAction, existingCode) in bindings where existingCode == code {
+            bindings.removeValue(forKey: existingAction)
+        }
+        bindings[action] = code
+    }
+
+    public mutating func clearBinding(for action: ReaderControlAction) {
         bindings.removeValue(forKey: action)
     }
 
@@ -124,7 +231,7 @@ public struct GamepadSettings: Codable, Hashable, Sendable {
 
 // MARK: - Input events
 
-public enum GamepadDpadDirection: String, Hashable, CaseIterable, Sendable {
+public enum ReaderControlDirection: String, Hashable, CaseIterable, Sendable {
     case up
     case down
     case left
@@ -133,18 +240,18 @@ public enum GamepadDpadDirection: String, Hashable, CaseIterable, Sendable {
 
 /// A single logical controller input after the UI glue has done rising-edge
 /// detection and binding lookup.
-public enum GamepadEvent: Hashable, Sendable {
+public enum ReaderControlEvent: Hashable, Sendable {
     /// The fixed Menu button.
     case menu
     /// A user-bound button resolved through ``GamepadSettings/bindings``.
-    case bound(GamepadAction)
+    case bound(ReaderControlAction)
     /// A direction-pad press; semantics depend on the active surface.
-    case dpad(GamepadDpadDirection)
+    case dpad(ReaderControlDirection)
 }
 
 /// Tracks per-element pressed state so callers can act exactly once per
 /// physical press (rising edge) and ignore analog chatter and releases.
-public struct GamepadPressTracker: Sendable {
+public struct RisingEdgePressTracker: Sendable {
     private var pressedElementKeys: Set<String> = []
 
     public init() {}
@@ -165,32 +272,32 @@ public struct GamepadPressTracker: Sendable {
 
 // MARK: - Surface interpretation
 
-public enum GamepadScrollDirection: Hashable, Sendable {
+public enum ReaderControlScrollDirection: Hashable, Sendable {
     case up
     case down
 }
 
-/// What the reader is currently showing, as far as gamepad semantics care.
-public enum GamepadReadingSurface: Hashable, Sendable {
+/// What the reader is currently showing, as far as control semantics care.
+public enum ReaderControlSurface: Hashable, Sendable {
     case paged(isRightToLeft: Bool)
     case vertical
 }
 
-/// A reader-level command produced from a ``GamepadEvent``.
-public enum GamepadReaderCommand: Hashable, Sendable {
+/// A reader-level command produced from a ``ReaderControlEvent``.
+public enum ReaderControlCommand: Hashable, Sendable {
     case turnPage(Int)
-    case scrollStep(GamepadScrollDirection)
+    case scrollStep(ReaderControlScrollDirection)
     case openComments
     case toggleChrome
 }
 
-/// A command for the chapter-comments sheet while it holds gamepad focus.
-public enum GamepadCommentsCommand: Hashable, Sendable {
-    case scroll(GamepadScrollDirection)
+/// A command for the chapter-comments sheet while it holds control focus.
+public enum ReaderControlCommentsCommand: Hashable, Sendable {
+    case scroll(ReaderControlScrollDirection)
     case close
 }
 
-public enum GamepadCommandResolver {
+public enum ReaderControlCommandResolver {
     /// Scroll step height as a fraction of the viewport; the remainder keeps
     /// visual continuity between steps.
     public static let verticalScrollViewportFraction: Double = 0.85
@@ -199,9 +306,9 @@ public enum GamepadCommandResolver {
     public static let commentsScrollStride = 3
 
     public static func readerCommand(
-        for event: GamepadEvent,
-        surface: GamepadReadingSurface
-    ) -> GamepadReaderCommand? {
+        for event: ReaderControlEvent,
+        surface: ReaderControlSurface
+    ) -> ReaderControlCommand? {
         switch event {
         case .menu:
             return .toggleChrome
@@ -212,7 +319,7 @@ public enum GamepadCommandResolver {
         }
     }
 
-    public static func commentsCommand(for event: GamepadEvent) -> GamepadCommentsCommand? {
+    public static func commentsCommand(for event: ReaderControlEvent) -> ReaderControlCommentsCommand? {
         switch event {
         case .menu, .bound(.openComments):
             .close
@@ -226,9 +333,9 @@ public enum GamepadCommandResolver {
     }
 
     private static func boundCommand(
-        for action: GamepadAction,
-        surface: GamepadReadingSurface
-    ) -> GamepadReaderCommand? {
+        for action: ReaderControlAction,
+        surface: ReaderControlSurface
+    ) -> ReaderControlCommand? {
         switch (action, surface) {
         case (.nextPage, .paged):
             .turnPage(1)
@@ -246,9 +353,9 @@ public enum GamepadCommandResolver {
     }
 
     private static func dpadCommand(
-        for direction: GamepadDpadDirection,
-        surface: GamepadReadingSurface
-    ) -> GamepadReaderCommand? {
+        for direction: ReaderControlDirection,
+        surface: ReaderControlSurface
+    ) -> ReaderControlCommand? {
         switch surface {
         case let .paged(isRightToLeft):
             switch direction {
