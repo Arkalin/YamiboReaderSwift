@@ -102,8 +102,13 @@ struct LocalFavoriteSelectionActionBar: View {
         selection.selectedCollectionCount > 0 && selection.selectedFavoriteCount == 0
     }
 
+    /// A smart card can be selected but contributes nothing to delete
+    /// (`FavoriteLibraryOrganizer.deleteSelection` skips every smart-card
+    /// id) — `hasDeletableSelection` accounts for that, so a selection made
+    /// up entirely of smart cards hides this button instead of showing one
+    /// that silently does nothing when tapped.
     private var canDelete: Bool {
-        selection.selectedEntryCount > 0
+        organizer.hasDeletableSelection
     }
 
     private var hasAnyAvailableAction: Bool {

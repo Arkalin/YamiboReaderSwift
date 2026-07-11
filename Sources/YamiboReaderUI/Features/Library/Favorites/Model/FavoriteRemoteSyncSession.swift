@@ -336,7 +336,7 @@ final class FavoriteRemoteSyncSession: ObservableObject {
                 authorID: payload.authorID,
                 sourceMetadataFetchFailed: metadata.fetchFailed
             )
-        case .manga(let payload), .mangaDirect(let payload):
+        case let .manga(payload), let .mangaDirect(payload):
             // A manga chapter thread now imports as a plain `.mangaThread`
             // favorite of its own thread id — there is no merged-directory
             // identity to resolve here anymore (smart-comic-mode Phase A
@@ -344,13 +344,32 @@ final class FavoriteRemoteSyncSession: ObservableObject {
             // cover, content-updated-at) mirrors the `.novel`/`.thread` cases
             // above instead of the old dedicated no-metadata manga path.
             //
-            // `.mangaDirect` (the board's Smart Comic Mode is off) is folded
-            // into this same case on purpose: classification into
-            // `.mangaThread` only depends on the board's thread kind, never
-            // on the mode toggle (decision #4) — the toggle only changes
-            // which UI a *live tap* routes to, not how a *synced* favorite
-            // is classified.
-            let cleanBookName = MangaTitleCleaner.cleanBookName(payload.title)
+            // Classification into `.mangaThread` only depends on the board's
+            // thread kind, never on the mode toggle (decision #4) — the
+            // toggle only changes which UI a *live tap* routes to (through
+            // `ForumMangaDetailView` vs. straight into the manga reader), not
+            // how a *synced* favorite is classified. That's why `.manga` and
+            // `.mangaDirect` — the resolver's only distinction between them
+            // is whether the board's Smart Comic Mode happens to be on —
+            // collapse into one shared case here.
+            //
+            // The stored title is always the post's own title verbatim,
+            // regardless of mode, for the same reason: the mode-dependent
+            // cleaned/shared book title is a pure UI-layer concern,
+            // recomputed fresh on every read by
+            // `FavoriteCardProjection.resolvedTitle` (via the same
+            // `MangaTitleCleaner.cleanBookName`) whenever a favorite's
+            // directory hasn't resolved yet — sync import baking a cleaned
+            // title into the stored `FavoriteItem` here would only destroy
+            // the original per-chapter title data with no corresponding
+            // display benefit. That loss is exactly why this used to be a
+            // bug for the mode-on `.manga` case: the archive detail page's
+            // whole point is showing each archived member's own distinct raw
+            // title so the user can tell chapters apart, and a cleaned title
+            // collapses every synced chapter of the same manga down to one
+            // indistinguishable generic book name. No merged-book identity,
+            // no cleanBookName cleanup — same treatment `.mangaDirect` always
+            // had, now shared by both mode states identically.
             let metadata = await threadMetadata(
                 thread: ThreadIdentity(tid: payload.thread.tid),
                 title: payload.title,
@@ -358,7 +377,7 @@ final class FavoriteRemoteSyncSession: ObservableObject {
             )
             return FavoriteThreadProbeResult(
                 target: .mangaThread(threadID: payload.thread.tid),
-                title: cleanBookName.isEmpty ? payload.title : cleanBookName,
+                title: payload.title,
                 sourceGroup: metadata.sourceGroup,
                 coverURL: metadata.coverURL,
                 contentUpdatedAt: metadata.contentUpdatedAt,

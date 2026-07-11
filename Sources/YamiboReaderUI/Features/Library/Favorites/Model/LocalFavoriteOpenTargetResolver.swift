@@ -26,6 +26,11 @@ enum LocalFavoriteOpenTarget: Sendable {
 /// - Mode off: resume via this thread's own `.mangaThread` progress record
 ///   directly — no directory lookup at all, exactly like a normal thread.
 ///
+/// `mangaScope: .singleThread` forces that same mode-off path without
+/// consulting the board switch at all — the "查看归档收藏" archive page opens
+/// its members this way, matching how it renders them as ordinary non-smart
+/// cards (see `FavoriteMangaReadingScope`).
+///
 /// TODO(Phase F): favorites now compute virtual merged-directory grouping
 /// (`LocalFavoriteLibraryProjection.cards`/`FavoriteCardProjection
 /// .mangaDirectory`/`.mergedMembers`), but this resolver still only knows
@@ -55,7 +60,11 @@ struct LocalFavoriteOpenTargetResolver {
         self.settingsStore = settingsStore
     }
 
-    func openTarget(for item: FavoriteItem, mode: FavoriteLaunchMode = .resume) async throws -> LocalFavoriteOpenTarget? {
+    func openTarget(
+        for item: FavoriteItem,
+        mode: FavoriteLaunchMode = .resume,
+        mangaScope: FavoriteMangaReadingScope = .boardDefault
+    ) async throws -> LocalFavoriteOpenTarget? {
         let latestDocument = try await libraryStore.load()
         guard let latestItem = latestDocument.items.first(where: { $0.id == item.id }) else {
             return nil
@@ -80,6 +89,17 @@ struct LocalFavoriteOpenTargetResolver {
             let url = YamiboRoute.threadByID(tid: threadID, page: 1, authorID: nil, reverse: false).url
             return .nativeThread(url: url, title: latestItem.resolvedDisplayTitle)
         case let .mangaThread(threadID):
+            // `.singleThread` scope short-circuits to the mode-off path
+            // below without consulting the board switch at all — the archive
+            // page's tapped member must open as exactly the thread its
+            // non-smart card shows, not re-enter the merged directory.
+            let smartModeEnabled: Bool
+            switch mangaScope {
+            case .boardDefault:
+                smartModeEnabled = await isSmartComicModeEnabled(forItem: latestItem)
+            case .singleThread:
+                smartModeEnabled = false
+            }
             // Unlike the old `.mangaTitle` merged identity, every
             // `.mangaThread` favorite already carries a real chapter tid, so
             // there is always a chapter to open — falling back to this
@@ -95,7 +115,7 @@ struct LocalFavoriteOpenTargetResolver {
                         initialPage: 0,
                         directoryName: nil,
                         offlineCacheFavoriteID: latestItem.id,
-                        isSmartModeEnabled: await isSmartComicModeEnabled(forItem: latestItem)
+                        isSmartModeEnabled: smartModeEnabled
                     )
                 )
             }
@@ -112,7 +132,7 @@ struct LocalFavoriteOpenTargetResolver {
             // that the two `.mangaThread` id formats are kept identical
             // specifically so this lookup is precise.
             let ownThreadProgress = await readingProgressStore.load(for: .mangaThread(threadID: threadID))?.manga
-            guard await isSmartComicModeEnabled(forItem: latestItem) else {
+            guard smartModeEnabled else {
                 return .mangaReader(
                     MangaLaunchContext(
                         originalThreadID: threadID,

@@ -24,7 +24,20 @@ struct FavoriteLibraryDisplayState: Equatable {
 
 /// One slot of a collection's 4-tile preview mosaic: a member's own cover
 /// (when it has one) or its own title for a text-fallback tile — never
-/// silently dropped just because it has no image.
+/// silently dropped just because it has no image. A mode-on `.mangaThread`
+/// favorite resolved to an actual `MangaDirectory` does NOT get its own slot
+/// per favorited chapter: every member of the same virtual merged smart-card
+/// group (smart-comic-mode decision #5) collapses into a single tile sharing
+/// that group's title/cover, exactly matching how the group displays as one
+/// card in the main list. A mode-on favorite with no resolved directory yet
+/// (the local-clean-fallback case) still keeps its own individual slot even
+/// if another favorite happens to guess the same cleaned title — the main
+/// card list itself only merges on an actually-resolved directory
+/// (`LocalFavoriteLibraryProjection.rawGroupedFavorites`), never on a
+/// same-guess coincidence alone, and this mosaic must not summarize the
+/// collection as more merged than its own card list actually shows.
+/// `LocalFavoriteLibraryDerivation.collectionPreviewTiles(_:mangaThreadItemsByEffectiveTitle:)`
+/// is what performs the resolved-directory collapsing.
 struct LocalFavoriteCollectionPreviewTile: Equatable {
     let coverURL: URL?
     let title: String
@@ -86,9 +99,35 @@ enum LocalFavoriteLibraryDerivation {
         /// `contentCoverURLsByTargetID`'s per-thread `.thread(tid:)` covers
         /// for standalone cards (smart-comic-mode decision #13/#16).
         var smartMangaCoverURLsByCleanBookName: [String: URL] = [:]
+        /// Non-nil only while a merged smart-comic card's "查看归档收藏" detail
+        /// page is open — threaded straight into the `cards` query as
+        /// `LocalFavoriteLibraryQuery.memberScopeCleanBookName`. Deliberately
+        /// left `nil` for `rootDerived`'s own `Inputs` (see
+        /// `FavoriteLibraryOrganizer.refreshDerivedState()`), the same way
+        /// `rootDerived` already forces `selectedCollectionID` to `nil`, so
+        /// the root screen never narrows to this scope.
+        var memberScopeCleanBookName: String? = nil
     }
 
     static func derive(_ inputs: Inputs) -> LocalFavoriteDerivedState {
+        // Computed once per `derive(_:)` call and threaded into every one of
+        // this single derive's several internal `resolvedCards` calls (the
+        // main call below, plus `categoryEntryCounts`'s per-category call,
+        // `collectionAggregates`'s per-collection call, and
+        // `sourceFilterEntryCounts`'s call) — without this, each of those
+        // calls would independently rebuild the same grouping from
+        // `inputs.document.items`, and `LocalFavoriteLibraryProjection
+        // .cards(...)` would additionally rebuild it once per smart card on
+        // top of that. Always freshly computed here, at the top of every
+        // `derive(_:)` call, from the CURRENT `inputs.document.items` — never
+        // hoisted up into `FavoriteLibraryOrganizer` or cached across
+        // separate `derive(_:)` calls, since `document.items` can change on
+        // every commit.
+        let mangaThreadItemsByEffectiveTitle = LocalFavoriteLibraryProjection.mangaThreadItemsByEffectiveTitle(
+            in: inputs.document.items,
+            mangaDirectoriesByTID: inputs.mangaDirectoriesByTID,
+            smartComicModeSettings: inputs.smartComicModeSettings
+        )
         let cards = resolvedCards(
             in: inputs.document,
             query: LocalFavoriteLibraryQuery(
@@ -98,11 +137,13 @@ enum LocalFavoriteLibraryDerivation {
                 selectedTagIDs: inputs.filter.selectedTagIDs,
                 sortOrder: inputs.filter.sortOrder,
                 sortsDescending: inputs.filter.sortDescending,
-                searchText: inputs.filter.searchText
+                searchText: inputs.filter.searchText,
+                memberScopeCleanBookName: inputs.memberScopeCleanBookName
             ),
-            inputs: inputs
+            inputs: inputs,
+            mangaThreadItemsByEffectiveTitle: mangaThreadItemsByEffectiveTitle
         )
-        let aggregates = collectionAggregates(inputs)
+        let aggregates = collectionAggregates(inputs, mangaThreadItemsByEffectiveTitle: mangaThreadItemsByEffectiveTitle)
         let collectionCounts = aggregates.mapValues(\.entryCount)
         let collections = visibleCollections(
             in: inputs.document,
@@ -122,11 +163,15 @@ enum LocalFavoriteLibraryDerivation {
                 sortOrder: inputs.filter.sortOrder,
                 descending: inputs.filter.sortDescending
             ),
-            categoryEntryCounts: categoryEntryCounts(inputs, collectionEntryCounts: collectionCounts),
+            categoryEntryCounts: categoryEntryCounts(
+                inputs,
+                collectionEntryCounts: collectionCounts,
+                mangaThreadItemsByEffectiveTitle: mangaThreadItemsByEffectiveTitle
+            ),
             collectionEntryCounts: collectionCounts,
-            sourceFilterEntryCounts: sourceFilterEntryCounts(inputs),
+            sourceFilterEntryCounts: sourceFilterEntryCounts(inputs, mangaThreadItemsByEffectiveTitle: mangaThreadItemsByEffectiveTitle),
             isMangaSourceFilterAvailable: isMangaSourceFilterAvailable(inputs),
-            collectionPreviewTiles: collectionPreviewTiles(inputs)
+            collectionPreviewTiles: collectionPreviewTiles(inputs, mangaThreadItemsByEffectiveTitle: mangaThreadItemsByEffectiveTitle)
         )
     }
 
@@ -135,14 +180,16 @@ enum LocalFavoriteLibraryDerivation {
     private static func resolvedCards(
         in document: FavoriteLibraryDocument,
         query: LocalFavoriteLibraryQuery,
-        inputs: Inputs
+        inputs: Inputs,
+        mangaThreadItemsByEffectiveTitle: [String: [FavoriteItem]]
     ) -> [FavoriteCardProjection] {
         LocalFavoriteLibraryProjection.cards(
             in: document,
             query: query,
             readingProgress: inputs.readingProgress,
             mangaDirectoriesByTID: inputs.mangaDirectoriesByTID,
-            smartComicModeSettings: inputs.smartComicModeSettings
+            smartComicModeSettings: inputs.smartComicModeSettings,
+            mangaThreadItemsByEffectiveTitle: mangaThreadItemsByEffectiveTitle
         )
         .map { card in
             var card = card
@@ -164,7 +211,8 @@ enum LocalFavoriteLibraryDerivation {
 
     private static func categoryEntryCounts(
         _ inputs: Inputs,
-        collectionEntryCounts: [String: Int]
+        collectionEntryCounts: [String: Int],
+        mangaThreadItemsByEffectiveTitle: [String: [FavoriteItem]]
     ) -> [String: Int] {
         Dictionary(uniqueKeysWithValues: inputs.document.categories.map { category in
             let cards = resolvedCards(
@@ -176,7 +224,8 @@ enum LocalFavoriteLibraryDerivation {
                     sortOrder: .organization,
                     searchText: inputs.filter.searchText
                 ),
-                inputs: inputs
+                inputs: inputs,
+                mangaThreadItemsByEffectiveTitle: mangaThreadItemsByEffectiveTitle
             )
             let collections = visibleCollections(
                 in: inputs.document,
@@ -193,7 +242,10 @@ enum LocalFavoriteLibraryDerivation {
         var sortSummary: FavoriteCollectionSortSummary
     }
 
-    private static func collectionAggregates(_ inputs: Inputs) -> [String: CollectionAggregate] {
+    private static func collectionAggregates(
+        _ inputs: Inputs,
+        mangaThreadItemsByEffectiveTitle: [String: [FavoriteItem]]
+    ) -> [String: CollectionAggregate] {
         Dictionary(uniqueKeysWithValues: inputs.document.collections.map { collection in
             let cards = resolvedCards(
                 in: inputs.document,
@@ -205,35 +257,112 @@ enum LocalFavoriteLibraryDerivation {
                     sortOrder: .organization,
                     searchText: inputs.filter.searchText
                 ),
-                inputs: inputs
+                inputs: inputs,
+                mangaThreadItemsByEffectiveTitle: mangaThreadItemsByEffectiveTitle
             )
             return (collection.id, CollectionAggregate(entryCount: cards.count, sortSummary: .summarizing(cards)))
         })
     }
 
-    private static func collectionPreviewTiles(_ inputs: Inputs) -> [String: [LocalFavoriteCollectionPreviewTile]] {
+    /// One preview-tile candidate before the final sort/take-4 — kept as a
+    /// small file-scope struct (mirroring `CollectionAggregate` above) rather
+    /// than a plain tuple purely for the named fields' readability.
+    private struct CollectionPreviewCandidate {
+        var sortDate: Date
+        var coverURL: URL?
+        var title: String
+    }
+
+    private static func collectionPreviewTiles(
+        _ inputs: Inputs,
+        mangaThreadItemsByEffectiveTitle: [String: [FavoriteItem]]
+    ) -> [String: [LocalFavoriteCollectionPreviewTile]] {
         Dictionary(uniqueKeysWithValues: inputs.document.collections.map { collection in
             let location = FavoriteLocation.collection(categoryID: collection.categoryID, collectionID: collection.id)
+            let members = inputs.document.items.filter { $0.locations.contains(location) }
+
             // Every member gets a tile — image-backed when a cover resolves,
-            // otherwise the member's own title for a text-fallback tile.
-            // Members without a cover must not be silently dropped here, or
-            // the mosaic shows fewer/blank tiles instead of that member's
-            // text cover.
-            let tiles = inputs.document.items
-                .filter { $0.locations.contains(location) }
-                .sorted { $0.updatedAt > $1.updatedAt }
-                .prefix(4)
-                .map { item in
-                    LocalFavoriteCollectionPreviewTile(
+            // otherwise its own title for a text-fallback tile — EXCEPT a
+            // mode-on `.mangaThread` favorite resolved to an actual
+            // `MangaDirectory`, which collapses with every other member of
+            // its virtual merged smart-card group (smart-comic-mode decision
+            // #5) into a single shared tile, matching how the main card list
+            // already shows that manga as one card. A mode-on favorite with
+            // no resolved directory yet keeps its own tile even if another
+            // favorite guesses the same cleaned title — see
+            // `LocalFavoriteCollectionPreviewTile`'s own doc comment for why
+            // (the main list itself only merges on a resolved directory).
+            // Non-manga members and mode-off manga favorites must not be
+            // silently dropped here, or the mosaic shows fewer/blank tiles
+            // instead of that member's text cover.
+            var candidates: [CollectionPreviewCandidate] = []
+            var seenEffectiveTitles: Set<String> = []
+            for item in members {
+                let isModeOnMangaThread = item.target.kind == .mangaThread
+                    && inputs.smartComicModeSettings.isEnabled(forumID: item.forumID)
+                guard isModeOnMangaThread else {
+                    candidates.append(CollectionPreviewCandidate(
+                        sortDate: item.updatedAt,
                         coverURL: inputs.contentCoverURLsByTargetID[item.target.id],
                         title: item.resolvedDisplayTitle
-                    )
+                    ))
+                    continue
                 }
+
+                let mangaDirectory = inputs.mangaDirectoriesByTID[item.target.threadID ?? ""]
+                let effectiveTitle = FavoriteCardProjection.resolvedTitle(
+                    item: item,
+                    mangaDirectory: mangaDirectory,
+                    isModeOnMangaThread: true
+                )
+                guard let mangaDirectory else {
+                    // No resolved `MangaDirectory` yet — the main card list
+                    // itself does not merge two such favorites just because
+                    // they happen to guess the same locally-cleaned title
+                    // (`LocalFavoriteLibraryProjection.rawGroupedFavorites`
+                    // only forms a group once a real directory has resolved;
+                    // an unresolved favorite always stays `standalone`
+                    // there). This tile must not merge more aggressively
+                    // than the card list it's summarizing, so each
+                    // unresolved favorite keeps its own tile — its own
+                    // locally-cleaned title, its own per-thread cover.
+                    candidates.append(CollectionPreviewCandidate(
+                        sortDate: item.updatedAt,
+                        coverURL: inputs.contentCoverURLsByTargetID[item.target.id],
+                        title: effectiveTitle
+                    ))
+                    continue
+                }
+
+                // A second/third member of the same resolved-directory group
+                // already produced this group's one tile — skip, rather than
+                // adding another.
+                guard seenEffectiveTitles.insert(effectiveTitle).inserted else { continue }
+
+                // The group's full membership (possibly reaching beyond this
+                // collection — decision #5: a merged group is global) decides
+                // recency and cover, so the tile is consistent regardless of
+                // which collection it's viewed from — mirrors `card(for:)`'s
+                // own "freshest of any member" logic, just keyed on
+                // `updatedAt` since that's what this function sorts by.
+                let groupMembers = mangaThreadItemsByEffectiveTitle[effectiveTitle] ?? [item]
+                let sortDate = groupMembers.map(\.updatedAt).max() ?? item.updatedAt
+                let coverURL = inputs.smartMangaCoverURLsByCleanBookName[mangaDirectory.cleanBookName]
+                candidates.append(CollectionPreviewCandidate(sortDate: sortDate, coverURL: coverURL, title: effectiveTitle))
+            }
+
+            let tiles = candidates
+                .sorted { $0.sortDate > $1.sortDate }
+                .prefix(4)
+                .map { LocalFavoriteCollectionPreviewTile(coverURL: $0.coverURL, title: $0.title) }
             return (collection.id, Array(tiles))
         })
     }
 
-    private static func sourceFilterEntryCounts(_ inputs: Inputs) -> [LocalFavoriteSourceFilter: Int] {
+    private static func sourceFilterEntryCounts(
+        _ inputs: Inputs,
+        mangaThreadItemsByEffectiveTitle: [String: [FavoriteItem]]
+    ) -> [LocalFavoriteSourceFilter: Int] {
         let allCards = resolvedCards(
             in: inputs.document,
             query: LocalFavoriteLibraryQuery(
@@ -244,10 +373,11 @@ enum LocalFavoriteLibraryDerivation {
                 sortOrder: .organization,
                 searchText: inputs.filter.searchText
             ),
-            inputs: inputs
+            inputs: inputs,
+            mangaThreadItemsByEffectiveTitle: mangaThreadItemsByEffectiveTitle
         )
         return Dictionary(grouping: allCards) { card in
-            LocalFavoriteSourceFilter.key(for: card.item)
+            LocalFavoriteSourceFilter.key(for: card.item, smartComicModeSettings: inputs.smartComicModeSettings)
         }
         .mapValues(\.count)
     }

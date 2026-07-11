@@ -11,11 +11,17 @@ struct LocalFavoriteGridCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
+            // A smart card is selectable like any other card — selecting it
+            // is equivalent to selecting every favorite archived under it,
+            // expanded transparently at bulk-operation time by
+            // `FavoriteLibraryOrganizer.expandedSelectionFavoriteIDs`; the id
+            // that lands in `selection.selectedFavoriteIDs` here is still
+            // just its own representative id.
             if selection.isSelectionMode {
                 LocalFavoriteSelectionIndicator(isSelected: selection.selectedFavoriteIDs.contains(card.id))
             }
-            LocalFavoriteGridCover(url: card.coverURL, title: card.item.resolvedDisplayTitle)
-            Text(card.item.resolvedDisplayTitle)
+            LocalFavoriteGridCover(url: card.coverURL, title: card.resolvedTitle)
+            Text(card.resolvedTitle)
                 .font(.subheadline.weight(.semibold))
                 .lineLimit(2, reservesSpace: true)
             Text(card.sourceGroupLabel)
@@ -28,12 +34,23 @@ struct LocalFavoriteGridCard: View {
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .topLeading)
         .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay(alignment: .topTrailing) {
+            if card.isModeOnMangaThread {
+                LocalFavoriteSmartCardBadge()
+            }
+        }
         .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         .onTapGesture {
             if selection.isSelectionMode {
+                // A smart card toggles into `selection.selectedFavoriteIDs`
+                // just like any other card — bulk operations expand it to
+                // every archived member at execution time (see the
+                // selection-indicator comment above). `deleteSelection`
+                // deliberately excludes it there instead of here, so it
+                // still requires the dedicated "查看归档收藏" archive page.
                 selection.toggleFavoriteSelection(id: card.id)
             } else {
-                actions.open(card.item, .resume)
+                actions.open(card, .resume)
             }
         }
         .contextMenu {

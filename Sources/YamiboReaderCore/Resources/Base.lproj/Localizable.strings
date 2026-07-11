@@ -132,6 +132,7 @@
 "favorites.bulk_delete_favorites_message" = "确定要删除已选中的收藏吗？这会同步删除远端收藏，但会保留本地缓存和阅读进度。";
 "favorites.bulk_delete_mixed_message" = "确定要删除已选中的内容吗？合集会被解散，收藏会同步删除远端收藏。";
 "favorites.bulk_delete_scope_message" = "已选收藏中有多位置项目。可以只从当前位置移除，或彻底删除收藏；彻底删除会同步删除远端收藏。";
+"favorites.bulk_delete_skipped_smart_manga_message" = "已选中的智能漫画收藏未被删除，请前往其“查看归档收藏”页面删除。";
 "favorites.bulk_dissolve_collections_message" = "确定要解散已选中的合集吗？其中的收藏会返回根页，不会被删除。";
 "favorites.card.last_updated" = "最后更新 %@";
 "favorites.card.recent_read" = "最近阅读 %@";
@@ -159,8 +160,6 @@
 "favorites.delete_favorite_message" = "确定要删除“%@”吗？这会同步删除远端收藏，但会保留本地缓存和阅读进度。";
 "favorites.delete_favorite_scope_message" = "“%@”在多个位置中出现。可以只从当前位置移除，或彻底删除收藏；彻底删除会同步删除远端收藏。";
 "favorites.delete_failed" = "删除失败";
-"favorites.delete_merged_group_confirm" = "全部移除";
-"favorites.delete_merged_group_message" = "这是自动合并显示的漫画收藏，取消收藏会同时移除下列全部 %d 话：\n%@\n这会同步删除远端收藏，但会保留本地缓存和阅读进度。";
 "favorites.delete_selection" = "删除所选内容";
 "favorites.delete_scope.current_location" = "仅从当前位置移除";
 "favorites.delete_scope.everywhere" = "彻底删除";
@@ -374,6 +373,7 @@
 "favorites.tags_select_all" = "全选";
 "favorites.tags_selected_count" = "已选择 %d 个标签";
 "favorites.title" = "收藏";
+"favorites.view_archived_favorites" = "查看归档收藏";
 "favorite_library.item_requires_location" = "收藏至少需要一个位置";
 "favorite_library.manga_title_resolution_failed" = "无法定位漫画目录";
 "forum.default_title" = "百合会论坛";
@@ -843,8 +843,8 @@
 "settings.reset_application_message" = "这将清空登录态、收藏本地状态、全部缓存、漫画目录和应用设置，并移除网页持久化数据。";
 "settings.resetting_application" = "初始化应用中…";
 "settings.smart_comic_mode.board_30" = "中文百合漫画区";
-"settings.smart_comic_mode.board_46" = "板块 46";
-"settings.smart_comic_mode.board_37" = "板块 37";
+"settings.smart_comic_mode.board_46" = "原创图作区";
+"settings.smart_comic_mode.board_37" = "百合漫画图源区";
 "settings.smart_comic_mode.footer" = "开启后，该板块的漫画帖子会自动识别所属合集，支持合并显示、目录跳转与续读；关闭则按普通帖子处理，仅用漫画阅读器展示单帖内容。";
 "settings.about_app_with_version" = "关于Yamibo Reader(%@)";
 "settings.section.appearance" = "外观";

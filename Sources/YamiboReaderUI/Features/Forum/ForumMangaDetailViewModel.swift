@@ -27,7 +27,7 @@ final class ForumMangaDetailViewModel {
                       changeID == readingProgressStore.changeID else {
                     continue
                 }
-                readingProgress = await readingProgressStore.load(threadID: context.thread.tid)
+                readingProgress = await self.loadReadingProgress()
             }
         }
     }
@@ -52,7 +52,7 @@ final class ForumMangaDetailViewModel {
     func reload() async {
         isLoading = true
         errorMessage = nil
-        readingProgress = await dependencies.readingProgressStore.load(threadID: context.thread.tid)
+        readingProgress = await loadReadingProgress()
         defer { isLoading = false }
 
         do {
@@ -95,10 +95,14 @@ final class ForumMangaDetailViewModel {
 
             currentDocument = document
             directory = resolvedDirectory
+            // Only now is `directory`'s stable identity known, so only now can
+            // the precise directory-scoped query replace whatever the fuzzy
+            // fetch above (before `directory` was known) happened to find.
+            readingProgress = await loadReadingProgress()
         } catch {
             currentDocument = nil
             directory = nil
-            readingProgress = await dependencies.readingProgressStore.load(threadID: context.thread.tid)
+            readingProgress = await loadReadingProgress()
             errorMessage = error.localizedDescription
         }
     }
@@ -139,6 +143,28 @@ final class ForumMangaDetailViewModel {
             // for mode-on boards.
             isSmartModeEnabled: true
         )
+    }
+
+    /// Once `directory` is known, its stable `mangaID`+`cleanBookName`
+    /// identity is the precise lookup key for this manga's reading progress
+    /// — mirrors `LocalFavoriteOpenTargetResolver.mangaDirectoryResumeTarget`.
+    /// `ReadingProgressStore.saveMangaTitle` upserts a single directory-level
+    /// row whose `thread_id`/`manga_chapter_thread_id` columns both hold
+    /// whatever chapter tid was current *at save time* — so a chapter that
+    /// was never the "current" one when that row was written can still have
+    /// its own stale `.mangaThread` row sharing this same tid. The generic
+    /// `load(threadID:)` OR-matches on either column and would happily
+    /// return whichever row was updated most recently regardless of kind,
+    /// coincidentally latching onto that stale per-chapter row instead of
+    /// the directory's true current position. Before `directory` resolves
+    /// there is no directory identity yet to query by, so the coincidental
+    /// OR-match remains the only option in that narrow window.
+    private func loadReadingProgress() async -> ReadingProgressRecord? {
+        guard let directory else {
+            return await dependencies.readingProgressStore.load(threadID: context.thread.tid)
+        }
+        let target = FavoriteContentTarget(mangaID: directory.favoriteIdentity, mangaCleanBookName: directory.cleanBookName)
+        return await dependencies.readingProgressStore.load(for: target)
     }
 
     private func ensuringDirectoryContainsCurrentChapter(

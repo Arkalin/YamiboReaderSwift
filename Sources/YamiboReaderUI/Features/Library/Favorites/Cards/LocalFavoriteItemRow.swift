@@ -15,9 +15,15 @@ struct LocalFavoriteItemRow: View {
     var body: some View {
         Button {
             if isSelectionMode {
+                // A smart card is selectable just like any other card —
+                // bulk operations expand it to every archived member at
+                // execution time (`FavoriteLibraryOrganizer
+                // .expandedSelectionFavoriteIDs`). `deleteSelection`
+                // deliberately excludes it there instead of here, so it
+                // still requires the dedicated "查看归档收藏" archive page.
                 onToggleSelection()
             } else {
-                actions.open(card.item, .resume)
+                actions.open(card, .resume)
             }
         } label: {
             rowContent
@@ -30,10 +36,19 @@ struct LocalFavoriteItemRow: View {
         }
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
             if !isSelectionMode {
-                Button(role: .destructive) {
-                    actions.delete(card)
-                } label: {
-                    Label(L10n.string("common.delete"), systemImage: "trash")
+                if card.isModeOnMangaThread {
+                    Button {
+                        actions.viewArchivedFavorites(card)
+                    } label: {
+                        Label(L10n.string("favorites.view_archived_favorites"), systemImage: "archivebox")
+                    }
+                    .tint(.orange)
+                } else {
+                    Button(role: .destructive) {
+                        actions.delete(card)
+                    } label: {
+                        Label(L10n.string("common.delete"), systemImage: "trash")
+                    }
                 }
                 Button {
                     actions.editTags(card.item)
@@ -47,16 +62,18 @@ struct LocalFavoriteItemRow: View {
 
     private var rowContent: some View {
         HStack(spacing: 12) {
+            // A smart card shows the selection indicator like any other
+            // card — see the tap-gate above.
             if isSelectionMode {
                 LocalFavoriteSelectionIndicator(isSelected: isSelected)
             }
             if showsCover {
                 // Android row cards use a 92dp-wide 0.72-ratio cover.
-                LocalFavoriteCoverThumbnail(url: card.coverURL, title: card.item.resolvedDisplayTitle)
+                LocalFavoriteCoverThumbnail(url: card.coverURL, title: card.resolvedTitle)
                     .frame(width: 92, height: 128)
             }
             VStack(alignment: .leading, spacing: 4) {
-                Text(card.item.resolvedDisplayTitle)
+                Text(card.resolvedTitle)
                     .font(.body)
                     .lineLimit(2)
                 Text(card.sourceGroupLabel)
@@ -70,5 +87,10 @@ struct LocalFavoriteItemRow: View {
         }
         .contentShape(Rectangle())
         .padding(.vertical, 4)
+        .overlay(alignment: .topTrailing) {
+            if card.isModeOnMangaThread {
+                LocalFavoriteSmartCardBadge()
+            }
+        }
     }
 }

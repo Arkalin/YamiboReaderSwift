@@ -62,7 +62,7 @@ import YamiboReaderTestSupport
         organizer: organizer,
         remoteSync: remoteSync,
         updateMonitor: updateMonitor,
-        onOpen: { _, _ in }
+        onOpen: { _, _, _ in }
     )
     _ = view
 

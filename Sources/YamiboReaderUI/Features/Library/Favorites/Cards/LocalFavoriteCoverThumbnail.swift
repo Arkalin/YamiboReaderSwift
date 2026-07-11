@@ -53,6 +53,28 @@ struct LocalFavoriteCoverThumbnail: View {
     }
 }
 
+/// Small sparkles badge overlaid on a smart-comic card's cover
+/// (`FavoriteCardProjection.isModeOnMangaThread`), signaling this card's
+/// title/content is Smart Comic Mode-managed — a locally-cleaned or shared
+/// manga book name rather than the representative favorite's own raw post
+/// title, whether or not it has actually merged with any sibling favorite
+/// yet. Mirrors the styling technique — not the content — of
+/// `LocalFavoritesOrganizationView`'s toolbar bell unread-count badge: a
+/// small white glyph on a colored shape, offset to hang over the corner.
+/// Purely a supplementary visual cue (the card's own accessibility label
+/// already conveys its title), so it is hidden from the accessibility tree.
+struct LocalFavoriteSmartCardBadge: View {
+    var body: some View {
+        Image(systemName: "sparkles")
+            .font(.system(size: 9, weight: .bold))
+            .foregroundStyle(.white)
+            .padding(5)
+            .background(Color.accentColor, in: Circle())
+            .offset(x: 5, y: -5)
+            .accessibilityHidden(true)
+    }
+}
+
 /// Title-on-color placeholder cover, mirroring the Android CoverTextFallback:
 /// the full title, bold, horizontally centered from the top, with the font
 /// size stepped by title length (32/24/19/15/12, Android parity) and

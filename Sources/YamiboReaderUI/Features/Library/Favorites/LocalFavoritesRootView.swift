@@ -52,8 +52,8 @@ struct LocalFavoritesRootView: View {
             organizer: organizer,
             remoteSync: remoteSync,
             updateMonitor: updateMonitor,
-            onOpen: { item, mode in
-                await open(item, mode: mode)
+            onOpen: { item, mode, mangaScope in
+                await open(item, mode: mode, mangaScope: mangaScope)
             }
         )
         .task {
@@ -67,9 +67,9 @@ struct LocalFavoritesRootView: View {
         }
     }
 
-    private func open(_ item: FavoriteItem, mode: FavoriteLaunchMode) async {
+    private func open(_ item: FavoriteItem, mode: FavoriteLaunchMode, mangaScope: FavoriteMangaReadingScope) async {
         do {
-            guard let target = try await openTargetResolver.openTarget(for: item, mode: mode) else { return }
+            guard let target = try await openTargetResolver.openTarget(for: item, mode: mode, mangaScope: mangaScope) else { return }
             switch target {
             case let .novelReader(context):
                 appModel.presentNovelReader(context)

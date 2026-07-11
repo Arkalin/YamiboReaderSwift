@@ -5,16 +5,32 @@ import YamiboReaderCore
 /// Cards carry no visible buttons: tap continues reading, long-press opens
 /// the menu (mirroring the Android cards, expressed as the iOS context menu).
 struct LocalFavoriteCardActions {
-    let open: (FavoriteItem, FavoriteLaunchMode) -> Void
+    /// Takes the whole card (not just `card.item`) so `standard(...)` can
+    /// derive the manga reading scope from the card's own display semantics:
+    /// a card rendered as a plain non-smart card opens as the plain single
+    /// thread it shows. In particular the "查看归档收藏" archive page's
+    /// member cards — deliberately built non-smart by the projection — open
+    /// the tapped chapter itself instead of bouncing back into the merged
+    /// directory every member shares.
+    let open: (FavoriteCardProjection, FavoriteLaunchMode) -> Void
     let select: (FavoriteItem) -> Void
     let move: (FavoriteItem) -> Void
     let editTags: (FavoriteItem) -> Void
     let toggleTextCover: (FavoriteItem) -> Void
     let syncToRemote: (FavoriteItem) -> Void
-    /// Takes the whole card projection (not just `card.item`) so it can tell
-    /// a merged group apart from a standalone favorite (smart-comic-mode
-    /// decision #6) and route to the right confirmation dialog.
+    /// Only ever invoked for a non-smart-card (`!isModeOnMangaThread`) card —
+    /// smart cards route their card actions to `viewArchivedFavorites`
+    /// instead, at every call site (context menu, swipe actions), so this
+    /// always targets `card.item` directly with no smart-card branching of
+    /// its own.
     let delete: (FavoriteCardProjection) -> Void
+    /// A smart card's replacement for `delete`: opens the "查看归档收藏" detail
+    /// page listing every individual member currently sharing this card's
+    /// effective title (`resolvedTitle`) — one item for a still-solitary
+    /// smart card, 2+ for an actually merged one — where per-item
+    /// delete/move/tag management actually happens through the existing
+    /// single-item card UI.
+    let viewArchivedFavorites: (FavoriteCardProjection) -> Void
 
     /// Standard wiring shared by the list and grid containers.
     @MainActor
@@ -22,11 +38,20 @@ struct LocalFavoriteCardActions {
         organizer: FavoriteLibraryOrganizer,
         selection: LocalFavoriteBrowseSession,
         routes: LocalFavoritesRoutes,
-        onOpen: @escaping (FavoriteItem, FavoriteLaunchMode) async -> Void
+        onOpen: @escaping (FavoriteItem, FavoriteLaunchMode, FavoriteMangaReadingScope) async -> Void
     ) -> LocalFavoriteCardActions {
         LocalFavoriteCardActions(
-            open: { item, mode in
-                Task { await onOpen(item, mode) }
+            open: { card, mode in
+                // A card opens with the scope its rendering promises: the
+                // smart-card treatment (merged title, sparkles badge) follows
+                // the board's Smart Comic Mode; a plain card — every
+                // archive-page member card, and any mode-off manga card —
+                // opens as the single thread it displays. Deriving this from
+                // `isModeOnMangaThread` (the projection's single smart-card
+                // gate) rather than re-reading settings keeps display and
+                // open behavior permanently in agreement.
+                let mangaScope: FavoriteMangaReadingScope = card.isModeOnMangaThread ? .boardDefault : .singleThread
+                Task { await onOpen(card.item, mode, mangaScope) }
             },
             select: { item in
                 selection.toggleFavoriteSelection(id: item.id)
@@ -45,11 +70,16 @@ struct LocalFavoriteCardActions {
                 Task { await organizer.syncItemToYamibo(item) }
             },
             delete: { card in
-                if let members = card.mergedMembers {
-                    routes.dialog = .deleteMergedGroup(members: members)
-                } else {
-                    routes.dialog = .deleteItem(card.item)
-                }
+                routes.dialog = .deleteItem(card.item)
+            },
+            viewArchivedFavorites: { card in
+                // `resolvedTitle` already IS the correct scope key in every
+                // case — whether or not `mangaDirectory` is actually
+                // resolved yet — since it's the same effective-title
+                // computation `cards(in:query:...)`'s member-scope filter
+                // groups by (see `FavoriteCardProjection.resolvedTitle`'s
+                // doc comment), so no `mangaDirectory` fallback is needed.
+                organizer.openMergedGroup(cleanBookName: card.resolvedTitle)
             }
         )
     }
@@ -62,16 +92,27 @@ struct LocalFavoriteCardContextMenu: View {
 
     var body: some View {
         Button {
-            actions.open(card.item, .resume)
+            actions.open(card, .resume)
         } label: {
             Label(L10n.string("favorites.open_resume"), systemImage: "book")
         }
         Button {
-            actions.open(card.item, .start)
+            actions.open(card, .start)
         } label: {
             Label(L10n.string("favorites.open_from_start"), systemImage: "text.page")
         }
         Divider()
+        // Both buttons are offered for a smart card too: selecting or moving
+        // one is equivalent to selecting/moving every favorite currently
+        // archived under it (the same membership its "查看归档收藏" page
+        // lists), expanded transparently at execution time by
+        // `FavoriteLibraryOrganizer.expandedSelectionFavoriteIDs` — neither
+        // `actions.select`/`actions.move`'s own closures need to know or
+        // care that `card.item` might be a smart card's representative
+        // member. Delete stays the one exception: it deliberately excludes
+        // any smart-card id from `deleteSelection`'s own scope instead, so
+        // "查看归档收藏" remains the only supported way to delete an
+        // individual archived member.
         Button {
             actions.select(card.item)
         } label: {
@@ -104,10 +145,18 @@ struct LocalFavoriteCardContextMenu: View {
             }
         }
         Divider()
-        Button(role: .destructive) {
-            actions.delete(card)
-        } label: {
-            Label(L10n.string("common.delete"), systemImage: "trash")
+        if card.isModeOnMangaThread {
+            Button {
+                actions.viewArchivedFavorites(card)
+            } label: {
+                Label(L10n.string("favorites.view_archived_favorites"), systemImage: "archivebox")
+            }
+        } else {
+            Button(role: .destructive) {
+                actions.delete(card)
+            } label: {
+                Label(L10n.string("common.delete"), systemImage: "trash")
+            }
         }
     }
 }

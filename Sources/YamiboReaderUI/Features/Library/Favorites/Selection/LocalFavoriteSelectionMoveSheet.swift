@@ -3,7 +3,7 @@ import YamiboReaderCore
 
 /// Tri-state per-item location membership (all / some / none of the selected
 /// items carry a location).
-enum LocalFavoriteLocationTriState {
+enum LocalFavoriteLocationTriState: Equatable {
     case none
     case some
     case all

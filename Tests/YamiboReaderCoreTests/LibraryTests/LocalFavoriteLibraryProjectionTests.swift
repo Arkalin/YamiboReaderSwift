@@ -86,6 +86,32 @@ import Testing
     #expect(Set(cards.map(\.id)) == [current.id, legacy.id])
 }
 
+@Test func localFavoriteSourceFilterKeyFallsBackToForumBoardForModeOffMangaThreadFavorites() throws {
+    var document = FavoriteLibraryDocument()
+    let categoryID = document.defaultCategory.id
+    let item = try FavoriteItem(
+        target: .mangaThread(threadID: "821"),
+        title: "第1话",
+        sourceGroup: .forumBoard(id: "46", label: "闭板漫画区"),
+        forumID: "46",
+        forumName: "闭板漫画区",
+        locations: [.category(categoryID)]
+    )
+    document.addItem(item)
+
+    // fid 46 is off by `SmartComicModeSettings`'s own default (smart-comic-
+    // mode design decision #2: a mode-off manga thread must behave exactly
+    // like an ordinary forum-board favorite, including its filter bucket).
+    let modeOffSettings = SmartComicModeSettings()
+    #expect(
+        LocalFavoriteSourceFilter.key(for: item, smartComicModeSettings: modeOffSettings)
+            == .forumBoard(id: "46", label: "闭板漫画区")
+    )
+
+    let modeOnSettings = SmartComicModeSettings(enabledForumIDs: ["46"])
+    #expect(LocalFavoriteSourceFilter.key(for: item, smartComicModeSettings: modeOnSettings) == .manga)
+}
+
 @Test func localFavoriteProjectionSearchesAllowedFieldsOnly() throws {
     let (document, items) = try makeProjectionDocument()
 
@@ -242,6 +268,156 @@ import Testing
     #expect(collectionCards.map(\.id) == [mergedCard.id])
 }
 
+/// `LocalFavoriteLibraryQuery.memberScopeCleanBookName` must replace, not
+/// combine with, the normal category/collection membership filter — a
+/// member resolved to the scoped directory has to show up on the "查看归档
+/// 收藏" detail page even when its own location doesn't match the query's
+/// `categoryID` at all. Regular (non-merged) category filtering can't stand
+/// in for this: once merged, a card's representative location is already
+/// the *union* of every member's own locations (proven above), so a naive
+/// reimplementation that forgot to actually bypass the category filter for
+/// member-scoped entries (which are standalone, each keeping only its own
+/// location — see `cards(in:query:...)`'s `isMemberScoped` branch) could
+/// still pass a same-category fixture by accident. This test only proves
+/// the bypass by putting one member in a category the query never selects.
+@Test func localFavoriteMemberScopeQueryBypassesCategoryFilterToShowEveryResolvedMember() throws {
+    var document = FavoriteLibraryDocument()
+    let defaultCategoryID = document.defaultCategory.id
+    let otherCategory = document.createCategory(name: "其他分类")
+
+    let directory = MangaDirectory(
+        cleanBookName: "范围测试漫画",
+        strategy: .links,
+        sourceKey: "chapter:811",
+        chapters: [
+            MangaChapter(tid: "811", rawTitle: "第1话", chapterNumber: 1),
+            MangaChapter(tid: "812", rawTitle: "第2话", chapterNumber: 2),
+        ]
+    )
+
+    let firstChapterFavorite = try FavoriteItem(
+        target: .mangaThread(threadID: "811"),
+        title: "第1话",
+        forumID: "30",
+        locations: [.category(defaultCategoryID)]
+    )
+    // Deliberately *not* in `defaultCategoryID` at all — only a plain
+    // category filter (no member scoping) would drop this one.
+    let secondChapterFavorite = try FavoriteItem(
+        target: .mangaThread(threadID: "812"),
+        title: "第2话",
+        forumID: "30",
+        locations: [.category(otherCategory.id)]
+    )
+    document.addItem(firstChapterFavorite)
+    document.addItem(secondChapterFavorite)
+
+    let mangaDirectoriesByTID = ["811": directory, "812": directory]
+    // Board 30 is mode-on by `SmartComicModeSettings`'s own default.
+    let settings = SmartComicModeSettings()
+
+    // Sanity check: without member scoping, the merged card still only
+    // resolves under the query's `categoryID` via the representative's own
+    // *unioned* location (decision #5) — this alone wouldn't catch a
+    // member-scope regression, which is exactly why the assertions below
+    // key off two genuinely standalone cards instead.
+    let mergedCards = LocalFavoriteLibraryProjection.cards(
+        in: document,
+        query: LocalFavoriteLibraryQuery(categoryID: defaultCategoryID),
+        mangaDirectoriesByTID: mangaDirectoriesByTID,
+        smartComicModeSettings: settings
+    )
+    #expect(mergedCards.count == 1)
+    #expect(mergedCards.first?.isMergedGroup == true)
+
+    let memberScopedCards = LocalFavoriteLibraryProjection.cards(
+        in: document,
+        query: LocalFavoriteLibraryQuery(categoryID: defaultCategoryID, memberScopeCleanBookName: directory.cleanBookName),
+        mangaDirectoriesByTID: mangaDirectoriesByTID,
+        smartComicModeSettings: settings
+    )
+    // Both members show up — including the one whose own location is
+    // `otherCategory`, not the query's `categoryID` — because member
+    // scoping bypasses category/collection filtering entirely.
+    #expect(Set(memberScopedCards.map(\.item.target.threadID)) == ["811", "812"])
+    #expect(memberScopedCards.allSatisfy { !$0.isMergedGroup })
+    #expect(memberScopedCards.allSatisfy { $0.mangaDirectory == nil })
+    #expect(memberScopedCards.allSatisfy { $0.mergedMembers == nil })
+}
+
+/// The actual fix: `memberScopeCleanBookName` matching must key off
+/// `FavoriteCardProjection.resolvedTitle` — the SAME effective title used
+/// for display and smart-card gating — not require an actually-resolved
+/// `MangaDirectory`. Two mode-on favorites that have never been opened in
+/// the reader (so neither has a `mangaDirectoriesByTID` entry) must still
+/// group together on the "查看归档收藏" detail page whenever their
+/// independently-computed local-clean guesses happen to match, and a
+/// solitary favorite whose guess matches no one else's must still open its
+/// own single-item "singleton archive" page with no special-casing.
+@Test func localFavoriteMemberScopeQueryMatchesUnresolvedModeOnFavoritesSharingTheSameLocalCleanGuess() throws {
+    var document = FavoriteLibraryDocument()
+    let categoryID = document.defaultCategory.id
+
+    let firstChapter = try FavoriteItem(
+        target: .mangaThread(threadID: "841"),
+        title: "【作者】作品 第1话",
+        forumID: "30",
+        locations: [.category(categoryID)]
+    )
+    let secondChapter = try FavoriteItem(
+        target: .mangaThread(threadID: "842"),
+        title: "【作者】作品 第2话",
+        forumID: "30",
+        locations: [.category(categoryID)]
+    )
+    let solitaryFavorite = try FavoriteItem(
+        target: .mangaThread(threadID: "843"),
+        title: "【作者】孤本 第1话",
+        forumID: "30",
+        locations: [.category(categoryID)]
+    )
+    document.addItem(firstChapter)
+    document.addItem(secondChapter)
+    document.addItem(solitaryFavorite)
+
+    // Board 30 is mode-on by `SmartComicModeSettings`'s own default; none of
+    // these tids have ever been resolved to a `MangaDirectory` yet (empty
+    // `mangaDirectoriesByTID`), mirroring synced-but-never-opened favorites.
+    let settings = SmartComicModeSettings()
+
+    let sharedGuessCards = LocalFavoriteLibraryProjection.cards(
+        in: document,
+        query: LocalFavoriteLibraryQuery(categoryID: categoryID, memberScopeCleanBookName: "作品"),
+        smartComicModeSettings: settings
+    )
+    #expect(Set(sharedGuessCards.map(\.item.target.threadID)) == ["841", "842"])
+    #expect(sharedGuessCards.allSatisfy { $0.mangaDirectory == nil })
+    #expect(sharedGuessCards.allSatisfy { $0.mergedMembers == nil })
+    // The *matching* that put these two cards in this scope still keys off
+    // the shared local-clean guess ("作品") — that's `Set(...threadID) ==
+    // ["841", "842"]` above. But once matched, each resulting card is
+    // deliberately de-smart-ified (`isModeOnMangaThread` forced `false` —
+    // see `cards(in:query:...)`'s member-scope card-building comment): it
+    // must show ITS OWN raw title, not the shared cleaned guess, so the
+    // archive page displays two distinguishable posts rather than two
+    // copies of the same collapsed "作品" card (the actual regression this
+    // fix addresses).
+    #expect(sharedGuessCards.allSatisfy { !$0.isModeOnMangaThread })
+    #expect(sharedGuessCards.allSatisfy { $0.resolvedTitle != "作品" })
+    let firstCard = try #require(sharedGuessCards.first { $0.item.target.threadID == "841" })
+    let secondCard = try #require(sharedGuessCards.first { $0.item.target.threadID == "842" })
+    #expect(firstCard.resolvedTitle == "【作者】作品 第1话")
+    #expect(secondCard.resolvedTitle == "【作者】作品 第2话")
+    #expect(firstCard.resolvedTitle != secondCard.resolvedTitle)
+
+    let solitaryCards = LocalFavoriteLibraryProjection.cards(
+        in: document,
+        query: LocalFavoriteLibraryQuery(categoryID: categoryID, memberScopeCleanBookName: "孤本"),
+        smartComicModeSettings: settings
+    )
+    #expect(solitaryCards.map(\.item.target.threadID) == ["843"])
+}
+
 @Test func localFavoriteProjectionKeepsModeOffMangaThreadFavoritesStandaloneEvenWithAResolvedDirectory() throws {
     var document = FavoriteLibraryDocument()
     let categoryID = document.defaultCategory.id
@@ -355,6 +531,108 @@ import Testing
     #expect(loneCard.mergedMembers == nil)
     #expect(loneCard.progressPercent == 100)
     #expect(loneCard.chapterPageProgress == L10n.string("favorites.progress.manga_page_total", "第1话", 5, 5))
+}
+
+@Test func localFavoriteCardResolvedTitlePrefersDirectoryCleanBookNameOverItemTitle() throws {
+    var document = FavoriteLibraryDocument()
+    let categoryID = document.defaultCategory.id
+
+    let directory = MangaDirectory(
+        cleanBookName: "标题解析漫画",
+        strategy: .links,
+        sourceKey: "chapter:901",
+        chapters: [MangaChapter(tid: "901", rawTitle: "第1话", chapterNumber: 1)]
+    )
+    let mangaFavorite = try FavoriteItem(
+        target: .mangaThread(threadID: "901"),
+        title: "第1话",
+        forumID: "30",
+        locations: [.category(categoryID)]
+    )
+    let plainFavorite = try FavoriteItem(
+        target: FavoriteItemTarget(kind: .normalThread, threadID: "902"),
+        title: "普通主题标题",
+        locations: [.category(categoryID)]
+    )
+    document.addItem(mangaFavorite)
+    document.addItem(plainFavorite)
+
+    let cards = LocalFavoriteLibraryProjection.cards(
+        in: document,
+        mangaDirectoriesByTID: ["901": directory],
+        smartComicModeSettings: SmartComicModeSettings()
+    )
+
+    // A resolved directory (even a lone one, not yet merged with any
+    // sibling) wins over the representative member's own post title.
+    let resolvedCard = try #require(cards.first { $0.id == mangaFavorite.id })
+    #expect(resolvedCard.mangaDirectory?.cleanBookName == "标题解析漫画")
+    #expect(resolvedCard.resolvedTitle == "标题解析漫画")
+    #expect(resolvedCard.resolvedTitle != mangaFavorite.resolvedDisplayTitle)
+
+    // No resolved directory: falls back to the item's own title, unchanged.
+    let unresolvedCard = try #require(cards.first { $0.id == plainFavorite.id })
+    #expect(unresolvedCard.mangaDirectory == nil)
+    #expect(unresolvedCard.resolvedTitle == plainFavorite.resolvedDisplayTitle)
+}
+
+@Test func localFavoriteCardResolvedTitleLocallyCleansUnresolvedModeOnMangaThreadFavoriteTitle() throws {
+    var document = FavoriteLibraryDocument()
+    let categoryID = document.defaultCategory.id
+
+    // Mode-on board (fid 30 is on by `SmartComicModeSettings`'s own
+    // default) that has never actually been opened in the reader yet, so
+    // it has no resolved `MangaDirectory` of its own -- `mangaDirectoriesByTID`
+    // below only has an entry for an unrelated tid, mirroring a real
+    // library where some *other* manga favorite has already been read
+    // while this one has only been synced/starred.
+    let rawTitle = "【作者】作品 第12话"
+    let unresolvedModeOnFavorite = try FavoriteItem(
+        target: .mangaThread(threadID: "930"),
+        title: rawTitle,
+        forumID: "30",
+        locations: [.category(categoryID)]
+    )
+    // Mode-off board (fid 46 is off by default): must keep showing its raw,
+    // unclean title even though it's also an unresolved `.mangaThread`
+    // favorite -- regression guard for the earlier mode-off fix.
+    let unresolvedModeOffFavorite = try FavoriteItem(
+        target: .mangaThread(threadID: "931"),
+        title: rawTitle,
+        forumID: "46",
+        locations: [.category(categoryID)]
+    )
+    document.addItem(unresolvedModeOnFavorite)
+    document.addItem(unresolvedModeOffFavorite)
+
+    let unrelatedDirectory = MangaDirectory(
+        cleanBookName: "无关漫画",
+        strategy: .links,
+        sourceKey: "chapter:999",
+        chapters: [MangaChapter(tid: "999", rawTitle: "第1话", chapterNumber: 1)]
+    )
+
+    let cards = LocalFavoriteLibraryProjection.cards(
+        in: document,
+        mangaDirectoriesByTID: ["999": unrelatedDirectory],
+        smartComicModeSettings: SmartComicModeSettings()
+    )
+
+    // Mode-on, unresolved: falls back to a local `MangaTitleCleaner`
+    // cleanup of the item's own title, not the raw post title and not
+    // some unrelated directory's book name.
+    let modeOnCard = try #require(cards.first { $0.id == unresolvedModeOnFavorite.id })
+    #expect(modeOnCard.mangaDirectory == nil)
+    #expect(modeOnCard.resolvedTitle == MangaTitleCleaner.cleanBookName(rawTitle))
+    #expect(modeOnCard.resolvedTitle == "作品")
+    #expect(modeOnCard.resolvedTitle != rawTitle)
+    #expect(modeOnCard.resolvedTitle != "无关漫画")
+
+    // Mode-off, unresolved: still the raw, unclean title.
+    let modeOffCard = try #require(cards.first { $0.id == unresolvedModeOffFavorite.id })
+    #expect(modeOffCard.mangaDirectory == nil)
+    #expect(modeOffCard.resolvedTitle == rawTitle)
+    #expect(modeOffCard.resolvedTitle == modeOffCard.item.resolvedDisplayTitle)
 }
 
 @Test func localFavoriteMixedEntriesKeepsCollectionsPinnedInOrganizationOrder() throws {

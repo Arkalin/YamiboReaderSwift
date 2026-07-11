@@ -18,7 +18,7 @@ struct LocalFavoriteGridContent: View {
     /// `FavoriteLibraryOrganizer.rootDerived`.
     let derived: LocalFavoriteDerivedState
     let isCollectionDetail: Bool
-    let onOpen: (FavoriteItem, FavoriteLaunchMode) async -> Void
+    let onOpen: (FavoriteItem, FavoriteLaunchMode, FavoriteMangaReadingScope) async -> Void
 
     private let gridColumns = [
         GridItem(.adaptive(minimum: 130), spacing: 12, alignment: .top)

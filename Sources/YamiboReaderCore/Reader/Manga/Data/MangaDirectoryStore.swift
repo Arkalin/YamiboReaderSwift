@@ -2,6 +2,10 @@ import Foundation
 @preconcurrency import GRDB
 
 public actor MangaDirectoryStore: MangaDirectoryPersisting, MangaDirectoryRenaming {
+    public nonisolated let changeID = UUID().uuidString
+    public static let didChangeNotification = Notification.Name("yamibo.mangaDirectoryStore.didChange")
+    public static let changeIDUserInfoKey = "changeID"
+
     private let database: DatabasePool
 
     public init(databasePool: DatabasePool? = nil) {
@@ -98,6 +102,7 @@ public actor MangaDirectoryStore: MangaDirectoryPersisting, MangaDirectoryRenami
         } catch {
             throw persistenceError(from: error)
         }
+        postChangeNotification()
     }
 
     public func deleteDirectory(named name: String) async throws {
@@ -112,6 +117,8 @@ public actor MangaDirectoryStore: MangaDirectoryPersisting, MangaDirectoryRenami
         to newDirectory: MangaDirectory
     ) async throws {
         guard let oldName = oldName.mangaReaderTrimmedNonEmpty else {
+            // `saveDirectory` itself posts the change notification on
+            // success now, so no explicit second post is needed here.
             try await saveDirectory(newDirectory)
             return
         }
@@ -122,6 +129,7 @@ public actor MangaDirectoryStore: MangaDirectoryPersisting, MangaDirectoryRenami
                 try db.execute(sql: "DELETE FROM manga_directories WHERE clean_book_name = ?", arguments: [oldName])
             }
         }
+        postChangeNotification()
     }
 
     public func clearAll() async throws {
@@ -392,6 +400,14 @@ public actor MangaDirectoryStore: MangaDirectoryPersisting, MangaDirectoryRenami
     /// `FavoriteSyncRunStore` — none of them batch `IN` queries today), so
     /// this is a fresh, file-local constant/helper rather than a reused one.
     private static let maxInClauseBatchSize = 500
+
+    private nonisolated func postChangeNotification() {
+        NotificationCenter.default.post(
+            name: Self.didChangeNotification,
+            object: nil,
+            userInfo: [Self.changeIDUserInfoKey: changeID]
+        )
+    }
 
     private static func openDatabase() -> DatabasePool {
         do {

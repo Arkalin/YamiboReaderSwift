@@ -41,6 +41,22 @@ final class FavoriteLibraryOrganizer: ObservableObject {
             persistNavigationState()
         }
     }
+    /// Non-nil while a smart-comic card's "查看归档收藏" detail page is open —
+    /// the effective title (`FavoriteCardProjection.resolvedTitle`) every
+    /// member on that page currently resolves to. Despite the property's
+    /// name this is not always an actually-resolved `MangaDirectory`'s
+    /// `cleanBookName` — it can equally be a locally-guessed clean title for
+    /// a still-unresolved favorite (see `resolvedTitle`'s doc comment).
+    /// Mirrors `selectedCollectionID`'s own navigation-state shape but is
+    /// deliberately not persisted through `SettingsStore` (see
+    /// `persistNavigationState()`): this scope is a live identity, not
+    /// durable navigation state worth restoring across launches.
+    @Published private(set) var selectedMergedGroupCleanBookName: String? = nil {
+        didSet {
+            selection.clearSelection()
+            refreshDerivedState()
+        }
+    }
     @Published var filter = LocalFavoriteFilterState() {
         didSet {
             guard filter != oldValue else { return }
@@ -94,6 +110,7 @@ final class FavoriteLibraryOrganizer: ObservableObject {
     private var progressUpdatesTask: Task<Void, Never>?
     private var coverUpdatesTask: Task<Void, Never>?
     private var settingsUpdatesTask: Task<Void, Never>?
+    private var mangaDirectoryUpdatesTask: Task<Void, Never>?
     private var mangaCoverBackfillTask: Task<Void, Never>?
     private var attemptedMangaCoverTargetIDs: Set<String> = []
 
@@ -168,6 +185,24 @@ final class FavoriteLibraryOrganizer: ObservableObject {
                 await self.reloadSmartComicModeSettings()
             }
         }
+        // Without this, renaming a manga directory from the manga reader's
+        // directory page would leave an already-open Favorites tab showing
+        // the old name/cover on a merged card until some unrelated
+        // favorite/progress/cover/settings change happened to trigger a
+        // full reload.
+        if let mangaDirectoryStore {
+            mangaDirectoryUpdatesTask = Task { @MainActor [weak self, store = mangaDirectoryStore] in
+                for await notification in NotificationCenter.default.notifications(named: MangaDirectoryStore.didChangeNotification) {
+                    guard !Task.isCancelled else { return }
+                    guard let self else { return }
+                    guard let changeID = notification.userInfo?[MangaDirectoryStore.changeIDUserInfoKey] as? String,
+                          changeID == store.changeID else {
+                        continue
+                    }
+                    await self.reloadMangaDirectories()
+                }
+            }
+        }
     }
 
     deinit {
@@ -175,6 +210,7 @@ final class FavoriteLibraryOrganizer: ObservableObject {
         progressUpdatesTask?.cancel()
         coverUpdatesTask?.cancel()
         settingsUpdatesTask?.cancel()
+        mangaDirectoryUpdatesTask?.cancel()
         mangaCoverBackfillTask?.cancel()
     }
 
@@ -366,6 +402,32 @@ final class FavoriteLibraryOrganizer: ObservableObject {
         scheduleMangaCoverBackfill(for: document.items)
     }
 
+    /// Re-derives the manga-directory-dependent slice of state
+    /// (`mangaDirectoriesByTID`/`smartMangaCoverURLsByCleanBookName`) in
+    /// response to `MangaDirectoryStore.didChangeNotification` -- e.g.
+    /// resolving a previously-unresolved manga favorite's directory for the
+    /// first time (`saveDirectory`), or renaming a directory from the manga
+    /// reader's directory page (`renameDirectory`). Without this, a newly-
+    /// resolved directory's merge/cover (or a rename's effect on a merged
+    /// card's displayed `cleanBookName`/`.smartManga` cover) would stay stale
+    /// in an already-open Favorites tab until some unrelated
+    /// favorite/progress/cover/settings change happened to trigger a
+    /// full reload.
+    ///
+    /// Also reloads `readingProgress` -- `MangaDirectoryStore
+    /// .renameRelatedStructuredMetadata` cascades a rename into the
+    /// `reading_progress` table too (directory-level progress rows get
+    /// migrated to the new clean book name), so without this an
+    /// already-loaded `readingProgress` array would keep referencing the old
+    /// identity and show no/stale progress on a card immediately after a
+    /// rename, until some other reload happened to refresh it.
+    private func reloadMangaDirectories() async {
+        mangaDirectoriesByTID = await resolveMangaDirectories(for: document.items, smartComicModeSettings: smartComicModeSettings)
+        smartMangaCoverURLsByCleanBookName = await smartMangaCoverURLs(for: Array(Set(mangaDirectoriesByTID.values)))
+        readingProgress = await readingProgressStore.loadAll()
+        refreshDerivedState()
+    }
+
     // MARK: - Categories
 
     @discardableResult
@@ -492,6 +554,22 @@ final class FavoriteLibraryOrganizer: ObservableObject {
         }
     }
 
+    // MARK: - Merged smart-comic groups
+
+    /// Opens a smart card's "查看归档收藏" detail page, scoping `derived.cards`
+    /// (not `rootDerived`) to every individual favorite whose own effective
+    /// title (`FavoriteCardProjection.resolvedTitle`) currently matches
+    /// `cleanBookName` — one item for a still-solitary smart card, 2+ for an
+    /// actually merged one. Mirrors `openCollection(id:)` exactly.
+    func openMergedGroup(cleanBookName: String) {
+        selectedMergedGroupCleanBookName = cleanBookName
+    }
+
+    /// Mirrors `closeCollection()` exactly.
+    func closeMergedGroup() {
+        selectedMergedGroupCleanBookName = nil
+    }
+
     // MARK: - Tags
 
     @discardableResult
@@ -520,14 +598,22 @@ final class FavoriteLibraryOrganizer: ObservableObject {
         filter.selectedTagIDs.remove(tagID)
     }
 
+    /// Reachable from a card's context-menu "标签" button, including a smart
+    /// card's — that button is not gated on `isModeOnMangaThread` (see
+    /// `LocalFavoriteCardContextMenu`), so `itemID` can be a smart card's
+    /// representative item id. Routed through `expandedSelectionFavoriteIDs`
+    /// so editing a smart card's tags from this single-item path applies to
+    /// every favorite archived under it, exactly like `updateTagsForSelection`
+    /// does for a bulk selection.
     func updateTags(for itemID: String, tagIDs: Set<String>) async {
+        let expandedIDs = expandedSelectionFavoriteIDs([itemID])
         await commit { document in
-            document.replaceTags(for: [itemID], with: tagIDs)
+            document.replaceTags(for: expandedIDs, with: tagIDs)
         }
     }
 
     func updateTagsForSelection(_ tagIDs: Set<String>) async {
-        let favoriteIDs = selection.selectedFavoriteIDs
+        let favoriteIDs = expandedSelectionFavoriteIDs(selection.selectedFavoriteIDs)
         guard !favoriteIDs.isEmpty else { return }
         let committed: Void? = await commit { document in
             document.replaceTags(for: favoriteIDs, with: tagIDs)
@@ -549,9 +635,106 @@ final class FavoriteLibraryOrganizer: ObservableObject {
         selection.toggleCollectionSelection(id: id)
     }
 
+    /// Whether `id` names a mode-on `.mangaThread` favorite that renders as a
+    /// smart card on the main list — the ground-truth definition
+    /// `LocalFavoriteLibraryProjection.cards(in:query:...)` itself uses for
+    /// `isModeOnMangaThread` — computed straight from `document.items` +
+    /// the current mode/directory snapshot rather than looked up in
+    /// `derived.cards`.
+    ///
+    /// This distinction matters: `filter` (search text / tag / source
+    /// filters) can narrow `derived.cards` at any time, and its own `didSet`
+    /// deliberately never clears `selection` (`LocalFavoriteBrowseSession`'s
+    /// own doc comment: "search is a plain live filter, not a session
+    /// mode"). A smart card that's selected and then scrolled out of
+    /// `derived.cards` by a filter change would stop being found by a
+    /// `derived.cards.first(where:)` lookup while remaining fully selected —
+    /// silently reverting it to "looks like an ordinary id" for any
+    /// selection-consuming operation. For `deleteSelection` in particular
+    /// that would mean deleting just its representative item instead of
+    /// skipping it, orphaning every other favorite still archived under it:
+    /// exactly the bug this whole feature exists to prevent. Sourcing the
+    /// check from `document.items` instead makes it immune to the current
+    /// filter entirely.
+    ///
+    /// Always `false` while the "查看归档收藏" archive page is open
+    /// (`selectedMergedGroupCleanBookName != nil`), matching
+    /// `cards(in:query:...)`'s own member-scoped computation: every card
+    /// there is deliberately an ordinary per-item card, never a smart card.
+    private func isSmartCardFavoriteID(_ id: String) -> Bool {
+        guard selectedMergedGroupCleanBookName == nil,
+              let item = document.items.first(where: { $0.id == id }) else { return false }
+        return item.target.kind == .mangaThread && smartComicModeSettings.isEnabled(forumID: item.forumID)
+    }
+
+    /// Whether the current selection has anything `deleteSelection` would
+    /// actually remove: at least one selected collection (dissolving a
+    /// collection is unaffected by smart-card concerns entirely), or at
+    /// least one selected favorite that ISN'T a smart card
+    /// (`deleteSelection` skips every smart-card id, deleting nothing for
+    /// them). Backs `LocalFavoriteSelectionActionBar`'s delete-button
+    /// visibility — per that view's own doc comment ("hidden, not merely
+    /// disabled, when the current selection can't use it"), a selection
+    /// made up entirely of smart cards must not show an active delete
+    /// button that silently does nothing when tapped.
+    var hasDeletableSelection: Bool {
+        selection.selectedCollectionCount > 0
+            || selection.selectedFavoriteIDs.contains { !isSmartCardFavoriteID($0) }
+    }
+
+    /// Expands `favoriteIDs` so any smart-card id (`isSmartCardFavoriteID`)
+    /// is replaced by the full set of ids for every favorite item currently
+    /// archived under it — the same membership its "查看归档收藏" page and
+    /// tag-union display use
+    /// (`LocalFavoriteLibraryProjection.archivedItems(matching:...)`). A
+    /// non-smart-card id passes through unchanged. Used by every
+    /// selection-consuming operation EXCEPT `deleteSelection`, which
+    /// intentionally keeps requiring the dedicated archive page for
+    /// per-item-visible deletion (see its own doc comment).
+    private func expandedSelectionFavoriteIDs(_ favoriteIDs: Set<String>) -> Set<String> {
+        guard selectedMergedGroupCleanBookName == nil else { return favoriteIDs }
+        // Built once for every id in this one call, instead of calling
+        // `archivedItems(matching:...)` (a full O(N) scan of `document.items`)
+        // once per selected id — an O(S x N) shape for S selected ids that
+        // this single O(N) precomputation plus O(1) lookups per id replaces.
+        // Still always freshly computed from the CURRENT `document.items`
+        // here at the top of this call, never cached across separate calls.
+        let itemsByEffectiveTitle = LocalFavoriteLibraryProjection.mangaThreadItemsByEffectiveTitle(
+            in: document.items,
+            mangaDirectoriesByTID: mangaDirectoriesByTID,
+            smartComicModeSettings: smartComicModeSettings
+        )
+        var expanded = favoriteIDs
+        for id in favoriteIDs {
+            guard let item = document.items.first(where: { $0.id == id }),
+                  item.target.kind == .mangaThread,
+                  smartComicModeSettings.isEnabled(forumID: item.forumID) else { continue }
+            let directory = mangaDirectoriesByTID[item.target.threadID ?? ""]
+            let effectiveTitle = FavoriteCardProjection.resolvedTitle(
+                item: item,
+                mangaDirectory: directory,
+                isModeOnMangaThread: true
+            )
+            let archived = itemsByEffectiveTitle[effectiveTitle] ?? []
+            expanded.formUnion(archived.map(\.id))
+        }
+        return expanded
+    }
+
+    /// Every card currently visible, including smart cards — selecting or
+    /// "select all"-ing a smart card is equivalent to selecting every
+    /// favorite archived under it, expanded transparently at execution time
+    /// by `expandedSelectionFavoriteIDs` (Part C); the id that actually lands
+    /// in `selection.selectedFavoriteIDs` is still just the smart card's own
+    /// representative id, same as any other card. Backs both
+    /// `selectAllVisible()` and `isAllVisibleSelected`.
+    private var selectableFavoriteIDs: [String] {
+        derived.cards.map(\.id)
+    }
+
     func selectAllVisible() {
         selection.selectAll(
-            favoriteIDs: derived.cards.map(\.id),
+            favoriteIDs: selectableFavoriteIDs,
             collectionIDs: selectedCollectionID == nil ? derived.visibleCollections.map(\.id) : []
         )
     }
@@ -561,7 +744,7 @@ final class FavoriteLibraryOrganizer: ObservableObject {
     /// membership diff (mirrors `MangaNovelReaderCacheSelectionState
     /// .isAllSelected` in the cache sheets' own select-all button).
     var isAllVisibleSelected: Bool {
-        let favoriteIDs = derived.cards.map(\.id)
+        let favoriteIDs = selectableFavoriteIDs
         let collectionIDs = selectedCollectionID == nil ? derived.visibleCollections.map(\.id) : []
         let totalCount = favoriteIDs.count + collectionIDs.count
         guard totalCount > 0 else { return false }
@@ -571,7 +754,7 @@ final class FavoriteLibraryOrganizer: ObservableObject {
     }
 
     var hasVisibleSelectableEntries: Bool {
-        !derived.cards.isEmpty || (selectedCollectionID == nil && !derived.visibleCollections.isEmpty)
+        !selectableFavoriteIDs.isEmpty || (selectedCollectionID == nil && !derived.visibleCollections.isEmpty)
     }
 
     /// Select-all ↔ clear-all toggle (cache-sheet select-all button parity):
@@ -588,7 +771,7 @@ final class FavoriteLibraryOrganizer: ObservableObject {
     @discardableResult
     func createCollectionFromSelection(name: String, color: FavoriteCollectionColor = .gray) async -> LocalFavoriteCollection? {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        let favoriteIDs = selection.selectedFavoriteIDs
+        let favoriteIDs = expandedSelectionFavoriteIDs(selection.selectedFavoriteIDs)
         let categoryID = selectedCategoryID
         let source = selectionSourceLocation
         guard !trimmed.isEmpty, !favoriteIDs.isEmpty else { return nil }
@@ -609,7 +792,7 @@ final class FavoriteLibraryOrganizer: ObservableObject {
 
     func moveSelectionToCategory(id categoryID: String) async {
         guard selection.selectedEntryCount > 0 else { return }
-        let favoriteIDs = selection.selectedFavoriteIDs
+        let favoriteIDs = expandedSelectionFavoriteIDs(selection.selectedFavoriteIDs)
         let collectionIDs = selection.selectedCollectionIDs
         let source = selectionSourceLocation
         let committed: Void? = await commit { document in
@@ -624,7 +807,7 @@ final class FavoriteLibraryOrganizer: ObservableObject {
     }
 
     func moveSelectionToCollection(id collectionID: String) async {
-        let favoriteIDs = selection.selectedFavoriteIDs
+        let favoriteIDs = expandedSelectionFavoriteIDs(selection.selectedFavoriteIDs)
         let source = selectionSourceLocation
         guard !favoriteIDs.isEmpty,
               let collection = document.collections.first(where: { $0.id == collectionID }) else { return }
@@ -642,7 +825,7 @@ final class FavoriteLibraryOrganizer: ObservableObject {
     }
 
     func addSelectionToCategory(id categoryID: String) async {
-        let favoriteIDs = selection.selectedFavoriteIDs
+        let favoriteIDs = expandedSelectionFavoriteIDs(selection.selectedFavoriteIDs)
         guard !favoriteIDs.isEmpty else { return }
         let committed: Void? = await commit { document in
             document.moveItems(ids: favoriteIDs, to: .category(categoryID), removing: nil)
@@ -652,7 +835,7 @@ final class FavoriteLibraryOrganizer: ObservableObject {
     }
 
     func addSelectionToCollection(id collectionID: String) async {
-        let favoriteIDs = selection.selectedFavoriteIDs
+        let favoriteIDs = expandedSelectionFavoriteIDs(selection.selectedFavoriteIDs)
         guard !favoriteIDs.isEmpty,
               let collection = document.collections.first(where: { $0.id == collectionID }) else { return }
         let committed: Void? = await commit { document in
@@ -667,9 +850,13 @@ final class FavoriteLibraryOrganizer: ObservableObject {
     }
 
     /// Whether all, some, or none of the selected items carry `location` —
-    /// drives the tri-state boxes in the move sheet.
+    /// drives the tri-state boxes in the move sheet. Routed through
+    /// `expandedSelectionFavoriteIDs` exactly like every other
+    /// selection-consuming operation, so a selected smart card's tri-state
+    /// readout reflects every favorite archived under it, not just its
+    /// representative member.
     func selectionLocationState(_ location: FavoriteLocation) -> LocalFavoriteLocationTriState {
-        let ids = selection.selectedFavoriteIDs
+        let ids = expandedSelectionFavoriteIDs(selection.selectedFavoriteIDs)
         guard !ids.isEmpty else { return .none }
         let selectedItems = document.items.filter { ids.contains($0.id) }
         guard !selectedItems.isEmpty else { return .none }
@@ -680,8 +867,14 @@ final class FavoriteLibraryOrganizer: ObservableObject {
 
     /// Adds or removes one location on every selected item. Removal skips
     /// items whose last location it would be (an item always lives somewhere).
+    /// Routed through `expandedSelectionFavoriteIDs` exactly like every other
+    /// selection-consuming operation — this backs the move sheet
+    /// (`LocalFavoriteSelectionMoveSheet`), the actual UI path a user hits
+    /// when moving a selected smart card, so it must expand to every
+    /// favorite archived under it rather than moving just the representative
+    /// member.
     func setSelectionLocation(_ location: FavoriteLocation, included: Bool) async {
-        let ids = selection.selectedFavoriteIDs
+        let ids = expandedSelectionFavoriteIDs(selection.selectedFavoriteIDs)
         guard !ids.isEmpty else { return }
         _ = await commit { document in
             if included {
@@ -715,10 +908,37 @@ final class FavoriteLibraryOrganizer: ObservableObject {
         selection.exitSelectionMode()
     }
 
+    /// Deliberately NOT routed through `expandedSelectionFavoriteIDs` —
+    /// unlike every other selection-consuming operation, delete must keep
+    /// requiring the dedicated "查看归档收藏" archive page for a smart card.
+    /// A smart card can now enter `selection.selectedFavoriteIDs` (Part D),
+    /// so any such id is partitioned out and skipped entirely here: deleting
+    /// only the representative item while leaving every other archived
+    /// member favorited would orphan them from their now-partially-deleted
+    /// group, with no corresponding cleanup — the exact bug that originally
+    /// justified excluding smart cards from selection altogether.
     func deleteSelection(scope: LocalFavoriteDeleteScope = .everywhere) async {
         guard selection.selectedEntryCount > 0 else { return }
-        let favoriteIDs = selection.selectedFavoriteIDs
+        let allSelectedFavoriteIDs = selection.selectedFavoriteIDs
+        // `isSmartCardFavoriteID` deliberately does NOT look the id up in
+        // `derived.cards` — see its own doc comment — precisely so a smart
+        // card scrolled out of the current search/tag/source filter while
+        // still selected still gets skipped here instead of silently
+        // falling through to a lone, sibling-orphaning delete below.
+        let skippedSmartCardFavoriteIDs = allSelectedFavoriteIDs.filter(isSmartCardFavoriteID)
+        let favoriteIDs = allSelectedFavoriteIDs.subtracting(skippedSmartCardFavoriteIDs)
+        if !skippedSmartCardFavoriteIDs.isEmpty {
+            transientMessage = L10n.string("favorites.bulk_delete_skipped_smart_manga_message")
+        }
         let collectionIDs = selection.selectedCollectionIDs
+        guard !favoriteIDs.isEmpty || !collectionIDs.isEmpty else {
+            // Nothing left to delete once smart cards are skipped — still
+            // exit selection mode so their now-stale ids don't linger
+            // selected (`exitSelectionMode()` clears the whole selection
+            // unconditionally).
+            selection.exitSelectionMode()
+            return
+        }
         let source = selectionSourceLocation
         let deleter = remoteDeleter
         let committed: Void? = await commit { document in
@@ -757,30 +977,6 @@ final class FavoriteLibraryOrganizer: ObservableObject {
             case .everywhere:
                 try await deleter.deleteRemoteFavorites(for: [latestItem])
                 document.removeItem(target: latestItem.target)
-            }
-        }
-    }
-
-    /// Unfavorites every member of a merged card in one commit
-    /// (smart-comic-mode decision #6): no per-chapter partial removal for a
-    /// merged group — the confirmation dialog already listed every title
-    /// that's about to go, so once confirmed this always removes the whole
-    /// set, with no "current location only" scope choice (there is no
-    /// coherent single "current location" for a card whose members can each
-    /// be filed under different categories/collections). Re-looks up members
-    /// by id in the freshly loaded document rather than trusting the
-    /// snapshot captured when the dialog was raised, matching
-    /// `deleteItem`/`deleteSelection`'s existing reload-then-mutate pattern.
-    func deleteMergedGroup(_ members: [FavoriteItem]) async {
-        let memberIDs = Set(members.map(\.id))
-        guard !memberIDs.isEmpty else { return }
-        let deleter = remoteDeleter
-        await commit { document in
-            let latestMembers = document.items.filter { memberIDs.contains($0.id) }
-            guard !latestMembers.isEmpty else { throw CommitAbort() }
-            try await deleter.deleteRemoteFavorites(for: latestMembers)
-            for member in latestMembers {
-                document.removeItem(target: member.target)
             }
         }
     }
@@ -845,10 +1041,18 @@ final class FavoriteLibraryOrganizer: ObservableObject {
                 textCoverForcedTargetIDs: textCoverForcedTargetIDs,
                 mangaDirectoriesByTID: mangaDirectoriesByTID,
                 smartComicModeSettings: smartComicModeSettings,
-                smartMangaCoverURLsByCleanBookName: smartMangaCoverURLsByCleanBookName
+                smartMangaCoverURLsByCleanBookName: smartMangaCoverURLsByCleanBookName,
+                memberScopeCleanBookName: selectedMergedGroupCleanBookName
             )
         )
-        rootDerived = selectedCollectionID == nil
+        // `derived` can now be scoped by an open merged group even while no
+        // collection is open, so the old `selectedCollectionID == nil`
+        // shortcut alone is no longer sufficient — it must also gate on
+        // `selectedMergedGroupCleanBookName`, or `rootDerived` would
+        // silently inherit the merged-group scope in that case (opening a
+        // merged group's detail page directly from the root, not from
+        // inside a collection) and defeat the whole point of `rootDerived`.
+        rootDerived = (selectedCollectionID == nil && selectedMergedGroupCleanBookName == nil)
             ? derived
             : LocalFavoriteLibraryDerivation.derive(
                 LocalFavoriteLibraryDerivation.Inputs(
@@ -862,6 +1066,8 @@ final class FavoriteLibraryOrganizer: ObservableObject {
                     mangaDirectoriesByTID: mangaDirectoriesByTID,
                     smartComicModeSettings: smartComicModeSettings,
                     smartMangaCoverURLsByCleanBookName: smartMangaCoverURLsByCleanBookName
+                    // `memberScopeCleanBookName` intentionally omitted (nil
+                    // default): `rootDerived` must never narrow to this scope.
                 )
             )
         selection.prune(

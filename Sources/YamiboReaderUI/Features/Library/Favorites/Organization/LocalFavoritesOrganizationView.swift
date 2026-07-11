@@ -11,13 +11,13 @@ struct LocalFavoritesOrganizationView: View {
     @ObservedObject private var selection: LocalFavoriteBrowseSession
     @StateObject private var routes = LocalFavoritesRoutes()
 
-    let onOpen: (FavoriteItem, FavoriteLaunchMode) async -> Void
+    let onOpen: (FavoriteItem, FavoriteLaunchMode, FavoriteMangaReadingScope) async -> Void
 
     init(
         organizer: FavoriteLibraryOrganizer,
         remoteSync: FavoriteRemoteSyncSession,
         updateMonitor: FavoriteUpdateMonitor,
-        onOpen: @escaping (FavoriteItem, FavoriteLaunchMode) async -> Void
+        onOpen: @escaping (FavoriteItem, FavoriteLaunchMode, FavoriteMangaReadingScope) async -> Void
     ) {
         self.organizer = organizer
         self.remoteSync = remoteSync
@@ -85,6 +85,9 @@ struct LocalFavoritesOrganizationView: View {
                 .navigationDestination(isPresented: collectionDetailBinding) {
                     collectionDetail
                 }
+                .navigationDestination(isPresented: mergedGroupDetailBinding) {
+                    mergedGroupDetail
+                }
                 .navigationDestination(isPresented: $routes.isUpdatesPagePushed) {
                     FavoriteUpdatesPage(
                         updateMonitor: updateMonitor,
@@ -95,7 +98,7 @@ struct LocalFavoritesOrganizationView: View {
                                 organizer.transientMessage = L10n.string("favorites.updates.event_target_missing")
                                 return
                             }
-                            await onOpen(item, .resume)
+                            await onOpen(item, .resume, .boardDefault)
                         }
                     )
                     .toolbar(selection.isSelectionMode ? .hidden : .automatic, for: .tabBar)
@@ -219,6 +222,67 @@ struct LocalFavoritesOrganizationView: View {
             }
             .accessibilityLabel(L10n.string("common.more"))
         }
+    }
+
+    // MARK: - Merged smart-comic group detail
+
+    /// A merged card's "查看归档收藏" action pushes this detail page, mirroring
+    /// `collectionDetailBinding` exactly — same reasoning about reading
+    /// `organizer.selectedMergedGroupCleanBookName` directly (not a locally
+    /// captured value) so an interactive edge-swipe-back gesture doesn't
+    /// desync from the organizer's own navigation state mid-drag.
+    private var mergedGroupDetailBinding: Binding<Bool> {
+        Binding(
+            get: { organizer.selectedMergedGroupCleanBookName != nil },
+            set: { isPresented in
+                if !isPresented {
+                    organizer.closeMergedGroup()
+                }
+            }
+        )
+    }
+
+    /// Lists every individual favorite currently merged into the card that
+    /// was opened — per-item management (delete/move/tag/etc.) happens here
+    /// through the same single-item card UI every other favorite uses, since
+    /// `LocalFavoriteLibraryProjection.cards(in:query:...)`'s
+    /// `memberScopeCleanBookName` scoping deliberately builds each member as
+    /// a genuinely standalone (non-merged) `FavoriteCardProjection`. Mirrors
+    /// `collectionDetail` body-for-body, including reusing
+    /// `isCollectionDetail: true` on `content(...)`/`emptyStateOverlay(...)`
+    /// — that flag only affects the category tab bar and empty-state
+    /// copy/icon, both of which read fine for this page too.
+    private var mergedGroupDetail: some View {
+        content(derived: organizer.derived, isCollectionDetail: true)
+            .overlay { emptyStateOverlay(derived: organizer.derived, isCollectionDetail: true) }
+            .searchable(
+                text: $organizer.filter.searchText,
+                prompt: L10n.string("favorites.search.placeholder")
+            )
+            .navigationTitle(
+                selection.isSelectionMode
+                    ? L10n.string("favorites.selected_count", selection.selectedEntryCount)
+                    : (organizer.selectedMergedGroupCleanBookName ?? "")
+            )
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                if selection.isSelectionMode {
+                    selectionToolbarContent(showsBackButton: true)
+                }
+            }
+            .toolbar(selection.isSelectionMode ? .hidden : .automatic, for: .tabBar)
+            .safeAreaInset(edge: .bottom) {
+                if selection.isSelectionMode {
+                    LocalFavoriteSelectionActionBar(
+                        organizer: organizer,
+                        selection: selection,
+                        routes: routes
+                    )
+                }
+            }
+            .forumTransientMessage(organizer.transientMessage) {
+                organizer.transientMessage = nil
+            }
     }
 
     // MARK: - Content
@@ -498,7 +562,7 @@ struct LocalFavoritesOrganizationView: View {
         switch routes.dialog {
         case .dissolveCollection, .dissolveSelectedCollections:
             Text(L10n.string("favorites.dissolve_collection"))
-        case .deleteItem, .deleteMergedGroup:
+        case .deleteItem:
             Text(L10n.string("favorites.delete_favorite"))
         case .deleteSelection:
             Text(L10n.string("favorites.delete_selection"))
@@ -524,11 +588,6 @@ struct LocalFavoritesOrganizationView: View {
             }
             Button(L10n.string("favorites.delete_scope.everywhere"), role: .destructive) {
                 Task { await organizer.deleteItem(item, scope: .everywhere) }
-            }
-        case let .deleteMergedGroup(members):
-            Button(L10n.string("common.cancel"), role: .cancel) {}
-            Button(L10n.string("favorites.delete_merged_group_confirm"), role: .destructive) {
-                Task { await organizer.deleteMergedGroup(members) }
             }
         case .deleteSelection:
             Button(L10n.string("common.cancel"), role: .cancel) {}
@@ -559,12 +618,6 @@ struct LocalFavoritesOrganizationView: View {
             } else {
                 Text(L10n.string("favorites.delete_favorite_message", item.resolvedDisplayTitle))
             }
-        case let .deleteMergedGroup(members):
-            Text(L10n.string(
-                "favorites.delete_merged_group_message",
-                members.count,
-                members.map(\.resolvedDisplayTitle).joined(separator: "\n")
-            ))
         case .deleteSelection:
             Text(deleteSelectionMessage)
         case .dissolveSelectedCollections:

@@ -235,6 +235,147 @@ final class FavoriteRemoteSyncSessionTests: XCTestCase {
         XCTAssertEqual(savedItem?.remoteMapping?.yamiboFavoriteID, "981")
     }
 
+    /// Regression test for the mode-off title path: `FavoriteRemoteSyncSession
+    /// .probeResult`'s combined `.manga`/`.mangaDirect` case must use the
+    /// post's own title verbatim, never run through `MangaTitleCleaner
+    /// .cleanBookName`, regardless of whether the board's Smart Comic Mode is
+    /// on or off (both mode states store the raw title identically now — see
+    /// that combined case's own doc comment for why). This test pins the
+    /// mode-off path specifically (fid 46, off by `SmartComicModeSettings`'s
+    /// own default, so the resolver classifies this thread as `.mangaDirect`)
+    /// — see `testStartKeepsRawTitleVerbatimForMangaModeOnRoute` below for the
+    /// mode-on (`.manga`) sibling. The raw title below has a bracketed tag
+    /// prefix and a chapter-number suffix — both stripped by `cleanBookName`
+    /// — so a regression that reintroduces the cleaner on this path would
+    /// make the final assertion fail.
+    func testStartKeepsRawTitleVerbatimForMangaDirectRoute() async throws {
+        defer { FavoriteSyncWiringTestURLProtocol.reset() }
+        let suiteName = YamiboTestDefaults.suiteName(prefix: "local-favorites-sync-mangaDirect-title")
+        let defaults = try YamiboTestDefaults.make(suiteName: suiteName)
+        let libraryStore = FavoriteLibraryStore(defaults: defaults, key: "local-favorites")
+        let runStore = FavoriteSyncRunStore(defaults: defaults, key: "sync-runs")
+
+        var document = try await libraryStore.load()
+        let targetCategory = document.createCategory(name: "远端")
+        try await libraryStore.save(document)
+
+        // fid 46 is off by `SmartComicModeSettings`'s own default — left
+        // untouched here so the resolver classifies this manga-board thread
+        // as `.mangaDirect`, not `.manga`.
+        let rawTitle = "【连载】测试漫画 第3话"
+        FavoriteSyncWiringTestURLProtocol.newChapterTID = "982"
+        FavoriteSyncWiringTestURLProtocol.newChapterTitle = rawTitle
+        FavoriteSyncWiringTestURLProtocol.remoteFavoriteID = "982"
+        FavoriteSyncWiringTestURLProtocol.forumID = "46"
+        FavoriteSyncWiringTestURLProtocol.forumName = "漫画区46"
+
+        let urlSessionConfiguration = URLSessionConfiguration.ephemeral
+        urlSessionConfiguration.protocolClasses = [FavoriteSyncWiringTestURLProtocol.self]
+        let mockedURLSession = URLSession(configuration: urlSessionConfiguration)
+        let forumCacheStore = ForumCacheStore(
+            baseDirectory: FileManager.default.temporaryDirectory
+                .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        )
+        let resolverSettingsStore = SettingsStore(defaults: defaults, key: "resolver-settings")
+
+        let session = FavoriteRemoteSyncSession(
+            libraryStore: libraryStore,
+            runStore: runStore,
+            contentCoverStore: ContentCoverStore(defaults: defaults, key: "content-covers"),
+            makeFavoriteRepository: { FavoriteRepository(client: YamiboClient(session: mockedURLSession)) },
+            makeForumThreadReaderRepository: {
+                ForumThreadReaderRepository(client: YamiboClient(session: mockedURLSession), cacheStore: forumCacheStore)
+            },
+            makeThreadRouteResolver: {
+                YamiboThreadRouteResolver(client: YamiboClient(session: mockedURLSession), settingsStore: resolverSettingsStore)
+            }
+            // No `runnerOverride` — this must run the real `makeEngineRunner()`
+            // so the genuine `FavoriteRemoteSyncSession.probeResult` (not a
+            // test double) is what computes the imported title.
+        )
+        await session.load()
+
+        _ = await session.start(targetCategoryID: targetCategory.id)
+        try await waitForStatus(.completed, in: session)
+
+        XCTAssertNil(session.errorMessage)
+        let savedItem = try await libraryStore.load().items.first {
+            $0.target == FavoriteItemTarget(kind: .mangaThread, threadID: "982")
+        }
+        XCTAssertEqual(savedItem?.title, rawTitle)
+    }
+
+    /// The actual regression test for the mode-on title bug fixed alongside
+    /// `testStartKeepsRawTitleVerbatimForMangaDirectRoute` above:
+    /// `FavoriteRemoteSyncSession.probeResult`'s `.manga` case used to run the
+    /// post's title through `MangaTitleCleaner.cleanBookName` before storing
+    /// it, destroying the ability to tell a manga's individually-synced
+    /// chapters apart on the "查看归档收藏" archive detail page. No prior test
+    /// covered the `.manga` (mode-on) title-storage behavior at all — this
+    /// mirrors the sibling test's structure/fixtures exactly, but with fid
+    /// "30" (中文百合漫画区, Smart Comic Mode on by `SmartComicModeSettings`'s
+    /// own default) so the resolver classifies this manga-board thread as
+    /// `.manga`, not `.mangaDirect`. The raw title below has the same
+    /// bracketed tag prefix and chapter-number suffix that `cleanBookName`
+    /// would strip, so a regression that reintroduces the cleaner on this
+    /// path would make the final assertion fail.
+    func testStartKeepsRawTitleVerbatimForMangaModeOnRoute() async throws {
+        defer { FavoriteSyncWiringTestURLProtocol.reset() }
+        let suiteName = YamiboTestDefaults.suiteName(prefix: "local-favorites-sync-manga-modeon-title")
+        let defaults = try YamiboTestDefaults.make(suiteName: suiteName)
+        let libraryStore = FavoriteLibraryStore(defaults: defaults, key: "local-favorites")
+        let runStore = FavoriteSyncRunStore(defaults: defaults, key: "sync-runs")
+
+        var document = try await libraryStore.load()
+        let targetCategory = document.createCategory(name: "远端")
+        try await libraryStore.save(document)
+
+        // fid 30 is on by `SmartComicModeSettings`'s own default — left
+        // untouched here so the resolver classifies this manga-board thread
+        // as `.manga`, not `.mangaDirect`.
+        let rawTitle = "【连载】测试漫画 第4话"
+        FavoriteSyncWiringTestURLProtocol.newChapterTID = "983"
+        FavoriteSyncWiringTestURLProtocol.newChapterTitle = rawTitle
+        FavoriteSyncWiringTestURLProtocol.remoteFavoriteID = "983"
+        FavoriteSyncWiringTestURLProtocol.forumID = "30"
+        FavoriteSyncWiringTestURLProtocol.forumName = "中文百合漫画区"
+
+        let urlSessionConfiguration = URLSessionConfiguration.ephemeral
+        urlSessionConfiguration.protocolClasses = [FavoriteSyncWiringTestURLProtocol.self]
+        let mockedURLSession = URLSession(configuration: urlSessionConfiguration)
+        let forumCacheStore = ForumCacheStore(
+            baseDirectory: FileManager.default.temporaryDirectory
+                .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        )
+        let resolverSettingsStore = SettingsStore(defaults: defaults, key: "resolver-settings")
+
+        let session = FavoriteRemoteSyncSession(
+            libraryStore: libraryStore,
+            runStore: runStore,
+            contentCoverStore: ContentCoverStore(defaults: defaults, key: "content-covers"),
+            makeFavoriteRepository: { FavoriteRepository(client: YamiboClient(session: mockedURLSession)) },
+            makeForumThreadReaderRepository: {
+                ForumThreadReaderRepository(client: YamiboClient(session: mockedURLSession), cacheStore: forumCacheStore)
+            },
+            makeThreadRouteResolver: {
+                YamiboThreadRouteResolver(client: YamiboClient(session: mockedURLSession), settingsStore: resolverSettingsStore)
+            }
+            // No `runnerOverride` — this must run the real `makeEngineRunner()`
+            // so the genuine `FavoriteRemoteSyncSession.probeResult` (not a
+            // test double) is what computes the imported title.
+        )
+        await session.load()
+
+        _ = await session.start(targetCategoryID: targetCategory.id)
+        try await waitForStatus(.completed, in: session)
+
+        XCTAssertNil(session.errorMessage)
+        let savedItem = try await libraryStore.load().items.first {
+            $0.target == FavoriteItemTarget(kind: .mangaThread, threadID: "983")
+        }
+        XCTAssertEqual(savedItem?.title, rawTitle)
+    }
+
     private func waitForStatus(
         _ status: FavoriteRemoteSyncTaskStatus,
         in session: FavoriteRemoteSyncSession
