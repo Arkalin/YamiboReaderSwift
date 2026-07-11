@@ -72,8 +72,20 @@ enum LocalFavoriteLibraryDerivation {
         var selectedCollectionID: String?
         var filter: LocalFavoriteFilterState
         var readingProgress: [ReadingProgressRecord]
-        var contentCoverURLsByTargetID: [String: URL]
-        var textCoverForcedTargetIDs: Set<String>
+        /// Resolved cover URLs for every row a visible card can display,
+        /// keyed by the SAME `ContentCoverKey` each card's own
+        /// `contentCoverKey` resolves: per-favorite `.thread(tid:)` entries
+        /// plus `.smartManga(cleanBookName:)` entries for resolved
+        /// directories (smart-comic-mode decision #13/#16). One keyspace so
+        /// a card's display lookup and its cover-action writes
+        /// (`FavoriteLibraryOrganizer.toggleTextCover`) can never disagree
+        /// about which row the card means.
+        var coverURLsByKey: [ContentCoverKey: URL]
+        /// Keys whose stored cover has `textCoverForced` set — same keyspace
+        /// as `coverURLsByKey` (a forced key also resolves no URL there; the
+        /// flag is surfaced separately so the card's context menu can offer
+        /// "使用图片封面" instead of "使用文字封面").
+        var textCoverForcedKeys: Set<ContentCoverKey>
         /// tid → resolved `MangaDirectory`, computed once at
         /// `FavoriteLibraryOrganizer.load()`/`reload()` time (smart-comic-mode
         /// design doc's performance constraint #2) — never recomputed here.
@@ -82,12 +94,6 @@ enum LocalFavoriteLibraryDerivation {
         /// time as `mangaDirectoriesByTID`, so grouping and the settings it
         /// was computed against never disagree mid-derivation.
         var smartComicModeSettings: SmartComicModeSettings = SmartComicModeSettings()
-        /// `.smartManga(cleanBookName:)` covers, keyed by `cleanBookName` —
-        /// the cover source for any card with a resolved `mangaDirectory`
-        /// (merged or a lone resolved favorite alike), as opposed to
-        /// `contentCoverURLsByTargetID`'s per-thread `.thread(tid:)` covers
-        /// for standalone cards (smart-comic-mode decision #13/#16).
-        var smartMangaCoverURLsByCleanBookName: [String: URL] = [:]
         /// Non-nil only while a merged smart-comic card's "查看归档收藏" detail
         /// page is open — threaded straight into the `cards` query as
         /// `LocalFavoriteLibraryQuery.memberScopeCleanBookName`. Deliberately
@@ -181,16 +187,19 @@ enum LocalFavoriteLibraryDerivation {
         )
         .map { card in
             var card = card
-            // A resolved-directory card (merged or a lone favorite that
-            // simply hasn't been joined by a sibling yet) shows the shared
-            // `.smartManga` cover, not the representative member's own
-            // per-thread cover — smart-comic-mode decision #13/#16.
-            if let mangaDirectory = card.mangaDirectory {
-                card.coverURL = inputs.smartMangaCoverURLsByCleanBookName[mangaDirectory.cleanBookName]
-            } else {
-                card.coverURL = inputs.contentCoverURLsByTargetID[card.item.target.id]
+            // `contentCoverKey` picks the row this card actually displays —
+            // the directory's shared `.smartManga` key for a resolved-
+            // directory card (merged or a lone favorite that simply hasn't
+            // been joined by a sibling yet, smart-comic-mode decision
+            // #13/#16), the favorite's own `.thread` key otherwise. Reading
+            // the URL and the text-cover flag through that same key keeps
+            // them consistent with each other and with
+            // `FavoriteLibraryOrganizer.toggleTextCover`, which writes
+            // through this exact property.
+            if let key = card.contentCoverKey {
+                card.coverURL = inputs.coverURLsByKey[key]
+                card.textCoverForced = inputs.textCoverForcedKeys.contains(key)
             }
-            card.textCoverForced = inputs.textCoverForcedTargetIDs.contains(card.item.target.id)
             return card
         }
     }
@@ -291,7 +300,7 @@ enum LocalFavoriteLibraryDerivation {
                 guard isModeOnMangaThread else {
                     candidates.append(CollectionPreviewCandidate(
                         sortDate: item.updatedAt,
-                        coverURL: inputs.contentCoverURLsByTargetID[item.target.id],
+                        coverURL: ContentCoverKey(target: item.target).flatMap { inputs.coverURLsByKey[$0] },
                         title: item.resolvedDisplayTitle
                     ))
                     continue
@@ -316,7 +325,7 @@ enum LocalFavoriteLibraryDerivation {
                     // locally-cleaned title, its own per-thread cover.
                     candidates.append(CollectionPreviewCandidate(
                         sortDate: item.updatedAt,
-                        coverURL: inputs.contentCoverURLsByTargetID[item.target.id],
+                        coverURL: ContentCoverKey(target: item.target).flatMap { inputs.coverURLsByKey[$0] },
                         title: effectiveTitle
                     ))
                     continue
@@ -335,7 +344,7 @@ enum LocalFavoriteLibraryDerivation {
                 // `updatedAt` since that's what this function sorts by.
                 let groupMembers = mangaThreadItemsByEffectiveTitle[effectiveTitle] ?? [item]
                 let sortDate = groupMembers.map(\.updatedAt).max() ?? item.updatedAt
-                let coverURL = inputs.smartMangaCoverURLsByCleanBookName[mangaDirectory.cleanBookName]
+                let coverURL = inputs.coverURLsByKey[.smartManga(cleanBookName: mangaDirectory.cleanBookName)]
                 candidates.append(CollectionPreviewCandidate(sortDate: sortDate, coverURL: coverURL, title: effectiveTitle))
             }
 

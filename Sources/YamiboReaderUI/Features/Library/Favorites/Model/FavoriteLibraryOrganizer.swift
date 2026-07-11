@@ -91,8 +91,16 @@ final class FavoriteLibraryOrganizer: ObservableObject {
     private let remoteDeleter: YamiboRemoteFavoriteDeleter
 
     private var readingProgress: [ReadingProgressRecord] = []
-    private var contentCoverURLsByTargetID: [String: URL] = [:]
-    private var textCoverForcedTargetIDs: Set<String> = []
+    /// Resolved cover URLs and text-cover-forced flags for everything the
+    /// cards can display, keyed by the SAME `ContentCoverKey` each card's
+    /// `contentCoverKey` resolves — per-favorite `.thread(tid:)` entries
+    /// plus `.smartManga(cleanBookName:)` entries for resolved directories
+    /// (decision #13/#16). A single keyspace shared with `toggleTextCover`'s
+    /// write path, so the row a card displays and the row its cover actions
+    /// touch are the same by construction (two parallel string-keyed maps
+    /// here once let a smart card's text-cover toggle write a `.thread` row
+    /// its own display never read).
+    private var coverLookup = ContentCoverLookup()
     /// tid → resolved `MangaDirectory`, for virtual favorites grouping
     /// (smart-comic-mode decision #3/#5). Populated only at `load()`/
     /// `reload()` via one batched `MangaDirectoryStore.directories
@@ -103,9 +111,6 @@ final class FavoriteLibraryOrganizer: ObservableObject {
     /// load/reload as `mangaDirectoriesByTID`, so the two are always
     /// consistent with each other for a given derivation.
     private var smartComicModeSettings = SmartComicModeSettings()
-    /// `.smartManga(cleanBookName:)` covers for every currently-resolved
-    /// directory, keyed by `cleanBookName` (decision #13/#16).
-    private var smartMangaCoverURLsByCleanBookName: [String: URL] = [:]
     private var libraryUpdatesTask: Task<Void, Never>?
     private var progressUpdatesTask: Task<Void, Never>?
     private var coverUpdatesTask: Task<Void, Never>?
@@ -295,13 +300,13 @@ final class FavoriteLibraryOrganizer: ObservableObject {
             errorMessage = error.localizedDescription
             return
         }
-        let coverLookup = await loadContentCovers(for: loadedDocument.items)
-        contentCoverURLsByTargetID = coverLookup.urlsByTargetID
-        textCoverForcedTargetIDs = coverLookup.forcedTargetIDs
+        let threadCovers = await loadContentCovers(for: loadedDocument.items)
         let settings = await settingsStore.load()
         smartComicModeSettings = settings.smartComicMode
         mangaDirectoriesByTID = await resolveMangaDirectories(for: loadedDocument.items, smartComicModeSettings: smartComicModeSettings)
-        smartMangaCoverURLsByCleanBookName = await smartMangaCoverURLs(for: Array(Set(mangaDirectoriesByTID.values)))
+        coverLookup = threadCovers.merging(
+            await smartMangaCoverLookup(for: Array(Set(mangaDirectoriesByTID.values)))
+        )
         display = FavoriteLibraryDisplayState(
             layoutMode: settings.favorites.layoutMode,
             showsCategoryCounts: settings.favorites.showsCategoryCounts
@@ -337,9 +342,7 @@ final class FavoriteLibraryOrganizer: ObservableObject {
             // let the next change notification retry.
             return
         }
-        let coverLookup = await loadContentCovers(for: loadedDocument.items)
-        contentCoverURLsByTargetID = coverLookup.urlsByTargetID
-        textCoverForcedTargetIDs = coverLookup.forcedTargetIDs
+        let threadCovers = await loadContentCovers(for: loadedDocument.items)
         // Only the Smart Comic Mode snapshot is refreshed here — unlike
         // `load()`, `reload()` deliberately never re-applies
         // `settings.favorites` (sort order/layout/etc.) so a background
@@ -349,7 +352,9 @@ final class FavoriteLibraryOrganizer: ObservableObject {
         let settings = await settingsStore.load()
         smartComicModeSettings = settings.smartComicMode
         mangaDirectoriesByTID = await resolveMangaDirectories(for: loadedDocument.items, smartComicModeSettings: smartComicModeSettings)
-        smartMangaCoverURLsByCleanBookName = await smartMangaCoverURLs(for: Array(Set(mangaDirectoriesByTID.values)))
+        coverLookup = threadCovers.merging(
+            await smartMangaCoverLookup(for: Array(Set(mangaDirectoriesByTID.values)))
+        )
         document = loadedDocument
         if !loadedDocument.categories.contains(where: { $0.id == selectedCategoryID }) {
             selectedCategoryID = loadedDocument.defaultCategory.id
@@ -373,16 +378,16 @@ final class FavoriteLibraryOrganizer: ObservableObject {
     }
 
     private func reloadContentCovers() async {
-        let coverLookup = await loadContentCovers(for: document.items)
-        contentCoverURLsByTargetID = coverLookup.urlsByTargetID
-        textCoverForcedTargetIDs = coverLookup.forcedTargetIDs
-        smartMangaCoverURLsByCleanBookName = await smartMangaCoverURLs(for: Array(Set(mangaDirectoriesByTID.values)))
+        let threadCovers = await loadContentCovers(for: document.items)
+        coverLookup = threadCovers.merging(
+            await smartMangaCoverLookup(for: Array(Set(mangaDirectoriesByTID.values)))
+        )
         refreshDerivedState()
     }
 
     /// Re-derives only the Smart Comic Mode-dependent slice of state
-    /// (`smartComicModeSettings`/`mangaDirectoriesByTID`/
-    /// `smartMangaCoverURLsByCleanBookName`) in response to *any*
+    /// (`smartComicModeSettings`/`mangaDirectoriesByTID`/`coverLookup`'s
+    /// `.smartManga` slice) in response to *any*
     /// `SettingsStore.didChangeNotification` — mirroring `reload()`'s
     /// deliberately narrower approach (see the comment at `reload()`):
     /// this must never re-apply `settings.favorites` (sort order/layout/
@@ -397,13 +402,15 @@ final class FavoriteLibraryOrganizer: ObservableObject {
         guard settings.smartComicMode != smartComicModeSettings else { return }
         smartComicModeSettings = settings.smartComicMode
         mangaDirectoriesByTID = await resolveMangaDirectories(for: document.items, smartComicModeSettings: smartComicModeSettings)
-        smartMangaCoverURLsByCleanBookName = await smartMangaCoverURLs(for: Array(Set(mangaDirectoriesByTID.values)))
+        coverLookup.replaceSmartMangaSlice(
+            with: await smartMangaCoverLookup(for: Array(Set(mangaDirectoriesByTID.values)))
+        )
         refreshDerivedState()
         scheduleMangaCoverBackfill(for: document.items)
     }
 
     /// Re-derives the manga-directory-dependent slice of state
-    /// (`mangaDirectoriesByTID`/`smartMangaCoverURLsByCleanBookName`) in
+    /// (`mangaDirectoriesByTID`/`coverLookup`'s `.smartManga` slice) in
     /// response to `MangaDirectoryStore.didChangeNotification` -- e.g.
     /// resolving a previously-unresolved manga favorite's directory for the
     /// first time (`saveDirectory`), or renaming a directory from the manga
@@ -423,7 +430,9 @@ final class FavoriteLibraryOrganizer: ObservableObject {
     /// rename, until some other reload happened to refresh it.
     private func reloadMangaDirectories() async {
         mangaDirectoriesByTID = await resolveMangaDirectories(for: document.items, smartComicModeSettings: smartComicModeSettings)
-        smartMangaCoverURLsByCleanBookName = await smartMangaCoverURLs(for: Array(Set(mangaDirectoriesByTID.values)))
+        coverLookup.replaceSmartMangaSlice(
+            with: await smartMangaCoverLookup(for: Array(Set(mangaDirectoriesByTID.values)))
+        )
         readingProgress = await readingProgressStore.loadAll()
         refreshDerivedState()
     }
@@ -1037,11 +1046,10 @@ final class FavoriteLibraryOrganizer: ObservableObject {
                 selectedCollectionID: selectedCollectionID,
                 filter: filter,
                 readingProgress: readingProgress,
-                contentCoverURLsByTargetID: contentCoverURLsByTargetID,
-                textCoverForcedTargetIDs: textCoverForcedTargetIDs,
+                coverURLsByKey: coverLookup.urlsByKey,
+                textCoverForcedKeys: coverLookup.forcedKeys,
                 mangaDirectoriesByTID: mangaDirectoriesByTID,
                 smartComicModeSettings: smartComicModeSettings,
-                smartMangaCoverURLsByCleanBookName: smartMangaCoverURLsByCleanBookName,
                 memberScopeCleanBookName: selectedMergedGroupCleanBookName
             )
         )
@@ -1061,11 +1069,10 @@ final class FavoriteLibraryOrganizer: ObservableObject {
                     selectedCollectionID: nil,
                     filter: filter,
                     readingProgress: readingProgress,
-                    contentCoverURLsByTargetID: contentCoverURLsByTargetID,
-                    textCoverForcedTargetIDs: textCoverForcedTargetIDs,
+                    coverURLsByKey: coverLookup.urlsByKey,
+                    textCoverForcedKeys: coverLookup.forcedKeys,
                     mangaDirectoriesByTID: mangaDirectoriesByTID,
-                    smartComicModeSettings: smartComicModeSettings,
-                    smartMangaCoverURLsByCleanBookName: smartMangaCoverURLsByCleanBookName
+                    smartComicModeSettings: smartComicModeSettings
                     // `memberScopeCleanBookName` intentionally omitted (nil
                     // default): `rootDerived` must never narrow to this scope.
                 )
@@ -1197,11 +1204,37 @@ final class FavoriteLibraryOrganizer: ObservableObject {
 
     // MARK: - Covers
 
-    private struct ContentCoverLookup {
-        var urlsByTargetID: [String: URL] = [:]
-        var forcedTargetIDs: Set<String> = []
+    /// Cover state for card display, keyed by the same `ContentCoverKey`
+    /// each card's `contentCoverKey` resolves. `.thread` and `.smartManga`
+    /// keys share the one keyspace; the two loaders below each fill their
+    /// own disjoint slice of it.
+    struct ContentCoverLookup {
+        var urlsByKey: [ContentCoverKey: URL] = [:]
+        var forcedKeys: Set<ContentCoverKey> = []
+
+        /// The two slices' key spaces are disjoint (`.thread` vs
+        /// `.smartManga` target types), so merging is purely additive.
+        func merging(_ other: ContentCoverLookup) -> ContentCoverLookup {
+            ContentCoverLookup(
+                urlsByKey: urlsByKey.merging(other.urlsByKey) { _, new in new },
+                forcedKeys: forcedKeys.union(other.forcedKeys)
+            )
+        }
+
+        /// Replaces only the `.smartManga` entries, leaving `.thread`
+        /// entries untouched — for callers that re-resolved directories or
+        /// settings without re-reading every favorite's own thread cover.
+        mutating func replaceSmartMangaSlice(with smart: ContentCoverLookup) {
+            urlsByKey = urlsByKey.filter { $0.key.targetType != .smartManga }
+                .merging(smart.urlsByKey) { _, new in new }
+            forcedKeys = forcedKeys.filter { $0.targetType != .smartManga }
+                .union(smart.forcedKeys)
+        }
     }
 
+    /// The per-favorite `.thread(tid:)` cover slice. `.smartManga` covers
+    /// for resolved directories come from `smartMangaCoverLookup(for:)` and
+    /// merge into the same keyspace.
     private func loadContentCovers(for items: [FavoriteItem]) async -> ContentCoverLookup {
         var lookup = ContentCoverLookup()
         for item in items {
@@ -1210,56 +1243,69 @@ final class FavoriteLibraryOrganizer: ObservableObject {
                 continue
             }
             if let resolvedURL = cover.resolvedURL {
-                lookup.urlsByTargetID[item.target.id] = resolvedURL
+                lookup.urlsByKey[key] = resolvedURL
             }
             if cover.textCoverForced {
-                lookup.forcedTargetIDs.insert(item.target.id)
+                lookup.forcedKeys.insert(key)
             }
         }
         return lookup
     }
 
-    /// Toggles whether the target shows the text placeholder cover instead of
+    /// Toggles whether the card shows the text placeholder cover instead of
     /// its resolved automatic/manual cover (card context-menu action).
+    /// Takes the whole card, not just `card.item`, because the key to write
+    /// is the key the card's cover actually reads (`card.contentCoverKey`):
+    /// a resolved-directory smart card displays the directory's shared
+    /// `.smartManga` cover, while the same `FavoriteItem` surfaced as a
+    /// "查看归档收藏" member card displays its own `.thread` cover.
     @discardableResult
-    func toggleTextCover(for item: FavoriteItem) async -> Bool {
-        guard let key = ContentCoverKey(target: item.target) else { return false }
-        let forced = !textCoverForcedTargetIDs.contains(item.target.id)
+    func toggleTextCover(for card: FavoriteCardProjection) async -> Bool {
+        guard let key = card.contentCoverKey else { return false }
+        let forced = !coverLookup.forcedKeys.contains(key)
         do {
             try await contentCoverStore.setTextCoverForced(forced, for: key)
         } catch {
-            YamiboLog.library.error("Failed to toggle text cover for \(item.id): \(error.localizedDescription)")
+            YamiboLog.library.error("Failed to toggle text cover for \(card.item.id): \(error.localizedDescription)")
             errorMessage = error.localizedDescription
             return false
         }
         let cover = await contentCoverStore.cover(for: key)
         if cover?.textCoverForced == true {
-            textCoverForcedTargetIDs.insert(item.target.id)
+            coverLookup.forcedKeys.insert(key)
         } else {
-            textCoverForcedTargetIDs.remove(item.target.id)
+            coverLookup.forcedKeys.remove(key)
         }
-        contentCoverURLsByTargetID[item.target.id] = cover?.resolvedURL
+        coverLookup.urlsByKey[key] = cover?.resolvedURL
         refreshDerivedState()
+        // Un-forcing a smart card whose `.smartManga` cover never resolved
+        // leaves it imageless again — give the backfill a chance right away
+        // instead of waiting for the next unrelated reload. (A no-op in
+        // every other case: forced keys and covered groups are filtered out
+        // of the backfill's own missing check.)
+        scheduleMangaCoverBackfill(for: document.items)
         transientMessage = forced
             ? L10n.string("cover.use_text_cover_success_message")
             : L10n.string("cover.use_image_cover_success_message")
         return true
     }
 
-    /// `.smartManga(cleanBookName:)` covers for every currently-resolved
-    /// directory (decision #13/#16) — the cover source for any card with a
-    /// resolved `mangaDirectory`, merged or not.
-    private func smartMangaCoverURLs(for directories: [MangaDirectory]) async -> [String: URL] {
-        var urlsByCleanBookName: [String: URL] = [:]
+    /// The `.smartManga(cleanBookName:)` cover slice for every currently-
+    /// resolved directory (decision #13/#16) — the cover source for any card
+    /// with a resolved `mangaDirectory`, merged or not.
+    private func smartMangaCoverLookup(for directories: [MangaDirectory]) async -> ContentCoverLookup {
+        var lookup = ContentCoverLookup()
         for directory in directories {
             let key = ContentCoverKey.smartManga(cleanBookName: directory.cleanBookName)
-            guard let cover = await contentCoverStore.cover(for: key),
-                  let resolvedURL = cover.resolvedURL else {
-                continue
+            guard let cover = await contentCoverStore.cover(for: key) else { continue }
+            if let resolvedURL = cover.resolvedURL {
+                lookup.urlsByKey[key] = resolvedURL
             }
-            urlsByCleanBookName[directory.cleanBookName] = resolvedURL
+            if cover.textCoverForced {
+                lookup.forcedKeys.insert(key)
+            }
         }
-        return urlsByCleanBookName
+        return lookup
     }
 
     /// Resolves missing `.smartManga` covers for computed manga-directory
@@ -1285,7 +1331,12 @@ final class FavoriteLibraryOrganizer: ObservableObject {
         )
         let missing = groups.filter { group in
             let key = ContentCoverKey.smartManga(cleanBookName: group.directory.cleanBookName)
-            return smartMangaCoverURLsByCleanBookName[group.directory.cleanBookName] == nil
+            return coverLookup.urlsByKey[key] == nil
+                // A text-cover-forced group resolves no URL above, but it is
+                // a deliberate "no image", not a missing cover — resolving
+                // an automatic URL for it would be wasted network every
+                // session (the forced flag suppresses whatever resolves).
+                && !coverLookup.forcedKeys.contains(key)
                 && !attemptedMangaCoverTargetIDs.contains(key.targetID)
         }
         guard !missing.isEmpty else { return }
@@ -1303,7 +1354,12 @@ final class FavoriteLibraryOrganizer: ObservableObject {
             for group in missing {
                 if Task.isCancelled { return }
                 let key = ContentCoverKey.smartManga(cleanBookName: group.directory.cleanBookName)
-                if let existing = await contentCoverStore.cover(for: key), existing.resolvedURL != nil {
+                // `resolvedURL` alone is not enough here: a text-cover-forced
+                // row resolves nil even when a URL is stored, and overwriting
+                // its automatic URL for a cover the flag suppresses anyway
+                // would be wasted work.
+                if let existing = await contentCoverStore.cover(for: key),
+                   existing.textCoverForced || existing.resolvedURL != nil {
                     continue
                 }
                 guard let firstChapter = group.directory.chapters.first else { continue }
