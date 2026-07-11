@@ -285,6 +285,83 @@ final class LocalFavoriteOpenTargetResolverTests: XCTestCase {
         XCTAssertFalse(context.isSmartModeEnabled)
     }
 
+    // A `.mangaThread` favorite whose board has NO configuration entry at
+    // all (fid "88" — not in the factory default, unlike the mode-off manga
+    // board above) reports mode-off under the one rule (pluggable-reader-
+    // config decision #4), so resume stays on the single-thread track: its
+    // own `.mangaThread` progress record, never the directory-level one,
+    // even when a resolved directory with fresher progress covers the tid.
+    func testMangaThreadOpenTargetOnUnconfiguredBoardResumesViaOwnThreadProgressOnly() async throws {
+        let suiteName = YamiboTestDefaults.suiteName(prefix: "local-favorites-open-target-manga-unconfigured")
+        _ = try YamiboTestDefaults.make(suiteName: suiteName)
+        let localFavoriteLibraryStore = FavoriteLibraryStore(
+            defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
+            key: "local-favorites"
+        )
+        let readingProgressStore = ReadingProgressStore(
+            defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
+            key: "reading-progress"
+        )
+        let settingsStore = SettingsStore(
+            defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
+            key: "settings"
+        )
+        let mangaDirectoryStore = try makeMangaDirectoryStore(suiteName: suiteName)
+        let directory = MangaDirectory(
+            cleanBookName: "未配置板块漫画",
+            strategy: .tag,
+            sourceKey: "未配置板块漫画",
+            chapters: [
+                MangaChapter(tid: "5001", rawTitle: "第一话", chapterNumber: 1, view: 1),
+                MangaChapter(tid: "5002", rawTitle: "第二话", chapterNumber: 2, view: 1)
+            ]
+        )
+        try await mangaDirectoryStore.saveDirectory(directory)
+        // Fresher directory-level record pointing at a different chapter —
+        // must be ignored entirely on the unconfigured board's resume path.
+        _ = try await readingProgressStore.saveMangaTitle(
+            cleanBookName: directory.cleanBookName,
+            chapterThreadID: "5002",
+            chapterTitle: "第二话",
+            pageIndex: 8,
+            mangaID: directory.favoriteIdentity
+        )
+        _ = try await readingProgressStore.saveMangaThread(MangaProgressReadingPosition(
+            chapterThreadID: "5001",
+            chapterTitle: "第一话",
+            pageIndex: 1
+        ))
+
+        var document = FavoriteLibraryDocument()
+        let item = try FavoriteItem(
+            target: .mangaThread(threadID: "5001"),
+            title: "未配置板块漫画 第一话",
+            sourceGroup: .forumBoard(id: "88", label: "未配置板块"),
+            forumID: "88",
+            forumName: "未配置板块",
+            locations: [.category(document.defaultCategory.id)]
+        )
+        document.addItem(item)
+        try await localFavoriteLibraryStore.save(document)
+
+        let resolver = LocalFavoriteOpenTargetResolver(
+            libraryStore: localFavoriteLibraryStore,
+            readingProgressStore: readingProgressStore,
+            mangaDirectoryStore: mangaDirectoryStore,
+            settingsStore: settingsStore
+        )
+        let opened = try await resolver.openTarget(for: item)
+
+        guard case let .mangaReader(context)? = opened else {
+            return XCTFail("Expected a manga reader open target")
+        }
+        XCTAssertEqual(context.originalThreadID, "5001")
+        XCTAssertEqual(context.chapterTID, "5001")
+        XCTAssertEqual(context.initialPage, 1)
+        XCTAssertNil(context.directoryName)
+        XCTAssertFalse(context.isSmartModeEnabled)
+    }
+
     // The "查看归档收藏" archive page opens its members with
     // `mangaScope: .singleThread`: even on a mode-ON board with a resolved
     // directory and a directory-level progress record pointing at a

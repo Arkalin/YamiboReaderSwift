@@ -247,6 +247,97 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
         XCTAssertTrue(organizer.derived.isMangaSourceFilterAvailable)
     }
 
+    /// Pluggable-reader-config decision #1: merged-card grouping is purely
+    /// configuration-driven for ANY board — an arbitrary fid ("99", no
+    /// factory entry) configured `.manga(smartEnabled: true)` merges its
+    /// directory-sharing favorites exactly like the factory smart board, and
+    /// removing that entry again (the settings overview's 移除 action, via a
+    /// bare `settingsStore.save` → `reloadBoardReaderSettings` live refresh)
+    /// dissolves the merged card back into independent ordinary cards with
+    /// the stored favorites themselves untouched.
+    func testArbitraryConfiguredBoardMergesAndEntryRemovalDissolvesWithoutDataLoss() async throws {
+        let suiteName = YamiboTestDefaults.suiteName(prefix: "local-favorites-arbitrary-board-merge")
+        _ = try YamiboTestDefaults.make(suiteName: suiteName)
+        let settingsStore = SettingsStore(
+            defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
+            key: "settings"
+        )
+        let localFavoriteLibraryStore = FavoriteLibraryStore(
+            defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
+            key: "local-favorites"
+        )
+        let mangaDirectoryStore = try makeMangaDirectoryStore(suiteName: suiteName)
+        let directory = MangaDirectory(
+            cleanBookName: "任意板块漫画",
+            strategy: .links,
+            sourceKey: "chapter:990",
+            chapters: [
+                MangaChapter(tid: "990", rawTitle: "第一话", chapterNumber: 1),
+                MangaChapter(tid: "991", rawTitle: "第二话", chapterNumber: 2),
+            ]
+        )
+        try await mangaDirectoryStore.saveDirectory(directory)
+
+        let firstTarget = FavoriteItemTarget(kind: .mangaThread, threadID: "990")
+        let secondTarget = FavoriteItemTarget(kind: .mangaThread, threadID: "991")
+        var document = try await localFavoriteLibraryStore.load()
+        let firstItem = try FavoriteItem(
+            target: firstTarget,
+            title: "任意板块漫画 第一话",
+            forumID: "99",
+            forumName: "任意板块",
+            locations: [.category(document.defaultCategory.id)]
+        )
+        let secondItem = try FavoriteItem(
+            target: secondTarget,
+            title: "任意板块漫画 第二话",
+            forumID: "99",
+            forumName: "任意板块",
+            locations: [.category(document.defaultCategory.id)]
+        )
+        document.addItem(firstItem)
+        document.addItem(secondItem)
+        try await localFavoriteLibraryStore.save(document)
+
+        // Seeded before the organizer exists (no load-modify-save race with
+        // `persistNavigationState()`): fid "99" configured manga + smart on.
+        var seededBoardReader = BoardReaderSettings()
+        seededBoardReader.setEntry(.init(mode: .manga(smartEnabled: true)), forumID: "99")
+        try await settingsStore.save(AppSettings(boardReader: seededBoardReader))
+
+        let organizer = try makeOrganizer(
+            libraryStore: localFavoriteLibraryStore,
+            settingsStore: settingsStore,
+            mangaDirectoryStore: mangaDirectoryStore
+        )
+        await organizer.load()
+        // Let `load()`'s own `persistNavigationState()` background Task
+        // settle before this test's concurrent settings save below.
+        try await Task.sleep(nanoseconds: 100_000_000)
+
+        // Configured arbitrary board merges like any factory smart board.
+        XCTAssertEqual(organizer.derived.cards.count, 1)
+        let mergedCard = try XCTUnwrap(organizer.derived.cards.first { $0.id == firstItem.id })
+        XCTAssertTrue(mergedCard.isMergedGroup)
+        XCTAssertEqual(mergedCard.mergedMembers?.map(\.target), [firstTarget, secondTarget])
+
+        // Remove the entry — exactly what the settings overview's 移除 does.
+        var settings = await settingsStore.load()
+        settings.boardReader.removeEntry(forumID: "99")
+        try await settingsStore.save(settings)
+
+        try await waitForOrganizerCondition {
+            organizer.derived.cards.count == 2
+        }
+        XCTAssertFalse(organizer.derived.cards.contains { $0.isMergedGroup })
+        XCTAssertTrue(organizer.derived.cards.allSatisfy { !$0.isModeOnMangaThread })
+        // Dissolution is purely presentational: both favorites survive in
+        // the stored library, completely unchanged.
+        let storedItems = try await localFavoriteLibraryStore.load().items
+        XCTAssertEqual(Set(storedItems.map(\.id)), [firstItem.id, secondItem.id])
+        XCTAssertEqual(Set(storedItems.map(\.title)), ["任意板块漫画 第一话", "任意板块漫画 第二话"])
+    }
+
     /// The manga reader's directory page can rename a `MangaDirectory` (e.g.
     /// correcting an auto-detected book name) via
     /// `MangaDirectoryStore.renameDirectory(from:to:)`. Before this fix,

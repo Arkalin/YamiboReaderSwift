@@ -1,5 +1,6 @@
 import XCTest
 @testable import YamiboReaderCore
+import YamiboReaderTestSupport
 @testable import YamiboReaderUI
 
 @MainActor
@@ -172,6 +173,139 @@ final class ForumBoardViewModelTests: XCTestCase {
         XCTAssertEqual(model.transientMessage, L10n.string("forum.board.refresh_failed", error.localizedDescription))
     }
 
+    // MARK: - Board reader settings (pluggable-reader-config Phase C)
+
+    /// Visiting a configured board whose loaded page name differs from the
+    /// stored snapshot silently refreshes the snapshot — exactly one settings
+    /// write, mode untouched (PRD decision #2).
+    func testLoadRefreshesBoardNameSnapshotForConfiguredBoardWhenNameChanged() async throws {
+        let settingsStore = try makeBoardSettingsStore(prefix: "forum-board-name-snapshot-refresh")
+        var settings = await settingsStore.load()
+        settings.boardReader.setEntry(
+            .init(mode: .manga(smartEnabled: false), boardName: "旧板块名"),
+            forumID: "5"
+        )
+        try await settingsStore.save(settings)
+
+        let fetched = makeBoardPage(fid: "5", title: "動漫區", page: 1, threadIDs: ["fresh"])
+        let repository = ForumBoardRepositoryStub(cached: nil, fetched: fetched)
+        let model = ForumBoardViewModel(fid: "5", title: nil, repository: repository, settingsStore: settingsStore)
+        let saveCounter = SettingsStoreSaveCounter(changeID: settingsStore.changeID)
+
+        await model.load()
+
+        try await waitForBoardCondition {
+            await settingsStore.load().boardReader.entry(forumID: "5")?.boardName == "動漫區"
+        }
+        let entry = await settingsStore.load().boardReader.entry(forumID: "5")
+        XCTAssertEqual(entry, BoardReaderSettings.Entry(mode: .manga(smartEnabled: false), boardName: "動漫區"))
+        // Exactly one write for the snapshot refresh. Settle briefly first so
+        // a buggy second in-flight write would land and be counted rather
+        // than racing this assertion.
+        try await Task.sleep(nanoseconds: 200_000_000)
+        XCTAssertEqual(saveCounter.count, 1)
+    }
+
+    /// Diff guard: when the stored snapshot already matches the loaded page
+    /// name, a routine visit performs no settings write at all.
+    func testLoadSkipsSnapshotWriteWhenStoredNameAlreadyMatches() async throws {
+        let settingsStore = try makeBoardSettingsStore(prefix: "forum-board-name-snapshot-unchanged")
+        var settings = await settingsStore.load()
+        settings.boardReader.setEntry(.init(mode: .novel, boardName: "動漫區"), forumID: "5")
+        try await settingsStore.save(settings)
+
+        let fetched = makeBoardPage(fid: "5", title: "動漫區", page: 1, threadIDs: ["fresh"])
+        let repository = ForumBoardRepositoryStub(cached: nil, fetched: fetched)
+        let model = ForumBoardViewModel(fid: "5", title: nil, repository: repository, settingsStore: settingsStore)
+        let saveCounter = SettingsStoreSaveCounter(changeID: settingsStore.changeID)
+
+        await model.load()
+        // The refresh runs on an unstructured Task; give a would-be write
+        // ample time to land before asserting none did.
+        try await Task.sleep(nanoseconds: 200_000_000)
+
+        XCTAssertEqual(saveCounter.count, 0)
+        let entry = await settingsStore.load().boardReader.entry(forumID: "5")
+        XCTAssertEqual(entry, BoardReaderSettings.Entry(mode: .novel, boardName: "動漫區"))
+    }
+
+    /// The snapshot refresh only ever refreshes — visiting an unconfigured
+    /// board never creates an entry (and never writes settings).
+    func testLoadDoesNotCreateEntryOrWriteSettingsForUnconfiguredBoard() async throws {
+        let settingsStore = try makeBoardSettingsStore(prefix: "forum-board-name-snapshot-unconfigured")
+
+        let fetched = makeBoardPage(fid: "5", title: "動漫區", page: 1, threadIDs: ["fresh"])
+        let repository = ForumBoardRepositoryStub(cached: nil, fetched: fetched)
+        let model = ForumBoardViewModel(fid: "5", title: nil, repository: repository, settingsStore: settingsStore)
+        let saveCounter = SettingsStoreSaveCounter(changeID: settingsStore.changeID)
+
+        await model.load()
+        try await Task.sleep(nanoseconds: 200_000_000)
+
+        XCTAssertEqual(saveCounter.count, 0)
+        let loaded = await settingsStore.load()
+        XCTAssertNil(loaded.boardReader.entry(forumID: "5"))
+    }
+
+    /// The reader-settings sheet's "普通" selection maps to
+    /// `setBoardReaderMode(nil)`: the persisted entry is removed (no entry =
+    /// plain thread reader, PRD decision #3) and the sheet's optimistic
+    /// `boardReaderEntry` state clears immediately.
+    func testSetBoardReaderModeNilRemovesPersistedEntry() async throws {
+        let settingsStore = try makeBoardSettingsStore(prefix: "forum-board-reader-mode-plain")
+        var settings = await settingsStore.load()
+        settings.boardReader.setEntry(.init(mode: .novel, boardName: "動漫區"), forumID: "5")
+        try await settingsStore.save(settings)
+
+        let repository = ForumBoardRepositoryStub(cached: nil)
+        let model = ForumBoardViewModel(fid: "5", title: nil, repository: repository, settingsStore: settingsStore)
+        await model.refreshBoardReaderEntry()
+        XCTAssertEqual(model.boardReaderEntry, BoardReaderSettings.Entry(mode: .novel, boardName: "動漫區"))
+
+        model.setBoardReaderMode(nil)
+
+        XCTAssertNil(model.boardReaderEntry)
+        try await waitForBoardCondition {
+            await settingsStore.load().boardReader.entry(forumID: "5") == nil
+        }
+        XCTAssertNil(model.boardReaderErrorMessage)
+    }
+
+    /// Persistence path for the sheet's "漫画" selection: saving
+    /// `.manga(smartEnabled: false)` on a previously-unconfigured board
+    /// creates the entry and stamps the loaded page's board name snapshot.
+    /// Note: the smart-off-by-default choice itself (PRD decision #8) lives in
+    /// `ForumBoardReaderSettingsSheet.modeBinding`, a private SwiftUI binding
+    /// this unit test cannot reach — only the resulting save is covered here.
+    func testSetBoardReaderModeMangaPersistsSmartOffEntryWithLoadedBoardNameSnapshot() async throws {
+        let settingsStore = try makeBoardSettingsStore(prefix: "forum-board-reader-mode-manga")
+
+        let fetched = makeBoardPage(fid: "5", title: "動漫區", page: 1, threadIDs: ["fresh"])
+        let repository = ForumBoardRepositoryStub(cached: nil, fetched: fetched)
+        let model = ForumBoardViewModel(fid: "5", title: nil, repository: repository, settingsStore: settingsStore)
+        await model.load()
+        await model.refreshBoardReaderEntry()
+        XCTAssertNil(model.boardReaderEntry)
+
+        model.setBoardReaderMode(.manga(smartEnabled: false))
+
+        let expected = BoardReaderSettings.Entry(mode: .manga(smartEnabled: false), boardName: "動漫區")
+        XCTAssertEqual(model.boardReaderEntry, expected)
+        try await waitForBoardCondition {
+            await settingsStore.load().boardReader.entry(forumID: "5") == expected
+        }
+        XCTAssertNil(model.boardReaderErrorMessage)
+    }
+
+    private func makeBoardSettingsStore(prefix: String) throws -> SettingsStore {
+        let suiteName = YamiboTestDefaults.suiteName(prefix: prefix)
+        _ = try YamiboTestDefaults.make(suiteName: suiteName)
+        return SettingsStore(
+            defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
+            key: "settings"
+        )
+    }
+
     func testPagingFailureClearsCurrentPageAndCanRestorePreviousSnapshot() async throws {
         let first = makeBoardPage(fid: "5", title: "動漫區", page: 1, threadIDs: ["first"])
         let repository = ForumBoardRepositoryStub(cached: nil, fetched: first)
@@ -190,6 +324,62 @@ final class ForumBoardViewModelTests: XCTestCase {
         XCTAssertEqual(model.threads.map(\.tid), ["first"])
         XCTAssertNil(model.errorMessage)
     }
+}
+
+/// Counts `SettingsStore.didChangeNotification` posts from ONE specific
+/// store (matched by its `changeID`) — the observable signal that a save
+/// actually hit the store, used to prove the board-name snapshot refresh's
+/// diff guard writes exactly once / not at all.
+private final class SettingsStoreSaveCounter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var observedCount = 0
+    private var token: (any NSObjectProtocol)?
+
+    init(changeID: String) {
+        token = NotificationCenter.default.addObserver(
+            forName: SettingsStore.didChangeNotification,
+            object: nil,
+            queue: nil
+        ) { [weak self] notification in
+            guard let self,
+                  notification.userInfo?[SettingsStore.changeIDUserInfoKey] as? String == changeID else {
+                return
+            }
+            self.lock.lock()
+            self.observedCount += 1
+            self.lock.unlock()
+        }
+    }
+
+    var count: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return observedCount
+    }
+
+    deinit {
+        if let token {
+            NotificationCenter.default.removeObserver(token)
+        }
+    }
+}
+
+/// Polls an async condition until it's true or the timeout elapses — for
+/// asserting on persisted settings that only update from the view model's
+/// unstructured save `Task`s, where a fixed sleep would be a flaky guess.
+@MainActor
+private func waitForBoardCondition(
+    timeout: TimeInterval = 2,
+    condition: @escaping () async -> Bool
+) async throws {
+    let deadline = Date().addingTimeInterval(timeout)
+    while Date() < deadline {
+        if await condition() {
+            return
+        }
+        try await Task.sleep(nanoseconds: 20_000_000)
+    }
+    XCTFail("Timed out waiting for condition")
 }
 
 private actor ForumBoardRepositoryStub: ForumBoardPageLoading {

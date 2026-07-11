@@ -59,6 +59,41 @@ import Testing
     #expect(chapter.view == 1)
 }
 
+// Pluggable-reader-config decision #6: tag-page thread rows are filtered by
+// whatever fid the launching board passed in — not a hardcoded "30" — so the
+// same tag list scopes to different boards depending on the caller.
+@Test func parseTagThreadListHTMLKeepsOnlyRowsLinkingToAllowedForumIDs() async throws {
+    let html = """
+    <table>
+      <tr>
+        <th><a href="thread-20001-1-1.html">任意板块 第1话</a></th>
+        <td class="by"><a href="forum-99-1.html">任意板块</a></td>
+        <td class="by"><cite><a href="space-uid-71.html">作者甲</a></cite></td>
+      </tr>
+      <tr>
+        <th><a href="thread-20002-1-1.html">漫画区 第2话</a></th>
+        <td class="by"><a href="forum.php?mod=forumdisplay&fid=30">中文百合漫画区</a></td>
+        <td class="by"><cite><a href="space-uid-72.html">作者乙</a></cite></td>
+      </tr>
+      <tr>
+        <th><a href="thread-20003-1-1.html">无板块链接 第3话</a></th>
+        <td class="by"><cite><a href="space-uid-73.html">作者丙</a></cite></td>
+      </tr>
+    </table>
+    """
+
+    // An arbitrary board's fid keeps only its own row (`forum-99-1.html`
+    // link form); rows for other boards and rows with no forum link at all
+    // are dropped.
+    let arbitraryBoardChapters = MangaHTMLParser.parseTagThreadListHTML(html, allowedForumIDs: ["99"])
+    #expect(arbitraryBoardChapters.map(\.tid) == ["20001"])
+
+    // The same HTML scoped to fid 30 keeps only the fid-query-form row —
+    // proving the filter follows the passed-in fid, not a hardcoded "30".
+    let factoryBoardChapters = MangaHTMLParser.parseTagThreadListHTML(html, allowedForumIDs: ["30"])
+    #expect(factoryBoardChapters.map(\.tid) == ["20002"])
+}
+
 @Test func favoriteParserKeepsOnlyThreadLinks() async throws {
     let html = #"""
     <ul class="sclist">

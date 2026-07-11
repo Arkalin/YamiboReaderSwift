@@ -113,6 +113,58 @@ import Testing
     #expect(LocalFavoriteSourceFilter.key(for: item, boardReaderSettings: modeOnSettings) == .manga)
 }
 
+// 兜底一条规则 (pluggable-reader-config decision #4): a `.mangaThread`
+// favorite with no forumID at all can never match a smart-enabled board, so
+// it behaves exactly like a plain unknown-source favorite — it never joins a
+// merged group (even when a locally resolved directory covers its tid), its
+// source-filter bucket is `.unknown`, and its card gets no smart treatment.
+@Test func localFavoriteProjectionTreatsMissingForumIDMangaThreadFavoritesAsPlainUnknownFavorites() throws {
+    var document = FavoriteLibraryDocument()
+    let categoryID = document.defaultCategory.id
+
+    let directory = MangaDirectory(
+        cleanBookName: "无板块漫画",
+        strategy: .links,
+        sourceKey: "chapter:861",
+        chapters: [
+            MangaChapter(tid: "861", rawTitle: "第1话", chapterNumber: 1),
+            MangaChapter(tid: "862", rawTitle: "第2话", chapterNumber: 2),
+        ]
+    )
+    let firstRawTitle = "【作者】无板块漫画 第1话"
+    let first = try FavoriteItem(
+        target: .mangaThread(threadID: "861"),
+        title: firstRawTitle,
+        locations: [.category(categoryID)]
+    )
+    let second = try FavoriteItem(
+        target: .mangaThread(threadID: "862"),
+        title: "【作者】无板块漫画 第2话",
+        locations: [.category(categoryID)]
+    )
+    document.addItem(first)
+    document.addItem(second)
+
+    let settings = BoardReaderSettings()
+
+    #expect(LocalFavoriteSourceFilter.key(for: first, boardReaderSettings: settings) == .unknown)
+    #expect(LocalFavoriteSourceFilter.key(for: second, boardReaderSettings: settings) == .unknown)
+
+    let cards = LocalFavoriteLibraryProjection.cards(
+        in: document,
+        mangaDirectoriesByTID: ["861": directory, "862": directory],
+        boardReaderSettings: settings
+    )
+
+    #expect(Set(cards.map(\.id)) == [first.id, second.id])
+    #expect(cards.allSatisfy { $0.mangaDirectory == nil && !$0.isMergedGroup })
+    #expect(cards.allSatisfy { !$0.isModeOnMangaThread })
+    // Raw post title, no local `MangaTitleCleaner` cleanup — the smart-card
+    // title fallback only ever applies to mode-on favorites.
+    let firstCard = try #require(cards.first { $0.id == first.id })
+    #expect(firstCard.resolvedTitle == firstRawTitle)
+}
+
 @Test func localFavoriteProjectionSearchesAllowedFieldsOnly() throws {
     let (document, items) = try makeProjectionDocument()
 
