@@ -120,6 +120,10 @@ _Avoid_: sign in, login, automatic-only sign-in
 The app workflow that keeps the **Favorite Library**, reader resume route, WebDAV sync, and current reading entry consistent across launch, foreground refresh, local data changes, and backgrounding.
 _Avoid_: app sync, startup restore, lifecycle handler
 
+**Favorite Update Notification**:
+The local system notification delivered when a favorite update check detects new content for a tracked **Favorite Item** — at most one per item, replaced in place as further updates accumulate onto the same undismissed event.
+_Avoid_: remote push, APNs, server notification
+
 ## Relationships
 
 - A **Favorite Library** is local-first: user-owned **Favorite Items** decide what saved content exists, while Yamibo remote favorites are a sync target for supported items.
@@ -207,3 +211,7 @@ _Avoid_: app sync, startup restore, lifecycle handler
 - **Yamibo Sign Out** preserves manga offline cache records, queued work, and image bytes because they are owned by the local **Favorite Library** rather than the current authentication state.
 - **Yamibo Check-In** is distinct from Yamibo Account login and may reuse the latest local daily check-in record to avoid unnecessary forum requests.
 - **App Continuity** may use WebDAV sync before restoring a reader resume route so the restored entry reflects the latest user-owned **Favorite Library** reading metadata.
+- **Favorite Update Notifications** are opt-in from the favorites updates page and require a system notification permission grant to turn on; while the permission is later revoked, deliveries are skipped silently and the updates page surfaces the blocked state.
+- Handling a favorite update event in-app — marking it read, dismissing it, or disabling notifications — removes its delivered **Favorite Update Notification**, and the app icon badge tracks the unread event count shown on the favorites bell.
+- Tapping a **Favorite Update Notification** opens its **Favorite Item** through the same resume-mode resolver path as the favorites page, falling back to the favorites tab when the item no longer exists.
+- **Favorite Update Notification** state is device-local platform state; like update tracking baselines and events, it is never carried by WebDAV sync.

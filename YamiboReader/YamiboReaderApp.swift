@@ -4,6 +4,7 @@ import AppIntents
 #endif
 #if os(iOS)
 import UIKit
+import UserNotifications
 #endif
 import YamiboReaderCore
 import YamiboReaderUI
@@ -27,7 +28,11 @@ struct YamiboReaderApp: App {
         #if os(iOS) && canImport(BackgroundTasks)
         FavoriteUpdateBackgroundScheduler.register(appContext: appContext)
         #endif
-        _appModel = State(initialValue: YamiboAppModel(appContext: appContext, initialTab: initialTab))
+        let appModel = YamiboAppModel(appContext: appContext, initialTab: initialTab)
+        #if os(iOS)
+        YamiboAppDelegate.appModel = appModel
+        #endif
+        _appModel = State(initialValue: appModel)
         #if canImport(AppIntents)
         YamiboAppShortcutsProvider.updateAppShortcutParameters()
         #endif
@@ -73,8 +78,19 @@ struct YamiboReaderApp: App {
 }
 
 #if os(iOS)
-private final class YamiboAppDelegate: NSObject, UIApplicationDelegate {
+private final class YamiboAppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
     static var appContext: YamiboAppContext?
+    static var appModel: YamiboAppModel?
+
+    func application(
+        _ application: UIApplication,
+        didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
+    ) -> Bool {
+        // Must be assigned before launch finishes so a notification tap that
+        // cold-starts the app still reaches `didReceive`.
+        UNUserNotificationCenter.current().delegate = self
+        return true
+    }
 
     func application(
         _ application: UIApplication,
@@ -86,6 +102,26 @@ private final class YamiboAppDelegate: NSObject, UIApplicationDelegate {
                 completionHandler,
                 forSessionIdentifier: identifier
             )
+    }
+
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification
+    ) async -> UNNotificationPresentationOptions {
+        // Foreground checks only run while the user is on the favorites
+        // surfaces, whose bell badge already shows the update — keep the
+        // icon badge in sync but skip the redundant banner.
+        [.badge]
+    }
+
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse
+    ) async {
+        guard response.actionIdentifier == UNNotificationDefaultActionIdentifier else { return }
+        let userInfo = response.notification.request.content.userInfo
+        guard let appModel = await MainActor.run(body: { Self.appModel }) else { return }
+        await FavoriteUpdateNotificationRouting.open(notificationUserInfo: userInfo, appModel: appModel)
     }
 }
 #endif

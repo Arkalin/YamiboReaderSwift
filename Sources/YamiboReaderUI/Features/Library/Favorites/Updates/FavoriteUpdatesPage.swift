@@ -1,8 +1,12 @@
 import SwiftUI
+#if canImport(UIKit)
+import UIKit
+#endif
 import YamiboReaderCore
 
 /// Dedicated favorite-updates page behind the favorites toolbar bell:
-/// check controls, the automatic interval, and the detected update events.
+/// check controls, the automatic interval, notifications, and the detected
+/// update events.
 struct FavoriteUpdatesPage: View {
     @ObservedObject var updateMonitor: FavoriteUpdateMonitor
     let routes: LocalFavoritesRoutes
@@ -10,11 +14,15 @@ struct FavoriteUpdatesPage: View {
     let onOpen: (FavoriteUpdateEvent) async -> Void
 
     @State private var selectedInterval: FavoriteUpdateCheckInterval = .off
+    @State private var notificationsEnabled = false
+    @State private var notificationsBlockedBySystem = false
+    @State private var showsNotificationDeniedAlert = false
 
     var body: some View {
         List {
             statusSection
             intervalSection
+            notificationSection
             eventsSection
         }
         .navigationTitle(L10n.string("favorites.updates.title"))
@@ -31,6 +39,23 @@ struct FavoriteUpdatesPage: View {
         }
         .task {
             selectedInterval = await updateMonitor.configuredInterval() ?? .off
+            notificationsEnabled = await updateMonitor.notificationsEnabled()
+            notificationsBlockedBySystem = await updateMonitor.notificationsBlockedBySystem()
+        }
+        .alert(
+            L10n.string("favorites.updates.notifications_denied_title"),
+            isPresented: $showsNotificationDeniedAlert
+        ) {
+            #if canImport(UIKit)
+            Button(L10n.string("favorites.updates.notifications_open_settings")) {
+                if let url = URL(string: UIApplication.openSettingsURLString) {
+                    UIApplication.shared.open(url)
+                }
+            }
+            #endif
+            Button(L10n.string("common.cancel"), role: .cancel) {}
+        } message: {
+            Text(L10n.string("favorites.updates.notifications_denied_message"))
         }
     }
 
@@ -86,6 +111,37 @@ struct FavoriteUpdatesPage: View {
         } footer: {
             Text(L10n.string("favorites.updates.interval_footer"))
         }
+    }
+
+    private var notificationSection: some View {
+        Section {
+            Toggle(L10n.string("favorites.updates.notifications"), isOn: notificationsBinding)
+        } footer: {
+            if notificationsBlockedBySystem {
+                Text(L10n.string("favorites.updates.notifications_blocked"))
+            } else {
+                Text(L10n.string("favorites.updates.notifications_footer"))
+            }
+        }
+    }
+
+    /// A custom binding (not `onChange`) so reverting a denied enable back to
+    /// off doesn't re-enter the setter and re-trigger the alert.
+    private var notificationsBinding: Binding<Bool> {
+        Binding(
+            get: { notificationsEnabled },
+            set: { requested in
+                notificationsEnabled = requested
+                Task {
+                    let effective = await updateMonitor.setNotificationsEnabled(requested)
+                    notificationsEnabled = effective
+                    notificationsBlockedBySystem = await updateMonitor.notificationsBlockedBySystem()
+                    if requested, !effective {
+                        showsNotificationDeniedAlert = true
+                    }
+                }
+            }
+        )
     }
 
     private var visibleEvents: [FavoriteUpdateEvent] {
