@@ -1487,10 +1487,7 @@ private struct NovelReaderPresentationModifier: ViewModifier {
                 )
             }
             .sheet(isPresented: $showingCachePanel) {
-                NovelReaderCachePanel(cache: model.cache) {
-                    showingCachePanel = false
-                    showingCacheProgress = true
-                }
+                NovelReaderCachePanel(cache: model.cache)
             }
             .sheet(
                 isPresented: $showingCacheProgress,

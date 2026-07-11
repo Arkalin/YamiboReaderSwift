@@ -55,7 +55,6 @@
 "common.current" = "当前";
 "common.delete" = "删除";
 "common.deleting" = "删除中";
-"common.deselect_all" = "取消全选";
 "common.done" = "完成";
 "common.edit" = "编辑";
 "common.invert_selection" = "反选";
@@ -702,12 +701,9 @@
 "reader.cache_detail.ready" = "准备开始缓存…";
 "reader.cache_detail.running" = "正在缓存第 %d 页\n%d / %d";
 "reader.cache_management" = "缓存管理";
+"reader.cache_page_section" = "页码";
 "reader.cache_progress" = "缓存进度";
 "reader.cache_queue_button_accessibility_format" = "下载队列，%d 项任务";
-"reader.cache_scope" = "缓存范围";
-"reader.cache_scope.all_posts" = "当前为全部回复缓存范围";
-"reader.cache_scope.author" = "当前为只看楼主缓存范围";
-"reader.cache_scope.description" = "缓存内容固定为纯文本，不包含图片。";
 "reader.cache_status.cancelled" = "缓存已终止";
 "reader.cache_status.completed" = "缓存完成";
 "reader.cache_status.ready" = "准备缓存";
@@ -718,6 +714,7 @@
 "reader.cache_updated_at" = "更新于 %@";
 "reader.cached" = "已缓存";
 "reader.caching" = "缓存中";
+"reader.uncached" = "未缓存";
 "reader.offline_stale_notice" = "正在阅读离线缓存内容，可重试在线加载。";
 "reader.offline_stale_notice_with_time" = "正在阅读 %@ 更新的离线缓存，可重试在线加载。";
 "reader.chapter_summary" = "目录项 %d · 过滤 %d";
@@ -768,10 +765,7 @@
 "reader.section.layout" = "辅助功能与布局选项";
 "reader.section.other" = "其他";
 "reader.section.text" = "文本";
-"reader.select_page" = "选择页码";
 "reader.select_web_page" = "选择网页";
-"reader.selected_content" = "已选内容";
-"reader.selected_pages" = "已选择 %d 页";
 "reader.settings.preview_fallback" = "今夜，窗外的风像翻页声一样轻，阅读设置会在此处预览，右上角保存后才会作用在正文中。你可以先把它调到舒服，再继续往下读。";
 "reader.source.all_posts" = "当前为全部回复页";
 "reader.title" = "小说阅读";
