@@ -155,9 +155,10 @@ struct LocalFavoritesOrganizationView: View {
                     : (organizer.selectedCollection?.name ?? "")
             )
             .navigationBarTitleDisplayMode(.inline)
+            .navigationBarBackButtonHidden(selection.isSelectionMode)
             .toolbar {
                 if selection.isSelectionMode {
-                    selectionToolbarContent(showsBackButton: true)
+                    selectionToolbarContent
                 } else {
                     ToolbarItem(placement: .topBarTrailing) {
                         collectionDetailMenu
@@ -265,9 +266,10 @@ struct LocalFavoritesOrganizationView: View {
                     : (organizer.selectedMergedGroupCleanBookName ?? "")
             )
             .navigationBarTitleDisplayMode(.inline)
+            .navigationBarBackButtonHidden(selection.isSelectionMode)
             .toolbar {
                 if selection.isSelectionMode {
-                    selectionToolbarContent(showsBackButton: true)
+                    selectionToolbarContent
                 }
             }
             .toolbar(selection.isSelectionMode ? .hidden : .automatic, for: .tabBar)
@@ -414,7 +416,7 @@ struct LocalFavoritesOrganizationView: View {
     @ToolbarContentBuilder
     private var favoriteToolbarContent: some ToolbarContent {
         if selection.isSelectionMode {
-            selectionToolbarContent(showsBackButton: false)
+            selectionToolbarContent
         } else {
             normalToolbarContent
         }
@@ -428,32 +430,21 @@ struct LocalFavoritesOrganizationView: View {
     /// (not a strict per-item inversion) since it only ever fires from an
     /// already-fully-selected state.
     ///
-    /// A custom leading toolbar item replaces `NavigationStack`'s automatic
-    /// back button rather than joining it — on the root page there's no back
-    /// button to lose, but the collection detail page is pushed and needs
-    /// one, so `showsBackButton` packs a back chevron into the same leading
-    /// item alongside the toggle there.
+    /// No back button here even on the pushed collection/merged-group detail
+    /// pages — `.navigationBarBackButtonHidden(selection.isSelectionMode)` on
+    /// those pages suppresses `NavigationStack`'s automatic one, so this stays
+    /// the only leading item instead of stacking a second arrow next to it.
     @ToolbarContentBuilder
-    private func selectionToolbarContent(showsBackButton: Bool) -> some ToolbarContent {
+    private var selectionToolbarContent: some ToolbarContent {
         ToolbarItem(placement: .topBarLeading) {
-            HStack(spacing: 16) {
-                if showsBackButton {
-                    Button {
-                        organizer.closeCollection()
-                    } label: {
-                        Image(systemName: "chevron.left")
-                    }
-                    .accessibilityLabel(L10n.string("common.back"))
-                }
-                Button(
-                    organizer.isAllVisibleSelected
-                        ? L10n.string("common.invert_selection")
-                        : L10n.string("common.select_all")
-                ) {
-                    organizer.toggleSelectAllVisible()
-                }
-                .disabled(!organizer.hasVisibleSelectableEntries)
+            Button(
+                organizer.isAllVisibleSelected
+                    ? L10n.string("common.invert_selection")
+                    : L10n.string("common.select_all")
+            ) {
+                organizer.toggleSelectAllVisible()
             }
+            .disabled(!organizer.hasVisibleSelectableEntries)
         }
         ToolbarItem(placement: .topBarTrailing) {
             Button(L10n.string("common.done")) {
