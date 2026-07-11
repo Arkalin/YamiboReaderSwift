@@ -57,6 +57,11 @@ final class ForumBoardViewModel {
     @ObservationIgnored private let settingsStore: SettingsStore?
     @ObservationIgnored private let repositoryProvider: @Sendable () async -> any ForumBoardPageLoading
     @ObservationIgnored private var generation = 0
+    /// Serializes this view model's two unstructured settings writers (mode
+    /// saves and board-name-snapshot refreshes): each new write awaits the
+    /// previous one, so a slow earlier write can never land after — and
+    /// silently undo — a later one.
+    @ObservationIgnored private var boardReaderWriteTask: Task<Void, Never>?
     @ObservationIgnored private lazy var pageNavigator = ForumPageNavigator<PageSnapshot>(
         capture: { [unowned self] in
             PageSnapshot(
@@ -262,16 +267,21 @@ final class ForumBoardViewModel {
         let updated = mode.map { BoardReaderSettings.Entry(mode: $0, boardName: boardName) }
         boardReaderEntry = updated
 
-        Task {
-            var settings = await settingsStore.load()
-            if let updated {
-                settings.boardReader.setEntry(updated, forumID: fid)
-            } else {
-                settings.boardReader.removeEntry(forumID: fid)
-            }
-
+        let fid = fid
+        let previousWrite = boardReaderWriteTask
+        boardReaderWriteTask = Task {
+            await previousWrite?.value
             do {
-                try await settingsStore.save(settings)
+                // Atomic entry-level mutation: `SettingsStore.update` applies
+                // it to freshly loaded settings inside the actor, so it can
+                // never clobber a concurrent writer's save with a stale blob.
+                try await settingsStore.update { settings in
+                    if let updated {
+                        settings.boardReader.setEntry(updated, forumID: fid)
+                    } else {
+                        settings.boardReader.removeEntry(forumID: fid)
+                    }
+                }
             } catch {
                 if boardReaderEntry == updated {
                     boardReaderEntry = previous
@@ -358,17 +368,25 @@ final class ForumBoardViewModel {
     /// matches, so routine visits do not touch the settings store.
     private func refreshBoardNameSnapshotIfNeeded(with boardName: String) {
         guard let settingsStore, !boardName.isEmpty else { return }
-        Task {
-            var settings = await settingsStore.load()
-            guard var entry = settings.boardReader.entry(forumID: fid),
-                  entry.boardName != boardName else { return }
-            entry.boardName = boardName
-            settings.boardReader.setEntry(entry, forumID: fid)
-
+        let fid = fid
+        let previousWrite = boardReaderWriteTask
+        boardReaderWriteTask = Task {
+            await previousWrite?.value
             do {
-                try await settingsStore.save(settings)
+                // Guarded inside the atomic mutation so it re-checks *fresh*
+                // state: if a serialized-just-before mode save removed the
+                // entry, this refresh sees that and skips — it can never
+                // resurrect a removed entry from a stale copy. An unchanged
+                // name leaves the settings untouched, so `update` skips the
+                // save entirely and routine visits don't touch the store.
+                try await settingsStore.update { settings in
+                    guard var entry = settings.boardReader.entry(forumID: fid),
+                          entry.boardName != boardName else { return }
+                    entry.boardName = boardName
+                    settings.boardReader.setEntry(entry, forumID: fid)
+                }
             } catch {
-                YamiboLog.persistence.warning("Failed to refresh board name snapshot for fid \(self.fid): \(error)")
+                YamiboLog.persistence.warning("Failed to refresh board name snapshot for fid \(fid): \(error)")
             }
         }
     }

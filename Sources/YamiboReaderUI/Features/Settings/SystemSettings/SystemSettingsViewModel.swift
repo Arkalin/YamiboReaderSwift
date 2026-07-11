@@ -308,20 +308,27 @@ final class SystemSettingsViewModel: ObservableObject {
     /// settings page cannot resolve real board names; only the board page
     /// ever writes or refreshes them.
     func setBoardReaderMode(_ mode: BoardReaderSettings.ReaderMode, forumID: String, boardName: String?) {
-        var updated = boardReader
-        updated.setEntry(.init(mode: mode, boardName: boardName), forumID: forumID)
-        updateBoardReader(updated)
+        let entry = BoardReaderSettings.Entry(mode: mode, boardName: boardName)
+        var optimistic = boardReader
+        optimistic.setEntry(entry, forumID: forumID)
+        updateBoardReader(optimistic: optimistic) { settings in
+            settings.boardReader.setEntry(entry, forumID: forumID)
+        }
     }
 
     /// Removing the entry = back to the plain thread reader (PRD decision #3).
     func removeBoardEntry(forumID: String) {
-        var updated = boardReader
-        updated.removeEntry(forumID: forumID)
-        updateBoardReader(updated)
+        var optimistic = boardReader
+        optimistic.removeEntry(forumID: forumID)
+        updateBoardReader(optimistic: optimistic) { settings in
+            settings.boardReader.removeEntry(forumID: forumID)
+        }
     }
 
     func resetBoardReader() {
-        updateBoardReader(.factoryDefault)
+        updateBoardReader(optimistic: .factoryDefault) { settings in
+            settings.boardReader = .factoryDefault
+        }
     }
 
     func clearNovelCache() async -> Bool {
@@ -585,23 +592,31 @@ final class SystemSettingsViewModel: ObservableObject {
         }
     }
 
-    private func updateBoardReader(_ updated: BoardReaderSettings) {
+    /// Entry-level persistence via the atomic `SettingsStore.update`: the
+    /// mutation applies to *freshly loaded* settings inside the actor, so an
+    /// entry another writer (e.g. a board page's sheet or name-snapshot
+    /// refresh) persisted after this sheet's `load()` is never wiped by
+    /// replaying this sheet's whole stale map. The `@Published` copy is
+    /// optimistic display state; on success it resyncs to the persisted
+    /// result (unless a newer local edit already superseded it).
+    private func updateBoardReader(
+        optimistic updated: BoardReaderSettings,
+        mutate: @escaping @Sendable (inout AppSettings) -> Void
+    ) {
         let previous = boardReader
         boardReader = updated
 
         Task {
-            var settings = await dependencies.settingsStore.load()
-            settings.boardReader = updated
-
             do {
-                try await dependencies.settingsStore.save(settings)
-            } catch {
-                await MainActor.run {
-                    if boardReader == updated {
-                        boardReader = previous
-                    }
-                    errorMessage = error.localizedDescription
+                let saved = try await dependencies.settingsStore.update(mutate)
+                if boardReader == updated {
+                    boardReader = saved.boardReader
                 }
+            } catch {
+                if boardReader == updated {
+                    boardReader = previous
+                }
+                errorMessage = error.localizedDescription
             }
         }
     }
