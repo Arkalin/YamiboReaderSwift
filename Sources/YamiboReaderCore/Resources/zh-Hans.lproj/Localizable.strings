@@ -574,6 +574,7 @@
 "forum.home.today_count" = "今日 %d";
 "forum.history" = "浏览历史";
 "forum.open_native_failed" = "无法原生打开";
+"forum.thread_link.loading" = "正在打开原帖…";
 "forum.unsupported_native_thread" = "当前帖子不适合原生阅读。";
 "cover.set_as_cover" = "设为封面";
 "cover.set_as_manga_cover" = "设为漫画封面：《%@》";

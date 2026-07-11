@@ -3,151 +3,33 @@ import YamiboReaderCore
 
 public struct ForumNavigationHostView: View {
     @State private var model: ForumHomeViewModel
-    @State private var path: [ForumDestination] = []
-    @State private var actionErrorMessage: String?
+    @State private var navigator: ForumDestinationNavigator
 
-    private let dependencies: ForumDependencies
     private let appModel: YamiboAppModel
 
     public init(dependencies: ForumDependencies, appModel: YamiboAppModel) {
-        self.dependencies = dependencies
         self.appModel = appModel
         _model = State(wrappedValue: ForumHomeViewModel(dependencies: dependencies))
+        _navigator = State(wrappedValue: ForumDestinationNavigator(
+            dependencies: dependencies,
+            appModel: appModel,
+            mode: .forumTab
+        ))
     }
 
     public var body: some View {
-        NavigationStack(path: $path) {
+        ForumDestinationStackView(navigator: navigator) {
             ForumHomeView(
                 model: model,
-                onBoardTap: openBoard,
-                onCarouselTap: openCarouselItem
+                onBoardTap: { navigator.openBoard($0) },
+                onCarouselTap: { navigator.openCarouselItem($0) }
             )
-            .navigationDestination(for: ForumDestination.self) { destination in
-                switch destination {
-                case let .board(fid, title, page):
-                    ForumBoardView(
-                        model: ForumBoardViewModel(
-                            fid: fid,
-                            title: title,
-                            initialPage: page ?? 1,
-                            dependencies: dependencies
-                        ),
-                        onSubBoardTap: openBoard,
-                        onPinnedTap: { openPinnedItem($0, containingFid: fid) },
-                        onThreadTap: { openThread($0, containingFid: fid) },
-                        onAuthorTap: openUserSpace,
-                        onSearchTap: {
-                            path.append(.search(fid: fid))
-                        },
-                        onPostThreadTap: {
-                            openPostThreadFallback(fid: fid)
-                        }
-                    )
-                    .forumNavigationBarStyle()
-                case let .search(fid):
-                    ForumSearchView(
-                        model: ForumSearchViewModel(forumID: fid, dependencies: dependencies),
-                        onThreadTap: { openThread($0, containingFid: fid) },
-                        onAuthorTap: openUserSpace,
-                        onURLSubmit: {
-                            route($0, source: .external)
-                        }
-                    )
-                    .forumNavigationBarStyle()
-                case let .userSpace(uid, name, section, subPage):
-                    UserSpaceView(
-                        model: UserSpaceViewModel(
-                            uid: uid,
-                            titleHint: name,
-                            initialSection: section,
-                            initialSubPage: subPage,
-                            dependencies: dependencies
-                        ),
-                        onThreadTap: { openThread($0, title: $1, containingFid: nil) },
-                        onUserTap: openUserSpace,
-                        onSectionTap: openUserSpaceSection,
-                        onBlogTap: openBlog,
-                        onPrivateMessageTap: openPrivateMessage,
-                        onMessageCenterTap: openMessageCenter,
-                        onWebTap: {
-                            path.append(.web($0))
-                        }
-                    )
-                    .forumNavigationBarStyle()
-                case let .messageCenter(tab):
-                    MessageCenterView(
-                        model: MessageCenterViewModel(initialTab: tab, dependencies: dependencies),
-                        onPrivateMessageTap: openPrivateMessage,
-                        onUserTap: openUserSpace,
-                        onWebTap: {
-                            path.append(.web($0))
-                        }
-                    )
-                    .forumNavigationBarStyle()
-                case let .privateMessage(uid, name):
-                    PrivateMessageView(
-                        model: PrivateMessageViewModel(
-                            uid: uid,
-                            titleHint: name,
-                            dependencies: dependencies
-                        )
-                    )
-                    .forumNavigationBarStyle()
-                case let .blog(blogID, uid, title):
-                    BlogReaderView(
-                        model: BlogReaderViewModel(blogID: blogID, uid: uid, titleHint: title, dependencies: dependencies),
-                        onUserTap: openUserSpace,
-                        onWebTap: {
-                            path.append(.web($0))
-                        }
-                    )
-                    .forumNavigationBarStyle()
-                case let .novelDetail(context):
-                    ForumNovelDetailView(
-                        model: ForumNovelDetailViewModel(context: context, dependencies: dependencies),
-                        onChapterTap: { launchContext in
-                            appModel.presentNovelReader(launchContext)
-                        },
-                        onUserTap: openUserSpace,
-                        onViewThread: {
-                            path.append(.threadReader(ThreadNovelLaunchContext(thread: context.thread, title: context.title, authorID: context.authorID, isDiscussionView: true)))
-                        }
-                    )
-                    .forumNavigationBarStyle()
-                case let .mangaDetail(context):
-                    ForumMangaDetailView(
-                        model: ForumMangaDetailViewModel(context: context, dependencies: dependencies),
-                        onChapterTap: { launchContext in
-                            appModel.presentMangaReader(launchContext)
-                        },
-                        onViewThread: {
-                            path.append(.threadReader(ThreadNovelLaunchContext(thread: context.thread, title: context.title, isDiscussionView: true)))
-                        }
-                    )
-                    .forumNavigationBarStyle()
-                case let .threadReader(context):
-                    ForumThreadReaderView(
-                        model: ForumThreadReaderViewModel(context: context, dependencies: dependencies),
-                        onUserTap: openUserSpace,
-                        onURLTap: { route($0, source: .external) }
-                    )
-                        .forumNavigationBarStyle()
-                case let .web(url):
-                    ForumBrowserView(
-                        url: url,
-                        sessionStore: dependencies.sessionStore,
-                        appModel: appModel,
-                        listensToForumNavigationRequest: false
-                    )
-                    .forumNavigationBarStyle()
-                }
-            }
             .navigationTitle(L10n.string("forum.default_title"))
             .yamiboInlineNavigationTitleDisplayMode()
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
                     Button {
-                        path.append(.search(fid: nil))
+                        navigator.push(.search(fid: nil))
                     } label: {
                         Image(systemName: "magnifyingglass")
                     }
@@ -161,208 +43,7 @@ public struct ForumNavigationHostView: View {
         }
         .onChange(of: appModel.forumNavigationRequest?.id) { _, _ in
             guard let request = appModel.forumNavigationRequest else { return }
-            route(request.url, source: request.source, title: request.title)
-        }
-        .alert(L10n.string("forum.open_native_failed"), isPresented: .constant(actionErrorMessage != nil), actions: {
-            Button(L10n.string("common.ok")) {
-                actionErrorMessage = nil
-            }
-        }, message: {
-            Text(actionErrorMessage ?? "")
-        })
-    }
-
-    private func route(_ url: URL, source: ForumNavigationSource, title: String? = nil) {
-        switch ForumRouteResolver.resolve(url: url, source: source) {
-        case .home:
-            path = []
-        case let .board(fid, title, page):
-            path.append(.board(fid: fid, title: title, page: page))
-        case let .thread(threadURL):
-            openThread(
-                threadURL,
-                title: title,
-                containingFid: nil,
-                intent: source == .readerOrigin || source == .readerDiscussion ? .nativeThreadReader : .contentRoute,
-                isDiscussionView: source == .readerDiscussion
-            )
-        case let .userSpace(uid, name):
-            path.append(.userSpace(uid: uid, name: name, section: .space, subPage: .profile))
-        case let .messageCenter(tab):
-            path.append(.messageCenter(tab: tab))
-        case let .privateMessage(uid, name):
-            path.append(.privateMessage(uid: uid, name: name))
-        case let .blog(blogID, uid, title):
-            path.append(.blog(blogID: blogID, uid: uid, title: title))
-        case let .web(url):
-            path.append(.web(url))
+            navigator.route(request.url, source: request.source, title: request.title)
         }
     }
-
-    private func openBoard(_ board: ForumBoardSummary) {
-        path.append(.board(fid: board.fid, title: board.name, page: nil))
-    }
-
-    private func openCarouselItem(_ item: ForumHomeCarouselItem) {
-        if item.isThreadTarget {
-            openThread(item.targetURL, title: nil, containingFid: nil)
-        }
-    }
-
-    private func openThread(
-        _ url: URL,
-        title: String?,
-        containingFid: String?,
-        intent: YamiboThreadRouteIntent = .contentRoute,
-        isDiscussionView: Bool = false
-    ) {
-        Task {
-            do {
-                let resolver = await dependencies.makeThreadRouteResolver()
-                let target = try await resolver.resolve(
-                    YamiboThreadRouteRequest(
-                        threadURL: url,
-                        title: title,
-                        intent: intent,
-                        tapContext: YamiboThreadTapContext(containingFid: containingFid)
-                    )
-                )
-                openYamiboThreadRouteTarget(target, isDiscussionView: isDiscussionView)
-            } catch {
-                actionErrorMessage = error.localizedDescription
-            }
-        }
-    }
-
-    private func openThread(_ thread: ForumThreadSummary, containingFid: String?) {
-        Task {
-            do {
-                let resolver = await dependencies.makeThreadRouteResolver()
-                let target = try await resolver.resolve(
-                    YamiboThreadRouteRequest(
-                        threadURL: thread.url,
-                        threadID: thread.tid,
-                        title: thread.title,
-                        authorID: thread.authorID,
-                        threadFid: thread.fid,
-                        tapContext: YamiboThreadTapContext(containingFid: containingFid)
-                    )
-                )
-                openYamiboThreadRouteTarget(target)
-            } catch {
-                actionErrorMessage = error.localizedDescription
-            }
-        }
-    }
-
-    private func openYamiboThreadRouteTarget(_ target: YamiboThreadRouteTarget, isDiscussionView: Bool = false) {
-        switch target {
-        case let .novel(payload):
-            let context = NovelDetailLaunchContext(
-                thread: payload.thread,
-                title: payload.title,
-                authorID: payload.authorID
-            )
-            path.append(.novelDetail(context))
-        case let .manga(payload):
-            let cleanBookName = MangaTitleCleaner.cleanBookName(payload.title)
-            let context = MangaDetailLaunchContext(
-                thread: payload.thread,
-                title: cleanBookName,
-                focusedChapterTID: payload.thread.tid,
-                directoryNameHint: cleanBookName
-            )
-            path.append(.mangaDetail(context))
-        case let .mangaDirect(payload):
-            // Board's Smart Comic Mode is off (decision #2/#12): open the
-            // manga reader directly for this one thread instead of pushing
-            // `ForumMangaDetailView`, using the same full-screen presentation
-            // path as favorites/likes/the chapter picker
-            // (`appModel.presentMangaReader`) rather than a NavigationStack
-            // destination. No directory concept applies here — this thread
-            // is treated exactly like a normal thread (total principle,
-            // decision #2), just rendered with the manga reader — so the
-            // title is used as-is (no `cleanBookName` cleanup) and page 0 is
-            // the only sensible start (no resume, matching
-            // `ForumMangaDetailViewModel.launchContext(for chapter:)`'s
-            // existing convention of never passing `initialPage`).
-            let context = MangaLaunchContext(
-                originalThreadID: payload.thread.tid,
-                chapterTID: payload.thread.tid,
-                displayTitle: payload.title,
-                source: .forum,
-                forumID: payload.thread.fid,
-                isSmartModeEnabled: false
-            )
-            appModel.presentMangaReader(context)
-        case let .thread(payload):
-            let context = ThreadNovelLaunchContext(
-                thread: payload.thread,
-                title: payload.title,
-                initialPage: payload.initialPage,
-                targetPostID: payload.targetPostID,
-                authorID: payload.authorID,
-                isDiscussionView: isDiscussionView
-            )
-            path.append(.threadReader(context))
-        case let .webFallback(url):
-            path.append(.web(url))
-        }
-    }
-
-    private func openUserSpace(uid: String, name: String?) {
-        path.append(.userSpace(uid: uid, name: name, section: .space, subPage: .profile))
-    }
-
-    private func openUserSpaceSection(uid: String?, name: String?, section: UserSpaceSection, subPage: UserSpaceSubPage) {
-        path.append(.userSpace(uid: uid, name: name, section: section, subPage: subPage))
-    }
-
-    private func openBlog(_ blog: UserSpaceBlogSummary) {
-        path.append(.blog(blogID: blog.blogID, uid: blog.authorID, title: blog.title))
-    }
-
-    private func openPrivateMessage(uid: String, name: String?) {
-        path.append(.privateMessage(uid: uid, name: name))
-    }
-
-    private func openMessageCenter(tab: MessageCenterTab) {
-        path.append(.messageCenter(tab: tab))
-    }
-
-    private func openPinnedItem(_ item: ForumPinnedItem, containingFid: String?) {
-        if item.threadID != nil {
-            openThread(item.url, title: item.title, containingFid: containingFid)
-        } else {
-            path.append(.web(item.url))
-        }
-    }
-
-    private func openPostThreadFallback(fid: String) {
-        var components = URLComponents(url: YamiboDomain.baseURL, resolvingAgainstBaseURL: false)!
-        components.path = "/forum.php"
-        components.queryItems = [
-            .init(name: "mod", value: "post"),
-            .init(name: "action", value: "newthread"),
-            .init(name: "fid", value: fid),
-            .init(name: "mobile", value: "2")
-        ]
-        if let url = components.url {
-            path.append(.web(url))
-        }
-    }
-
-}
-
-private enum ForumDestination: Hashable {
-    case board(fid: String, title: String?, page: Int?)
-    case search(fid: String?)
-    case userSpace(uid: String?, name: String?, section: UserSpaceSection, subPage: UserSpaceSubPage)
-    case messageCenter(tab: MessageCenterTab)
-    case privateMessage(uid: String, name: String?)
-    case blog(blogID: String, uid: String?, title: String?)
-    case novelDetail(NovelDetailLaunchContext)
-    case mangaDetail(MangaDetailLaunchContext)
-    case threadReader(ThreadNovelLaunchContext)
-    case web(URL)
 }

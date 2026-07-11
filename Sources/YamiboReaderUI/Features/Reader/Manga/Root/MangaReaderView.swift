@@ -13,6 +13,7 @@ public struct MangaReaderView: View {
     @State private var isChromeVisible = true
     @State private var isDirectoryPresented = false
     @State private var isChapterCommentsPresented = false
+    @State private var forumThreadOverlayItem: ReaderForumThreadOverlayItem?
     @State private var isSettingsPresented = false
     @State private var isCachePresented = false
     @State private var isLikesPresented = false
@@ -207,8 +208,17 @@ public struct MangaReaderView: View {
                 loadInitial: model.loadChapterComments(for:),
                 refresh: model.refreshChapterComments(for:),
                 loadNext: model.loadNextChapterCommentsPage,
-                onOpenOriginalPost: openOriginalPostFromComments(_:),
-                peripheralInput: appModel.peripheralInput
+                forumDependencies: appModel.appContext.forumDependencies,
+                appModel: appModel,
+                discussionWorkTIDs: discussionWorkTIDs
+            )
+        }
+        .fullScreenCover(item: $forumThreadOverlayItem) { item in
+            ReaderForumThreadOverlayScreen(
+                item: item,
+                dependencies: appModel.appContext.forumDependencies,
+                appModel: appModel,
+                discussionWorkTIDs: discussionWorkTIDs
             )
         }
         .sheet(isPresented: $isSettingsPresented) {
@@ -324,6 +334,18 @@ public struct MangaReaderView: View {
         return !loaded.pages.isEmpty
     }
 
+    /// Every thread ID this reading session covers: the work thread plus (for
+    /// smart manga) all directory chapter threads. Threads from this set
+    /// opened inside a forum overlay stay discussion companions and must not
+    /// write their own browsing-history rows.
+    private var discussionWorkTIDs: Set<String> {
+        var tids: Set<String> = [context.originalThreadID, context.chapterTID]
+        if case let .loaded(loaded) = model.presentation.state {
+            tids.formUnion(loaded.directoryPanel.displayChapters.map(\.tid))
+        }
+        return tids
+    }
+
     private var canReceiveApplePencilPageTurn: Bool {
         guard case let .loaded(loaded) = model.presentation.state else { return false }
         return UIDevice.current.userInterfaceIdiom == .pad &&
@@ -333,6 +355,7 @@ public struct MangaReaderView: View {
             !isChapterCommentsPresented &&
             !isSettingsPresented &&
             !isCachePresented &&
+            forumThreadOverlayItem == nil &&
             !isDismissing &&
             !isChromeVisible
     }
@@ -346,7 +369,8 @@ public struct MangaReaderView: View {
             isChapterCommentsPresented ||
             isSettingsPresented ||
             isCachePresented ||
-            isLikesPresented
+            isLikesPresented ||
+            forumThreadOverlayItem != nil
     }
 
     private func handleControlEvent(_ event: ReaderControlEvent) {
@@ -403,27 +427,19 @@ public struct MangaReaderView: View {
         }
     }
 
+    /// 打开原帖 layers the thread over the reader instead of dismissing it —
+    /// closing the overlay drops straight back into the page being read.
     private func openOriginalPost() {
         guard !isDismissing else { return }
-        isDismissing = true
-        Task {
-            let latestContext = await model.saveProgress()
-            appModel.dismissMangaReader(
-                openThreadInForum: YamiboRoute.threadByID(
-                    tid: context.originalThreadID,
-                    page: 1,
-                    authorID: nil,
-                    reverse: false
-                ).url,
-                suspendedMangaContext: latestContext
-            )
-        }
-    }
-
-    private func openOriginalPostFromComments(_ url: URL) {
-        guard !isDismissing else { return }
-        isDismissing = true
-        appModel.dismissMangaReader(openThreadInForum: url)
+        forumThreadOverlayItem = ReaderForumThreadOverlayItem(
+            url: YamiboRoute.threadByID(
+                tid: context.originalThreadID,
+                page: 1,
+                authorID: nil,
+                reverse: false
+            ).url,
+            title: context.displayTitle
+        )
     }
 
     @MainActor
