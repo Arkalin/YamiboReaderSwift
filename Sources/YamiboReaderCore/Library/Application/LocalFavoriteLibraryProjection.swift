@@ -341,11 +341,11 @@ public enum LocalFavoriteLibraryProjection {
         // building exclusively standalone cards without passing anything
         // new — `groupedCardEntries` short-circuits to "everything
         // standalone" whenever `mangaDirectoriesByTID` is empty, before ever
-        // consulting `smartComicModeSettings`.
+        // consulting `boardReaderSettings`.
         mangaDirectoriesByTID: [String: MangaDirectory] = [:],
-        smartComicModeSettings: SmartComicModeSettings = SmartComicModeSettings(),
+        boardReaderSettings: BoardReaderSettings = BoardReaderSettings(),
         // Precomputed `mangaThreadItemsByEffectiveTitle(in:mangaDirectoriesByTID:
-        // smartComicModeSettings:)` result, when a caller that needs it for
+        // boardReaderSettings:)` result, when a caller that needs it for
         // several keys within one derivation (`LocalFavoriteLibraryDerivation`)
         // has already built it once. `nil` (the default, so every existing
         // caller keeps compiling unchanged) means this call builds it fresh
@@ -360,7 +360,7 @@ public enum LocalFavoriteLibraryProjection {
         let resolvedMangaThreadItemsByEffectiveTitle = mangaThreadItemsByEffectiveTitle ?? Self.mangaThreadItemsByEffectiveTitle(
             in: document.items,
             mangaDirectoriesByTID: mangaDirectoriesByTID,
-            smartComicModeSettings: smartComicModeSettings
+            boardReaderSettings: boardReaderSettings
         )
 
         // A smart card's "查看归档收藏" detail page scopes by *effective title*
@@ -398,7 +398,7 @@ public enum LocalFavoriteLibraryProjection {
             entries = groupedCardEntries(
                 for: document.items,
                 mangaDirectoriesByTID: mangaDirectoriesByTID,
-                smartComicModeSettings: smartComicModeSettings
+                boardReaderSettings: boardReaderSettings
             )
         }
 
@@ -441,7 +441,7 @@ public enum LocalFavoriteLibraryProjection {
                 let isModeOnMangaThread = isMemberScoped
                     ? false
                     : (entry.representativeItem.target.kind == .mangaThread
-                        && smartComicModeSettings.isEnabled(forumID: entry.representativeItem.forumID))
+                        && boardReaderSettings.isSmartComicModeEnabled(forumID: entry.representativeItem.forumID))
                 var cardEntry = entry
                 if isModeOnMangaThread {
                     // A smart card's displayed tags must be the union of tags
@@ -512,12 +512,12 @@ public enum LocalFavoriteLibraryProjection {
         matching cleanBookName: String,
         in items: [FavoriteItem],
         mangaDirectoriesByTID: [String: MangaDirectory],
-        smartComicModeSettings: SmartComicModeSettings
+        boardReaderSettings: BoardReaderSettings
     ) -> [FavoriteItem] {
         mangaThreadItemsByEffectiveTitle(
             in: items,
             mangaDirectoriesByTID: mangaDirectoriesByTID,
-            smartComicModeSettings: smartComicModeSettings
+            boardReaderSettings: boardReaderSettings
         )[cleanBookName] ?? []
     }
 
@@ -538,11 +538,11 @@ public enum LocalFavoriteLibraryProjection {
     public static func mangaThreadItemsByEffectiveTitle(
         in items: [FavoriteItem],
         mangaDirectoriesByTID: [String: MangaDirectory],
-        smartComicModeSettings: SmartComicModeSettings
+        boardReaderSettings: BoardReaderSettings
     ) -> [String: [FavoriteItem]] {
         var itemsByEffectiveTitle: [String: [FavoriteItem]] = [:]
         for item in items {
-            // The explicit `isEnabled(forumID:)` check is required, not
+            // The explicit `isSmartComicModeEnabled(forumID:)` check is required, not
             // redundant with the directory lookup below — see
             // `rawGroupedFavorites`' own doc comment on why a
             // resolved-directory proxy signal must never stand in for the
@@ -550,7 +550,7 @@ public enum LocalFavoriteLibraryProjection {
             // bugs). Mode-off items never participate in this scope,
             // resolved directory or not.
             guard item.target.kind == .mangaThread,
-                  smartComicModeSettings.isEnabled(forumID: item.forumID) else {
+                  boardReaderSettings.isSmartComicModeEnabled(forumID: item.forumID) else {
                 continue
             }
             let directory = mangaDirectoriesByTID[item.target.threadID ?? ""]
@@ -580,12 +580,12 @@ public enum LocalFavoriteLibraryProjection {
     public static func mangaDirectoryGroups(
         for items: [FavoriteItem],
         mangaDirectoriesByTID: [String: MangaDirectory],
-        smartComicModeSettings: SmartComicModeSettings
+        boardReaderSettings: BoardReaderSettings
     ) -> [MangaDirectoryFavoriteGroup] {
         rawGroupedFavorites(
             for: items,
             mangaDirectoriesByTID: mangaDirectoriesByTID,
-            smartComicModeSettings: smartComicModeSettings
+            boardReaderSettings: boardReaderSettings
         ).groups.map { raw in
             MangaDirectoryFavoriteGroup(directory: raw.directory, members: raw.members)
         }
@@ -626,14 +626,14 @@ public enum LocalFavoriteLibraryProjection {
         query: LocalFavoriteLibraryQuery = LocalFavoriteLibraryQuery(),
         readingProgress: [ReadingProgressRecord] = [],
         mangaDirectoriesByTID: [String: MangaDirectory] = [:],
-        smartComicModeSettings: SmartComicModeSettings = SmartComicModeSettings()
+        boardReaderSettings: BoardReaderSettings = BoardReaderSettings()
     ) -> Int {
         cards(
             in: document,
             query: query,
             readingProgress: readingProgress,
             mangaDirectoriesByTID: mangaDirectoriesByTID,
-            smartComicModeSettings: smartComicModeSettings
+            boardReaderSettings: boardReaderSettings
         ).count
     }
 
@@ -662,7 +662,7 @@ public enum LocalFavoriteLibraryProjection {
 
     /// Partitions `items` into favorites that stay standalone and favorites
     /// resolved to a shared `MangaDirectory`, using the *explicit*
-    /// `SmartComicModeSettings.isEnabled(forumID:)` check — not any proxy
+    /// `BoardReaderSettings.isSmartComicModeEnabled(forumID:)` check — not any proxy
     /// signal (`directoryName != nil`, `cleanBookName.isEmpty`, etc. — see
     /// the design doc's three prior same-class bugs) — as the sole
     /// mode-on/off gate. This is the cheap in-memory pre-filter the design
@@ -673,7 +673,7 @@ public enum LocalFavoriteLibraryProjection {
     private static func rawGroupedFavorites(
         for items: [FavoriteItem],
         mangaDirectoriesByTID: [String: MangaDirectory],
-        smartComicModeSettings: SmartComicModeSettings
+        boardReaderSettings: BoardReaderSettings
     ) -> (standalone: [FavoriteItem], groups: [RawMangaDirectoryGroup]) {
         guard !mangaDirectoriesByTID.isEmpty else {
             return (items, [])
@@ -686,7 +686,7 @@ public enum LocalFavoriteLibraryProjection {
         for item in items {
             guard item.target.kind == .mangaThread,
                   let threadID = item.target.threadID,
-                  smartComicModeSettings.isEnabled(forumID: item.forumID),
+                  boardReaderSettings.isSmartComicModeEnabled(forumID: item.forumID),
                   let directory = mangaDirectoriesByTID[threadID] else {
                 standalone.append(item)
                 continue
@@ -721,12 +721,12 @@ public enum LocalFavoriteLibraryProjection {
     private static func groupedCardEntries(
         for items: [FavoriteItem],
         mangaDirectoriesByTID: [String: MangaDirectory],
-        smartComicModeSettings: SmartComicModeSettings
+        boardReaderSettings: BoardReaderSettings
     ) -> [GroupedFavoriteEntry] {
         let raw = rawGroupedFavorites(
             for: items,
             mangaDirectoriesByTID: mangaDirectoriesByTID,
-            smartComicModeSettings: smartComicModeSettings
+            boardReaderSettings: boardReaderSettings
         )
         let standaloneEntries = raw.standalone.map {
             GroupedFavoriteEntry(representativeItem: $0, members: nil, mangaDirectory: nil)
@@ -829,7 +829,7 @@ public enum LocalFavoriteLibraryProjection {
             mergedMembers: entry.members,
             // Pre-computed by the caller — see the doc comment at the call
             // site in `cards(in:query:...)` for why this can't be recomputed
-            // from `item`/`smartComicModeSettings` here: doing so would
+            // from `item`/`boardReaderSettings` here: doing so would
             // ignore the member-scoped archive page's deliberate "show as an
             // ordinary card" intent and force every one of its cards back to
             // `true`.

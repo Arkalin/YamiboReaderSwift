@@ -10,7 +10,7 @@ public struct AppSettings: Codable, Hashable, Sendable {
     public var favorites: FavoriteLibrarySettings
     public var webBrowser: WebBrowserSettings
     public var system: SystemSettings
-    public var smartComicMode: SmartComicModeSettings
+    public var boardReader: BoardReaderSettings
 
     public init(
         novelReader: NovelReaderAppearanceSettings = .init(),
@@ -19,7 +19,7 @@ public struct AppSettings: Codable, Hashable, Sendable {
         favorites: FavoriteLibrarySettings = .init(),
         webBrowser: WebBrowserSettings = .init(),
         system: SystemSettings = .init(),
-        smartComicMode: SmartComicModeSettings = .init()
+        boardReader: BoardReaderSettings = .init()
     ) {
         self.novelReader = novelReader
         self.novelOfflineCache = novelOfflineCache
@@ -27,14 +27,15 @@ public struct AppSettings: Codable, Hashable, Sendable {
         self.favorites = favorites
         self.webBrowser = webBrowser
         self.system = system
-        self.smartComicMode = smartComicMode
+        self.boardReader = boardReader
     }
 
-    /// Convenience so callers don't need to reach through `smartComicMode`
+    /// Convenience so callers don't need to reach through `boardReader`
     /// directly. `forumID` accepts `nil` so routing/launch-context call
     /// sites that only sometimes have a known board can pass it straight
-    /// through without an extra unwrap.
+    /// through without an extra unwrap — `nil` reports `false` like any
+    /// unconfigured board.
     public func isSmartComicModeEnabled(forumID: String?) -> Bool {
-        smartComicMode.isEnabled(forumID: forumID)
+        boardReader.isSmartComicModeEnabled(forumID: forumID)
     }
 }

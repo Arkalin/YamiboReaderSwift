@@ -114,9 +114,9 @@ struct LocalFavoriteOpenTargetResolver {
                         source: .favorites,
                         initialPage: 0,
                         directoryName: nil,
-                        forumID: latestItem.forumID,
                         offlineCacheFavoriteID: latestItem.id,
-                        isSmartModeEnabled: smartModeEnabled
+                        isSmartModeEnabled: smartModeEnabled,
+                        forumID: latestItem.forumID
                     )
                 )
             }
@@ -143,9 +143,9 @@ struct LocalFavoriteOpenTargetResolver {
                         chapterView: ownThreadProgress?.chapterView ?? 1,
                         initialPage: ownThreadProgress?.mangaPageIndex ?? 0,
                         directoryName: nil,
-                        forumID: latestItem.forumID,
                         offlineCacheFavoriteID: latestItem.id,
-                        isSmartModeEnabled: false
+                        isSmartModeEnabled: false,
+                        forumID: latestItem.forumID
                     )
                 )
             }
@@ -180,9 +180,9 @@ struct LocalFavoriteOpenTargetResolver {
                     chapterView: ownThreadProgress?.chapterView ?? 1,
                     initialPage: ownThreadProgress?.mangaPageIndex ?? 0,
                     directoryName: nil,
-                    forumID: item.forumID,
                     offlineCacheFavoriteID: item.id,
-                    isSmartModeEnabled: true
+                    isSmartModeEnabled: true,
+                    forumID: item.forumID
                 )
             )
         }
@@ -198,9 +198,9 @@ struct LocalFavoriteOpenTargetResolver {
                 chapterView: directoryProgress?.chapterView ?? firstChapter.view,
                 initialPage: directoryProgress?.mangaPageIndex ?? 0,
                 directoryName: directory.cleanBookName,
-                forumID: item.forumID,
                 offlineCacheFavoriteID: item.id,
-                isSmartModeEnabled: true
+                isSmartModeEnabled: true,
+                forumID: item.forumID
             )
         )
     }
@@ -208,8 +208,9 @@ struct LocalFavoriteOpenTargetResolver {
     /// `FavoriteItem.forumID` is only populated once metadata for the item
     /// has been resolved (remote sync probing or a healed unknown source
     /// group), so this can legitimately be `nil` for older/unresolved items
-    /// — `isSmartComicModeEnabled` treats a missing forumID as enabled,
-    /// matching this resolver's pre-Phase-B unconditional behavior.
+    /// — a missing forumID reports `false` like any board not currently
+    /// configured as `.manga(smartEnabled: true)`, so such favorites resume
+    /// on the single-thread track and never join a merged directory.
     private func isSmartComicModeEnabled(forItem item: FavoriteItem) async -> Bool {
         await settingsStore.load().isSmartComicModeEnabled(forumID: item.forumID)
     }

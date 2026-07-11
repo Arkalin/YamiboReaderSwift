@@ -90,10 +90,10 @@ enum LocalFavoriteLibraryDerivation {
         /// `FavoriteLibraryOrganizer.load()`/`reload()` time (smart-comic-mode
         /// design doc's performance constraint #2) — never recomputed here.
         var mangaDirectoriesByTID: [String: MangaDirectory] = [:]
-        /// Snapshot of the per-board toggle taken at the same load/reload
-        /// time as `mangaDirectoriesByTID`, so grouping and the settings it
-        /// was computed against never disagree mid-derivation.
-        var smartComicModeSettings: SmartComicModeSettings = SmartComicModeSettings()
+        /// Snapshot of the per-board reader configuration taken at the same
+        /// load/reload time as `mangaDirectoriesByTID`, so grouping and the
+        /// settings it was computed against never disagree mid-derivation.
+        var boardReaderSettings: BoardReaderSettings = BoardReaderSettings()
         /// Non-nil only while a merged smart-comic card's "查看归档收藏" detail
         /// page is open — threaded straight into the `cards` query as
         /// `LocalFavoriteLibraryQuery.memberScopeCleanBookName`. Deliberately
@@ -121,7 +121,7 @@ enum LocalFavoriteLibraryDerivation {
         let mangaThreadItemsByEffectiveTitle = LocalFavoriteLibraryProjection.mangaThreadItemsByEffectiveTitle(
             in: inputs.document.items,
             mangaDirectoriesByTID: inputs.mangaDirectoriesByTID,
-            smartComicModeSettings: inputs.smartComicModeSettings
+            boardReaderSettings: inputs.boardReaderSettings
         )
         let cards = resolvedCards(
             in: inputs.document,
@@ -190,7 +190,7 @@ enum LocalFavoriteLibraryDerivation {
             query: query,
             readingProgress: inputs.readingProgress,
             mangaDirectoriesByTID: inputs.mangaDirectoriesByTID,
-            smartComicModeSettings: inputs.smartComicModeSettings,
+            boardReaderSettings: inputs.boardReaderSettings,
             mangaThreadItemsByEffectiveTitle: mangaThreadItemsByEffectiveTitle
         )
         .map { card in
@@ -304,7 +304,7 @@ enum LocalFavoriteLibraryDerivation {
             var seenEffectiveTitles: Set<String> = []
             for item in members {
                 let isModeOnMangaThread = item.target.kind == .mangaThread
-                    && inputs.smartComicModeSettings.isEnabled(forumID: item.forumID)
+                    && inputs.boardReaderSettings.isSmartComicModeEnabled(forumID: item.forumID)
                 guard isModeOnMangaThread else {
                     candidates.append(CollectionPreviewCandidate(
                         sortDate: item.updatedAt,

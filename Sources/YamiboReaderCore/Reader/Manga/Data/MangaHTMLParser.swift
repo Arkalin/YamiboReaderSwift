@@ -173,7 +173,7 @@ enum MangaHTMLParser {
     static func parseTagThreadListHTML(
         _ html: String,
         groupIndex: Int = 0,
-        allowedForumIDs: Set<String> = ["30"]
+        allowedForumIDs: Set<String>
     ) -> [MangaChapter] {
         parsePCList(html, groupIndex: groupIndex, allowedForumIDs: allowedForumIDs)
     }

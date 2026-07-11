@@ -35,6 +35,23 @@ public actor SettingsStore {
         try await save(AppSettings())
     }
 
+    /// Atomic read-modify-write: load, mutate, and save run inside the actor
+    /// as one uninterruptible step, so two concurrent writers can never
+    /// interleave `load()`/`save()` pairs and clobber each other with a stale
+    /// whole-blob save. Skips the save (and the change notification) when the
+    /// mutation leaves the settings unchanged. Returns the settings as
+    /// persisted (or as loaded, when unchanged).
+    @discardableResult
+    public func update(_ mutate: @Sendable (inout AppSettings) -> Void) async throws -> AppSettings {
+        var settings = Self.loadSync(defaults: defaults, key: key)
+        let original = settings
+        mutate(&settings)
+        if settings != original {
+            try await save(settings)
+        }
+        return settings
+    }
+
     public nonisolated static func loadSync(
         defaults: UserDefaults = .standard,
         key: String = defaultKey

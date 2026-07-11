@@ -48,12 +48,20 @@ final class ForumBoardViewModel {
     var selectedFilterID: String?
     var selectedOrderOptionID: String?
     var currentPage: Int
+    var boardReaderEntry: BoardReaderSettings.Entry?
+    var boardReaderErrorMessage: String?
 
     let fid: String
     let initialTitle: String?
 
+    @ObservationIgnored private let settingsStore: SettingsStore?
     @ObservationIgnored private let repositoryProvider: @Sendable () async -> any ForumBoardPageLoading
     @ObservationIgnored private var generation = 0
+    /// Serializes this view model's two unstructured settings writers (mode
+    /// saves and board-name-snapshot refreshes): each new write awaits the
+    /// previous one, so a slow earlier write can never land after — and
+    /// silently undo — a later one.
+    @ObservationIgnored private var boardReaderWriteTask: Task<Void, Never>?
     @ObservationIgnored private lazy var pageNavigator = ForumPageNavigator<PageSnapshot>(
         capture: { [unowned self] in
             PageSnapshot(
@@ -80,6 +88,7 @@ final class ForumBoardViewModel {
         self.fid = fid
         initialTitle = title
         currentPage = max(1, initialPage)
+        settingsStore = dependencies.settingsStore
         repositoryProvider = {
             await dependencies.makeForumRepository()
         }
@@ -89,11 +98,13 @@ final class ForumBoardViewModel {
         fid: String,
         title: String?,
         initialPage: Int = 1,
-        repository: any ForumBoardPageLoading
+        repository: any ForumBoardPageLoading,
+        settingsStore: SettingsStore? = nil
     ) {
         self.fid = fid
         initialTitle = title
         currentPage = max(1, initialPage)
+        self.settingsStore = settingsStore
         repositoryProvider = {
             repository
         }
@@ -232,6 +243,59 @@ final class ForumBoardViewModel {
         transientMessage = nil
     }
 
+    /// Single source of truth for the reader-settings sheet: the persisted
+    /// entry for this board, loaded when the sheet opens and optimistically
+    /// updated by `setBoardReaderMode(_:)`.
+    func refreshBoardReaderEntry() async {
+        guard let settingsStore else { return }
+        let entryBeforeLoad = boardReaderEntry
+        let loaded = await settingsStore.load().boardReader.entry(forumID: fid)
+        // An optimistic update from `setBoardReaderMode(_:)` during the load
+        // must not be clobbered by the stale stored value.
+        guard boardReaderEntry == entryBeforeLoad else { return }
+        boardReaderEntry = loaded
+    }
+
+    /// `nil` mode = plain thread reader = no entry (PRD decision #3). Every
+    /// save stamps the current board-name snapshot: the loaded page's real
+    /// name, falling back to the entry's existing snapshot while the page is
+    /// unavailable, else `nil` — never a placeholder string.
+    func setBoardReaderMode(_ mode: BoardReaderSettings.ReaderMode?) {
+        guard let settingsStore else { return }
+        let previous = boardReaderEntry
+        let boardName = boardNameSnapshot ?? previous?.boardName
+        let updated = mode.map { BoardReaderSettings.Entry(mode: $0, boardName: boardName) }
+        boardReaderEntry = updated
+
+        let fid = fid
+        let previousWrite = boardReaderWriteTask
+        boardReaderWriteTask = Task {
+            await previousWrite?.value
+            do {
+                // Atomic entry-level mutation: `SettingsStore.update` applies
+                // it to freshly loaded settings inside the actor, so it can
+                // never clobber a concurrent writer's save with a stale blob.
+                try await settingsStore.update { settings in
+                    if let updated {
+                        settings.boardReader.setEntry(updated, forumID: fid)
+                    } else {
+                        settings.boardReader.removeEntry(forumID: fid)
+                    }
+                }
+            } catch {
+                if boardReaderEntry == updated {
+                    boardReaderEntry = previous
+                }
+                boardReaderErrorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    private var boardNameSnapshot: String? {
+        guard let name = page?.board.name, !name.isEmpty else { return nil }
+        return name
+    }
+
     private func reloadForOptionChange() async {
         generation += 1
         let requestGeneration = generation
@@ -295,6 +359,36 @@ final class ForumBoardViewModel {
     private func apply(_ page: ForumBoardPage) {
         self.page = page
         currentPage = page.pageNavigation?.currentPage ?? currentPage
+        refreshBoardNameSnapshotIfNeeded(with: page.board.name)
+    }
+
+    /// Visiting the board page silently refreshes an existing entry's
+    /// board-name snapshot (PRD decision #2). Only refreshes — never creates
+    /// an entry — and skips the write entirely when the stored name already
+    /// matches, so routine visits do not touch the settings store.
+    private func refreshBoardNameSnapshotIfNeeded(with boardName: String) {
+        guard let settingsStore, !boardName.isEmpty else { return }
+        let fid = fid
+        let previousWrite = boardReaderWriteTask
+        boardReaderWriteTask = Task {
+            await previousWrite?.value
+            do {
+                // Guarded inside the atomic mutation so it re-checks *fresh*
+                // state: if a serialized-just-before mode save removed the
+                // entry, this refresh sees that and skips — it can never
+                // resurrect a removed entry from a stale copy. An unchanged
+                // name leaves the settings untouched, so `update` skips the
+                // save entirely and routine visits don't touch the store.
+                try await settingsStore.update { settings in
+                    guard var entry = settings.boardReader.entry(forumID: fid),
+                          entry.boardName != boardName else { return }
+                    entry.boardName = boardName
+                    settings.boardReader.setEntry(entry, forumID: fid)
+                }
+            } catch {
+                YamiboLog.persistence.warning("Failed to refresh board name snapshot for fid \(fid): \(error)")
+            }
+        }
     }
 
     private enum FailurePresentation {

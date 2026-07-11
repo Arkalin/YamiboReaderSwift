@@ -128,9 +128,9 @@ final class FavoriteRemoteSyncSessionTests: XCTestCase {
     /// `ForumThreadReaderRepository`/`YamiboThreadRouteResolver`, HTTP calls
     /// intercepted by a `URLProtocol` double rather than faked away), and
     /// deliberately turns Smart Comic Mode on for a board (fid 46) that is
-    /// *off* by `SmartComicModeSettings`'s own default. If the session failed
+    /// *off* by `BoardReaderSettings`'s own default. If the session failed
     /// to forward the injected `settingsStore` (or `mangaDirectoryStore`) into
-    /// the engine, the engine would fall back to `SmartComicModeSettings()`'s
+    /// the engine, the engine would fall back to `BoardReaderSettings()`'s
     /// default (fid 46 off) or to no directory data at all, and the
     /// attribution warning below would never fire — so the warning actually
     /// firing is proof the session-to-engine wiring itself is correct, not
@@ -171,13 +171,13 @@ final class FavoriteRemoteSyncSessionTests: XCTestCase {
             ]
         ))
 
-        // fid 46 is off by `SmartComicModeSettings`'s own default — turning
-        // it on here, in the *injected* store, is what makes the warning
-        // firing meaningful proof of forwarding rather than a coincidence of
-        // the engine's own defaults.
+        // fid 46's smart bit is off by `BoardReaderSettings`'s factory
+        // default — turning it on here, in the *injected* store, is what
+        // makes the warning firing meaningful proof of forwarding rather
+        // than a coincidence of the engine's own defaults.
         let settingsStore = SettingsStore(defaults: defaults, key: "settings")
         var settings = await settingsStore.load()
-        settings.smartComicMode.enabledForumIDs = ["46"]
+        settings.boardReader.setEntry(.init(mode: .manga(smartEnabled: true)), forumID: "46")
         try await settingsStore.save(settings)
 
         FavoriteSyncWiringTestURLProtocol.newChapterTID = "981"
@@ -241,7 +241,7 @@ final class FavoriteRemoteSyncSessionTests: XCTestCase {
     /// .cleanBookName`, regardless of whether the board's Smart Comic Mode is
     /// on or off (both mode states store the raw title identically now — see
     /// that combined case's own doc comment for why). This test pins the
-    /// mode-off path specifically (fid 46, off by `SmartComicModeSettings`'s
+    /// mode-off path specifically (fid 46, off by `BoardReaderSettings`'s
     /// own default, so the resolver classifies this thread as `.mangaDirect`)
     /// — see `testStartKeepsRawTitleVerbatimForMangaModeOnRoute` below for the
     /// mode-on (`.manga`) sibling. The raw title below has a bracketed tag
@@ -259,7 +259,7 @@ final class FavoriteRemoteSyncSessionTests: XCTestCase {
         let targetCategory = document.createCategory(name: "远端")
         try await libraryStore.save(document)
 
-        // fid 46 is off by `SmartComicModeSettings`'s own default — left
+        // fid 46 is off by `BoardReaderSettings`'s own default — left
         // untouched here so the resolver classifies this manga-board thread
         // as `.mangaDirect`, not `.manga`.
         let rawTitle = "【连载】测试漫画 第3话"
@@ -313,7 +313,7 @@ final class FavoriteRemoteSyncSessionTests: XCTestCase {
     /// chapters apart on the "查看归档收藏" archive detail page. No prior test
     /// covered the `.manga` (mode-on) title-storage behavior at all — this
     /// mirrors the sibling test's structure/fixtures exactly, but with fid
-    /// "30" (中文百合漫画区, Smart Comic Mode on by `SmartComicModeSettings`'s
+    /// "30" (中文百合漫画区, Smart Comic Mode on by `BoardReaderSettings`'s
     /// own default) so the resolver classifies this manga-board thread as
     /// `.manga`, not `.mangaDirect`. The raw title below has the same
     /// bracketed tag prefix and chapter-number suffix that `cleanBookName`
@@ -330,7 +330,7 @@ final class FavoriteRemoteSyncSessionTests: XCTestCase {
         let targetCategory = document.createCategory(name: "远端")
         try await libraryStore.save(document)
 
-        // fid 30 is on by `SmartComicModeSettings`'s own default — left
+        // fid 30 is on by `BoardReaderSettings`'s own default — left
         // untouched here so the resolver classifies this manga-board thread
         // as `.manga`, not `.mangaDirect`.
         let rawTitle = "【连载】测试漫画 第4话"

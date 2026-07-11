@@ -220,6 +220,7 @@ final class BrowsingHistoryViewModel {
                 localTargetKindOverride: favoriteTargetKind(for: entry),
                 formHash: nil,
                 syncToRemote: syncToRemote,
+                boardReaderSettings: await settingsStore.load().boardReader,
                 localFavoriteLibraryStore: favoriteLibraryStore,
                 remoteRepository: await makeFavoriteRepository()
             )
@@ -236,6 +237,7 @@ final class BrowsingHistoryViewModel {
             try await FavoriteQuickActions.removeFavorite(
                 favorite,
                 removeRemote: removeRemote,
+                boardReaderSettings: await settingsStore.load().boardReader,
                 localFavoriteLibraryStore: favoriteLibraryStore,
                 remoteRepository: removeRemote ? await makeFavoriteRepository() : nil
             )

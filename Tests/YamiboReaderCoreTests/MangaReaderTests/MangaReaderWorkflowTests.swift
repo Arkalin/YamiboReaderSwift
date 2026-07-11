@@ -1310,7 +1310,7 @@ private actor RecordingMangaDirectoryRepository: MangaDirectoryRepository {
         }
     }
 
-    func loadTagDirectory(tagIDs: [String]) async throws -> [MangaChapter] {
+    func loadTagDirectory(tagIDs: [String], allowedForumID: String) async throws -> [MangaChapter] {
         tagDirectoryRequests.append(tagIDs)
         return tagChapters
     }

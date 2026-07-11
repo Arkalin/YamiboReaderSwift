@@ -14,7 +14,7 @@ final class SystemSettingsViewModel: ObservableObject {
     @Published var applePencilPageTurn = ApplePencilPageTurnSettings()
     @Published var gamepad = GamepadSettings()
     @Published var keyboard = KeyboardSettings()
-    @Published var smartComicMode = SmartComicModeSettings()
+    @Published var boardReader = BoardReaderSettings()
     @Published private(set) var novelCacheBytes = 0
     @Published private(set) var mangaIndexCacheBytes = 0
     @Published private(set) var offlineCacheBytes = 0
@@ -79,7 +79,7 @@ final class SystemSettingsViewModel: ObservableObject {
         applePencilPageTurn = settings.system.applePencilPageTurn
         gamepad = settings.system.gamepad
         keyboard = settings.system.keyboard
-        smartComicMode = settings.smartComicMode
+        boardReader = settings.boardReader
         await refreshStorageUsage()
     }
 
@@ -355,19 +355,32 @@ final class SystemSettingsViewModel: ObservableObject {
         updateNovelOfflineCache(updated)
     }
 
-    /// Toggles Smart Comic Mode for one of the 3 manageable boards
-    /// (smart-comic-mode design decision #1). `forumID` outside
-    /// `SmartComicModeSettings.manageableForumIDs` is a no-op — there is no
-    /// toggle for it.
-    func setSmartComicModeEnabled(_ isEnabled: Bool, forumID: String) {
-        guard SmartComicModeSettings.manageableForumIDs.contains(forumID) else { return }
-        var updated = smartComicMode
-        if isEnabled {
-            updated.enabledForumIDs.insert(forumID)
-        } else {
-            updated.enabledForumIDs.remove(forumID)
+    /// Overwrites the board's entry with `mode`. `boardName` must be the
+    /// entry's stored snapshot carried through unchanged — the central
+    /// settings page cannot resolve real board names; only the board page
+    /// ever writes or refreshes them.
+    func setBoardReaderMode(_ mode: BoardReaderSettings.ReaderMode, forumID: String, boardName: String?) {
+        let entry = BoardReaderSettings.Entry(mode: mode, boardName: boardName)
+        var optimistic = boardReader
+        optimistic.setEntry(entry, forumID: forumID)
+        updateBoardReader(optimistic: optimistic) { settings in
+            settings.boardReader.setEntry(entry, forumID: forumID)
         }
-        updateSmartComicMode(updated)
+    }
+
+    /// Removing the entry = back to the plain thread reader (PRD decision #3).
+    func removeBoardEntry(forumID: String) {
+        var optimistic = boardReader
+        optimistic.removeEntry(forumID: forumID)
+        updateBoardReader(optimistic: optimistic) { settings in
+            settings.boardReader.removeEntry(forumID: forumID)
+        }
+    }
+
+    func resetBoardReader() {
+        updateBoardReader(optimistic: .factoryDefault) { settings in
+            settings.boardReader = .factoryDefault
+        }
     }
 
     func clearNovelCache() async -> Bool {
@@ -421,7 +434,7 @@ final class SystemSettingsViewModel: ObservableObject {
             applePencilPageTurn = .init()
             gamepad = .init()
             keyboard = .init()
-            smartComicMode = .init()
+            boardReader = .init()
             novelCacheBytes = 0
             mangaIndexCacheBytes = 0
             offlineCacheBytes = 0
@@ -675,23 +688,31 @@ final class SystemSettingsViewModel: ObservableObject {
         }
     }
 
-    private func updateSmartComicMode(_ updated: SmartComicModeSettings) {
-        let previous = smartComicMode
-        smartComicMode = updated
+    /// Entry-level persistence via the atomic `SettingsStore.update`: the
+    /// mutation applies to *freshly loaded* settings inside the actor, so an
+    /// entry another writer (e.g. a board page's sheet or name-snapshot
+    /// refresh) persisted after this sheet's `load()` is never wiped by
+    /// replaying this sheet's whole stale map. The `@Published` copy is
+    /// optimistic display state; on success it resyncs to the persisted
+    /// result (unless a newer local edit already superseded it).
+    private func updateBoardReader(
+        optimistic updated: BoardReaderSettings,
+        mutate: @escaping @Sendable (inout AppSettings) -> Void
+    ) {
+        let previous = boardReader
+        boardReader = updated
 
         Task {
-            var settings = await dependencies.settingsStore.load()
-            settings.smartComicMode = updated
-
             do {
-                try await dependencies.settingsStore.save(settings)
-            } catch {
-                await MainActor.run {
-                    if smartComicMode == updated {
-                        smartComicMode = previous
-                    }
-                    errorMessage = error.localizedDescription
+                let saved = try await dependencies.settingsStore.update(mutate)
+                if boardReader == updated {
+                    boardReader = saved.boardReader
                 }
+            } catch {
+                if boardReader == updated {
+                    boardReader = previous
+                }
+                errorMessage = error.localizedDescription
             }
         }
     }

@@ -109,6 +109,7 @@ enum SystemSettingsConfirmation: String, Identifiable {
     case clearNovelCache
     case clearMangaIndexCache
     case clearImageCache
+    case restoreBoardReaderDefaults
     case resetApplication
 
     var id: String { rawValue }
@@ -121,6 +122,8 @@ enum SystemSettingsConfirmation: String, Identifiable {
             L10n.string("settings.confirm_clear_manga_index_cache")
         case .clearImageCache:
             L10n.string("settings.confirm_clear_image_cache")
+        case .restoreBoardReaderDefaults:
+            L10n.string("settings.board_reader.confirm_restore_default")
         case .resetApplication:
             L10n.string("settings.confirm_reset_application")
         }
@@ -134,6 +137,8 @@ enum SystemSettingsConfirmation: String, Identifiable {
             L10n.string("common.clear")
         case .clearImageCache:
             L10n.string("common.clear")
+        case .restoreBoardReaderDefaults:
+            L10n.string("settings.board_reader.restore")
         case .resetApplication:
             L10n.string("settings.reset")
         }
@@ -147,6 +152,8 @@ enum SystemSettingsConfirmation: String, Identifiable {
             L10n.string("settings.clear_manga_index_cache_message")
         case .clearImageCache:
             L10n.string("settings.clear_image_cache_message")
+        case .restoreBoardReaderDefaults:
+            L10n.string("settings.board_reader.restore_default_message")
         case .resetApplication:
             L10n.string("settings.reset_application_message")
         }

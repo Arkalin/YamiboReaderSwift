@@ -83,7 +83,10 @@ struct YamiboThreadRouteResolverTests {
     #expect(context.authorID == "705217")
 }
 
-@Test func yamiboThreadRouteResolverUsesKnownMangaKindWhenTaxonomyMisses() async throws {
+// `knownThreadKind` still classifies a fid the configuration doesn't cover,
+// but an unconfigured board never reports Smart Comic Mode on (one rule, no
+// special cases), so the route is the direct single-thread manga reader.
+@Test func yamiboThreadRouteResolverUsesKnownMangaKindWhenConfigurationMisses() async throws {
     let resolver = YamiboThreadRouteResolver(client: yamiboThreadRouteTestClient())
     let request = YamiboThreadRouteRequest(
         threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=200&mobile=2")),
@@ -94,8 +97,8 @@ struct YamiboThreadRouteResolverTests {
 
     let target = try await resolver.resolve(request)
 
-    guard case let .manga(context) = target else {
-        Issue.record("Expected manga detail target, got \(target)")
+    guard case let .mangaDirect(context) = target else {
+        Issue.record("Expected direct-to-reader manga target, got \(target)")
         return
     }
     #expect(context.thread.tid == "200")
@@ -134,7 +137,7 @@ struct YamiboThreadRouteResolverTests {
     let suiteName = YamiboTestDefaults.suiteName(prefix: "route-resolver-smart-comic-mode-enabled")
     let settingsStore = try SettingsStore(testSuiteName: suiteName, key: "settings")
     var settings = await settingsStore.load()
-    settings.smartComicMode.enabledForumIDs.insert("46")
+    settings.boardReader.setEntry(.init(mode: .manga(smartEnabled: true)), forumID: "46")
     try await settingsStore.save(settings)
     let resolver = YamiboThreadRouteResolver(client: yamiboThreadRouteTestClient(), settingsStore: settingsStore)
     let request = YamiboThreadRouteRequest(
@@ -154,11 +157,10 @@ struct YamiboThreadRouteResolverTests {
     #expect(payload.thread.fid == "46")
 }
 
-// Boards outside the manageable set (30/46/37) have no toggle at all and
-// must keep today's unconditional manga routing even when explicitly
-// classified via `knownThreadKind` (decision #1's scope is exactly these
-// three boards).
-@Test func yamiboThreadRouteResolverRoutesToMangaDetailForOutOfScopeBoardRegardlessOfSettings() async throws {
+// A board with no configuration entry never reports Smart Comic Mode on —
+// even a thread explicitly classified as manga via `knownThreadKind` opens
+// the reader directly instead of `ForumMangaDetailView`.
+@Test func yamiboThreadRouteResolverRoutesDirectlyToMangaReaderForUnconfiguredBoard() async throws {
     let suiteName = YamiboTestDefaults.suiteName(prefix: "route-resolver-smart-comic-mode-out-of-scope")
     let settingsStore = try SettingsStore(testSuiteName: suiteName, key: "settings")
     let resolver = YamiboThreadRouteResolver(client: yamiboThreadRouteTestClient(), settingsStore: settingsStore)
@@ -171,10 +173,125 @@ struct YamiboThreadRouteResolverTests {
 
     let target = try await resolver.resolve(request)
 
-    guard case .manga = target else {
+    guard case .mangaDirect = target else {
+        Issue.record("Expected direct-to-reader manga target, got \(target)")
+        return
+    }
+}
+
+// Pluggable-reader-config decision #1: ANY board — not just the old
+// hardcoded taxonomy's five — routes by whatever reader mode the user
+// configured for it. fid "99" has no factory entry at all.
+@Test func yamiboThreadRouteResolverRoutesArbitraryBoardConfiguredAsNovelToNovelReader() async throws {
+    let suiteName = YamiboTestDefaults.suiteName(prefix: "route-resolver-arbitrary-board-novel")
+    let settingsStore = try SettingsStore(testSuiteName: suiteName, key: "settings")
+    var settings = await settingsStore.load()
+    settings.boardReader.setEntry(.init(mode: .novel), forumID: "99")
+    try await settingsStore.save(settings)
+    let resolver = YamiboThreadRouteResolver(client: yamiboThreadRouteTestClient(), settingsStore: settingsStore)
+    let request = YamiboThreadRouteRequest(
+        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=900&mobile=2")),
+        title: "任意板块小说",
+        authorID: "705300",
+        tapContext: YamiboThreadTapContext(containingFid: "99")
+    )
+
+    let target = try await resolver.resolve(request)
+
+    guard case let .novel(context) = target else {
+        Issue.record("Expected novel detail target, got \(target)")
+        return
+    }
+    #expect(context.thread.tid == "900")
+    #expect(context.thread.fid == "99")
+    #expect(context.title == "任意板块小说")
+}
+
+// Same arbitrary board, configured manga with the smart bit ON: routing goes
+// to the manga detail page (`.manga`), exactly like the factory smart board.
+@Test func yamiboThreadRouteResolverRoutesArbitraryBoardConfiguredMangaSmartOnToMangaDetail() async throws {
+    let suiteName = YamiboTestDefaults.suiteName(prefix: "route-resolver-arbitrary-board-manga-smart-on")
+    let settingsStore = try SettingsStore(testSuiteName: suiteName, key: "settings")
+    var settings = await settingsStore.load()
+    settings.boardReader.setEntry(.init(mode: .manga(smartEnabled: true)), forumID: "99")
+    try await settingsStore.save(settings)
+    let resolver = YamiboThreadRouteResolver(client: yamiboThreadRouteTestClient(), settingsStore: settingsStore)
+    let request = YamiboThreadRouteRequest(
+        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=901&mobile=2")),
+        title: "任意板块漫画",
+        tapContext: YamiboThreadTapContext(containingFid: "99")
+    )
+
+    let target = try await resolver.resolve(request)
+
+    guard case let .manga(payload) = target else {
         Issue.record("Expected manga detail target, got \(target)")
         return
     }
+    #expect(payload.thread.tid == "901")
+    #expect(payload.thread.fid == "99")
+}
+
+// Manga without the smart bit: still the manga reader, but directly
+// (`.mangaDirect`), skipping the detail page.
+@Test func yamiboThreadRouteResolverRoutesArbitraryBoardConfiguredMangaSmartOffDirectlyToReader() async throws {
+    let suiteName = YamiboTestDefaults.suiteName(prefix: "route-resolver-arbitrary-board-manga-smart-off")
+    let settingsStore = try SettingsStore(testSuiteName: suiteName, key: "settings")
+    var settings = await settingsStore.load()
+    settings.boardReader.setEntry(.init(mode: .manga(smartEnabled: false)), forumID: "99")
+    try await settingsStore.save(settings)
+    let resolver = YamiboThreadRouteResolver(client: yamiboThreadRouteTestClient(), settingsStore: settingsStore)
+    let request = YamiboThreadRouteRequest(
+        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=902&mobile=2")),
+        title: "任意板块漫画",
+        tapContext: YamiboThreadTapContext(containingFid: "99")
+    )
+
+    let target = try await resolver.resolve(request)
+
+    guard case let .mangaDirect(payload) = target else {
+        Issue.record("Expected direct-to-reader manga target, got \(target)")
+        return
+    }
+    #expect(payload.thread.tid == "902")
+    #expect(payload.thread.fid == "99")
+}
+
+// Removing the same board's entry (the settings overview's 移除 action)
+// drops it straight back to the plain native thread reader — no entry means
+// no special routing of any kind (pluggable-reader-config decision #3).
+@Test func yamiboThreadRouteResolverFallsBackToThreadReaderWhenBoardEntryIsRemoved() async throws {
+    let suiteName = YamiboTestDefaults.suiteName(prefix: "route-resolver-arbitrary-board-entry-removed")
+    let settingsStore = try SettingsStore(testSuiteName: suiteName, key: "settings")
+    var settings = await settingsStore.load()
+    settings.boardReader.setEntry(.init(mode: .novel), forumID: "99")
+    try await settingsStore.save(settings)
+    let resolver = YamiboThreadRouteResolver(client: yamiboThreadRouteTestClient(), settingsStore: settingsStore)
+    let request = YamiboThreadRouteRequest(
+        threadURL: try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=903&mobile=2")),
+        title: "撤销配置的帖子",
+        tapContext: YamiboThreadTapContext(containingFid: "99")
+    )
+
+    let configuredTarget = try await resolver.resolve(request)
+    guard case .novel = configuredTarget else {
+        Issue.record("Expected novel detail target while configured, got \(configuredTarget)")
+        return
+    }
+
+    settings = await settingsStore.load()
+    settings.boardReader.removeEntry(forumID: "99")
+    try await settingsStore.save(settings)
+
+    let target = try await resolver.resolve(request)
+
+    guard case let .thread(context) = target else {
+        Issue.record("Expected native thread reader target after removal, got \(target)")
+        return
+    }
+    #expect(context.thread.tid == "903")
+    #expect(context.thread.fid == "99")
+    #expect(context.title == "撤销配置的帖子")
 }
 
 @Test func yamiboThreadRouteResolverNativeThreadIntentBypassesNovelClassification() async throws {

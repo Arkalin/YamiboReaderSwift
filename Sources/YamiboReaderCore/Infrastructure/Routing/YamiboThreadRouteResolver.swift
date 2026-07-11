@@ -45,15 +45,18 @@ public actor YamiboThreadRouteResolver {
             )
         }
 
+        let settings = await settingsStore.load().boardReader
+
         let initialFid = request.tapContext.containingFid ?? request.threadFid
         let initialKind = kindForKnownInputs(
             fid: initialFid,
             knownThreadKind: request.knownThreadKind,
-            title: nil
+            title: nil,
+            settings: settings
         )
 
         let metadata: YamiboThreadMetadata?
-        if shouldFetchMetadata(fid: initialFid, knownThreadKind: request.knownThreadKind) {
+        if shouldFetchMetadata(fid: initialFid, knownThreadKind: request.knownThreadKind, settings: settings) {
             do {
                 metadata = try await loadMetadata(for: requestURL)
             } catch let fallback as YamiboThreadRouteResolverWebFallback {
@@ -77,7 +80,8 @@ public actor YamiboThreadRouteResolver {
             : kindForKnownInputs(
                 fid: fid,
                 knownThreadKind: request.knownThreadKind,
-                title: [title, metadata?.sectionText].compactMap { $0 }.joined(separator: " ")
+                title: [title, metadata?.sectionText].compactMap { $0 }.joined(separator: " "),
+                settings: settings
             )
 
         switch kind {
@@ -103,12 +107,12 @@ public actor YamiboThreadRouteResolver {
                 initialPage: baseInitialPage,
                 targetPostID: targetPostID
             )
-            // Classification (kind == .manga) never depends on the toggle
-            // (decision #4) — only which UI this routes to does. Boards
-            // outside the manageable set (or a missing fid) always report
-            // enabled, so this preserves today's unconditional `.manga`
-            // routing everywhere the feature doesn't apply.
-            guard await isSmartComicModeEnabled(forumID: fid) else {
+            // Classification (kind == .manga) picks the manga reader; the
+            // board's smart bit only decides which entry point: detail page
+            // (`.manga`) when smart is on, direct single-chapter reading
+            // (`.mangaDirect`) otherwise. The strict rule applies — an
+            // unconfigured or missing fid never reports smart-enabled.
+            guard settings.isSmartComicModeEnabled(forumID: fid) else {
                 return .mangaDirect(payload)
             }
             return .manga(payload)
@@ -133,12 +137,12 @@ public actor YamiboThreadRouteResolver {
         }
     }
 
-    private func isSmartComicModeEnabled(forumID: String?) async -> Bool {
-        await settingsStore.load().isSmartComicModeEnabled(forumID: forumID)
-    }
-
-    private func shouldFetchMetadata(fid: String?, knownThreadKind: YamiboThreadKind?) -> Bool {
-        if let fid, YamiboThreadTaxonomy.threadKind(for: fid) != .unknown {
+    private func shouldFetchMetadata(
+        fid: String?,
+        knownThreadKind: YamiboThreadKind?,
+        settings: BoardReaderSettings
+    ) -> Bool {
+        if let fid, settings.threadKind(forumID: fid) != .unknown {
             return false
         }
         if let knownThreadKind, knownThreadKind != .unknown {
@@ -161,12 +165,13 @@ public actor YamiboThreadRouteResolver {
     private func kindForKnownInputs(
         fid: String?,
         knownThreadKind: YamiboThreadKind?,
-        title: String?
+        title: String?,
+        settings: BoardReaderSettings
     ) -> YamiboThreadKind {
         if let fid {
-            let taxonomyKind = YamiboThreadTaxonomy.threadKind(for: fid)
-            if taxonomyKind != .unknown {
-                return taxonomyKind
+            let configuredKind = settings.threadKind(forumID: fid)
+            if configuredKind != .unknown {
+                return configuredKind
             }
             if let knownThreadKind, knownThreadKind != .unknown {
                 return knownThreadKind

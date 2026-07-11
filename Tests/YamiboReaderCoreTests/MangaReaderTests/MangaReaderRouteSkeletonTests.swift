@@ -16,8 +16,11 @@ struct MangaReaderTestsRouteContracts {
             knownThreadKind: .manga
         ))
 
-        guard case let .manga(payload) = target else {
-            Issue.record("Expected manga payload")
+        // A request without a fid can never come from a smart-enabled manga
+        // board (one rule, no special cases), so the manga classification
+        // routes to the direct single-thread reader payload.
+        guard case let .mangaDirect(payload) = target else {
+            Issue.record("Expected direct-to-reader manga payload")
             return
         }
         #expect(payload.thread.tid == "700")

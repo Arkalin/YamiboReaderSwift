@@ -61,8 +61,8 @@ struct BrowsingHistoryOpenTargetResolver {
                         chapterView: ownThreadProgress?.chapterView ?? 1,
                         initialPage: ownThreadProgress?.mangaPageIndex ?? 0,
                         directoryName: nil,
-                        forumID: entry.forumID,
-                        isSmartModeEnabled: false
+                        isSmartModeEnabled: false,
+                        forumID: entry.forumID
                     )
                 )
             }
@@ -77,8 +77,8 @@ struct BrowsingHistoryOpenTargetResolver {
                         chapterView: ownThreadProgress?.chapterView ?? 1,
                         initialPage: ownThreadProgress?.mangaPageIndex ?? 0,
                         directoryName: nil,
-                        forumID: entry.forumID,
-                        isSmartModeEnabled: true
+                        isSmartModeEnabled: true,
+                        forumID: entry.forumID
                     )
                 )
             }
@@ -96,8 +96,8 @@ struct BrowsingHistoryOpenTargetResolver {
                     chapterView: directoryProgress?.chapterView ?? firstChapter.view,
                     initialPage: directoryProgress?.mangaPageIndex ?? 0,
                     directoryName: directory.cleanBookName,
-                    forumID: entry.forumID,
-                    isSmartModeEnabled: true
+                    isSmartModeEnabled: true,
+                    forumID: entry.forumID
                 )
             )
 
@@ -122,8 +122,8 @@ struct BrowsingHistoryOpenTargetResolver {
                         chapterView: ownThreadProgress?.chapterView ?? directoryProgress?.chapterView ?? 1,
                         initialPage: ownThreadProgress?.mangaPageIndex ?? 0,
                         directoryName: nil,
-                        forumID: entry.forumID,
-                        isSmartModeEnabled: false
+                        isSmartModeEnabled: false,
+                        forumID: entry.forumID
                     )
                 )
             }
@@ -147,8 +147,8 @@ struct BrowsingHistoryOpenTargetResolver {
                     chapterView: directoryProgress?.chapterView ?? fallbackChapterView,
                     initialPage: directoryProgress?.mangaPageIndex ?? 0,
                     directoryName: cleanBookName,
-                    forumID: entry.forumID,
-                    isSmartModeEnabled: true
+                    isSmartModeEnabled: true,
+                    forumID: entry.forumID
                 )
             )
         }

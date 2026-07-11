@@ -43,6 +43,7 @@ enum FavoriteQuickActions {
         localTargetKindOverride: FavoriteItemTargetKind? = nil,
         formHash: String?,
         syncToRemote: Bool,
+        boardReaderSettings: BoardReaderSettings,
         localFavoriteLibraryStore: FavoriteLibraryStore,
         remoteRepository: (any ForumThreadFavoriteRemoteOperating)?
     ) async throws -> AddResult {
@@ -53,6 +54,7 @@ enum FavoriteQuickActions {
             forumName: forumName,
             contentUpdatedAt: contentUpdatedAt,
             localTargetKindOverride: localTargetKindOverride,
+            boardReaderSettings: boardReaderSettings,
             localFavoriteLibraryStore: localFavoriteLibraryStore
         )
         guard syncToRemote, let remoteRepository else {
@@ -84,6 +86,7 @@ enum FavoriteQuickActions {
     static func removeFavorite(
         _ favorite: Favorite,
         removeRemote: Bool,
+        boardReaderSettings: BoardReaderSettings,
         localFavoriteLibraryStore: FavoriteLibraryStore,
         remoteRepository: (any ForumThreadFavoriteRemoteOperating)?
     ) async throws {
@@ -109,7 +112,7 @@ enum FavoriteQuickActions {
             // re-deriving a target when no matching item exists (nothing to
             // look up — e.g. a concurrent removal already won).
             let target = document.items.first { $0.target.threadID == favorite.threadID }?.target
-                ?? (try? localTarget(for: favorite, forumID: nil))
+                ?? (try? localTarget(for: favorite, forumID: nil, boardReaderSettings: boardReaderSettings))
             guard let target else { return }
             document.removeItem(target: target)
         }
@@ -151,6 +154,7 @@ enum FavoriteQuickActions {
         forumName: String?,
         contentUpdatedAt: Date?,
         localTargetKindOverride: FavoriteItemTargetKind? = nil,
+        boardReaderSettings: BoardReaderSettings,
         localFavoriteLibraryStore: FavoriteLibraryStore
     ) async throws -> FavoriteItem {
         let target: FavoriteItemTarget
@@ -162,7 +166,7 @@ enum FavoriteQuickActions {
             // misfile it as `.normalThread`.
             target = FavoriteItemTarget(kind: localTargetKindOverride, threadID: favorite.threadID)
         } else {
-            target = try localTarget(for: favorite, forumID: forumID)
+            target = try localTarget(for: favorite, forumID: forumID, boardReaderSettings: boardReaderSettings)
         }
         return try await localFavoriteLibraryStore.update { document in
             let item = try FavoriteItem(
@@ -182,24 +186,27 @@ enum FavoriteQuickActions {
         }
     }
 
-    /// Classifies a favorite's target kind (decision #4): `.novelThread`
-    /// keeps its existing priority over board classification (unchanged from
-    /// pre-Phase-F behavior — a novel-type favorite never becomes a manga
-    /// thread just because it happens to share a board id), then falls back
-    /// to `.mangaThread` purely by the thread's board fid via
-    /// `YamiboThreadTaxonomy.threadKind(for:)` — independent of whether that
-    /// board's Smart Comic Mode toggle is currently on or off (decision #4's
-    /// explicit point: the toggle only affects display grouping/routing, not
-    /// classification, so a favorite's kind never flips depending on when it
-    /// was added relative to a toggle flip). `forumID` is optional because
-    /// not every call site can supply one (see `removeFavorite`, which looks
-    /// up the stored target instead of relying on this classification when
-    /// possible) — a missing/blank fid simply can't classify as manga.
-    private static func localTarget(for favorite: Favorite, forumID: String?) throws -> FavoriteItemTarget {
+    /// Classifies a favorite's target kind: `.novelThread` keeps its
+    /// existing priority over board classification (a novel-type favorite
+    /// never becomes a manga thread just because it happens to share a board
+    /// id), then falls back to `.mangaThread` purely by the thread's board
+    /// fid via `BoardReaderSettings.threadKind(forumID:)` — independent of
+    /// that board's Smart Comic Mode bit (the bit only affects display
+    /// grouping/routing, not classification). Kind is stamped at add time
+    /// and never rewritten by later configuration changes. `forumID` is
+    /// optional because not every call site can supply one (see
+    /// `removeFavorite`, which looks up the stored target instead of relying
+    /// on this classification when possible) — a missing/blank fid simply
+    /// can't classify as manga.
+    private static func localTarget(
+        for favorite: Favorite,
+        forumID: String?,
+        boardReaderSettings: BoardReaderSettings
+    ) throws -> FavoriteItemTarget {
         let kind: FavoriteItemTargetKind
         if favorite.type == .novel {
             kind = .novelThread
-        } else if let forumID, YamiboThreadTaxonomy.threadKind(for: forumID) == .manga {
+        } else if boardReaderSettings.threadKind(forumID: forumID) == .manga {
             kind = .mangaThread
         } else {
             kind = .normalThread

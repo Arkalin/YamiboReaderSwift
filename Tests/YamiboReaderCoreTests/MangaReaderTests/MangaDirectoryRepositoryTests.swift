@@ -102,14 +102,14 @@ struct MangaReaderTestsDirectoryRepository {
         }
 
         let repository = YamiboMangaDirectoryRepository(client: testClient(session: harness.session))
-        let chapters = try await repository.loadTagDirectory(tagIDs: [" 12 ", "", "12", "34"])
+        let chapters = try await repository.loadTagDirectory(tagIDs: [" 12 ", "", "12", "34"], allowedForumID: "30")
 
         #expect(chapters.map(\.tid) == ["1201", "3401"])
         #expect(chapters.map(\.groupIndex) == [0, 1])
         #expect(harness.requests.map { $0.url?.absoluteString ?? "" }.count == 3)
     }
 
-    @Test func tagDirectoryKeepsOnlyChineseYuriMangaForumRows() async throws {
+    @Test func tagDirectoryKeepsOnlyRowsFromAllowedForum() async throws {
         let harness = MangaReaderDataTestHarness()
         defer { harness.reset() }
 
@@ -124,10 +124,13 @@ struct MangaReaderTestsDirectoryRepository {
             """)
         }
 
+        // The explicitly passed board fid governs the row filter — rows from
+        // any other board are dropped, including fid 30 (the old hardcoded
+        // value), proving the filter is no longer pinned to board 30.
         let repository = YamiboMangaDirectoryRepository(client: YamiboClient(session: harness.session))
-        let chapters = try await repository.loadTagDirectory(tagIDs: ["20013"])
+        let chapters = try await repository.loadTagDirectory(tagIDs: ["20013"], allowedForumID: "33")
 
-        #expect(chapters.map(\.tid) == ["571415"])
+        #expect(chapters.map(\.tid) == ["570528"])
     }
 
     @Test func tagDirectoryThrowsFloodControlInsteadOfReturningPartialResults() async throws {
@@ -145,7 +148,7 @@ struct MangaReaderTestsDirectoryRepository {
         let repository = YamiboMangaDirectoryRepository(client: YamiboClient(session: harness.session))
 
         await #expect(throws: YamiboError.floodControl) {
-            _ = try await repository.loadTagDirectory(tagIDs: ["12"])
+            _ = try await repository.loadTagDirectory(tagIDs: ["12"], allowedForumID: "30")
         }
     }
 

@@ -46,9 +46,10 @@ struct YamiboMangaDirectoryRepository: MangaDirectoryRepository {
         }
     }
 
-    func loadTagDirectory(tagIDs: [String]) async throws -> [MangaChapter] {
+    func loadTagDirectory(tagIDs: [String], allowedForumID: String) async throws -> [MangaChapter] {
         let normalizedTagIDs = normalizedUniqueValues(tagIDs)
         guard !normalizedTagIDs.isEmpty else { return [] }
+        let allowedForumIDs = Set([allowedForumID])
 
         return try await MangaReaderDataSupport.mapNetworkErrors {
             var chapters: [MangaChapter] = []
@@ -59,7 +60,11 @@ struct YamiboMangaDirectoryRepository: MangaDirectoryRepository {
                     userAgent: YamiboNetworkConfiguration.desktopTagUserAgent
                 )
                 try MangaReaderDataSupport.validateReadableMangaHTML(firstHTML)
-                chapters.append(contentsOf: MangaHTMLParser.parseTagThreadListHTML(firstHTML, groupIndex: groupIndex))
+                chapters.append(contentsOf: MangaHTMLParser.parseTagThreadListHTML(
+                    firstHTML,
+                    groupIndex: groupIndex,
+                    allowedForumIDs: allowedForumIDs
+                ))
 
                 let totalPages = MangaHTMLParser.extractTotalPages(from: firstHTML)
                 guard totalPages > 1 else { continue }
@@ -71,7 +76,11 @@ struct YamiboMangaDirectoryRepository: MangaDirectoryRepository {
                         userAgent: YamiboNetworkConfiguration.desktopTagUserAgent
                     )
                     try MangaReaderDataSupport.validateReadableMangaHTML(html)
-                    let pageChapters = MangaHTMLParser.parseTagThreadListHTML(html, groupIndex: groupIndex)
+                    let pageChapters = MangaHTMLParser.parseTagThreadListHTML(
+                        html,
+                        groupIndex: groupIndex,
+                        allowedForumIDs: allowedForumIDs
+                    )
                     guard !pageChapters.isEmpty else { continue }
                     chapters.append(contentsOf: pageChapters)
                 }

@@ -167,11 +167,15 @@ public final class NovelReaderViewModel: ObservableObject {
         context.threadTitle.isEmpty ? L10n.string("reader.title") : context.threadTitle
     }
 
-    /// Cover menu entries for images opened from this novel's thread.
+    /// Cover menu entries for images opened from this novel's thread. The
+    /// novel reader never supplies a manga directory store, and a novel
+    /// board is never a smart-enabled manga board, so the smart gate is a
+    /// constant `false`.
     var imageBrowserCoverActionsProvider: ImageBrowserCoverActionsProvider {
         ImageBrowserThreadCoverActions.provider(
             tid: context.threadID,
-            contentCoverStore: { [dependencies] in dependencies.contentCoverStore }
+            contentCoverStore: { [dependencies] in dependencies.contentCoverStore },
+            isSmartComicModeEnabled: { false }
         )
     }
 

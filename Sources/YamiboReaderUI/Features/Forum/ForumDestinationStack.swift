@@ -280,8 +280,8 @@ final class ForumDestinationNavigator {
                 chapterTID: payload.thread.tid,
                 displayTitle: payload.title,
                 source: .forum,
-                forumID: payload.thread.fid,
-                isSmartModeEnabled: false
+                isSmartModeEnabled: false,
+                forumID: payload.thread.fid
             )
             appModel.presentMangaReader(context)
         case let .thread(payload):

@@ -152,7 +152,14 @@ struct LikeWorkListView: View {
                     // resolved — and per decision #12, that only ever happens
                     // for a mode-on board. So every liked manga image
                     // necessarily came from a mode-on read.
-                    isSmartModeEnabled: true
+                    isSmartModeEnabled: true,
+                    // Like items carry no board fid (`LikeItem`/`LikeWorkKey`
+                    // are keyed by cleanBookName only), so there is nothing
+                    // to pass — the reader view model's configuration
+                    // fallback substitutes "30", matching this launch path's
+                    // behavior before `forumID` existed. Known gap,
+                    // pluggable-reader-config R4.
+                    forumID: nil
                 )
             )
         }

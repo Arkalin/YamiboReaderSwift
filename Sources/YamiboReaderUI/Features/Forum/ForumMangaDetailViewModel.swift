@@ -45,7 +45,18 @@ final class ForumMangaDetailViewModel {
     ) {
         self.context = context
         self.dependencies = dependencies
-        self.workflowConfiguration = workflowConfiguration
+        // Stamp the launching board's fid over the injected configuration
+        // (mirroring MangaReaderViewModel's construction): the detail page's
+        // 更新目录 action reaches `workflow.updateDirectory` → search, which
+        // must query THIS board — never the test-convenience default "30"
+        // (pluggable-reader-config decision #6). A fid-less route (routing
+        // always sets one today) keeps the injected configuration's own
+        // value, i.e. exactly the pre-stamping behavior.
+        var configuration = workflowConfiguration
+        if let fid = context.thread.fid {
+            configuration.searchForumID = fid
+        }
+        self.workflowConfiguration = configuration
         self.makeThreadCoverPageRepository = makeThreadCoverPageRepository
             ?? { [makeForumThreadReaderRepository = dependencies.makeForumThreadReaderRepository] in
                 await makeForumThreadReaderRepository()
@@ -176,7 +187,6 @@ final class ForumMangaDetailViewModel {
                 displayTitle: context.title,
                 source: .forum,
                 directoryName: context.directoryNameHint,
-                forumID: context.thread.fid,
                 // `ForumMangaDetailView` (and this view model) is only ever
                 // reached via `YamiboThreadRouteTarget.manga`, which
                 // `YamiboThreadRouteResolver` only produces when the board's
@@ -185,7 +195,8 @@ final class ForumMangaDetailViewModel {
                 // `true` (rather than re-querying `AppSettings`) keeps this
                 // view model from needing its own settings dependency for a
                 // fact its caller already established.
-                isSmartModeEnabled: true
+                isSmartModeEnabled: true,
+                forumID: context.thread.fid
             )
             let resolution = try await workflow.resolveInitialDirectory(
                 context: launchContext,
@@ -240,10 +251,10 @@ final class ForumMangaDetailViewModel {
             chapterView: manga?.chapterView ?? fallbackChapterView,
             initialPage: manga?.mangaPageIndex ?? 0,
             directoryName: directory.cleanBookName,
-            forumID: context.thread.fid,
             // See the comment in `reload()`: this view model only exists
             // for mode-on boards.
-            isSmartModeEnabled: true
+            isSmartModeEnabled: true,
+            forumID: context.thread.fid
         )
     }
 
@@ -255,10 +266,10 @@ final class ForumMangaDetailViewModel {
             source: .forum,
             chapterView: chapter.view,
             directoryName: directory?.cleanBookName ?? context.directoryNameHint,
-            forumID: context.thread.fid,
             // See the comment in `reload()`: this view model only exists
             // for mode-on boards.
-            isSmartModeEnabled: true
+            isSmartModeEnabled: true,
+            forumID: context.thread.fid
         )
     }
 
@@ -589,7 +600,7 @@ private struct UnreachedMangaDirectoryRepository: MangaDirectoryRepository {
         throw YamiboError.underlying("Manga directory repository is not reachable from this call site.")
     }
 
-    func loadTagDirectory(tagIDs: [String]) async throws -> [MangaChapter] {
+    func loadTagDirectory(tagIDs: [String], allowedForumID: String) async throws -> [MangaChapter] {
         throw YamiboError.underlying("Manga directory repository is not reachable from this call site.")
     }
 

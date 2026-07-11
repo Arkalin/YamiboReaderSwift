@@ -220,6 +220,15 @@ public final class MangaReaderViewModel: ObservableObject {
                 self?.imageSource(for: page) ?? page.mangaReaderImageSource(offlineScope: nil)
             }
         )
+        // Directory search/tag filtering is scoped to the launching thread's
+        // own board (pluggable-reader-config decision #6). The launch context
+        // carries that board's fid; a context without one (likes, pre-forumID
+        // persisted routes) falls back to "30" here — the single UI-side
+        // fallback point (R4) — so such launches search exactly as they do
+        // today. The time-related fields stay whatever the dependencies
+        // provided (tests inject manual clocks through them).
+        var directoryWorkflowConfiguration = dependencies.directoryWorkflowConfiguration
+        directoryWorkflowConfiguration.searchForumID = context.forumID ?? "30"
         let workflow = MangaReaderWorkflow(
             context: context,
             projectionLoader: await dependencies.makeProjectionLoader(),
@@ -227,7 +236,7 @@ public final class MangaReaderViewModel: ObservableObject {
             directoryStore: dependencies.makeDirectoryStore(),
             offlineCacheStore: dependencies.makeOfflineCacheStore(),
             settings: committedSettings,
-            directoryWorkflowConfiguration: dependencies.directoryWorkflowConfiguration,
+            directoryWorkflowConfiguration: directoryWorkflowConfiguration,
             directorySearchCooldownState: dependencies.makeDirectorySearchCooldownState()
         )
         self.workflow = workflow
@@ -1424,10 +1433,10 @@ public final class MangaReaderViewModel: ObservableObject {
             chapterView: currentPage.sourceIdentity.view,
             initialPage: currentPage.localIndex,
             directoryName: directoryName,
-            forumID: context.forumID,
             offlineCacheFavoriteID: context.offlineCacheFavoriteID,
             isPreview: context.isPreview,
-            isSmartModeEnabled: context.isSmartModeEnabled
+            isSmartModeEnabled: context.isSmartModeEnabled,
+            forumID: context.forumID
         )
         return MangaReaderProgressSnapshot(
             progress: progress,

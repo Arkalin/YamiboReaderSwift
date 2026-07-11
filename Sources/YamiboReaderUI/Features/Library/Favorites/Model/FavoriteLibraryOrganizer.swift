@@ -107,10 +107,10 @@ final class FavoriteLibraryOrganizer: ObservableObject {
     /// (containingTIDs:)` call — never recomputed per render (the design
     /// doc's performance constraint #2).
     private var mangaDirectoriesByTID: [String: MangaDirectory] = [:]
-    /// Snapshot of the per-board Smart Comic Mode toggle taken at the same
+    /// Snapshot of the per-board reader configuration taken at the same
     /// load/reload as `mangaDirectoriesByTID`, so the two are always
     /// consistent with each other for a given derivation.
-    private var smartComicModeSettings = SmartComicModeSettings()
+    private var boardReaderSettings = BoardReaderSettings()
     private var libraryUpdatesTask: Task<Void, Never>?
     private var progressUpdatesTask: Task<Void, Never>?
     private var coverUpdatesTask: Task<Void, Never>?
@@ -187,7 +187,7 @@ final class FavoriteLibraryOrganizer: ObservableObject {
                       changeID == store.changeID else {
                     continue
                 }
-                await self.reloadSmartComicModeSettings()
+                await self.reloadBoardReaderSettings()
             }
         }
         // Without this, renaming a manga directory from the manga reader's
@@ -302,8 +302,8 @@ final class FavoriteLibraryOrganizer: ObservableObject {
         }
         let threadCovers = await loadContentCovers(for: loadedDocument.items)
         let settings = await settingsStore.load()
-        smartComicModeSettings = settings.smartComicMode
-        mangaDirectoriesByTID = await resolveMangaDirectories(for: loadedDocument.items, smartComicModeSettings: smartComicModeSettings)
+        boardReaderSettings = settings.boardReader
+        mangaDirectoriesByTID = await resolveMangaDirectories(for: loadedDocument.items, boardReaderSettings: boardReaderSettings)
         coverLookup = threadCovers.merging(
             await smartMangaCoverLookup(for: Array(Set(mangaDirectoriesByTID.values)))
         )
@@ -350,8 +350,8 @@ final class FavoriteLibraryOrganizer: ObservableObject {
         // can't clobber the sort order the user may have just changed live
         // in this session.
         let settings = await settingsStore.load()
-        smartComicModeSettings = settings.smartComicMode
-        mangaDirectoriesByTID = await resolveMangaDirectories(for: loadedDocument.items, smartComicModeSettings: smartComicModeSettings)
+        boardReaderSettings = settings.boardReader
+        mangaDirectoriesByTID = await resolveMangaDirectories(for: loadedDocument.items, boardReaderSettings: boardReaderSettings)
         coverLookup = threadCovers.merging(
             await smartMangaCoverLookup(for: Array(Set(mangaDirectoriesByTID.values)))
         )
@@ -386,7 +386,7 @@ final class FavoriteLibraryOrganizer: ObservableObject {
     }
 
     /// Re-derives only the Smart Comic Mode-dependent slice of state
-    /// (`smartComicModeSettings`/`mangaDirectoriesByTID`/`coverLookup`'s
+    /// (`boardReaderSettings`/`mangaDirectoriesByTID`/`coverLookup`'s
     /// `.smartManga` slice) in response to *any*
     /// `SettingsStore.didChangeNotification` — mirroring `reload()`'s
     /// deliberately narrower approach (see the comment at `reload()`):
@@ -397,11 +397,11 @@ final class FavoriteLibraryOrganizer: ObservableObject {
     /// may have just changed live in this session. Guarded on an actual
     /// diff so unrelated settings saves (which also post this notification)
     /// don't re-run the manga-directory batch query for no reason.
-    private func reloadSmartComicModeSettings() async {
+    private func reloadBoardReaderSettings() async {
         let settings = await settingsStore.load()
-        guard settings.smartComicMode != smartComicModeSettings else { return }
-        smartComicModeSettings = settings.smartComicMode
-        mangaDirectoriesByTID = await resolveMangaDirectories(for: document.items, smartComicModeSettings: smartComicModeSettings)
+        guard settings.boardReader != boardReaderSettings else { return }
+        boardReaderSettings = settings.boardReader
+        mangaDirectoriesByTID = await resolveMangaDirectories(for: document.items, boardReaderSettings: boardReaderSettings)
         coverLookup.replaceSmartMangaSlice(
             with: await smartMangaCoverLookup(for: Array(Set(mangaDirectoriesByTID.values)))
         )
@@ -429,7 +429,7 @@ final class FavoriteLibraryOrganizer: ObservableObject {
     /// identity and show no/stale progress on a card immediately after a
     /// rename, until some other reload happened to refresh it.
     private func reloadMangaDirectories() async {
-        mangaDirectoriesByTID = await resolveMangaDirectories(for: document.items, smartComicModeSettings: smartComicModeSettings)
+        mangaDirectoriesByTID = await resolveMangaDirectories(for: document.items, boardReaderSettings: boardReaderSettings)
         coverLookup.replaceSmartMangaSlice(
             with: await smartMangaCoverLookup(for: Array(Set(mangaDirectoriesByTID.values)))
         )
@@ -688,7 +688,7 @@ final class FavoriteLibraryOrganizer: ObservableObject {
     private func isSmartCardFavoriteID(_ id: String) -> Bool {
         guard selectedMergedGroupCleanBookName == nil,
               let item = document.items.first(where: { $0.id == id }) else { return false }
-        return item.target.kind == .mangaThread && smartComicModeSettings.isEnabled(forumID: item.forumID)
+        return item.target.kind == .mangaThread && boardReaderSettings.isSmartComicModeEnabled(forumID: item.forumID)
     }
 
     /// Whether the current selection has anything `deleteSelection` would
@@ -726,13 +726,13 @@ final class FavoriteLibraryOrganizer: ObservableObject {
         let itemsByEffectiveTitle = LocalFavoriteLibraryProjection.mangaThreadItemsByEffectiveTitle(
             in: document.items,
             mangaDirectoriesByTID: mangaDirectoriesByTID,
-            smartComicModeSettings: smartComicModeSettings
+            boardReaderSettings: boardReaderSettings
         )
         var expanded = favoriteIDs
         for id in favoriteIDs {
             guard let item = document.items.first(where: { $0.id == id }),
                   item.target.kind == .mangaThread,
-                  smartComicModeSettings.isEnabled(forumID: item.forumID) else { continue }
+                  boardReaderSettings.isSmartComicModeEnabled(forumID: item.forumID) else { continue }
             let directory = mangaDirectoriesByTID[item.target.threadID ?? ""]
             let effectiveTitle = FavoriteCardProjection.resolvedTitle(
                 item: item,
@@ -1064,7 +1064,7 @@ final class FavoriteLibraryOrganizer: ObservableObject {
                 coverURLsByKey: coverLookup.urlsByKey,
                 textCoverForcedKeys: coverLookup.forcedKeys,
                 mangaDirectoriesByTID: mangaDirectoriesByTID,
-                smartComicModeSettings: smartComicModeSettings,
+                boardReaderSettings: boardReaderSettings,
                 memberScopeCleanBookName: selectedMergedGroupCleanBookName
             )
         )
@@ -1088,7 +1088,7 @@ final class FavoriteLibraryOrganizer: ObservableObject {
                     coverURLsByKey: coverLookup.urlsByKey,
                     textCoverForcedKeys: coverLookup.forcedKeys,
                     mangaDirectoriesByTID: mangaDirectoriesByTID,
-                    smartComicModeSettings: smartComicModeSettings
+                    boardReaderSettings: boardReaderSettings
                     // `memberScopeCleanBookName` intentionally omitted (nil
                     // default): `rootDerived` must never narrow to this scope.
                 )
@@ -1191,7 +1191,7 @@ final class FavoriteLibraryOrganizer: ObservableObject {
     /// needs, in exactly one batched query — the design doc's performance
     /// constraint #1. `items` is first narrowed in memory (no I/O) to
     /// mode-on `.mangaThread` favorites only, using the *explicit*
-    /// `SmartComicModeSettings.isEnabled(forumID:)` check (never a proxy
+    /// `BoardReaderSettings.isSmartComicModeEnabled(forumID:)` check (never a proxy
     /// signal — this exact class of bug bit three earlier phases), before
     /// the single `MangaDirectoryStore.directories(containingTIDs:)` round
     /// trip. Called only from `load()`/`reload()`, never from
@@ -1199,12 +1199,12 @@ final class FavoriteLibraryOrganizer: ObservableObject {
     /// performance constraint #2.
     private func resolveMangaDirectories(
         for items: [FavoriteItem],
-        smartComicModeSettings: SmartComicModeSettings
+        boardReaderSettings: BoardReaderSettings
     ) async -> [String: MangaDirectory] {
         guard let mangaDirectoryStore else { return [:] }
         let candidateTIDs = items.compactMap { item -> String? in
             guard item.target.kind == .mangaThread,
-                  smartComicModeSettings.isEnabled(forumID: item.forumID) else {
+                  boardReaderSettings.isSmartComicModeEnabled(forumID: item.forumID) else {
                 return nil
             }
             return item.target.threadID
@@ -1343,7 +1343,7 @@ final class FavoriteLibraryOrganizer: ObservableObject {
         let groups = LocalFavoriteLibraryProjection.mangaDirectoryGroups(
             for: items,
             mangaDirectoriesByTID: mangaDirectoriesByTID,
-            smartComicModeSettings: smartComicModeSettings
+            boardReaderSettings: boardReaderSettings
         )
         let missing = groups.filter { group in
             let key = ContentCoverKey.smartManga(cleanBookName: group.directory.cleanBookName)

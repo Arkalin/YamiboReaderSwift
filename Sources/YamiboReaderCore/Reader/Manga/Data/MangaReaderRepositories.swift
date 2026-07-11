@@ -75,7 +75,11 @@ public struct MangaDirectorySeed: Hashable, Sendable {
 
 public protocol MangaDirectoryRepository: Sendable {
     func loadDirectorySeed(for threadID: String) async throws -> MangaDirectorySeed
-    func loadTagDirectory(tagIDs: [String]) async throws -> [MangaChapter]
+    /// `allowedForumID` scopes the tag list to rows belonging to that board
+    /// (the launching thread's board fid, pluggable-reader-config decision
+    /// #6) — tag pages mix threads from every board, so rows from other
+    /// boards are dropped.
+    func loadTagDirectory(tagIDs: [String], allowedForumID: String) async throws -> [MangaChapter]
     func searchDirectory(keyword: String, forumID: String) async throws -> [MangaChapter]
 }
 

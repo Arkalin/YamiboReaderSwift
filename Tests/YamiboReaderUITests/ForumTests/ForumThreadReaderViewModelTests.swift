@@ -170,9 +170,14 @@ import Testing
         mangaDirectoryStore: ForumThreadReaderTestMangaDirectoryStore(directories: [directory])
     )
     var seedDocument = try await fixture.localFavoriteLibraryStore.load()
+    // The sibling must carry its own board fid: the toast's second gate
+    // re-checks isSmartComicModeEnabled(forumID:) per sibling (mirroring the
+    // Favorites page's per-member merge rule), and a missing fid reads as
+    // smart-off under the strict one-rule semantics.
     seedDocument.addItem(try FavoriteItem(
         target: .mangaThread(threadID: "700"),
         title: "第一话",
+        sourceGroup: .forumBoard(id: "30", label: "中文百合漫画区"),
         locations: [.category(seedDocument.defaultCategory.id)]
     ))
     try await fixture.localFavoriteLibraryStore.save(seedDocument)
@@ -210,7 +215,7 @@ import Testing
         mangaDirectoryStore: ForumThreadReaderTestMangaDirectoryStore(directories: [directory])
     )
     var settings = await fixture.settingsStore.load()
-    settings.smartComicMode.enabledForumIDs.remove("30")
+    settings.boardReader.setEntry(.init(mode: .manga(smartEnabled: false)), forumID: "30")
     try await fixture.settingsStore.save(settings)
     var seedDocument = try await fixture.localFavoriteLibraryStore.load()
     seedDocument.addItem(try FavoriteItem(

@@ -174,17 +174,29 @@ public struct SystemSettingsView: View {
                 }
 
                 Section {
-                    ForEach(SystemSettingsSmartComicModeBoard.allBoards) { board in
-                        Toggle(
-                            L10n.string(board.titleKey),
-                            isOn: smartComicModeBinding(forumID: board.forumID)
+                    ForEach(boardReaderRows) { row in
+                        SystemSettingsBoardReaderRowMenu(
+                            row: row,
+                            isBusy: viewModel.isBusy,
+                            onSelectMode: { mode in
+                                viewModel.setBoardReaderMode(mode, forumID: row.forumID, boardName: row.entry.boardName)
+                            },
+                            onRemove: {
+                                viewModel.removeBoardEntry(forumID: row.forumID)
+                            }
                         )
-                        .disabled(viewModel.isBusy)
                     }
+
+                    Button(role: .destructive) {
+                        pendingConfirmation = .restoreBoardReaderDefaults
+                    } label: {
+                        Text(L10n.string("settings.board_reader.restore_default"))
+                    }
+                    .disabled(viewModel.isBusy)
                 } header: {
-                    Text(L10n.string("settings.section.smart_comic_mode"))
+                    Text(L10n.string("settings.section.board_reader"))
                 } footer: {
-                    Text(L10n.string("settings.smart_comic_mode.footer"))
+                    Text(L10n.string("settings.board_reader.footer"))
                 }
 
                 Section(L10n.string("settings.section.storage")) {
@@ -440,11 +452,21 @@ public struct SystemSettingsView: View {
         )
     }
 
-    private func smartComicModeBinding(forumID: String) -> Binding<Bool> {
-        Binding(
-            get: { viewModel.smartComicMode.isEnabled(forumID: forumID) },
-            set: { viewModel.setSmartComicModeEnabled($0, forumID: forumID) }
-        )
+    private var boardReaderRows: [SystemSettingsBoardReaderRow] {
+        viewModel.boardReader.entries
+            .map { SystemSettingsBoardReaderRow(forumID: $0.key, entry: $0.value) }
+            .sorted { lhs, rhs in
+                switch (Int(lhs.forumID), Int(rhs.forumID)) {
+                case let (lhsNumber?, rhsNumber?):
+                    lhsNumber < rhsNumber
+                case (.some, nil):
+                    true
+                case (nil, .some):
+                    false
+                case (nil, nil):
+                    lhs.forumID < rhs.forumID
+                }
+            }
     }
 
     private var aboutSettingsTitle: String {
@@ -571,6 +593,8 @@ public struct SystemSettingsView: View {
             _ = await viewModel.clearMangaIndexCache()
         case .clearImageCache:
             _ = await viewModel.clearImageCache()
+        case .restoreBoardReaderDefaults:
+            viewModel.resetBoardReader()
         case .resetApplication:
             let didReset = await viewModel.resetApplication()
             guard didReset else { return }
@@ -585,23 +609,106 @@ private enum FavoriteBackgroundPickerPurpose {
     case replacement
 }
 
-/// The 3 manageable boards' toggle rows, in a fixed display order (smart-
-/// comic-mode design decision #1: fid 30/46/37, not a free board picker).
-/// fid 30's `中文百合漫画区` name is confirmed (test fixtures,
-/// `MangaDirectoryWorkflowConfiguration.searchForumID`'s default). fid 46/37
-/// have no confirmed display name anywhere in the app (no cached forum board
-/// list is wired into the settings composition root), so they fall back to
-/// a generic "板块 <fid>" label.
-private struct SystemSettingsSmartComicModeBoard: Identifiable {
-    let id: String
+private struct SystemSettingsBoardReaderRow: Identifiable {
     let forumID: String
-    let titleKey: String
+    let entry: BoardReaderSettings.Entry
 
-    static let allBoards: [SystemSettingsSmartComicModeBoard] = [
-        SystemSettingsSmartComicModeBoard(id: "30", forumID: "30", titleKey: "settings.smart_comic_mode.board_30"),
-        SystemSettingsSmartComicModeBoard(id: "46", forumID: "46", titleKey: "settings.smart_comic_mode.board_46"),
-        SystemSettingsSmartComicModeBoard(id: "37", forumID: "37", titleKey: "settings.smart_comic_mode.board_37")
-    ]
+    var id: String {
+        forumID
+    }
+
+    /// The stored name snapshot; the "板块 N" placeholder is presentation-
+    /// only and never written back to storage (PRD revision R9).
+    var displayName: String {
+        entry.boardName ?? L10n.string("settings.board_reader.board_placeholder", forumID)
+    }
+
+    var modeLabel: String {
+        switch entry.mode {
+        case .novel:
+            L10n.string("settings.board_reader.mode.novel")
+        case .manga(smartEnabled: true):
+            L10n.string("settings.board_reader.mode.smart_manga")
+        case .manga(smartEnabled: false):
+            L10n.string("settings.board_reader.mode.manga")
+        }
+    }
+}
+
+private enum SystemSettingsBoardReaderModeOption: Hashable, CaseIterable {
+    case novel
+    case manga
+
+    var title: String {
+        switch self {
+        case .novel:
+            L10n.string("settings.board_reader.mode.novel")
+        case .manga:
+            L10n.string("settings.board_reader.mode.manga")
+        }
+    }
+}
+
+private struct SystemSettingsBoardReaderRowMenu: View {
+    let row: SystemSettingsBoardReaderRow
+    let isBusy: Bool
+    let onSelectMode: (BoardReaderSettings.ReaderMode) -> Void
+    let onRemove: () -> Void
+
+    var body: some View {
+        Menu {
+            Picker(L10n.string("settings.board_reader.mode"), selection: modeBinding) {
+                ForEach(SystemSettingsBoardReaderModeOption.allCases, id: \.self) { option in
+                    Text(option.title)
+                        .tag(option)
+                }
+            }
+
+            if case let .manga(smartEnabled) = row.entry.mode {
+                Toggle(
+                    L10n.string("settings.board_reader.smart_toggle"),
+                    isOn: Binding(
+                        get: { smartEnabled },
+                        set: { onSelectMode(.manga(smartEnabled: $0)) }
+                    )
+                )
+            }
+
+            Button(role: .destructive, action: onRemove) {
+                Text(L10n.string("settings.board_reader.remove"))
+            }
+        } label: {
+            SystemSettingsRow(
+                title: row.displayName,
+                value: row.modeLabel,
+                showsChevron: false
+            )
+        }
+        .disabled(isBusy)
+    }
+
+    private var modeBinding: Binding<SystemSettingsBoardReaderModeOption> {
+        Binding(
+            get: {
+                if case .novel = row.entry.mode {
+                    return .novel
+                }
+                return .manga
+            },
+            set: { option in
+                switch option {
+                case .novel:
+                    guard row.entry.mode != .novel else { return }
+                    onSelectMode(.novel)
+                case .manga:
+                    if case .manga = row.entry.mode { return }
+                    // Newly manga-configured boards default Smart Comic Mode
+                    // off (PRD decision #8).
+                    onSelectMode(.manga(smartEnabled: false))
+                }
+            }
+        )
+    }
 }
 
 private extension View {

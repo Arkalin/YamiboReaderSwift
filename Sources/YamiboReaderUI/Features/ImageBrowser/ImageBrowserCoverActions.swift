@@ -24,13 +24,14 @@ enum ImageBrowserThreadCoverActions {
         tid: String,
         contentCoverStore: @escaping @Sendable () async -> ContentCoverStore?,
         mangaDirectoryStore: @escaping @Sendable () async -> (any MangaDirectoryPersisting)? = { nil },
-        // Smart Comic Mode off (design decision #16): the tapped thread's
-        // board has no manga-directory-aware UI at all, even if a
-        // `MangaDirectory` technically still exists for this tid (e.g. a
-        // leftover from when the board was previously on). Defaults to
-        // always-enabled so callers that never deal with manga boards
-        // (novel reader today) keep today's behavior unchanged.
-        isSmartComicModeEnabled: @escaping @Sendable () async -> Bool = { true }
+        // Smart Comic Mode gate: when the tapped thread's board is not
+        // currently configured as a smart-enabled manga board, the browser
+        // has no manga-directory-aware UI at all, even if a `MangaDirectory`
+        // technically still exists for this tid (e.g. a leftover from when
+        // the board was previously configured). No default — every caller
+        // supplies its own explicit configuration query (or `{ false }`
+        // when it has no settings store to ask).
+        isSmartComicModeEnabled: @escaping @Sendable () async -> Bool
     ) -> ImageBrowserCoverActionsProvider {
         {
             let trimmedTID = tid.trimmingCharacters(in: .whitespacesAndNewlines)

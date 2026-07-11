@@ -691,7 +691,7 @@ private final class ConfigurableMangaDirectoryRepository: MangaDirectoryReposito
         fatalError("loadDirectorySeed is not exercised by ForumMangaDetailViewModelTests")
     }
 
-    func loadTagDirectory(tagIDs: [String]) async throws -> [MangaChapter] {
+    func loadTagDirectory(tagIDs: [String], allowedForumID: String) async throws -> [MangaChapter] {
         lock.withLock { _tagDirectoryCallCount += 1 }
         return tagDirectoryResults
     }
@@ -769,7 +769,7 @@ private struct UnusedMangaDirectoryRepository: MangaDirectoryRepository {
         fatalError("loadDirectorySeed is not exercised by ForumMangaDetailViewModelTests")
     }
 
-    func loadTagDirectory(tagIDs: [String]) async throws -> [MangaChapter] {
+    func loadTagDirectory(tagIDs: [String], allowedForumID: String) async throws -> [MangaChapter] {
         fatalError("loadTagDirectory is not exercised by ForumMangaDetailViewModelTests")
     }
 
