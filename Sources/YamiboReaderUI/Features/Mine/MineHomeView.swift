@@ -78,7 +78,6 @@ public struct MineHomeView: View {
             .listStyle(.insetGrouped)
             .navigationTitle(L10n.string("tab.mine"))
             .yamiboInlineNavigationTitleDisplayMode()
-            .forumNavigationBarStyle()
             .refreshable {
                 await viewModel.refreshProfile()
             }
