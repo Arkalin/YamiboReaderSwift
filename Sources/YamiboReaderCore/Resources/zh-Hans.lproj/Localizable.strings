@@ -81,6 +81,7 @@
 "common.unhide" = "取消隐藏";
 "common.updating" = "更新中";
 "context.current_page_not_manga_chapter" = "当前页面不是漫画章节";
+"context.board_favorites_page" = "板块收藏页";
 "context.favorites_page" = "收藏页";
 "context.manga_directory" = "漫画目录";
 "context.manga_images" = "漫画图片";
@@ -128,6 +129,14 @@
 "favorite_type.novel" = "小说";
 "favorite_type.other" = "其他";
 "favorite_type.unknown" = "未定";
+"favorites.boards.delete_confirm_message" = "将从论坛账号中删除对“%@”的收藏。";
+"favorites.boards.delete_confirm_title" = "删除板块收藏";
+"favorites.boards.empty" = "暂无收藏的板块";
+"favorites.boards.empty_hint" = "可在论坛板块页右上角菜单中收藏板块。";
+"favorites.boards.load_failed" = "板块收藏加载失败";
+"favorites.boards.missing_delete_id" = "未能解析该收藏的编号，无法删除。";
+"favorites.boards.open" = "打开板块";
+"favorites.boards.title" = "板块收藏";
 "favorites.bulk_delete_favorites_message" = "确定要删除已选中的收藏吗？这会同步删除远端收藏，但会保留本地缓存和阅读进度。";
 "favorites.bulk_delete_mixed_message" = "确定要删除已选中的内容吗？合集会被解散，收藏会同步删除远端收藏。";
 "favorites.bulk_delete_scope_message" = "已选收藏中有多位置项目。可以只从当前位置移除，或彻底删除收藏；彻底删除会同步删除远端收藏。";

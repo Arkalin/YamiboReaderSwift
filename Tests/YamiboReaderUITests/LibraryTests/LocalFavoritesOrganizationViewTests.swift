@@ -62,7 +62,9 @@ import YamiboReaderTestSupport
         organizer: organizer,
         remoteSync: remoteSync,
         updateMonitor: updateMonitor,
-        onOpen: { _, _, _ in }
+        makeFavoriteRepository: { FavoriteRepository(client: await makeClient()) },
+        onOpen: { _, _, _ in },
+        onOpenBoard: { _ in }
     )
     _ = view
 

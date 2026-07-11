@@ -10,6 +10,7 @@ struct LocalFavoritesRootView: View {
     @StateObject private var updateMonitor: FavoriteUpdateMonitor
 
     private let openTargetResolver: LocalFavoriteOpenTargetResolver
+    private let makeFavoriteRepository: @Sendable () async -> FavoriteRepository
     let appModel: YamiboAppModel
 
     init(dependencies: LibraryDependencies, appModel: YamiboAppModel) {
@@ -45,6 +46,7 @@ struct LocalFavoritesRootView: View {
             mangaDirectoryStore: dependencies.mangaDirectoryStore,
             settingsStore: dependencies.settingsStore
         )
+        makeFavoriteRepository = dependencies.makeFavoriteRepository
         self.appModel = appModel
     }
 
@@ -53,8 +55,14 @@ struct LocalFavoritesRootView: View {
             organizer: organizer,
             remoteSync: remoteSync,
             updateMonitor: updateMonitor,
+            makeFavoriteRepository: makeFavoriteRepository,
             onOpen: { item, mode, mangaScope in
                 await open(item, mode: mode, mangaScope: mangaScope)
+            },
+            onOpenBoard: { board in
+                appModel.openForumURL(
+                    YamiboRoute.forumBoard(fid: board.fid, page: 1, filterID: nil, orderFilter: nil, orderBy: nil).url
+                )
             }
         )
         .task {

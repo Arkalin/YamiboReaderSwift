@@ -12,18 +12,26 @@ struct LocalFavoritesOrganizationView: View {
     @StateObject private var routes = LocalFavoritesRoutes()
 
     let onOpen: (FavoriteItem, FavoriteLaunchMode, FavoriteMangaReadingScope) async -> Void
+    /// Feeds the pushed board-favorite page, which manages remote board
+    /// favorites purely over the network (no local store involved).
+    let makeFavoriteRepository: @Sendable () async -> FavoriteRepository
+    let onOpenBoard: (BoardFavorite) -> Void
 
     init(
         organizer: FavoriteLibraryOrganizer,
         remoteSync: FavoriteRemoteSyncSession,
         updateMonitor: FavoriteUpdateMonitor,
-        onOpen: @escaping (FavoriteItem, FavoriteLaunchMode, FavoriteMangaReadingScope) async -> Void
+        makeFavoriteRepository: @escaping @Sendable () async -> FavoriteRepository,
+        onOpen: @escaping (FavoriteItem, FavoriteLaunchMode, FavoriteMangaReadingScope) async -> Void,
+        onOpenBoard: @escaping (BoardFavorite) -> Void
     ) {
         self.organizer = organizer
         self.remoteSync = remoteSync
         self.updateMonitor = updateMonitor
         self.selection = organizer.selection
         self.onOpen = onOpen
+        self.makeFavoriteRepository = makeFavoriteRepository
+        self.onOpenBoard = onOpenBoard
     }
 
     var body: some View {
@@ -100,6 +108,13 @@ struct LocalFavoritesOrganizationView: View {
                             }
                             await onOpen(item, .resume, .boardDefault)
                         }
+                    )
+                    .toolbar(selection.isSelectionMode ? .hidden : .automatic, for: .tabBar)
+                }
+                .navigationDestination(isPresented: $routes.isBoardFavoritesPushed) {
+                    FavoriteBoardListView(
+                        model: FavoriteBoardListViewModel(repositoryProvider: makeFavoriteRepository),
+                        onOpenBoard: onOpenBoard
                     )
                     .toolbar(selection.isSelectionMode ? .hidden : .automatic, for: .tabBar)
                 }
@@ -519,6 +534,11 @@ struct LocalFavoritesOrganizationView: View {
                     }
                 } label: {
                     Label(L10n.string("favorites.sync.start"), systemImage: "arrow.triangle.2.circlepath")
+                }
+                Button {
+                    routes.isBoardFavoritesPushed = true
+                } label: {
+                    Label(L10n.string("favorites.boards.title"), systemImage: "square.grid.2x2")
                 }
             }
         } label: {

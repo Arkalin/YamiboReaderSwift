@@ -65,4 +65,6 @@ final class LocalFavoritesRoutes: ObservableObject {
     @Published var isSyncProgressPushed = false
     /// The favorite-updates page is pushed (toolbar bell entry).
     @Published var isUpdatesPagePushed = false
+    /// The board-favorite management page is pushed (overflow menu entry).
+    @Published var isBoardFavoritesPushed = false
 }

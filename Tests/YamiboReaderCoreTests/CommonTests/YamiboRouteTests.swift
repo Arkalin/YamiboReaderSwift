@@ -50,6 +50,22 @@ struct YamiboRouteTests {
         #expect(items["mod"] == "viewthread")
     }
 
+    @Test func boardFavoritesRouteRequestsForumTypeFavoriteList() throws {
+        let routed = YamiboRoute.boardFavorites(page: 2).url
+        let components = try #require(URLComponents(url: routed, resolvingAgainstBaseURL: false))
+        let items = Dictionary(uniqueKeysWithValues: (components.queryItems ?? []).compactMap { item in
+            item.value.map { (item.name, $0) }
+        })
+
+        #expect(components.path == "/home.php")
+        #expect(items["mod"] == "space")
+        #expect(items["do"] == "favorite")
+        #expect(items["view"] == "me")
+        #expect(items["type"] == "forum")
+        #expect(items["mobile"] == "2")
+        #expect(items["page"] == "2")
+    }
+
     @Test func threadByIDRouteBuildsRequestURLWithoutSourceThreadURL() throws {
         let routed = YamiboRoute.threadByID(tid: " 521519 ", page: 25, authorID: "406769", reverse: true).url
         let components = try #require(URLComponents(url: routed, resolvingAgainstBaseURL: false))

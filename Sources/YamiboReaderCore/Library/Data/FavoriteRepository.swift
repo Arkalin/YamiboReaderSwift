@@ -57,6 +57,29 @@ public actor FavoriteRepository {
         return parsed
     }
 
+    /// Fetches one page of the remote board-favorite (`type=forum`) list.
+    /// Board favorites are network-only — no local store mirrors them — so
+    /// callers render this result directly. Deleting one goes through the
+    /// shared `deleteFavorite(remoteFavoriteID:)` (the delete endpoint is
+    /// `type=all` and works for any favorite kind).
+    public func fetchBoardFavoritesPage(page: Int = 1) async throws -> BoardFavoriteRemotePage {
+        let html = try await client.fetchHTML(for: .boardFavorites(page: page))
+        let parsed = FavoriteHTMLParser.parseBoardFavoritePage(from: html)
+        if parsed.boards.isEmpty {
+            if let error = inferContentError(from: html) {
+                throw error
+            }
+            if !parsed.documentParsed {
+                throw YamiboError.parsingFailed(context: L10n.string("context.board_favorites_page"))
+            }
+        }
+        return BoardFavoriteRemotePage(
+            boards: parsed.boards,
+            currentPage: parsed.currentPage,
+            totalPages: parsed.totalPages
+        )
+    }
+
     /// Fetches the session's formHash once so bulk operations (sync upload)
     /// can reuse it instead of re-fetching the profile per request.
     public func currentFormHash() async throws -> String {
