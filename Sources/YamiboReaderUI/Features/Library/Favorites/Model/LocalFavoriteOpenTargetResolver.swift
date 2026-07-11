@@ -115,7 +115,8 @@ struct LocalFavoriteOpenTargetResolver {
                         initialPage: 0,
                         directoryName: nil,
                         offlineCacheFavoriteID: latestItem.id,
-                        isSmartModeEnabled: smartModeEnabled
+                        isSmartModeEnabled: smartModeEnabled,
+                        forumID: latestItem.forumID
                     )
                 )
             }
@@ -143,7 +144,8 @@ struct LocalFavoriteOpenTargetResolver {
                         initialPage: ownThreadProgress?.mangaPageIndex ?? 0,
                         directoryName: nil,
                         offlineCacheFavoriteID: latestItem.id,
-                        isSmartModeEnabled: false
+                        isSmartModeEnabled: false,
+                        forumID: latestItem.forumID
                     )
                 )
             }
@@ -179,7 +181,8 @@ struct LocalFavoriteOpenTargetResolver {
                     initialPage: ownThreadProgress?.mangaPageIndex ?? 0,
                     directoryName: nil,
                     offlineCacheFavoriteID: item.id,
-                    isSmartModeEnabled: true
+                    isSmartModeEnabled: true,
+                    forumID: item.forumID
                 )
             )
         }
@@ -196,7 +199,8 @@ struct LocalFavoriteOpenTargetResolver {
                 initialPage: directoryProgress?.mangaPageIndex ?? 0,
                 directoryName: directory.cleanBookName,
                 offlineCacheFavoriteID: item.id,
-                isSmartModeEnabled: true
+                isSmartModeEnabled: true,
+                forumID: item.forumID
             )
         )
     }

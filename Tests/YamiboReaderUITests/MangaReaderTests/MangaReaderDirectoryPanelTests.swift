@@ -294,7 +294,7 @@ private actor DirectoryPanelRepository: MangaDirectoryRepository {
         seed
     }
 
-    func loadTagDirectory(tagIDs: [String]) async throws -> [MangaChapter] {
+    func loadTagDirectory(tagIDs: [String], allowedForumID: String) async throws -> [MangaChapter] {
         tagChapters
     }
 
@@ -324,7 +324,7 @@ private actor DelayedDirectoryPanelRepository: MangaDirectoryRepository {
         seed
     }
 
-    func loadTagDirectory(tagIDs: [String]) async throws -> [MangaChapter] {
+    func loadTagDirectory(tagIDs: [String], allowedForumID: String) async throws -> [MangaChapter] {
         didStartTagLoad = true
         try await Task.sleep(nanoseconds: 200_000_000)
         return tagChapters

@@ -62,6 +62,10 @@ final class ForumMangaDetailViewModel {
             let document = try await loader.loadReaderProjection(
                 MangaReaderProjectionRequest(threadID: context.thread.tid)
             )
+            // Resolve-only workflow instance: this page never calls
+            // updateDirectory/search, so `searchForumID` is deliberately left
+            // at its default — the reader stamps the real board fid when it
+            // launches (MangaReaderViewModel configuration construction).
             let workflow = MangaDirectoryWorkflow(
                 repository: repository,
                 store: store,
@@ -81,7 +85,8 @@ final class ForumMangaDetailViewModel {
                 // `true` (rather than re-querying `AppSettings`) keeps this
                 // view model from needing its own settings dependency for a
                 // fact its caller already established.
-                isSmartModeEnabled: true
+                isSmartModeEnabled: true,
+                forumID: context.thread.fid
             )
             let resolution = try await workflow.resolveInitialDirectory(
                 context: launchContext,
@@ -127,7 +132,8 @@ final class ForumMangaDetailViewModel {
             directoryName: directory.cleanBookName,
             // See the comment in `reload()`: this view model only exists
             // for mode-on boards.
-            isSmartModeEnabled: true
+            isSmartModeEnabled: true,
+            forumID: context.thread.fid
         )
     }
 
@@ -141,7 +147,8 @@ final class ForumMangaDetailViewModel {
             directoryName: directory?.cleanBookName ?? context.directoryNameHint,
             // See the comment in `reload()`: this view model only exists
             // for mode-on boards.
-            isSmartModeEnabled: true
+            isSmartModeEnabled: true,
+            forumID: context.thread.fid
         )
     }
 

@@ -3,6 +3,14 @@ import Foundation
 public struct MangaDirectoryWorkflowConfiguration: Sendable {
     public var searchCooldownDuration: TimeInterval
     public var forcedSearchShortcutDuration: TimeInterval
+    /// Board (fid) scoping directory search and tag-list row filtering:
+    /// the launching thread's own board, stamped per launch from
+    /// `MangaLaunchContext.forumID` (pluggable-reader-config decision #6).
+    /// The "30" default exists for test/default construction convenience;
+    /// production reader launches always overwrite it when
+    /// `MangaReaderViewModel` builds its configuration, substituting "30"
+    /// there for launches with no board context (likes, pre-forumID
+    /// persisted routes) — the single UI-side R4 fallback point.
     public var searchForumID: String
     public var now: @Sendable () -> Date
 
@@ -143,6 +151,10 @@ public struct MangaDirectoryWorkflow: Sendable {
         let now = configuration.now()
         let latest = try await store.directory(named: currentDirectory.cleanBookName) ?? currentDirectory
         let keyword = searchKeyword(for: latest, currentTID: currentTID)
+        // No fallback here: `searchForumID` is non-optional and already
+        // resolved upstream (MangaReaderViewModel stamps it per launch,
+        // substituting "30" only there — the single UI-side R4 point).
+        let forumID = configuration.searchForumID
 
         var chapters: [MangaChapter]
         var searchPerformed = false
@@ -150,14 +162,14 @@ public struct MangaDirectoryWorkflow: Sendable {
 
         if latest.strategy == .tag, !isForcedSearch {
             let tagIDs = normalizedValues(latest.sourceKey.split(separator: ",").map(String.init))
-            chapters = try await repository.loadTagDirectory(tagIDs: tagIDs)
+            chapters = try await repository.loadTagDirectory(tagIDs: tagIDs, allowedForumID: forumID)
             try Task.checkCancellation()
             if chapters.isEmpty {
                 searchPerformed = true
                 let pendingCooldownExpiresAt = try await nextSearchCooldownDeadline(now: now)
                 chapters = try await repository.searchDirectory(
                     keyword: keyword,
-                    forumID: normalizedNonEmpty(configuration.searchForumID) ?? "30"
+                    forumID: forumID
                 )
                 try Task.checkCancellation()
                 await searchCooldownState.startCooldown(until: pendingCooldownExpiresAt)
@@ -168,7 +180,7 @@ public struct MangaDirectoryWorkflow: Sendable {
             let pendingCooldownExpiresAt = try await nextSearchCooldownDeadline(now: now)
             chapters = try await repository.searchDirectory(
                 keyword: keyword,
-                forumID: normalizedNonEmpty(configuration.searchForumID) ?? "30"
+                forumID: forumID
             )
             try Task.checkCancellation()
             await searchCooldownState.startCooldown(until: pendingCooldownExpiresAt)

@@ -350,7 +350,7 @@ private actor AdjacentPrefetchDirectoryRepository: MangaDirectoryRepository {
         seed
     }
 
-    func loadTagDirectory(tagIDs: [String]) async throws -> [MangaChapter] {
+    func loadTagDirectory(tagIDs: [String], allowedForumID: String) async throws -> [MangaChapter] {
         []
     }
 

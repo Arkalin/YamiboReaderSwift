@@ -65,7 +65,7 @@ struct MangaDirectoryWorkflowTests {
         #expect(!result.searchPerformed)
         #expect(result.shouldOfferForcedSearch)
         #expect(result.cooldownExpiresAt == nil)
-        #expect(await repository.tagDirectoryRequests == [["31"]])
+        #expect(await repository.tagDirectoryRequests.map(\.tagIDs) == [["31"]])
         #expect(await repository.searchRequests.isEmpty)
     }
 
@@ -111,10 +111,14 @@ struct MangaDirectoryWorkflowTests {
             searchChapters: [makeChapter(tid: "702", title: "第3话")]
         )
         let cooldown = MangaDirectorySearchCooldownState()
+        // A non-default board fid: the configured `searchForumID` must reach
+        // both the tag-list filter and the fallback search unchanged
+        // (pluggable-reader-config decision #6 — the value is stamped per
+        // launch from the thread's own board, no longer always "30").
         let workflow = MangaDirectoryWorkflow(
             repository: repository,
             store: store,
-            configuration: MangaDirectoryWorkflowConfiguration(now: { now }),
+            configuration: MangaDirectoryWorkflowConfiguration(searchForumID: "46", now: { now }),
             searchCooldownState: cooldown
         )
 
@@ -126,7 +130,8 @@ struct MangaDirectoryWorkflowTests {
         #expect(!result.shouldOfferForcedSearch)
         #expect(result.cooldownExpiresAt == now.addingTimeInterval(20))
         #expect(await cooldown.cooldownExpiresAt(now: now) == now.addingTimeInterval(20))
-        #expect(await repository.searchRequests.map(\.forumID) == ["30"])
+        #expect(await repository.tagDirectoryRequests.map(\.allowedForumID) == ["46"])
+        #expect(await repository.searchRequests.map(\.forumID) == ["46"])
         #expect(await repository.searchRequests.first?.keyword == "作者 测试漫画")
     }
 
@@ -250,7 +255,7 @@ private actor RecordingDirectoryRepository: MangaDirectoryRepository {
     private let tagChapters: [MangaChapter]
     private let searchChapters: [MangaChapter]
     private(set) var seedThreadIDs: [String] = []
-    private(set) var tagDirectoryRequests: [[String]] = []
+    private(set) var tagDirectoryRequests: [(tagIDs: [String], allowedForumID: String)] = []
     private(set) var searchRequests: [(keyword: String, forumID: String)] = []
 
     init(
@@ -268,8 +273,8 @@ private actor RecordingDirectoryRepository: MangaDirectoryRepository {
         return seed
     }
 
-    func loadTagDirectory(tagIDs: [String]) async throws -> [MangaChapter] {
-        tagDirectoryRequests.append(tagIDs)
+    func loadTagDirectory(tagIDs: [String], allowedForumID: String) async throws -> [MangaChapter] {
+        tagDirectoryRequests.append((tagIDs, allowedForumID))
         return tagChapters
     }
 

@@ -289,7 +289,8 @@ public struct ForumNavigationHostView: View {
                 chapterTID: payload.thread.tid,
                 displayTitle: payload.title,
                 source: .forum,
-                isSmartModeEnabled: false
+                isSmartModeEnabled: false,
+                forumID: payload.thread.fid
             )
             appModel.presentMangaReader(context)
         case let .thread(payload):

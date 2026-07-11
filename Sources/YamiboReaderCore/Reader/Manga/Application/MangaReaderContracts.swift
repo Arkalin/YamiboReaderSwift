@@ -29,6 +29,15 @@ public struct MangaLaunchContext: Hashable, Identifiable, Sendable {
     /// existing snapshot; the init default exists solely for test-construction
     /// convenience (pluggable-reader-config R3).
     public var isSmartModeEnabled: Bool
+    /// Snapshot of the forum board (fid) this chapter was launched from,
+    /// scoping directory search and tag-list row filtering to that board
+    /// (pluggable-reader-config decision #6). `nil` means the launch origin
+    /// had no board context (e.g. the My Likes list, R4); the reader view
+    /// model's configuration construction then substitutes "30" — the single
+    /// UI-side fallback point — preserving today's behavior for such
+    /// launches. Like `isSmartModeEnabled` above, this is a launch-time
+    /// snapshot stamped by the caller, never re-queried by the reader.
+    public var forumID: String?
 
     public var id: String {
         originalThreadID
@@ -44,7 +53,8 @@ public struct MangaLaunchContext: Hashable, Identifiable, Sendable {
         directoryName: String? = nil,
         offlineCacheFavoriteID: String? = nil,
         isPreview: Bool = false,
-        isSmartModeEnabled: Bool = true
+        isSmartModeEnabled: Bool = true,
+        forumID: String? = nil
     ) {
         self.originalThreadID = Self.normalizedThreadID(originalThreadID, field: "originalThreadID")
         self.chapterTID = Self.normalizedThreadID(chapterTID, field: "chapterTID")
@@ -56,6 +66,7 @@ public struct MangaLaunchContext: Hashable, Identifiable, Sendable {
         self.offlineCacheFavoriteID = offlineCacheFavoriteID?.mangaReaderTrimmedNonEmpty
         self.isPreview = isPreview
         self.isSmartModeEnabled = isSmartModeEnabled
+        self.forumID = forumID?.mangaReaderTrimmedNonEmpty
     }
 
     private static func normalizedThreadID(_ value: String, field: String) -> String {
@@ -77,6 +88,7 @@ extension MangaLaunchContext: Codable {
         case offlineCacheFavoriteID
         case isPreview
         case isSmartModeEnabled
+        case forumID
     }
 
     public func encode(to encoder: any Encoder) throws {
@@ -91,6 +103,7 @@ extension MangaLaunchContext: Codable {
         try container.encodeIfPresent(offlineCacheFavoriteID, forKey: .offlineCacheFavoriteID)
         try container.encode(isPreview, forKey: .isPreview)
         try container.encode(isSmartModeEnabled, forKey: .isSmartModeEnabled)
+        try container.encodeIfPresent(forumID, forKey: .forumID)
     }
 
     public init(from decoder: any Decoder) throws {
@@ -108,7 +121,12 @@ extension MangaLaunchContext: Codable {
             // Existing persisted routes (reader-resume route store) predate
             // this field; treat them as mode-on, matching the field's own
             // default and every pre-Phase-B launch context.
-            isSmartModeEnabled: try container.decodeIfPresent(Bool.self, forKey: .isSmartModeEnabled) ?? true
+            isSmartModeEnabled: try container.decodeIfPresent(Bool.self, forKey: .isSmartModeEnabled) ?? true,
+            // Persisted routes written before this field existed carry no
+            // board snapshot; decoding them as `nil` lets the reader view
+            // model's configuration fallback substitute "30" — exactly what
+            // those launches did when they were written.
+            forumID: try container.decodeIfPresent(String.self, forKey: .forumID)
         )
     }
 }

@@ -244,7 +244,7 @@ private struct UnusedMangaDirectoryRepository: MangaDirectoryRepository {
         fatalError("loadDirectorySeed is not exercised by ForumMangaDetailViewModelTests")
     }
 
-    func loadTagDirectory(tagIDs: [String]) async throws -> [MangaChapter] {
+    func loadTagDirectory(tagIDs: [String], allowedForumID: String) async throws -> [MangaChapter] {
         fatalError("loadTagDirectory is not exercised by ForumMangaDetailViewModelTests")
     }
 

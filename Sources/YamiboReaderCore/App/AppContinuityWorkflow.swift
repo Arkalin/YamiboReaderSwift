@@ -343,7 +343,8 @@ private extension MangaLaunchContext {
             directoryName: directoryName,
             offlineCacheFavoriteID: favoriteItem?.id ?? offlineCacheFavoriteID,
             isPreview: isPreview,
-            isSmartModeEnabled: isSmartModeEnabled
+            isSmartModeEnabled: isSmartModeEnabled,
+            forumID: forumID
         )
     }
 }
