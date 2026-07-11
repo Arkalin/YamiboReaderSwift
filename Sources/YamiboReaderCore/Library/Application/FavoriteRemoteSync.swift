@@ -282,6 +282,17 @@ public struct FavoriteYamiboSyncEngine: Sendable {
 
                 do {
                     let probeResult = try await Self.probeWithRetry(entry, client: client)
+                    guard !probeResult.sourceMetadataFetchFailed else {
+                        // The thread's own detail page never resolved even
+                        // after `threadMetadata()`'s retries, so forum/cover/
+                        // content-updated metadata is unknown. This used to
+                        // still import the item as a permanent "未知来源"
+                        // placeholder with a warning; treat it the same as
+                        // any other probe failure instead, so the item isn't
+                        // kept in favorites and the next sync run retries it
+                        // from scratch.
+                        throw YamiboError.parsingFailed(context: entry.threadID)
+                    }
                     let mapping = FavoriteRemoteMapping(
                         yamiboFavoriteID: entry.remoteFavoriteID,
                         yamiboRemoteOrder: entry.remoteOrder,
@@ -309,9 +320,6 @@ public struct FavoriteYamiboSyncEngine: Sendable {
                         }
                     }
                     await commit { $0.importedCount += 1 }
-                    if probeResult.sourceMetadataFetchFailed {
-                        await commit { $0.warnings.append(.importedWithUnresolvedSource(title: label)) }
-                    }
                     // `importedItem.forumID` (not `probeResult.forumID`,
                     // which the manga probe path leaves nil) is read here
                     // because `FavoriteItem.init` resolves the real forumID
