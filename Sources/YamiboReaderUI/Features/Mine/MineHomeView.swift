@@ -76,8 +76,6 @@ public struct MineHomeView: View {
                 )
             }
             .listStyle(.insetGrouped)
-            .scrollContentBackground(.hidden)
-            .background(ForumColors.creamBackground.ignoresSafeArea())
             .navigationTitle(L10n.string("tab.mine"))
             .yamiboInlineNavigationTitleDisplayMode()
             .forumNavigationBarStyle()
