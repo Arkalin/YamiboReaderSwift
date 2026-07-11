@@ -62,14 +62,6 @@ final class NovelReaderCacheCoordinator: ObservableObject {
         state.operation.hasSession
     }
 
-    var scopeTitle: String {
-        L10n.string("reader.cache_scope.author")
-    }
-
-    var scopeDescription: String {
-        L10n.string("reader.cache_scope.description")
-    }
-
     var allCacheableViews: [Int] {
         let maxView = reading.maxView()
         guard maxView > 0 else { return [] }

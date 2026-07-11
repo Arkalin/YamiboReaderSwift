@@ -6,75 +6,34 @@ import UIKit
 
 struct NovelReaderCachePanel: View {
     @ObservedObject var cache: NovelReaderCacheCoordinator
-    let onShowProgress: () -> Void
     @Environment(\.dismiss) private var dismiss
+    @State private var isSelecting = false
     @State private var selectedViews: Set<Int> = []
     @State private var isQueuePresented = false
     @State private var queueViewModel: MineHomeViewModel
 
-    init(cache: NovelReaderCacheCoordinator, onShowProgress: @escaping () -> Void) {
+    init(cache: NovelReaderCacheCoordinator) {
         _cache = ObservedObject(wrappedValue: cache)
-        self.onShowProgress = onShowProgress
         _queueViewModel = State(initialValue: cache.makeOfflineCacheQueueViewModel())
     }
 
     var body: some View {
         NavigationStack {
-            List {
-                Section(L10n.string("reader.cache_scope")) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(cache.scopeTitle)
-                            .font(.headline)
-                        Text(cache.scopeDescription)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
-                    .padding(.vertical, 4)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    NovelReaderCachePageSection(
+                        rows: rows,
+                        isSelecting: $isSelecting,
+                        selectedViews: $selectedViews,
+                        isAllSelected: selectionState.isAllSelected,
+                        onToggleAll: toggleAll
+                    )
                 }
-
-                Section(L10n.string("reader.select_page")) {
-                    Button(selectionState.isAllSelected ? L10n.string("common.deselect_all") : L10n.string("common.select_all")) {
-                        if selectionState.isAllSelected {
-                            selectedViews = []
-                        } else {
-                            selectedViews = Set(cache.allCacheableViews)
-                        }
-                    }
-                    .disabled(cache.allCacheableViews.isEmpty)
-
-                    if cache.allCacheableViews.isEmpty {
-                        Text(L10n.string("reader.no_cacheable_pages"))
-                            .foregroundStyle(.secondary)
-                    } else {
-                        ForEach(cache.allCacheableViews, id: \.self) { view in
-                            Button {
-                                toggleSelection(for: view)
-                            } label: {
-                                HStack(spacing: 12) {
-                                    Image(systemName: selectedViews.contains(view) ? "checkmark.circle.fill" : "circle")
-                                        .foregroundStyle(selectedViews.contains(view) ? Color.accentColor : Color.secondary)
-                                    Text(L10n.string("reader.page_number_spaced", view))
-                                        .foregroundStyle(.primary)
-                                    Spacer()
-                                    cacheStateLabel(for: view)
-                                }
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                }
-
-                if !selectedViews.isEmpty {
-                    Section(L10n.string("reader.selected_content")) {
-                        Text(L10n.string("reader.selected_pages", selectedViews.count))
-                            .foregroundStyle(.secondary)
-                    }
-                }
+                .padding(16)
             }
+            .background(YamiboColors.SystemSurface.groupedBackground)
             .navigationTitle(L10n.string("reader.cache_management"))
-            .safeAreaInset(edge: .bottom, spacing: 0) {
-                actionBar
-            }
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button {
@@ -91,13 +50,48 @@ struct NovelReaderCachePanel: View {
                         action: showQueue
                     )
                 }
+
+                if isSelecting && usesSystemSelectionBottomToolbar {
+                    ToolbarItem(placement: .bottomBar) {
+                        NovelReaderCacheSelectionToolbar(
+                            selectionState: selectionState,
+                            onCache: cacheSelection,
+                            onUpdate: updateSelection,
+                            onDelete: deleteSelection
+                        )
+                    }
+                }
             }
-            .task {
-                await cache.refresh()
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                if isSelecting && !usesSystemSelectionBottomToolbar {
+                    NovelReaderCacheSelectionActionBar(
+                        selectionState: selectionState,
+                        onCache: cacheSelection,
+                        onUpdate: updateSelection,
+                        onDelete: deleteSelection
+                    )
+                }
             }
             .sheet(isPresented: $isQueuePresented) {
                 MineOfflineCacheQueueSheet(viewModel: queueViewModel)
             }
+            .task {
+                await cache.refresh()
+            }
+            .refreshable {
+                await cache.refresh()
+            }
+            .sensoryFeedback(.selection, trigger: selectedViews)
+        }
+    }
+
+    private var rows: [NovelReaderCachePageRow] {
+        cache.allCacheableViews.map { view in
+            NovelReaderCachePageRow(
+                view: view,
+                status: cache.status(for: view),
+                updateTime: cache.updateTime(for: view)
+            )
         }
     }
 
@@ -105,74 +99,337 @@ struct NovelReaderCachePanel: View {
         cache.selectionState(for: selectedViews)
     }
 
-    private var actionBar: some View {
-        VStack(spacing: 12) {
-            Divider()
-            HStack(spacing: 12) {
-                Button(L10n.string("reader.cache_action.cache")) {
-                    cache.startCaching(views: selectionState.uncachedSelectedViews)
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(!selectionState.canCache)
+    private var usesSystemSelectionBottomToolbar: Bool {
+        if #available(iOS 26, *) {
+            return true
+        }
+        return false
+    }
 
-                Button(L10n.string("reader.cache_action.update")) {
-                    cache.updateCachedViews(selectionState.updatableSelectedViews)
-                }
-                .buttonStyle(.bordered)
-                .disabled(!selectionState.canUpdate)
+    private func toggleAll() {
+        if selectionState.isAllSelected {
+            selectedViews = []
+        } else {
+            selectedViews = Set(cache.allCacheableViews)
+        }
+    }
 
-                Button(L10n.string("common.delete"), role: .destructive) {
-                    Task {
-                        await cache.deleteCachedViews(selectionState.cachedSelectedViews)
-                        selectedViews.subtract(selectionState.cachedSelectedViews)
+    private func cacheSelection() {
+        cache.startCaching(views: selectionState.uncachedSelectedViews)
+        exitSelectionMode()
+    }
+
+    private func updateSelection() {
+        cache.updateCachedViews(selectionState.updatableSelectedViews)
+        exitSelectionMode()
+    }
+
+    private func deleteSelection() {
+        let targets = selectionState.cachedSelectedViews
+        Task { @MainActor in
+            await cache.deleteCachedViews(targets)
+            exitSelectionMode()
+        }
+    }
+
+    @MainActor
+    private func exitSelectionMode() {
+        isSelecting = false
+        selectedViews = []
+    }
+
+    private func showQueue() {
+        isQueuePresented = true
+    }
+}
+
+private struct NovelReaderCachePageRow: Identifiable, Equatable {
+    let view: Int
+    let status: NovelOfflineCacheViewStatus
+    let updateTime: Date?
+
+    var id: Int { view }
+}
+
+private struct NovelReaderCachePageSection: View {
+    let rows: [NovelReaderCachePageRow]
+    @Binding var isSelecting: Bool
+    @Binding var selectedViews: Set<Int>
+    let isAllSelected: Bool
+    let onToggleAll: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            NovelReaderCacheSelectionHeader(
+                isSelecting: isSelecting,
+                isAllSelected: isAllSelected,
+                isEmpty: rows.isEmpty,
+                onToggleAll: onToggleAll,
+                onToggleSelectionMode: toggleSelectionMode
+            )
+            .frame(height: 38, alignment: .center)
+
+            if rows.isEmpty {
+                ContentUnavailableView(L10n.string("reader.no_cacheable_pages"), systemImage: "doc.text")
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 16)
+            } else {
+                LazyVStack(spacing: 10) {
+                    ForEach(rows) { row in
+                        NovelReaderCachePageRowView(
+                            row: row,
+                            isSelecting: isSelecting,
+                            isSelected: selectedViews.contains(row.view),
+                            onToggleSelection: {
+                                toggleSelection(row.view)
+                            }
+                        )
                     }
                 }
-                .buttonStyle(.bordered)
-                .disabled(!selectionState.canDelete)
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.horizontal, 20)
-            .padding(.bottom, 12)
-        }
-        .background(.ultraThinMaterial)
-    }
-
-    @ViewBuilder
-    private func cacheStateLabel(for view: Int) -> some View {
-        VStack(alignment: .trailing, spacing: 3) {
-            switch cache.status(for: view) {
-            case .caching:
-                Label(L10n.string("reader.caching"), systemImage: "arrow.down.circle.fill")
-                    .labelStyle(.titleAndIcon)
-                    .font(.caption)
-                    .foregroundStyle(.orange)
-            case .cached:
-                Label(L10n.string("reader.cached"), systemImage: "checkmark.seal.fill")
-                    .labelStyle(.titleAndIcon)
-                    .font(.caption)
-                    .foregroundStyle(.green)
-            case .uncached:
-                EmptyView()
-            }
-
-            if let updateTime = cache.updateTime(for: view) {
-                Text(L10n.string("reader.cache_updated_at", updateTime.formatted(date: .abbreviated, time: .shortened)))
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
             }
         }
     }
 
-    private func toggleSelection(for view: Int) {
+    private func toggleSelectionMode() {
+        if isSelecting {
+            isSelecting = false
+            selectedViews = []
+        } else {
+            isSelecting = true
+        }
+    }
+
+    private func toggleSelection(_ view: Int) {
+        if !isSelecting {
+            isSelecting = true
+            selectedViews.insert(view)
+            return
+        }
+
         if selectedViews.contains(view) {
             selectedViews.remove(view)
         } else {
             selectedViews.insert(view)
         }
     }
+}
 
-    private func showQueue() {
-        isQueuePresented = true
+private struct NovelReaderCacheSelectionHeader: View {
+    let isSelecting: Bool
+    let isAllSelected: Bool
+    let isEmpty: Bool
+    let onToggleAll: () -> Void
+    let onToggleSelectionMode: () -> Void
+
+    var body: some View {
+        HStack {
+            if isSelecting {
+                Button(isAllSelected ? L10n.string("common.invert_selection") : L10n.string("common.select_all")) {
+                    onToggleAll()
+                }
+                .font(.subheadline.weight(.semibold))
+                .disabled(isEmpty)
+            } else {
+                Text(L10n.string("reader.cache_page_section"))
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer(minLength: 0)
+
+            Button(isSelecting ? L10n.string("common.done") : L10n.string("common.select")) {
+                onToggleSelectionMode()
+            }
+            .font(.subheadline.weight(.semibold))
+            .buttonStyle(.plain)
+            .disabled(isEmpty && !isSelecting)
+        }
+    }
+}
+
+private struct NovelReaderCachePageRowView: View {
+    let row: NovelReaderCachePageRow
+    let isSelecting: Bool
+    let isSelected: Bool
+    let onToggleSelection: () -> Void
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Text(L10n.string("reader.page_number_spaced", row.view))
+                .font(.subheadline)
+                .foregroundStyle(titleColor)
+                .lineLimit(1)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            VStack(alignment: .trailing, spacing: 3) {
+                NovelReaderCacheStateBadge(status: row.status, isDimmed: isDimmed)
+
+                if let updateTime = row.updateTime {
+                    Text(L10n.string("reader.cache_updated_at", updateTime.formatted(date: .abbreviated, time: .shortened)))
+                        .font(.caption2)
+                        .foregroundStyle(isDimmed ? Color.secondary.opacity(0.55) : Color.secondary)
+                }
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(YamiboColors.SystemSurface.secondaryGroupedBackground)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .strokeBorder(isSelecting && isSelected ? Color.accentColor : Color.clear, lineWidth: 2)
+        )
+        .contentShape(Rectangle())
+        .animation(.spring(response: 0.24, dampingFraction: 0.72), value: isSelected)
+        .onTapGesture {
+            onToggleSelection()
+        }
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+
+    private var isDimmed: Bool {
+        isSelecting && !isSelected
+    }
+
+    private var titleColor: Color {
+        isDimmed ? .secondary : .primary
+    }
+}
+
+private struct NovelReaderCacheStateBadge: View {
+    let status: NovelOfflineCacheViewStatus
+    let isDimmed: Bool
+
+    var body: some View {
+        Label(title, systemImage: systemImage)
+            .labelStyle(.titleAndIcon)
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(tint)
+            .lineLimit(1)
+            .minimumScaleFactor(0.8)
+    }
+
+    private var title: String {
+        switch status {
+        case .cached:
+            L10n.string("reader.cached")
+        case .uncached:
+            L10n.string("reader.uncached")
+        case .caching:
+            L10n.string("reader.caching")
+        }
+    }
+
+    private var systemImage: String {
+        switch status {
+        case .cached:
+            "checkmark.seal.fill"
+        case .uncached:
+            "icloud"
+        case .caching:
+            "arrow.down.circle.fill"
+        }
+    }
+
+    private var tint: Color {
+        if isDimmed {
+            return Color.secondary.opacity(0.55)
+        }
+        switch status {
+        case .cached:
+            return Color.green
+        case .uncached:
+            return Color.secondary
+        case .caching:
+            return Color.orange
+        }
+    }
+}
+
+private struct NovelReaderCacheSelectionToolbar: View {
+    let selectionState: NovelReaderCacheSelectionState
+    let onCache: () -> Void
+    let onUpdate: () -> Void
+    let onDelete: () -> Void
+
+    var body: some View {
+        HStack(spacing: 16) {
+            toolbarButton(
+                title: L10n.string("reader.cache_action.cache"),
+                systemImage: "square.and.arrow.down",
+                role: nil,
+                isEnabled: selectionState.canCache,
+                action: onCache
+            )
+            toolbarButton(
+                title: L10n.string("reader.cache_action.update"),
+                systemImage: "arrow.triangle.2.circlepath",
+                role: nil,
+                isEnabled: selectionState.canUpdate,
+                action: onUpdate
+            )
+            toolbarButton(
+                title: L10n.string("common.delete"),
+                systemImage: "trash",
+                role: .destructive,
+                isEnabled: selectionState.canDelete,
+                action: onDelete
+            )
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+    }
+
+    private func toolbarButton(
+        title: String,
+        systemImage: String,
+        role: ButtonRole?,
+        isEnabled: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(role: role, action: action) {
+            VStack(spacing: 3) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 18, weight: .regular))
+                    .frame(width: 24, height: 22)
+                Text(title)
+                    .font(.caption2)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.78)
+            }
+            .frame(width: 66)
+            .foregroundStyle(role == .destructive ? Color.red : Color.primary)
+            .opacity(isEnabled ? 1 : 0.35)
+        }
+        .buttonStyle(.plain)
+        .disabled(!isEnabled)
+        .accessibilityLabel(title)
+    }
+}
+
+private struct NovelReaderCacheSelectionActionBar: View {
+    let selectionState: NovelReaderCacheSelectionState
+    let onCache: () -> Void
+    let onUpdate: () -> Void
+    let onDelete: () -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Divider()
+            NovelReaderCacheSelectionToolbar(
+                selectionState: selectionState,
+                onCache: onCache,
+                onUpdate: onUpdate,
+                onDelete: onDelete
+            )
+            .frame(maxWidth: .infinity)
+            .padding(.top, 10)
+            .padding(.bottom, 12)
+        }
+        .background(.ultraThinMaterial)
     }
 }
 
