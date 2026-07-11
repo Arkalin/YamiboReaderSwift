@@ -8,11 +8,13 @@ struct MangaVerticalCollectionViewport: UIViewRepresentable {
     let pages: [MangaReaderPageProjection]
     let currentPageIndex: Int?
     let viewportPlacement: MangaNovelReaderViewportPlacement?
+    let gamepadScrollStep: ReaderGamepadScrollStepRequest?
     let imageLoader: MangaReaderPageImageLoader
     let isChromeVisible: Bool
     let zoomEnabled: Bool
     let likedPageIDs: Set<String>
     let onCurrentPageChange: (Int) -> Void
+    let onGamepadScrollEdgeReached: (GamepadScrollDirection) -> Void
     let onPageLongPress: (MangaReaderPageProjection) -> Void
     let onTap: () -> Void
 
@@ -102,6 +104,8 @@ struct MangaVerticalCollectionViewport: UIViewRepresentable {
         private var pendingReportedGlobalIndex: Int?
         private var currentPagePublishDisplayLink: CADisplayLink?
         private var lastAppliedPlacementRevision: Int?
+        private var lastAppliedGamepadScrollRevision: Int?
+        private var pendingGamepadScrollTarget: (y: CGFloat, timestamp: TimeInterval)?
         private(set) var verticalZoomScale = MangaPageZoomPolicy.minimumScale
         private var pinchStartScale: CGFloat?
         lazy var tapGesture = UITapGestureRecognizer(target: self, action: #selector(handleTap(_:)))
@@ -128,6 +132,7 @@ struct MangaVerticalCollectionViewport: UIViewRepresentable {
             guard nextIdentity != contentIdentity else {
                 applyInitialPlacementIfNeeded(in: collectionView)
                 applyViewportPlacementIfNeeded(in: collectionView)
+                applyGamepadScrollStepIfNeeded(in: collectionView)
                 return
             }
 
@@ -136,6 +141,7 @@ struct MangaVerticalCollectionViewport: UIViewRepresentable {
             heightToWidthRatios = heightToWidthRatios.filter { validIDs.contains($0.key) }
             lastReportedGlobalIndex = nil
             pendingReportedGlobalIndex = nil
+            pendingGamepadScrollTarget = nil
             cancelPendingCurrentPagePublish()
             resetVerticalZoom(in: collectionView, animated: false)
 
@@ -154,6 +160,8 @@ struct MangaVerticalCollectionViewport: UIViewRepresentable {
             collectionView.layoutIfNeeded()
             applyInitialPlacementIfNeeded(in: collectionView)
             applyViewportPlacementIfNeeded(in: collectionView)
+            // A scroll step issued against the previous content is stale.
+            lastAppliedGamepadScrollRevision = parent.gamepadScrollStep?.revision
         }
 
         func collectionView(_ collectionView: UICollectionView, numberOfItemsInSection section: Int) -> Int {
@@ -266,6 +274,68 @@ struct MangaVerticalCollectionViewport: UIViewRepresentable {
             )
             lastAppliedPlacementRevision = placement.revision
             publishCurrentPageIfNeeded(from: collectionView)
+        }
+
+        /// Grace window in which a still-animating step's target keeps serving
+        /// as the base for the next one, so rapid presses compound instead of
+        /// re-reading the mid-animation offset.
+        private static let gamepadScrollAnimationGrace: TimeInterval = 0.45
+
+        func applyGamepadScrollStepIfNeeded(in collectionView: UICollectionView) {
+            guard pendingInitialPageIndex == nil,
+                  let request = parent.gamepadScrollStep,
+                  request.revision != lastAppliedGamepadScrollRevision else {
+                return
+            }
+            guard !parent.pages.isEmpty,
+                  collectionView.bounds.height > 0 else {
+                return
+            }
+            lastAppliedGamepadScrollRevision = request.revision
+
+            let minOffsetY = -collectionView.adjustedContentInset.top
+            let maxOffsetY = max(
+                minOffsetY,
+                collectionView.contentSize.height - collectionView.bounds.height
+                    + collectionView.adjustedContentInset.bottom
+            )
+            let currentY = collectionView.contentOffset.y
+            let edgeTolerance: CGFloat = 0.5
+
+            // Already clamped at the edge when pressed: report instead of
+            // scrolling so the reader can cross to the adjacent chapter.
+            let isAtEdge = switch request.direction {
+            case .down: currentY >= maxOffsetY - edgeTolerance
+            case .up: currentY <= minOffsetY + edgeTolerance
+            }
+            if isAtEdge {
+                let onGamepadScrollEdgeReached = parent.onGamepadScrollEdgeReached
+                let direction = request.direction
+                callbackScheduler.publish {
+                    onGamepadScrollEdgeReached(direction)
+                }
+                return
+            }
+
+            let now = CACurrentMediaTime()
+            var baseY = currentY
+            if let pending = pendingGamepadScrollTarget,
+               now - pending.timestamp < Self.gamepadScrollAnimationGrace {
+                baseY = pending.y
+            }
+            let step = collectionView.bounds.height
+                * CGFloat(GamepadCommandResolver.verticalScrollViewportFraction)
+            let desiredY = request.direction == .down ? baseY + step : baseY - step
+            let targetY = min(max(desiredY, minOffsetY), maxOffsetY)
+            pendingGamepadScrollTarget = (targetY, now)
+            collectionView.setContentOffset(
+                CGPoint(x: collectionView.contentOffset.x, y: targetY),
+                animated: true
+            )
+        }
+
+        func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
+            pendingGamepadScrollTarget = nil
         }
 
         @objc private func handleTap(_ recognizer: UITapGestureRecognizer) {

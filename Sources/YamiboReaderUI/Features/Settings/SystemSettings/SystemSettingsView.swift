@@ -7,6 +7,7 @@ public struct SystemSettingsView: View {
     @Environment(\.openURL) private var openURL
 
     private let dependencies: SettingsDependencies
+    private let gamepadInput: GamepadInputManager?
     private let onApplicationReset: @MainActor () async -> Void
 
     @StateObject private var viewModel: SystemSettingsViewModel
@@ -25,6 +26,7 @@ public struct SystemSettingsView: View {
 
     public init(
         dependencies: SettingsDependencies,
+        gamepadInput: GamepadInputManager? = nil,
         onApplicationReset: @escaping @MainActor () async -> Void
     ) {
         _viewModel = StateObject(wrappedValue: SystemSettingsViewModel(dependencies: dependencies))
@@ -39,6 +41,7 @@ public struct SystemSettingsView: View {
             makeThreadRouteResolver: dependencies.library.makeThreadRouteResolver
         ))
         self.dependencies = dependencies
+        self.gamepadInput = gamepadInput
         self.onApplicationReset = onApplicationReset
     }
 
@@ -275,7 +278,7 @@ public struct SystemSettingsView: View {
                 AboutView()
             }
             .navigationDestination(isPresented: $showingPeripheralSettings) {
-                SystemSettingsPeripheralPageTurnView(viewModel: viewModel)
+                SystemSettingsPeripheralPageTurnView(viewModel: viewModel, gamepadInput: gamepadInput)
             }
             .navigationDestination(isPresented: $showingOfflineCacheManagement) {
                 OfflineCacheManagementView(viewModel: viewModel)

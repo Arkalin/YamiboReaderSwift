@@ -4,11 +4,15 @@ import YamiboReaderCore
 #if os(iOS)
 struct ReaderChapterCommentsContent: View {
     private static let loadNextColor = Color(red: 0.54, green: 0.35, blue: 0.22)
+    static let refreshErrorRowID = "__refresh_error__"
+    static let loadNextRowID = "__load_next__"
+    private static let cardCornerRadius: CGFloat = 10
 
     let state: ReaderChapterCommentsState
     let isLoadingMore: Bool
     let loadMoreError: String?
     let refreshError: String?
+    @Binding var scrollTarget: String?
     let retry: (ReaderChapterCommentTarget) -> Void
     let loadNext: () -> Void
     let openOriginalPost: (URL) -> Void
@@ -18,6 +22,9 @@ struct ReaderChapterCommentsContent: View {
         content
     }
 
+    // The comment list is a hand-rolled inset-grouped ScrollView instead of a
+    // List: `scrollPosition(id:)` (needed for drift-free gamepad scrolling)
+    // only works on ScrollView + scrollTargetLayout.
     @ViewBuilder
     private var content: some View {
         switch state {
@@ -53,31 +60,74 @@ struct ReaderChapterCommentsContent: View {
                     systemImage: "text.bubble"
                 )
             } else {
-                List {
-                    if let refreshError {
-                        Section {
-                            Label(refreshError, systemImage: "exclamationmark.triangle")
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 0) {
+                        if let refreshError {
+                            refreshErrorCard(refreshError)
+                                .id(Self.refreshErrorRowID)
                         }
-                    }
-                    Section {
                         ForEach(page.comments) { comment in
-                            ReaderChapterCommentRow(
-                                comment: comment,
-                                originalPostURL: comment.originalPostURL(threadID: target.threadID),
-                                openOriginalPost: openOriginalPost
-                            )
+                            commentCardRow(comment, target: target, page: page)
+                                .id(comment.id)
                         }
-                    } footer: {
                         if page.nextView != nil {
                             loadNextButton
                                 .padding(.top, 10)
+                                .id(Self.loadNextRowID)
                         }
                     }
+                    .scrollTargetLayout()
+                    .padding(.horizontal, 16)
+                    .padding(.top, 20)
+                    .padding(.bottom, 24)
                 }
+                .scrollPosition(id: $scrollTarget, anchor: .top)
+                .background(Color(.systemGroupedBackground))
             }
         }
+    }
+
+    private func refreshErrorCard(_ message: String) -> some View {
+        Label(message, systemImage: "exclamationmark.triangle")
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 11)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color(.secondarySystemGroupedBackground))
+            .clipShape(RoundedRectangle(cornerRadius: Self.cardCornerRadius, style: .continuous))
+            .padding(.bottom, 16)
+    }
+
+    private func commentCardRow(
+        _ comment: ChapterComment,
+        target: ReaderChapterCommentTarget,
+        page: ChapterCommentsPage
+    ) -> some View {
+        let isFirst = comment.id == page.comments.first?.id
+        let isLast = comment.id == page.comments.last?.id
+        return ReaderChapterCommentRow(
+            comment: comment,
+            originalPostURL: comment.originalPostURL(threadID: target.threadID),
+            openOriginalPost: openOriginalPost
+        )
+        .padding(.horizontal, 16)
+        .padding(.vertical, 7)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(.secondarySystemGroupedBackground))
+        .overlay(alignment: .bottom) {
+            if !isLast {
+                Divider()
+                    .padding(.leading, 16)
+            }
+        }
+        .clipShape(.rect(
+            topLeadingRadius: isFirst ? Self.cardCornerRadius : 0,
+            bottomLeadingRadius: isLast ? Self.cardCornerRadius : 0,
+            bottomTrailingRadius: isLast ? Self.cardCornerRadius : 0,
+            topTrailingRadius: isFirst ? Self.cardCornerRadius : 0,
+            style: .continuous
+        ))
     }
 
     private var loadNextButton: some View {
@@ -115,7 +165,11 @@ struct ReaderChapterCommentsSheet: View {
     let refresh: (ReaderChapterCommentTarget?) async -> Void
     let loadNext: () async -> Void
     let onOpenOriginalPost: (URL) -> Void
+    var gamepadInput: GamepadInputManager?
     var emptyTitle = L10n.string("reader.chapter_comments_empty")
+
+    @State private var scrollTarget: String?
+    @State private var gamepadHandlerToken: UUID?
 
     var body: some View {
         NavigationStack {
@@ -124,6 +178,7 @@ struct ReaderChapterCommentsSheet: View {
                 isLoadingMore: isLoadingMore,
                 loadMoreError: loadMoreError,
                 refreshError: refreshError,
+                scrollTarget: $scrollTarget,
                 retry: retry(_:),
                 loadNext: loadNextPage,
                 openOriginalPost: openOriginalPost(_:),
@@ -153,6 +208,50 @@ struct ReaderChapterCommentsSheet: View {
         }
         .task(id: target) {
             await loadInitial(target)
+        }
+        .onAppear {
+            guard let gamepadInput, gamepadHandlerToken == nil else { return }
+            gamepadHandlerToken = gamepadInput.pushHandler { event in
+                handleGamepadEvent(event)
+            }
+        }
+        .onDisappear {
+            gamepadInput?.removeHandler(gamepadHandlerToken)
+            gamepadHandlerToken = nil
+        }
+    }
+
+    private func handleGamepadEvent(_ event: GamepadEvent) {
+        switch GamepadCommandResolver.commentsCommand(for: event) {
+        case .close:
+            dismiss()
+        case let .scroll(direction):
+            scrollComments(direction)
+        case nil:
+            break
+        }
+    }
+
+    private func scrollComments(_ direction: GamepadScrollDirection) {
+        guard case let .loaded(_, page) = state, !page.comments.isEmpty else { return }
+        let ids = page.comments.map(\.id)
+        let currentIndex: Int = if let scrollTarget, let index = ids.firstIndex(of: scrollTarget) {
+            index
+        } else if scrollTarget == ReaderChapterCommentsContent.loadNextRowID {
+            ids.count - 1
+        } else {
+            0
+        }
+        let stride = GamepadCommandResolver.commentsScrollStride
+        let desiredIndex = direction == .down ? currentIndex + stride : currentIndex - stride
+        let clampedIndex = min(max(desiredIndex, 0), ids.count - 1)
+        withAnimation(.easeInOut(duration: 0.25)) {
+            scrollTarget = ids[clampedIndex]
+        }
+        // Reaching the tail with more pages available loads the next one so
+        // a controller user never has to touch the on-screen button.
+        if direction == .down, desiredIndex >= ids.count - 1, page.nextView != nil, !isLoadingMore {
+            loadNextPage()
         }
     }
 

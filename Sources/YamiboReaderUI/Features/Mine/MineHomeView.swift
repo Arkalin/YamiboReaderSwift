@@ -126,7 +126,10 @@ public struct MineHomeView: View {
                 }
             }
             .sheet(isPresented: $showingSettingsSheet) {
-                SystemSettingsView(dependencies: settingsDependencies) {
+                SystemSettingsView(
+                    dependencies: settingsDependencies,
+                    gamepadInput: appModel.gamepadInput
+                ) {
                     await appModel.bootstrap()
                 }
             }
