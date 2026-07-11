@@ -28,19 +28,17 @@ public enum LocalFavoriteLibrarySortOrder: String, Codable, CaseIterable, Identi
     }
 }
 
-/// One choosable source filter: a forum board, all manga aggregated into a
-/// single entry (mirroring the Android filter's single "標籤" row), or items
-/// with an unknown source. Forum boards compare by id only.
+/// One choosable source filter: a forum board, or items with an unknown
+/// source. Forum boards compare by id only.
 public enum LocalFavoriteSourceFilter: Hashable, Sendable {
     case forumBoard(id: String, label: String)
-    case manga
     case unknown
 
     public static func == (lhs: LocalFavoriteSourceFilter, rhs: LocalFavoriteSourceFilter) -> Bool {
         switch (lhs, rhs) {
         case let (.forumBoard(lhsID, _), .forumBoard(rhsID, _)):
             lhsID == rhsID
-        case (.manga, .manga), (.unknown, .unknown):
+        case (.unknown, .unknown):
             true
         default:
             false
@@ -52,8 +50,6 @@ public enum LocalFavoriteSourceFilter: Hashable, Sendable {
         case let .forumBoard(id, _):
             hasher.combine("forumBoard")
             hasher.combine(id)
-        case .manga:
-            hasher.combine("manga")
         case .unknown:
             hasher.combine("unknown")
         }
@@ -63,40 +59,28 @@ public enum LocalFavoriteSourceFilter: Hashable, Sendable {
         switch self {
         case let .forumBoard(id, label):
             label.isEmpty ? id : label
-        case .manga:
-            L10n.string("favorites.filter.manga")
         case .unknown:
             L10n.string("favorites.source_group.unknown")
         }
     }
 
-    /// Canonical filter bucket an item belongs to.
-    ///
-    /// A `.mangaThread` only counts as `.manga` while its board's Smart Comic
-    /// Mode is currently on (smart-comic-mode design decision #2): once a
-    /// board's mode is off, its favorites must behave exactly like ordinary
-    /// forum-board favorites in every way except which reader UI opens them,
-    /// so they fall through to the same `.forumBoard`/`.unknown` logic used
-    /// for non-manga items rather than duplicating it here.
-    public static func key(for item: FavoriteItem, smartComicModeSettings: SmartComicModeSettings) -> LocalFavoriteSourceFilter {
-        if item.target.kind == .mangaThread, smartComicModeSettings.isEnabled(forumID: item.forumID) {
-            return .manga
-        }
+    /// Canonical filter bucket an item belongs to. `.mangaThread` favorites
+    /// have no dedicated bucket (there is no "智能漫画" filter chip) — they
+    /// fall through to the same `.forumBoard`/`.unknown` logic as every other
+    /// item, regardless of their board's Smart Comic Mode state.
+    public static func key(for item: FavoriteItem) -> LocalFavoriteSourceFilter {
         if let forumID = item.forumID ?? item.sourceGroup.forumID {
             return .forumBoard(id: forumID, label: item.forumName ?? item.sourceGroup.forumName ?? forumID)
         }
         return .unknown
     }
 
-    public func matches(_ item: FavoriteItem, smartComicModeSettings: SmartComicModeSettings) -> Bool {
-        let isModeOnMangaThread = item.target.kind == .mangaThread && smartComicModeSettings.isEnabled(forumID: item.forumID)
+    public func matches(_ item: FavoriteItem) -> Bool {
         switch self {
         case let .forumBoard(id, _):
-            return !isModeOnMangaThread && (item.forumID == id || item.sourceGroup.forumID == id)
-        case .manga:
-            return isModeOnMangaThread
+            return item.forumID == id || item.sourceGroup.forumID == id
         case .unknown:
-            return LocalFavoriteSourceFilter.key(for: item, smartComicModeSettings: smartComicModeSettings) == .unknown
+            return LocalFavoriteSourceFilter.key(for: item) == .unknown
         }
     }
 }
@@ -412,7 +396,7 @@ public enum LocalFavoriteLibraryProjection {
             }
             .filter { entry in
                 query.selectedSourceFilters.isEmpty
-                    || query.selectedSourceFilters.contains { $0.matches(entry.representativeItem, smartComicModeSettings: smartComicModeSettings) }
+                    || query.selectedSourceFilters.contains { $0.matches(entry.representativeItem) }
             }
             .filter { entry in
                 query.selectedTagIDs.isEmpty || query.selectedTagIDs.isSubset(of: Set(entry.representativeItem.tagIDs))

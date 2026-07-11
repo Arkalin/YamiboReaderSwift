@@ -170,10 +170,10 @@ final class FavoriteLibraryOrganizer: ObservableObject {
         }
         // Without this, toggling the new Smart Comic Mode settings UI while
         // the Favorites tab is already loaded would leave the merged-card
-        // grouping and the "智能漫画" filter chip's availability stale until
-        // some unrelated favorite/progress/cover change happened to trigger
-        // a reload — the settings VALUE was always modeled/consumed
-        // correctly, but nothing here reacted to it changing live.
+        // grouping stale until some unrelated favorite/progress/cover change
+        // happened to trigger a reload — the settings VALUE was always
+        // modeled/consumed correctly, but nothing here reacted to it
+        // changing live.
         settingsUpdatesTask = Task { @MainActor [weak self, store = settingsStore] in
             for await notification in NotificationCenter.default.notifications(named: SettingsStore.didChangeNotification) {
                 guard !Task.isCancelled else { return }

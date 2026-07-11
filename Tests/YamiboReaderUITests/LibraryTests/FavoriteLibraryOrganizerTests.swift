@@ -77,78 +77,6 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
         XCTAssertEqual(organizer.derived.sourceFilterEntryCounts[boardBFilter], 1)
     }
 
-    /// Smart-comic-mode decision #9: the "智能漫画" filter chip's visibility
-    /// is gated purely on `SmartComicModeSettings` — at least one of the 3
-    /// manageable boards being on — never on whether a `.mangaThread`
-    /// favorite happens to exist. This deliberately checks both directions:
-    /// available with zero manga favorites (mode on by default), and NOT
-    /// available even with an existing manga favorite once every manageable
-    /// board is switched off.
-    func testMangaSourceFilterAvailabilityIsGatedOnSmartComicModeSettingsNotFavoriteExistence() async throws {
-        let suiteName = YamiboTestDefaults.suiteName(prefix: "local-favorites-manga-filter-availability")
-        _ = try YamiboTestDefaults.make(suiteName: suiteName)
-        let settingsStore = SettingsStore(
-            defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
-            key: "settings"
-        )
-        let localFavoriteLibraryStore = FavoriteLibraryStore(
-            defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
-            key: "local-favorites"
-        )
-        let organizer = try makeOrganizer(
-            libraryStore: localFavoriteLibraryStore,
-            settingsStore: settingsStore
-        )
-        await organizer.load()
-        // `load()` assigning `selectedCategoryID`/`selectedCollectionID`
-        // fires `persistNavigationState()`, which spawns its own
-        // unstructured load-modify-save `Task` against this same
-        // `settingsStore`. Letting that settle before this test does its
-        // own concurrent load-modify-save below avoids a lost-update race
-        // where that Task's save (started from a `settings` snapshot it
-        // read before this test's own save below) would clobber this
-        // test's change with stale data — mirrors the settle delay other
-        // tests in this file already use around `persistNavigationState`.
-        try await Task.sleep(nanoseconds: 100_000_000)
-
-        // Default settings: fid 30 on, zero favorites of any kind yet — the
-        // chip must still be offered.
-        XCTAssertTrue(organizer.derived.isMangaSourceFilterAvailable)
-        XCTAssertNil(organizer.derived.sourceFilterEntryCounts[.manga])
-
-        // Turn every manageable board off, then favorite a manga thread on
-        // one of them: the favorite exists, but the chip must stay hidden.
-        var settings = await settingsStore.load()
-        settings.smartComicMode.enabledForumIDs = []
-        try await settingsStore.save(settings)
-
-        var document = try await localFavoriteLibraryStore.load()
-        document.addItem(try FavoriteItem(
-            target: .mangaThread(threadID: "950"),
-            title: "关闭板块漫画",
-            forumID: "46",
-            locations: [.category(document.defaultCategory.id)]
-        ))
-        try await localFavoriteLibraryStore.save(document)
-        await organizer.reload()
-
-        XCTAssertFalse(organizer.derived.isMangaSourceFilterAvailable)
-        // Smart-comic-mode decision #2: while board 46's mode is off, its
-        // favorite must bucket exactly like an ordinary forum-board favorite
-        // (not `.manga`) — see `LocalFavoriteSourceFilter.key(for:smartComicModeSettings:)`.
-        XCTAssertNil(organizer.derived.sourceFilterEntryCounts[.manga])
-        XCTAssertEqual(organizer.derived.sourceFilterEntryCounts[.forumBoard(id: "46", label: "46")], 1)
-
-        // Turning that same board back on makes the chip available again.
-        settings = await settingsStore.load()
-        settings.smartComicMode.enabledForumIDs = ["46"]
-        try await settingsStore.save(settings)
-        await organizer.reload()
-
-        XCTAssertTrue(organizer.derived.isMangaSourceFilterAvailable)
-        XCTAssertEqual(organizer.derived.sourceFilterEntryCounts[.manga], 1)
-    }
-
     /// Fix for the stale-state gap this file's Phase H review flagged:
     /// `FavoriteLibraryOrganizer` did not subscribe to
     /// `SettingsStore.didChangeNotification`, so toggling Smart Comic Mode
@@ -201,29 +129,25 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
         document.addItem(secondItem)
         try await localFavoriteLibraryStore.save(document)
 
-        // Board 30 is on by default (unrelated to this test's fid "46"
-        // favorites), so it alone would already make the "智能漫画" chip
-        // available — disable it up front so this test's chip assertions
-        // isolate the fid "46" toggle being exercised below. Seeded before
-        // the organizer exists, so there is no load-modify-save race with
-        // its own `persistNavigationState()` background Task.
-        try await settingsStore.save(AppSettings(smartComicMode: SmartComicModeSettings(enabledForumIDs: [])))
-
         let organizer = try makeOrganizer(
             libraryStore: localFavoriteLibraryStore,
             settingsStore: settingsStore,
             mangaDirectoryStore: mangaDirectoryStore
         )
         await organizer.load()
-        // See the sibling availability test's identical comment: let
-        // `load()`'s own `persistNavigationState()` background Task settle
-        // before this test does its own concurrent settings save below.
+        // `load()` assigning `selectedCategoryID`/`selectedCollectionID`
+        // fires `persistNavigationState()`, which spawns its own
+        // unstructured load-modify-save `Task` against this same
+        // `settingsStore`. Letting that settle before this test does its own
+        // concurrent load-modify-save below avoids a lost-update race where
+        // that Task's save (started from a `settings` snapshot it read
+        // before this test's own save below) would clobber this test's
+        // change with stale data.
         try await Task.sleep(nanoseconds: 100_000_000)
 
         // fid "46" is off by default: no merge yet, two standalone cards.
         XCTAssertEqual(organizer.derived.cards.count, 2)
         XCTAssertFalse(organizer.derived.cards.contains { $0.isMergedGroup })
-        XCTAssertFalse(organizer.derived.isMangaSourceFilterAvailable)
 
         // Flip the board on directly through the settings store — exactly
         // what the new Settings UI's toggle does — with no call to
@@ -238,7 +162,6 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
         let mergedCard = try XCTUnwrap(organizer.derived.cards.first { $0.id == firstItem.id })
         XCTAssertTrue(mergedCard.isMergedGroup)
         XCTAssertEqual(mergedCard.mergedMembers?.map(\.target), [firstTarget, secondTarget])
-        XCTAssertTrue(organizer.derived.isMangaSourceFilterAvailable)
     }
 
     /// The manga reader's directory page can rename a `MangaDirectory` (e.g.
