@@ -8,17 +8,37 @@ final class ForumMangaDetailViewModel {
     var directory: MangaDirectory?
     var currentDocument: MangaReaderProjection?
     var readingProgress: ReadingProgressRecord?
+    var contentCover: ContentCover?
     var isLoading = false
     var errorMessage: String?
+
+    /// Directory command surface mirroring the reader directory sheet's
+    /// update/search button: a single in-flight flag shared by "update
+    /// directory" and "save correction" (they mutate the same directory row),
+    /// plus the search-cooldown countdown and the short post-update window in
+    /// which the button escalates to a forced global search.
+    var isDirectoryActionRunning = false
+    var directoryCooldownRemaining = 0
+    var forcedSearchShortcutRemaining: Int?
+    var directoryActionErrorMessage: String?
 
     let context: MangaDetailLaunchContext
 
     @ObservationIgnored private let dependencies: ForumDependencies
     @ObservationIgnored private var readingProgressUpdatesTask: Task<Void, Never>?
+    @ObservationIgnored private var contentCoverUpdatesTask: Task<Void, Never>?
+    @ObservationIgnored private var automaticDirectoryUpdateTask: Task<Void, Never>?
+    @ObservationIgnored private var directoryTickTask: Task<Void, Never>?
+    @ObservationIgnored private let workflowConfiguration: MangaDirectoryWorkflowConfiguration
 
-    init(context: MangaDetailLaunchContext, dependencies: ForumDependencies) {
+    init(
+        context: MangaDetailLaunchContext,
+        dependencies: ForumDependencies,
+        workflowConfiguration: MangaDirectoryWorkflowConfiguration = MangaDirectoryWorkflowConfiguration()
+    ) {
         self.context = context
         self.dependencies = dependencies
+        self.workflowConfiguration = workflowConfiguration
         readingProgressUpdatesTask = Task { @MainActor [weak self, readingProgressStore = dependencies.readingProgressStore] in
             for await notification in NotificationCenter.default.notifications(named: ReadingProgressStore.didChangeNotification) {
                 guard !Task.isCancelled else { return }
@@ -30,10 +50,24 @@ final class ForumMangaDetailViewModel {
                 readingProgress = await self.loadReadingProgress()
             }
         }
+        contentCoverUpdatesTask = Task { @MainActor [weak self, contentCoverStore = dependencies.contentCoverStore] in
+            for await notification in NotificationCenter.default.notifications(named: ContentCoverStore.didChangeNotification) {
+                guard !Task.isCancelled else { return }
+                guard let self else { return }
+                guard let changeID = notification.userInfo?[ContentCoverStore.changeIDUserInfoKey] as? String,
+                      changeID == contentCoverStore.changeID else {
+                    continue
+                }
+                contentCover = await self.loadContentCover()
+            }
+        }
     }
 
     deinit {
         readingProgressUpdatesTask?.cancel()
+        contentCoverUpdatesTask?.cancel()
+        automaticDirectoryUpdateTask?.cancel()
+        directoryTickTask?.cancel()
     }
 
     var navigationTitle: String {
@@ -42,6 +76,69 @@ final class ForumMangaDetailViewModel {
 
     var focusedChapterTID: String? {
         context.focusedChapterTID ?? currentDocument?.tid
+    }
+
+    var currentReadChapterTID: String? {
+        readingProgress?.manga?.chapterThreadID
+    }
+
+    var coverURL: URL? {
+        contentCover?.resolvedURL
+    }
+
+    var latestChapterText: String? {
+        guard let directory else { return nil }
+        return MangaChapterDisplayFormatter.latestChapter(in: directory.chapters).map {
+            L10n.string("manga.latest_chapter", MangaChapterDisplayFormatter.displayNumber(for: $0))
+        }
+    }
+
+    var readingProgressText: String? {
+        guard let manga = readingProgress?.manga else { return nil }
+        if let pageCount = manga.mangaPageCount {
+            return L10n.string("favorites.progress.manga_page_total", manga.lastChapter, manga.mangaPageIndex + 1, pageCount)
+        }
+        return L10n.string("favorites.progress.manga_page", manga.lastChapter, manga.mangaPageIndex + 1)
+    }
+
+    var currentReadChapterProgressText: String? {
+        guard let manga = readingProgress?.manga else { return nil }
+        return L10n.string("favorites.progress.page", manga.mangaPageIndex + 1)
+    }
+
+    /// Same title state machine as the reader directory sheet's update button
+    /// (`MangaReaderWorkflow.directoryPanelPresentation`): busy → cooldown
+    /// countdown → forced-search shortcut countdown → strategy-dependent
+    /// default.
+    var updateButtonTitle: String {
+        if isDirectoryActionRunning {
+            return L10n.string("common.updating")
+        }
+        if directoryCooldownRemaining > 0 {
+            return "\(directoryCooldownRemaining)s"
+        }
+        if let forcedSearchShortcutRemaining {
+            return forcedSearchShortcutRemaining > 0
+                ? L10n.string("manga.global_search_countdown", forcedSearchShortcutRemaining)
+                : L10n.string("manga.global_search")
+        }
+        if let directory, directory.strategy != .tag {
+            return L10n.string("manga.global_search")
+        }
+        return L10n.string("reader.cache_action.update")
+    }
+
+    var isUpdateButtonEnabled: Bool {
+        directory != nil && !isDirectoryActionRunning && directoryCooldownRemaining <= 0
+    }
+
+    var isSearchMode: Bool {
+        forcedSearchShortcutRemaining != nil || (directory.map { $0.strategy != .tag } ?? false)
+    }
+
+    var editDraft: MangaDirectoryEditDraft? {
+        guard let directory else { return nil }
+        return makeDirectoryWorkflow().editDraft(for: directory, currentTID: focusedChapterTID)
     }
 
     func load() async {
@@ -57,16 +154,10 @@ final class ForumMangaDetailViewModel {
 
         do {
             let loader = await dependencies.makeMangaReaderProjectionLoader()
-            let repository = await dependencies.makeMangaDirectoryRepository()
-            let store = dependencies.mangaDirectoryStore
             let document = try await loader.loadReaderProjection(
                 MangaReaderProjectionRequest(threadID: context.thread.tid)
             )
-            let workflow = MangaDirectoryWorkflow(
-                repository: repository,
-                store: store,
-                searchCooldownState: dependencies.mangaDirectorySearchCooldownState
-            )
+            let workflow = await makeDirectoryWorkflowWithRepository()
             let launchContext = MangaLaunchContext(
                 originalThreadID: context.thread.tid,
                 chapterTID: context.thread.tid,
@@ -90,7 +181,7 @@ final class ForumMangaDetailViewModel {
             let resolvedDirectory = try await ensuringDirectoryContainsCurrentChapter(
                 resolution.directory,
                 document: document,
-                store: store
+                store: dependencies.mangaDirectoryStore
             )
 
             currentDocument = document
@@ -99,10 +190,15 @@ final class ForumMangaDetailViewModel {
             // the precise directory-scoped query replace whatever the fuzzy
             // fetch above (before `directory` was known) happened to find.
             readingProgress = await loadReadingProgress()
+            contentCover = await loadContentCover()
+            if resolution.shouldAutoUpdateAfterInitialLoad {
+                startAutomaticDirectoryUpdate()
+            }
         } catch {
             currentDocument = nil
             directory = nil
             readingProgress = await loadReadingProgress()
+            contentCover = nil
             errorMessage = error.localizedDescription
         }
     }
@@ -143,6 +239,209 @@ final class ForumMangaDetailViewModel {
             // for mode-on boards.
             isSmartModeEnabled: true
         )
+    }
+
+    // MARK: - Directory update (search)
+
+    func updateDirectoryFromDetail() async {
+        automaticDirectoryUpdateTask?.cancel()
+        automaticDirectoryUpdateTask = nil
+        await performDirectoryUpdate(isForcedSearch: forcedSearchShortcutRemaining != nil)
+    }
+
+    func clearDirectoryActionError() {
+        directoryActionErrorMessage = nil
+    }
+
+    private func startAutomaticDirectoryUpdate() {
+        automaticDirectoryUpdateTask?.cancel()
+        automaticDirectoryUpdateTask = Task { @MainActor [weak self] in
+            await self?.performDirectoryUpdate(isForcedSearch: false)
+            self?.automaticDirectoryUpdateTask = nil
+        }
+    }
+
+    private func performDirectoryUpdate(isForcedSearch: Bool) async {
+        guard let directory, !isDirectoryActionRunning else { return }
+        isDirectoryActionRunning = true
+        directoryActionErrorMessage = nil
+        defer {
+            isDirectoryActionRunning = false
+            refreshDirectoryTiming()
+        }
+
+        let workflow = await makeDirectoryWorkflowWithRepository()
+        do {
+            let result = try await workflow.updateDirectory(
+                directory,
+                currentTID: focusedChapterTID,
+                isForcedSearch: isForcedSearch
+            )
+            guard !Task.isCancelled else { return }
+            self.directory = result.directory
+            if let cooldownExpiresAt = result.cooldownExpiresAt {
+                directoryCooldownExpiresAt = cooldownExpiresAt
+                forcedSearchShortcutExpiresAt = nil
+            } else if result.shouldOfferForcedSearch {
+                directoryCooldownExpiresAt = nil
+                forcedSearchShortcutExpiresAt = workflowConfiguration.now()
+                    .addingTimeInterval(workflowConfiguration.forcedSearchShortcutDuration)
+            } else {
+                directoryCooldownExpiresAt = nil
+                forcedSearchShortcutExpiresAt = nil
+            }
+        } catch is CancellationError {
+        } catch {
+            guard !Task.isCancelled else { return }
+            YamiboLog.forum.error("Manga detail directory update failed: \(error.localizedDescription)")
+            if case let YamiboError.searchCooldown(seconds) = error {
+                directoryCooldownExpiresAt = workflowConfiguration.now()
+                    .addingTimeInterval(TimeInterval(seconds))
+                forcedSearchShortcutExpiresAt = nil
+            } else if let cooldown = await workflow.cooldownExpiresAt() {
+                directoryCooldownExpiresAt = cooldown
+                forcedSearchShortcutExpiresAt = nil
+            }
+            directoryActionErrorMessage = error.localizedDescription
+        }
+    }
+
+    // MARK: - Correction
+
+    func saveCorrection(_ draft: MangaDirectoryEditDraft) async {
+        guard let directory, !isDirectoryActionRunning else { return }
+        automaticDirectoryUpdateTask?.cancel()
+        automaticDirectoryUpdateTask = nil
+        isDirectoryActionRunning = true
+        directoryActionErrorMessage = nil
+        defer {
+            isDirectoryActionRunning = false
+            refreshDirectoryTiming()
+        }
+
+        do {
+            let workflow = makeDirectoryWorkflow()
+            let oldName = directory.cleanBookName
+            let updated = try await workflow.renameDirectory(
+                directory,
+                cleanBookName: draft.cleanBookName,
+                searchKeyword: MangaDirectoryWorkflow.searchKeyword(from: draft)
+            )
+            var cacheRenameError: Error?
+            if oldName != updated.cleanBookName {
+                // Mirrors the reader's rename cascade: the directory-level
+                // `.mangaTitle` reading-progress row is keyed by
+                // cleanBookName, and cached chapters live under an owner
+                // directory named after it. (The `.smartManga` cover row is
+                // migrated inside `MangaDirectoryStore.renameDirectory`.)
+                do {
+                    try await dependencies.readingProgressStore.migrateMangaTitleKey(from: oldName, to: updated.cleanBookName)
+                } catch {
+                    YamiboLog.persistence.error("Failed to migrate reading progress key after manga title rename: \(error.localizedDescription)")
+                }
+                if let offlineCacheStore = dependencies.mangaOfflineCacheStore {
+                    do {
+                        try await offlineCacheStore.renameMangaOfflineCacheOwner(from: oldName, to: updated.cleanBookName)
+                    } catch {
+                        YamiboLog.offlineCache.error("Failed to rename offline cache owner directory after manga rename: \(error.localizedDescription)")
+                        cacheRenameError = error
+                    }
+                }
+            }
+            guard !Task.isCancelled else { return }
+            self.directory = updated
+            readingProgress = await loadReadingProgress()
+            contentCover = await loadContentCover()
+            directoryActionErrorMessage = cacheRenameError?.localizedDescription
+        } catch is CancellationError {
+        } catch {
+            guard !Task.isCancelled else { return }
+            YamiboLog.forum.error("Manga detail directory rename failed: \(error.localizedDescription)")
+            directoryActionErrorMessage = error.localizedDescription
+        }
+    }
+
+    // MARK: - Countdown timing
+
+    @ObservationIgnored private var directoryCooldownExpiresAt: Date?
+    @ObservationIgnored private var forcedSearchShortcutExpiresAt: Date?
+
+    private func refreshDirectoryTiming() {
+        let now = workflowConfiguration.now()
+        directoryCooldownRemaining = remainingSeconds(until: directoryCooldownExpiresAt, now: now) ?? 0
+        if directoryCooldownRemaining == 0 {
+            directoryCooldownExpiresAt = nil
+        }
+        forcedSearchShortcutRemaining = remainingSeconds(until: forcedSearchShortcutExpiresAt, now: now)
+        if forcedSearchShortcutRemaining == nil {
+            forcedSearchShortcutExpiresAt = nil
+        }
+        updateDirectoryTickTask()
+    }
+
+    private func updateDirectoryTickTask() {
+        let hasActiveDeadline = directoryCooldownExpiresAt != nil || forcedSearchShortcutExpiresAt != nil
+        guard hasActiveDeadline else {
+            directoryTickTask?.cancel()
+            directoryTickTask = nil
+            return
+        }
+        guard directoryTickTask == nil else { return }
+
+        directoryTickTask = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
+                guard let self, !Task.isCancelled else { return }
+                let now = self.workflowConfiguration.now()
+                self.directoryCooldownRemaining = self.remainingSeconds(until: self.directoryCooldownExpiresAt, now: now) ?? 0
+                if self.directoryCooldownRemaining == 0 {
+                    self.directoryCooldownExpiresAt = nil
+                }
+                self.forcedSearchShortcutRemaining = self.remainingSeconds(until: self.forcedSearchShortcutExpiresAt, now: now)
+                if self.forcedSearchShortcutRemaining == nil {
+                    self.forcedSearchShortcutExpiresAt = nil
+                }
+                guard self.directoryCooldownExpiresAt != nil || self.forcedSearchShortcutExpiresAt != nil else {
+                    self.directoryTickTask = nil
+                    return
+                }
+            }
+        }
+    }
+
+    private func remainingSeconds(until deadline: Date?, now: Date) -> Int? {
+        guard let deadline else { return nil }
+        let remaining = deadline.timeIntervalSince(now)
+        guard remaining > 0 else { return nil }
+        return max(1, Int(ceil(remaining)))
+    }
+
+    // MARK: - Loading helpers
+
+    private func makeDirectoryWorkflow() -> MangaDirectoryWorkflow {
+        MangaDirectoryWorkflow(
+            repository: UnreachedMangaDirectoryRepository(),
+            store: dependencies.mangaDirectoryStore,
+            configuration: workflowConfiguration,
+            searchCooldownState: dependencies.mangaDirectorySearchCooldownState
+        )
+    }
+
+    private func makeDirectoryWorkflowWithRepository() async -> MangaDirectoryWorkflow {
+        MangaDirectoryWorkflow(
+            repository: await dependencies.makeMangaDirectoryRepository(),
+            store: dependencies.mangaDirectoryStore,
+            configuration: workflowConfiguration,
+            searchCooldownState: dependencies.mangaDirectorySearchCooldownState
+        )
+    }
+
+    private func loadContentCover() async -> ContentCover? {
+        guard let cleanBookName = directory?.cleanBookName.trimmingCharacters(in: .whitespacesAndNewlines),
+              !cleanBookName.isEmpty else {
+            return nil
+        }
+        return await dependencies.contentCoverStore.cover(for: .smartManga(cleanBookName: cleanBookName))
     }
 
     /// Once `directory` is known, its stable `mangaID`+`cleanBookName`
@@ -193,5 +492,24 @@ final class ForumMangaDetailViewModel {
         updated.lastUpdatedAt = Date()
         try await store.saveDirectory(updated)
         return updated
+    }
+}
+
+/// `editDraft(for:currentTID:)` is the only pure helper this view model needs
+/// off `MangaDirectoryWorkflow` outside an update/reload, and it never touches
+/// the repository — this placeholder keeps those synchronous call sites from
+/// having to await the real repository factory just to satisfy the
+/// initializer.
+private struct UnreachedMangaDirectoryRepository: MangaDirectoryRepository {
+    func loadDirectorySeed(for threadID: String) async throws -> MangaDirectorySeed {
+        throw YamiboError.underlying("Manga directory repository is not reachable from this call site.")
+    }
+
+    func loadTagDirectory(tagIDs: [String]) async throws -> [MangaChapter] {
+        throw YamiboError.underlying("Manga directory repository is not reachable from this call site.")
+    }
+
+    func searchDirectory(keyword: String, forumID: String) async throws -> [MangaChapter] {
+        throw YamiboError.underlying("Manga directory repository is not reachable from this call site.")
     }
 }

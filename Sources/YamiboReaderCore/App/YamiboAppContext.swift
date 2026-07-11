@@ -140,6 +140,7 @@ public final class YamiboAppContext: Sendable {
             contentCoverStore: contentCoverStore,
             mangaDirectoryStore: mangaDirectoryStore,
             mangaDirectorySearchCooldownState: mangaDirectorySearchCooldownState,
+            mangaOfflineCacheStore: offlineCacheStore,
             makeForumRepository: { [self] in await makeForumRepository() },
             makeForumThreadReaderRepository: { [self] in await makeForumThreadReaderRepository() },
             makeUserSpaceRepository: { [self] in await makeUserSpaceRepository() },
