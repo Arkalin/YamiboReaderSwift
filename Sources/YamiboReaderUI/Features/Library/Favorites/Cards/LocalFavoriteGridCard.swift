@@ -25,11 +25,6 @@ struct LocalFavoriteGridCard: View {
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .topLeading)
         .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-        .overlay(alignment: .topTrailing) {
-            if card.isModeOnMangaThread {
-                LocalFavoriteSmartCardBadge()
-            }
-        }
         // A smart card is selectable like any other card — selecting it is
         // equivalent to selecting every favorite archived under it, expanded
         // transparently at bulk-operation time by
@@ -37,6 +32,15 @@ struct LocalFavoriteGridCard: View {
         // that lands in `selection.selectedFavoriteIDs` here is still just
         // its own representative id.
         .favoriteSelectionEmphasis(isSelectionMode: selection.isSelectionMode, isSelected: isSelected, cornerRadius: 8)
+        // Layered after `favoriteSelectionEmphasis`, not before: that
+        // modifier's `.opacity()` forces an offscreen compositing pass sized
+        // to the card's own frame, which clips any overlay poking past the
+        // card's edge — including this badge's outward corner offset.
+        .overlay(alignment: .topTrailing) {
+            if card.isModeOnMangaThread {
+                LocalFavoriteSmartCardBadge()
+            }
+        }
         .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         .onTapGesture {
             if selection.isSelectionMode {
