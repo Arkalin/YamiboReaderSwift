@@ -16,7 +16,12 @@ struct LocalFavoriteCardActions {
     let select: (FavoriteItem) -> Void
     let move: (FavoriteItem) -> Void
     let editTags: (FavoriteItem) -> Void
-    let toggleTextCover: (FavoriteItem) -> Void
+    /// Takes the whole card (like `open`) because the cover key to toggle
+    /// follows the card's display semantics (`FavoriteCardProjection
+    /// .contentCoverKey`): a resolved-directory smart card toggles the
+    /// shared `.smartManga` cover it displays, while the same item's
+    /// "查看归档收藏" member card toggles its own `.thread` cover.
+    let toggleTextCover: (FavoriteCardProjection) -> Void
     let syncToRemote: (FavoriteItem) -> Void
     /// Only ever invoked for a non-smart-card (`!isModeOnMangaThread`) card —
     /// smart cards route their card actions to `viewArchivedFavorites`
@@ -63,8 +68,8 @@ struct LocalFavoriteCardActions {
             editTags: { item in
                 routes.sheet = .tagSelection(.favorite(item.id, initialTagIDs: Set(item.tagIDs)))
             },
-            toggleTextCover: { item in
-                Task { await organizer.toggleTextCover(for: item) }
+            toggleTextCover: { card in
+                Task { await organizer.toggleTextCover(for: card) }
             },
             syncToRemote: { item in
                 Task { await organizer.syncItemToYamibo(item) }
@@ -129,7 +134,7 @@ struct LocalFavoriteCardContextMenu: View {
             Label(L10n.string("favorites.tags_action"), systemImage: "tag")
         }
         Button {
-            actions.toggleTextCover(card.item)
+            actions.toggleTextCover(card)
         } label: {
             if card.textCoverForced {
                 Label(L10n.string("cover.use_image_cover"), systemImage: "photo")

@@ -278,6 +278,26 @@ public struct FavoriteCardProjection: Equatable, Identifiable, Sendable {
         return cleaned.isEmpty ? item.resolvedDisplayTitle : cleaned
     }
 
+    /// The `content_cover` key this card's displayed cover reads AND every
+    /// card-level cover action writes — the single authority keeping the two
+    /// sides on the same row. A resolved-directory card (merged or a lone
+    /// resolved favorite alike) uses the directory's shared
+    /// `.smartManga(cleanBookName:)` key (smart-comic-mode decision #13/#16);
+    /// every other card — normal/novel threads, mode-off manga favorites,
+    /// mode-on ones with no locally-resolved directory yet, and the
+    /// "查看归档收藏" page's deliberately non-smart member cards
+    /// (`mangaDirectory` forced nil there) — uses its own per-favorite
+    /// `.thread(tid:)` key. Deriving a card's cover reads or writes from
+    /// anything else (e.g. `ContentCoverKey(target: item.target)` directly,
+    /// which can only ever produce `.thread`) is how a smart card's
+    /// text-cover toggle once wrote a row its own display never read.
+    public var contentCoverKey: ContentCoverKey? {
+        if let mangaDirectory {
+            return .smartManga(cleanBookName: mangaDirectory.cleanBookName)
+        }
+        return ContentCoverKey(target: item.target)
+    }
+
     /// Deliberately still `item.id` — the representative member's own real
     /// id — even for a merged card, *not* a synthetic directory-based id.
     /// The existing (unmodified by this phase) selection/bulk-action UI

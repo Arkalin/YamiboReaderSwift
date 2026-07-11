@@ -47,10 +47,11 @@ public struct ContentCoverKey: Codable, Hashable, Sendable {
     /// Canonical cover key for a favorite target. Every `FavoriteItemTarget`
     /// case is thread-based (there is no merged-directory identity on this
     /// type at all), so a favorite's own cover key is always `.thread(tid:)`
-    /// — including for `.mangaThread` favorites. Reattributing a merged
-    /// manga card's cover to the `.smartManga` key is a later phase's job
-    /// (smart-comic-mode design decision #13); this only covers the
-    /// per-favorite case that already existed for normal/novel threads.
+    /// — including for `.mangaThread` favorites. Card-level cover reads and
+    /// writes must NOT call this directly: a resolved-directory smart card's
+    /// cover lives under the shared `.smartManga` key instead, and
+    /// `FavoriteCardProjection.contentCoverKey` is the one place that picks
+    /// between the two (smart-comic-mode decision #13/#16).
     public init?(target: FavoriteItemTarget) {
         guard let threadID = target.threadID else { return nil }
         self = .thread(tid: threadID)

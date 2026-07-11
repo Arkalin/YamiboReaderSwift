@@ -2533,15 +2533,125 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
         XCTAssertEqual(organizer.derived.cards.first?.coverURL, coverURL)
         XCTAssertEqual(organizer.derived.cards.first?.textCoverForced, false)
 
-        let firstToggleSucceeded = await organizer.toggleTextCover(for: item)
+        let cardBeforeForce = try XCTUnwrap(organizer.derived.cards.first)
+        let firstToggleSucceeded = await organizer.toggleTextCover(for: cardBeforeForce)
         XCTAssertTrue(firstToggleSucceeded)
         XCTAssertNil(organizer.derived.cards.first?.coverURL)
         XCTAssertEqual(organizer.derived.cards.first?.textCoverForced, true)
 
-        let secondToggleSucceeded = await organizer.toggleTextCover(for: item)
+        let cardAfterForce = try XCTUnwrap(organizer.derived.cards.first)
+        let secondToggleSucceeded = await organizer.toggleTextCover(for: cardAfterForce)
         XCTAssertTrue(secondToggleSucceeded)
         XCTAssertEqual(organizer.derived.cards.first?.coverURL, coverURL)
         XCTAssertEqual(organizer.derived.cards.first?.textCoverForced, false)
+    }
+
+    /// A resolved-directory smart card displays the directory's shared
+    /// `.smartManga` cover, so its "使用文字封面" toggle must write the
+    /// text-cover-forced flag on that SAME `.smartManga` row — while the
+    /// same favorite surfaced as an individual "查看归档收藏" member card
+    /// displays (and must keep toggling) its own `.thread` row. Before the
+    /// fix, `toggleTextCover` always wrote the representative member's
+    /// `.thread` key: the smart card's menu label flipped and the toast
+    /// reported success, but the `.smartManga` cover the card displays never
+    /// changed.
+    func testToggleTextCoverOnSmartCardWritesSmartMangaKeyAndMemberCardWritesThreadKey() async throws {
+        let suiteName = YamiboTestDefaults.suiteName(prefix: "local-favorites-smart-card-text-cover")
+        _ = try YamiboTestDefaults.make(suiteName: suiteName)
+        let localFavoriteLibraryStore = FavoriteLibraryStore(
+            defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
+            key: "local-favorites"
+        )
+        let contentCoverStore = ContentCoverStore(
+            defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
+            key: "content-covers"
+        )
+        let mangaDirectoryStore = try makeMangaDirectoryStore(suiteName: suiteName)
+        let directory = MangaDirectory(
+            cleanBookName: "文字封面测试漫画",
+            strategy: .links,
+            sourceKey: "chapter:980",
+            chapters: [
+                MangaChapter(tid: "980", rawTitle: "第一话", chapterNumber: 1),
+                MangaChapter(tid: "981", rawTitle: "第二话", chapterNumber: 2),
+            ]
+        )
+        try await mangaDirectoryStore.saveDirectory(directory)
+
+        var document = try await localFavoriteLibraryStore.load()
+        let firstItem = try FavoriteItem(
+            target: FavoriteItemTarget(kind: .mangaThread, threadID: "980"),
+            title: "第一话",
+            forumID: "30",
+            forumName: "中文百合漫画区",
+            locations: [.category(document.defaultCategory.id)]
+        )
+        document.addItem(firstItem)
+        document.addItem(try FavoriteItem(
+            target: FavoriteItemTarget(kind: .mangaThread, threadID: "981"),
+            title: "第二话",
+            forumID: "30",
+            forumName: "中文百合漫画区",
+            locations: [.category(document.defaultCategory.id)]
+        ))
+        try await localFavoriteLibraryStore.save(document)
+
+        let smartMangaKey = ContentCoverKey.smartManga(cleanBookName: directory.cleanBookName)
+        let representativeThreadKey = ContentCoverKey.thread(tid: "980")
+        let sharedMangaCoverURL = try XCTUnwrap(URL(string: "https://img.example.com/shared-manga-cover.jpg"))
+        let chapterThreadCoverURL = try XCTUnwrap(URL(string: "https://img.example.com/chapter-thread-cover.jpg"))
+        try await contentCoverStore.setAutomaticCover(sharedMangaCoverURL, for: smartMangaKey)
+        try await contentCoverStore.setAutomaticCover(chapterThreadCoverURL, for: representativeThreadKey)
+
+        let organizer = try makeOrganizer(
+            libraryStore: localFavoriteLibraryStore,
+            contentCoverStore: contentCoverStore,
+            mangaDirectoryStore: mangaDirectoryStore
+        )
+        await organizer.load()
+
+        let mergedCard = try XCTUnwrap(organizer.derived.cards.first)
+        XCTAssertTrue(mergedCard.isMergedGroup)
+        XCTAssertEqual(mergedCard.coverURL, sharedMangaCoverURL)
+        XCTAssertEqual(mergedCard.textCoverForced, false)
+
+        // Forcing the text cover on the smart card must suppress the shared
+        // `.smartManga` cover it displays…
+        let smartToggleSucceeded = await organizer.toggleTextCover(for: mergedCard)
+        XCTAssertTrue(smartToggleSucceeded)
+        let forcedCard = try XCTUnwrap(organizer.derived.cards.first)
+        XCTAssertNil(forcedCard.coverURL)
+        XCTAssertEqual(forcedCard.textCoverForced, true)
+        // …by flagging the `.smartManga` row, leaving the representative
+        // member's own `.thread` row untouched.
+        let smartCoverAfterSmartToggle = await contentCoverStore.cover(for: smartMangaKey)
+        XCTAssertEqual(smartCoverAfterSmartToggle?.textCoverForced, true)
+        let threadCoverAfterSmartToggle = await contentCoverStore.cover(for: representativeThreadKey)
+        XCTAssertEqual(threadCoverAfterSmartToggle?.textCoverForced, false)
+
+        // Toggling back restores the shared cover.
+        let smartToggleBackSucceeded = await organizer.toggleTextCover(for: forcedCard)
+        XCTAssertTrue(smartToggleBackSucceeded)
+        XCTAssertEqual(organizer.derived.cards.first?.coverURL, sharedMangaCoverURL)
+        XCTAssertEqual(organizer.derived.cards.first?.textCoverForced, false)
+
+        // The same favorite surfaced as an individual archive member card
+        // (deliberately non-smart, `mangaDirectory` nil) displays its own
+        // `.thread` cover, so ITS toggle writes the `.thread` row and leaves
+        // `.smartManga` alone.
+        organizer.openMergedGroup(cleanBookName: mergedCard.resolvedTitle)
+        let memberCard = try XCTUnwrap(organizer.derived.cards.first { $0.item.id == firstItem.id })
+        XCTAssertNil(memberCard.mangaDirectory)
+        XCTAssertEqual(memberCard.coverURL, chapterThreadCoverURL)
+        let memberToggleSucceeded = await organizer.toggleTextCover(for: memberCard)
+        XCTAssertTrue(memberToggleSucceeded)
+        let threadCoverAfterMemberToggle = await contentCoverStore.cover(for: representativeThreadKey)
+        XCTAssertEqual(threadCoverAfterMemberToggle?.textCoverForced, true)
+        let smartCoverAfterMemberToggle = await contentCoverStore.cover(for: smartMangaKey)
+        XCTAssertEqual(smartCoverAfterMemberToggle?.textCoverForced, false)
+        let toggledMemberCard = try XCTUnwrap(organizer.derived.cards.first { $0.item.id == firstItem.id })
+        XCTAssertNil(toggledMemberCard.coverURL)
+        XCTAssertEqual(toggledMemberCard.textCoverForced, true)
     }
 
     func testSearchModeSubmitsCountsAndExitClearsSelection() async throws {

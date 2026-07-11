@@ -81,23 +81,21 @@ final class LocalFavoriteLibraryDerivationTests: XCTestCase {
             selectedCollectionID: nil,
             filter: LocalFavoriteFilterState(),
             readingProgress: [],
-            contentCoverURLsByTargetID: [
-                normalItem.target.id: normalCoverURL,
+            coverURLsByKey: [
+                .thread(tid: "3001"): normalCoverURL,
                 // A resolved-directory group's tile must use the SHARED
                 // `.smartManga` cover, not either member's own per-thread
-                // cover — this cover must be ignored by the fix.
-                firstChapterItem.target.id: perThreadCoverURL,
-                secondChapterItem.target.id: perThreadCoverURL
+                // cover — these thread covers must be ignored by the fix.
+                .thread(tid: "2001"): perThreadCoverURL,
+                .thread(tid: "2002"): perThreadCoverURL,
+                .smartManga(cleanBookName: directory.cleanBookName): sharedMangaCoverURL
             ],
-            textCoverForcedTargetIDs: [],
+            textCoverForcedKeys: [],
             mangaDirectoriesByTID: [
                 "2001": directory,
                 "2002": directory
             ],
-            smartComicModeSettings: SmartComicModeSettings(),
-            smartMangaCoverURLsByCleanBookName: [
-                directory.cleanBookName: sharedMangaCoverURL
-            ]
+            smartComicModeSettings: SmartComicModeSettings()
         )
 
         let derived = LocalFavoriteLibraryDerivation.derive(inputs)
@@ -175,16 +173,15 @@ final class LocalFavoriteLibraryDerivationTests: XCTestCase {
             selectedCollectionID: nil,
             filter: LocalFavoriteFilterState(),
             readingProgress: [],
-            contentCoverURLsByTargetID: [
-                firstItem.target.id: firstItemCoverURL,
-                secondItem.target.id: secondItemCoverURL
+            coverURLsByKey: [
+                .thread(tid: "4001"): firstItemCoverURL,
+                .thread(tid: "4002"): secondItemCoverURL
             ],
-            textCoverForcedTargetIDs: [],
+            textCoverForcedKeys: [],
             // No `mangaDirectoriesByTID` entries at all — neither favorite's
             // directory has resolved locally.
             mangaDirectoriesByTID: [:],
-            smartComicModeSettings: SmartComicModeSettings(),
-            smartMangaCoverURLsByCleanBookName: [:]
+            smartComicModeSettings: SmartComicModeSettings()
         )
 
         let derived = LocalFavoriteLibraryDerivation.derive(inputs)
