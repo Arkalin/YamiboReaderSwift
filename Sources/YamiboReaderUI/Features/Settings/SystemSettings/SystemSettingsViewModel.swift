@@ -12,6 +12,7 @@ final class SystemSettingsViewModel: ObservableObject {
     @Published var favoriteShowsCategoryCounts = true
     @Published var novelOfflineCache = NovelOfflineCacheSettings()
     @Published var applePencilPageTurn = ApplePencilPageTurnSettings()
+    @Published var gamepad = GamepadSettings()
     @Published var smartComicMode = SmartComicModeSettings()
     @Published private(set) var novelCacheBytes = 0
     @Published private(set) var mangaIndexCacheBytes = 0
@@ -75,6 +76,7 @@ final class SystemSettingsViewModel: ObservableObject {
         favoriteShowsCategoryCounts = settings.favorites.showsCategoryCounts
         novelOfflineCache = settings.novelOfflineCache
         applePencilPageTurn = settings.system.applePencilPageTurn
+        gamepad = settings.system.gamepad
         smartComicMode = settings.smartComicMode
         await refreshStorageUsage()
     }
@@ -291,6 +293,30 @@ final class SystemSettingsViewModel: ObservableObject {
         updateApplePencilPageTurn(updated)
     }
 
+    func updateGamepadEnabled(_ isEnabled: Bool) {
+        var updated = gamepad
+        updated.isEnabled = isEnabled
+        updateGamepad(updated)
+    }
+
+    func bindGamepadAction(_ action: GamepadAction, toElementAlias alias: String) {
+        var updated = gamepad
+        updated.bind(action, toElementAlias: alias)
+        updateGamepad(updated)
+    }
+
+    func clearGamepadBinding(for action: GamepadAction) {
+        var updated = gamepad
+        updated.clearBinding(for: action)
+        updateGamepad(updated)
+    }
+
+    func restoreGamepadDefaultBindings() {
+        var updated = gamepad
+        updated.restoreDefaultBindings()
+        updateGamepad(updated)
+    }
+
     func updateNovelOfflineCacheRetainsInlineImages(_ retainsInlineImages: Bool) {
         var updated = novelOfflineCache
         updated.retainsInlineImages = retainsInlineImages
@@ -367,6 +393,7 @@ final class SystemSettingsViewModel: ObservableObject {
             favoriteBackground = .init()
             novelOfflineCache = .init()
             applePencilPageTurn = .init()
+            gamepad = .init()
             smartComicMode = .init()
             novelCacheBytes = 0
             mangaIndexCacheBytes = 0
@@ -572,6 +599,27 @@ final class SystemSettingsViewModel: ObservableObject {
                 await MainActor.run {
                     if applePencilPageTurn == updated {
                         applePencilPageTurn = previous
+                    }
+                    errorMessage = error.localizedDescription
+                }
+            }
+        }
+    }
+
+    private func updateGamepad(_ updated: GamepadSettings) {
+        let previous = gamepad
+        gamepad = updated
+
+        Task {
+            var settings = await dependencies.settingsStore.load()
+            settings.system.gamepad = updated
+
+            do {
+                try await dependencies.settingsStore.save(settings)
+            } catch {
+                await MainActor.run {
+                    if gamepad == updated {
+                        gamepad = previous
                     }
                     errorMessage = error.localizedDescription
                 }

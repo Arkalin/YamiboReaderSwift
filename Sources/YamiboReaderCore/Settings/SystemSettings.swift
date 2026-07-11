@@ -72,14 +72,17 @@ public struct SystemSettings: Codable, Hashable, Sendable {
     public var homePage: AppHomePage
     public var usesDataSaverMode: Bool
     public var applePencilPageTurn: ApplePencilPageTurnSettings
+    public var gamepad: GamepadSettings
 
     public init(
         homePage: AppHomePage = .forum,
         usesDataSaverMode: Bool = false,
-        applePencilPageTurn: ApplePencilPageTurnSettings = .init()
+        applePencilPageTurn: ApplePencilPageTurnSettings = .init(),
+        gamepad: GamepadSettings = .init()
     ) {
         self.homePage = homePage
         self.usesDataSaverMode = usesDataSaverMode
         self.applePencilPageTurn = applePencilPageTurn
+        self.gamepad = gamepad
     }
 }

@@ -35,6 +35,8 @@ public struct NovelReaderView: View {
     @State private var likedNovelImageAnchors: Set<NovelImageLikeAnchor> = []
     @State private var showingLikes = false
     @State private var likeFeedbackGenerator = UINotificationFeedbackGenerator()
+    @State private var gamepadHandlerToken: UUID?
+    @State private var gamepadPagedPagerIdentity: ReaderPagedPagerIdentity?
     private let appModel: YamiboAppModel
     private let dependencies: NovelReaderDependencies
 
@@ -175,6 +177,15 @@ public struct NovelReaderView: View {
             }
             .disabled(hasPresentedOverlay)
             .allowsHitTesting(!hasPresentedOverlay)
+            .onChange(of: pagedPagerIdentity, initial: true) { _, newValue in
+                gamepadPagedPagerIdentity = newValue
+            }
+            .onAppear {
+                guard gamepadHandlerToken == nil else { return }
+                gamepadHandlerToken = appModel.gamepadInput.pushHandler { event in
+                    handleGamepadEvent(event)
+                }
+            }
             .modifier(readerLifecycleModifier(currentLayout: currentLayout))
             .modifier(novelReaderPresentationModifier())
             .modifier(readerStateObserverModifier())
@@ -225,6 +236,8 @@ public struct NovelReaderView: View {
                 model.handleMemoryPressure()
             },
             onDisappear: {
+                appModel.gamepadInput.removeHandler(gamepadHandlerToken)
+                gamepadHandlerToken = nil
                 verticalRestoreRetryTask?.cancel()
                 verticalViewportPositionUpdateTask?.cancel()
                 syncVerticalViewportBeforeSave()
@@ -248,6 +261,7 @@ public struct NovelReaderView: View {
             imageBrowserItem: $imageBrowserItem,
             chapterCommentsTarget: chapterCommentsTarget,
             likeDependencies: dependencies.like,
+            gamepadInput: appModel.gamepadInput,
             onJumpToChapterDirectoryChapter: { chapter in
                 Task { await jumpToChapterDirectoryChapter(chapter) }
             },
@@ -767,6 +781,61 @@ public struct NovelReaderView: View {
         guard !hasPresentedOverlay else { return }
         withAnimation(.easeInOut(duration: 0.2)) {
             chromeState.toggleChrome()
+        }
+    }
+
+    private func handleGamepadEvent(_ event: GamepadEvent) {
+        guard !isDismissing, !hasPresentedOverlay else { return }
+        guard !model.novelReaderSurfaces.isEmpty, !readerLoadingOverlayPresentation.isPresented else {
+            // Loading/error: Menu still flips the chrome state so a
+            // controller user keeps an escape hatch wherever chrome renders.
+            if event == .menu {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    chromeState.toggleChrome()
+                }
+            }
+            return
+        }
+
+        let surface: GamepadReadingSurface = model.settings.readingMode == .paged
+            ? .paged(isRightToLeft: model.settings.pageTurnDirection == .rightToLeft)
+            : .vertical
+        guard let command = GamepadCommandResolver.readerCommand(for: event, surface: surface) else { return }
+
+        switch command {
+        case .toggleChrome:
+            toggleChrome()
+        case .openComments:
+            openChapterComments()
+        case let .turnPage(delta):
+            hideChromeForGamepadReading()
+            Task { await goRelativePage(delta, pagerIdentity: gamepadPagedPagerIdentity) }
+        case let .scrollStep(direction):
+            hideChromeForGamepadReading()
+            performGamepadVerticalScrollStep(direction)
+        }
+    }
+
+    /// A page turn while the chrome is up means "keep reading": perform it
+    /// and tuck the chrome away, mirroring the tap-zone mental model.
+    private func hideChromeForGamepadReading() {
+        guard chromeState.showsChrome else { return }
+        withAnimation(.easeInOut(duration: 0.2)) {
+            chromeState.hideChrome()
+        }
+    }
+
+    private func performGamepadVerticalScrollStep(_ direction: GamepadScrollDirection) {
+        cancelVerticalRestoreForUserScroll()
+        switch verticalScrollCoordinator.performGamepadScrollStep(direction) {
+        case .scrolled, .unavailable:
+            break
+        case .atEdge:
+            // Pressed while already clamped: cross to the adjacent web page
+            // through the same linear path as the touch boundary pull.
+            Task {
+                await handleVerticalBoundaryPullRelease(direction == .down ? .next : .previous)
+            }
         }
     }
 
@@ -1453,6 +1522,7 @@ private struct NovelReaderPresentationModifier: ViewModifier {
 
     let chapterCommentsTarget: ReaderChapterCommentTarget?
     let likeDependencies: LikeDependencies
+    let gamepadInput: GamepadInputManager?
     let onJumpToChapterDirectoryChapter: (NovelReaderChapter) -> Void
     let onPreviewChapterDirectoryWebView: (Int) -> Void
     let onOpenOriginalPostFromComments: (URL) -> Void
@@ -1483,7 +1553,8 @@ private struct NovelReaderPresentationModifier: ViewModifier {
                     loadInitial: model.loadChapterComments(for:),
                     refresh: model.refreshChapterComments(for:),
                     loadNext: model.loadNextChapterCommentsPage,
-                    onOpenOriginalPost: onOpenOriginalPostFromComments
+                    onOpenOriginalPost: onOpenOriginalPostFromComments,
+                    gamepadInput: gamepadInput
                 )
             }
             .sheet(isPresented: $showingCachePanel) {

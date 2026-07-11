@@ -9,10 +9,12 @@ struct MangaReaderPresentationContent: View {
     let imageLoader: MangaReaderPageImageLoader?
     let isChromeVisible: Bool
     let likedPageIDs: Set<String>
+    let gamepadScrollStep: ReaderGamepadScrollStepRequest?
     let onRetryInitialLoad: () -> Void
     let onCurrentPageChange: (Int) -> Void
     let canBoundaryPageTurn: (Int, Bool) -> Bool
     let onBoundaryPageTurn: (Int, Bool) -> Void
+    let onGamepadScrollEdgeReached: (GamepadScrollDirection) -> Void
     let onPageLongPress: (MangaReaderPageProjection) -> Void
     let onTap: () -> Void
 
@@ -30,9 +32,11 @@ struct MangaReaderPresentationContent: View {
                     imageLoader: imageLoader,
                     isChromeVisible: isChromeVisible,
                     likedPageIDs: likedPageIDs,
+                    gamepadScrollStep: gamepadScrollStep,
                     onCurrentPageChange: onCurrentPageChange,
                     canBoundaryPageTurn: canBoundaryPageTurn,
                     onBoundaryPageTurn: onBoundaryPageTurn,
+                    onGamepadScrollEdgeReached: onGamepadScrollEdgeReached,
                     onPageLongPress: onPageLongPress,
                     onTap: onTap
                 )
@@ -71,9 +75,11 @@ private struct MangaReaderLoadedContent: View {
     let imageLoader: MangaReaderPageImageLoader?
     let isChromeVisible: Bool
     let likedPageIDs: Set<String>
+    let gamepadScrollStep: ReaderGamepadScrollStepRequest?
     let onCurrentPageChange: (Int) -> Void
     let canBoundaryPageTurn: (Int, Bool) -> Bool
     let onBoundaryPageTurn: (Int, Bool) -> Void
+    let onGamepadScrollEdgeReached: (GamepadScrollDirection) -> Void
     let onPageLongPress: (MangaReaderPageProjection) -> Void
     let onTap: () -> Void
 
@@ -87,11 +93,13 @@ private struct MangaReaderLoadedContent: View {
                     pages: loaded.pages,
                     currentPageIndex: loaded.currentPageIndex,
                     viewportPlacement: loaded.viewportPlacement,
+                    gamepadScrollStep: gamepadScrollStep,
                     imageLoader: imageLoader,
                     isChromeVisible: isChromeVisible,
                     zoomEnabled: settings.zoomEnabled,
                     likedPageIDs: likedPageIDs,
                     onCurrentPageChange: onCurrentPageChange,
+                    onGamepadScrollEdgeReached: onGamepadScrollEdgeReached,
                     onPageLongPress: onPageLongPress,
                     onTap: onTap
                 )

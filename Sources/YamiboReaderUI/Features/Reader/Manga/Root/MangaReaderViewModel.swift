@@ -373,6 +373,25 @@ public final class MangaReaderViewModel: ObservableObject {
         )
     }
 
+    /// Discrete adjacent-chapter jump for vertical mode, where page turning is
+    /// continuous scrolling and the paged `jumpRelativePage` boundary path is
+    /// unreachable. Shares its linear-crossing semantics: backward lands on
+    /// the previous chapter's last page, forward on the next chapter's first.
+    public func jumpToAdjacentChapterFromVerticalBoundary(_ delta: Int) async {
+        guard delta != 0,
+              let workflow,
+              presentation.settings.readingMode == .vertical,
+              case let .loaded(loaded) = presentation.state,
+              !loaded.pages.isEmpty else {
+            return
+        }
+        await jumpToAdjacentChapterBoundary(
+            delta: delta,
+            sourcePosition: stableReadingPosition(from: loaded),
+            workflow: workflow
+        )
+    }
+
     public var currentChapterCommentTarget: ReaderChapterCommentTarget? {
         guard case let .loaded(loaded) = presentation.state,
               let currentPage = loaded.currentPage else {
