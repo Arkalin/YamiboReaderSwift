@@ -11,6 +11,7 @@ public struct NovelReaderView: View {
     @State private var showingCacheProgress = false
     @State private var showingChapterSheet = false
     @State private var showingChapterComments = false
+    @State private var forumThreadOverlayItem: ReaderForumThreadOverlayItem?
     @State private var imageBrowserItem: ImageBrowserItem?
     @State private var chapterCommentsTarget: ReaderChapterCommentTarget?
     @State private var chromeState = NovelReaderChromeState()
@@ -258,18 +259,16 @@ public struct NovelReaderView: View {
             showingChapterSheet: $showingChapterSheet,
             showingChapterComments: $showingChapterComments,
             showingLikes: $showingLikes,
+            forumThreadOverlayItem: $forumThreadOverlayItem,
             imageBrowserItem: $imageBrowserItem,
             chapterCommentsTarget: chapterCommentsTarget,
             likeDependencies: dependencies.like,
-            gamepadInput: appModel.gamepadInput,
+            appModel: appModel,
             onJumpToChapterDirectoryChapter: { chapter in
                 Task { await jumpToChapterDirectoryChapter(chapter) }
             },
             onPreviewChapterDirectoryWebView: { view in
                 Task { await model.navigation.previewChapterDirectoryWebView(view) }
-            },
-            onOpenOriginalPostFromComments: { url in
-                openOriginalPostFromComments(url)
             },
             onOpenLikeAnchor: { payload in
                 handleLikeAnchorOpen(payload)
@@ -286,6 +285,7 @@ public struct NovelReaderView: View {
             showingChapterSheet: $showingChapterSheet,
             showingChapterComments: $showingChapterComments,
             showingLikes: $showingLikes,
+            forumThreadOverlayItem: $forumThreadOverlayItem,
             imageBrowserItem: $imageBrowserItem,
             isStatusBarHidden: chromeState.mode == .immersiveHidden,
             onUpdateChromeForContentState: {
@@ -712,9 +712,13 @@ public struct NovelReaderView: View {
         Task { await model.loadCurrent(forceRefresh: true) }
     }
 
+    /// 打开原帖 layers the thread over the reader instead of dismissing it —
+    /// closing the overlay drops straight back into the passage being read.
     private func openInForum() {
-        syncVerticalViewportBeforeSave()
-        dismissReaderOpeningForum(model.currentForumTargetURL)
+        forumThreadOverlayItem = ReaderForumThreadOverlayItem(
+            url: model.currentForumTargetURL,
+            title: model.title
+        )
     }
 
     private func handleImageTap(url: URL, title: String?) {
@@ -758,21 +762,6 @@ public struct NovelReaderView: View {
         Task {
             await model.saveProgress()
             appModel.dismissNovelReader()
-        }
-    }
-
-    private func openOriginalPostFromComments(_ url: URL) {
-        dismissReaderOpeningForum(url)
-    }
-
-    private func dismissReaderOpeningForum(_ url: URL) {
-        chromeState.showChrome()
-        guard !isDismissing else { return }
-        isDismissing = true
-        syncVerticalViewportBeforeSave()
-        Task {
-            let resumeContext = await model.saveProgress()
-            appModel.dismissNovelReader(openThreadInForum: url, suspendedNovelContext: resumeContext)
         }
     }
 
@@ -1232,6 +1221,7 @@ public struct NovelReaderView: View {
             showingChapterSheet ||
             showingChapterComments ||
             showingLikes ||
+            forumThreadOverlayItem != nil ||
             imageBrowserItem != nil
     }
 
@@ -1241,7 +1231,8 @@ public struct NovelReaderView: View {
             showingCacheProgress ||
             showingChapterSheet ||
             showingChapterComments ||
-            showingLikes
+            showingLikes ||
+            forumThreadOverlayItem != nil
     }
 
     private var canReceiveApplePencilPageTurn: Bool {
@@ -1518,14 +1509,14 @@ private struct NovelReaderPresentationModifier: ViewModifier {
     @Binding var showingChapterSheet: Bool
     @Binding var showingChapterComments: Bool
     @Binding var showingLikes: Bool
+    @Binding var forumThreadOverlayItem: ReaderForumThreadOverlayItem?
     @Binding var imageBrowserItem: ImageBrowserItem?
 
     let chapterCommentsTarget: ReaderChapterCommentTarget?
     let likeDependencies: LikeDependencies
-    let gamepadInput: GamepadInputManager?
+    let appModel: YamiboAppModel
     let onJumpToChapterDirectoryChapter: (NovelReaderChapter) -> Void
     let onPreviewChapterDirectoryWebView: (Int) -> Void
-    let onOpenOriginalPostFromComments: (URL) -> Void
     let onOpenLikeAnchor: (LikeAnchorPayload) -> Void
 
     func body(content: Content) -> some View {
@@ -1553,8 +1544,17 @@ private struct NovelReaderPresentationModifier: ViewModifier {
                     loadInitial: model.loadChapterComments(for:),
                     refresh: model.refreshChapterComments(for:),
                     loadNext: model.loadNextChapterCommentsPage,
-                    onOpenOriginalPost: onOpenOriginalPostFromComments,
-                    gamepadInput: gamepadInput
+                    forumDependencies: appModel.appContext.forumDependencies,
+                    appModel: appModel,
+                    discussionWorkTIDs: [model.context.threadID]
+                )
+            }
+            .fullScreenCover(item: $forumThreadOverlayItem) { item in
+                ReaderForumThreadOverlayScreen(
+                    item: item,
+                    dependencies: appModel.appContext.forumDependencies,
+                    appModel: appModel,
+                    discussionWorkTIDs: [model.context.threadID]
                 )
             }
             .sheet(isPresented: $showingCachePanel) {
@@ -1605,6 +1605,7 @@ private struct NovelReaderStateObserverModifier: ViewModifier {
     @Binding var showingChapterSheet: Bool
     @Binding var showingChapterComments: Bool
     @Binding var showingLikes: Bool
+    @Binding var forumThreadOverlayItem: ReaderForumThreadOverlayItem?
     @Binding var imageBrowserItem: ImageBrowserItem?
 
     let isStatusBarHidden: Bool
@@ -1647,6 +1648,9 @@ private struct NovelReaderStateObserverModifier: ViewModifier {
                 onUpdateChromeForContentState()
             }
             .onChange(of: showingLikes) { _, _ in
+                onUpdateChromeForContentState()
+            }
+            .onChange(of: forumThreadOverlayItem) { _, _ in
                 onUpdateChromeForContentState()
             }
             .onChange(of: imageBrowserItem) { _, _ in

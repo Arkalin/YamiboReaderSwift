@@ -164,12 +164,45 @@ struct ReaderChapterCommentsSheet: View {
     let loadInitial: (ReaderChapterCommentTarget?) async -> Void
     let refresh: (ReaderChapterCommentTarget?) async -> Void
     let loadNext: () async -> Void
-    let onOpenOriginalPost: (URL) -> Void
-    var gamepadInput: GamepadInputManager?
-    var emptyTitle = L10n.string("reader.chapter_comments_empty")
+    let gamepadInput: GamepadInputManager?
+    let emptyTitle: String
 
+    private let forumDependencies: ForumDependencies
+    private let appModel: YamiboAppModel
+    private let discussionWorkTIDs: Set<String>
+
+    @State private var threadOverlayItem: ReaderForumThreadOverlayItem?
     @State private var scrollTarget: String?
     @State private var gamepadHandlerToken: UUID?
+
+    init(
+        target: ReaderChapterCommentTarget?,
+        state: ReaderChapterCommentsState,
+        isLoadingMore: Bool,
+        loadMoreError: String?,
+        refreshError: String?,
+        loadInitial: @escaping (ReaderChapterCommentTarget?) async -> Void,
+        refresh: @escaping (ReaderChapterCommentTarget?) async -> Void,
+        loadNext: @escaping () async -> Void,
+        forumDependencies: ForumDependencies,
+        appModel: YamiboAppModel,
+        discussionWorkTIDs: Set<String>,
+        emptyTitle: String = L10n.string("reader.chapter_comments_empty")
+    ) {
+        self.target = target
+        self.state = state
+        self.isLoadingMore = isLoadingMore
+        self.loadMoreError = loadMoreError
+        self.refreshError = refreshError
+        self.loadInitial = loadInitial
+        self.refresh = refresh
+        self.loadNext = loadNext
+        self.gamepadInput = appModel.gamepadInput
+        self.emptyTitle = emptyTitle
+        self.forumDependencies = forumDependencies
+        self.appModel = appModel
+        self.discussionWorkTIDs = discussionWorkTIDs
+    }
 
     var body: some View {
         NavigationStack {
@@ -206,6 +239,14 @@ struct ReaderChapterCommentsSheet: View {
                 }
             }
         }
+        .fullScreenCover(item: $threadOverlayItem) { item in
+            ReaderForumThreadOverlayScreen(
+                item: item,
+                dependencies: forumDependencies,
+                appModel: appModel,
+                discussionWorkTIDs: discussionWorkTIDs
+            )
+        }
         .task(id: target) {
             await loadInitial(target)
         }
@@ -222,6 +263,10 @@ struct ReaderChapterCommentsSheet: View {
     }
 
     private func handleGamepadEvent(_ event: GamepadEvent) {
+        // While the original-post cover is up, the comment list is fully
+        // hidden; the cover is a touch-first surface, and close must not
+        // tear down this sheet underneath it.
+        guard threadOverlayItem == nil else { return }
         switch GamepadCommandResolver.commentsCommand(for: event) {
         case .close:
             dismiss()
@@ -267,9 +312,15 @@ struct ReaderChapterCommentsSheet: View {
         Task { await refresh(target) }
     }
 
+    /// 查看原帖 opens the original post as a full-screen cover above this
+    /// sheet instead of tearing down the reader underneath: closing the cover
+    /// returns to the comment list, closing the sheet returns to reading.
+    /// The cover root hardcodes `isDiscussionView: true`, keeping parity with
+    /// the old `.readerDiscussion`-sourced jump — this companion view of the
+    /// work must not write its own browsing-history row (browsing-history
+    /// decision #14).
     private func openOriginalPost(_ url: URL) {
-        dismiss()
-        onOpenOriginalPost(url)
+        threadOverlayItem = ReaderForumThreadOverlayItem(url: url, title: target?.title)
     }
 }
 
