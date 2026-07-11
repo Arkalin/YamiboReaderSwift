@@ -2,33 +2,24 @@ import Foundation
 import Testing
 @testable import YamiboReaderCore
 
-@Test func localFavoriteProjectionFiltersBySourceGroupForThreadNovelMangaAndUnknown() throws {
+@Test func localFavoriteProjectionFiltersBySourceGroupForThreadNovelAndUnknown() throws {
     let (document, items) = try makeProjectionDocument()
 
     let forumCards = LocalFavoriteLibraryProjection.cards(
         in: document,
         query: LocalFavoriteLibraryQuery(selectedSourceFilters: [.forumBoard(id: "fid-1", label: "版块A")])
     )
-    let mangaCards = LocalFavoriteLibraryProjection.cards(
-        in: document,
-        query: LocalFavoriteLibraryQuery(selectedSourceFilters: [.manga])
-    )
     let unknownCards = LocalFavoriteLibraryProjection.cards(
         in: document,
         query: LocalFavoriteLibraryQuery(selectedSourceFilters: [.unknown])
     )
-    let combinedCards = LocalFavoriteLibraryProjection.cards(
-        in: document,
-        query: LocalFavoriteLibraryQuery(selectedSourceFilters: [
-            .forumBoard(id: "fid-1", label: "版块A"),
-            .manga,
-        ])
-    )
 
     #expect(Set(forumCards.map(\.id)) == [items.normal.id, items.novel.id])
-    #expect(mangaCards.map(\.id) == [items.manga.id])
-    #expect(unknownCards.map(\.id) == [items.unknown.id])
-    #expect(Set(combinedCards.map(\.id)) == [items.normal.id, items.novel.id, items.manga.id])
+    // No dedicated "智能漫画" filter bucket anymore (the filter chip was
+    // removed): `items.manga` carries no forumID/forumName (only a
+    // `.smartManga` sourceGroup label), so it now falls back to `.unknown`
+    // like any other item with no real forum board.
+    #expect(Set(unknownCards.map(\.id)) == [items.manga.id, items.unknown.id])
 }
 
 @Test func localFavoriteProjectionSortsForumGroupsByExplicitForumName() throws {
@@ -86,7 +77,7 @@ import Testing
     #expect(Set(cards.map(\.id)) == [current.id, legacy.id])
 }
 
-@Test func localFavoriteSourceFilterKeyFallsBackToForumBoardForModeOffMangaThreadFavorites() throws {
+@Test func localFavoriteSourceFilterKeyBucketsMangaThreadFavoritesByForumBoard() throws {
     var document = FavoriteLibraryDocument()
     let categoryID = document.defaultCategory.id
     let item = try FavoriteItem(
@@ -99,17 +90,10 @@ import Testing
     )
     document.addItem(item)
 
-    // fid 46 is off by `SmartComicModeSettings`'s own default (smart-comic-
-    // mode design decision #2: a mode-off manga thread must behave exactly
-    // like an ordinary forum-board favorite, including its filter bucket).
-    let modeOffSettings = SmartComicModeSettings()
-    #expect(
-        LocalFavoriteSourceFilter.key(for: item, smartComicModeSettings: modeOffSettings)
-            == .forumBoard(id: "46", label: "闭板漫画区")
-    )
-
-    let modeOnSettings = SmartComicModeSettings(enabledForumIDs: ["46"])
-    #expect(LocalFavoriteSourceFilter.key(for: item, smartComicModeSettings: modeOnSettings) == .manga)
+    // No dedicated "智能漫画" filter bucket anymore — a `.mangaThread`
+    // favorite always buckets by its real forum board, regardless of that
+    // board's Smart Comic Mode state.
+    #expect(LocalFavoriteSourceFilter.key(for: item) == .forumBoard(id: "46", label: "闭板漫画区"))
 }
 
 @Test func localFavoriteProjectionSearchesAllowedFieldsOnly() throws {

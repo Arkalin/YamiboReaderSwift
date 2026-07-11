@@ -56,17 +56,6 @@ struct LocalFavoriteDerivedState: Equatable {
     var categoryEntryCounts: [String: Int] = [:]
     var collectionEntryCounts: [String: Int] = [:]
     var sourceFilterEntryCounts: [LocalFavoriteSourceFilter: Int] = [:]
-    /// Whether the "智能漫画" (`.manga`) source filter should be offered in
-    /// the filter sheet at all (smart-comic-mode decision #9). This is
-    /// gated purely on `SmartComicModeSettings` — true iff at least one of
-    /// the 3 manageable boards currently has the mode on — and deliberately
-    /// NOT on whether `sourceFilterEntryCounts` happens to contain `.manga`
-    /// (i.e. not on whether any `.mangaThread` favorite currently exists).
-    /// Once shown, the filter's matching scope is unaffected by this flag:
-    /// it still matches every `.mangaThread` favorite regardless of that
-    /// favorite's own board's mode state — visibility and matching scope
-    /// are two separate concerns and must not be conflated.
-    var isMangaSourceFilterAvailable = false
     /// Up to four preview tiles per visible collection for the preview
     /// mosaic, resolved from the collection's own members (not the filtered
     /// cards).
@@ -170,7 +159,6 @@ enum LocalFavoriteLibraryDerivation {
             ),
             collectionEntryCounts: collectionCounts,
             sourceFilterEntryCounts: sourceFilterEntryCounts(inputs, mangaThreadItemsByEffectiveTitle: mangaThreadItemsByEffectiveTitle),
-            isMangaSourceFilterAvailable: isMangaSourceFilterAvailable(inputs),
             collectionPreviewTiles: collectionPreviewTiles(inputs, mangaThreadItemsByEffectiveTitle: mangaThreadItemsByEffectiveTitle)
         )
     }
@@ -377,19 +365,9 @@ enum LocalFavoriteLibraryDerivation {
             mangaThreadItemsByEffectiveTitle: mangaThreadItemsByEffectiveTitle
         )
         return Dictionary(grouping: allCards) { card in
-            LocalFavoriteSourceFilter.key(for: card.item, smartComicModeSettings: inputs.smartComicModeSettings)
+            LocalFavoriteSourceFilter.key(for: card.item)
         }
         .mapValues(\.count)
-    }
-
-    /// Smart-comic-mode decision #9: visible iff at least one of the 3
-    /// manageable boards currently has the mode on — purely a settings
-    /// check, independent of `sourceFilterEntryCounts`/whether any
-    /// `.mangaThread` favorite currently exists.
-    private static func isMangaSourceFilterAvailable(_ inputs: Inputs) -> Bool {
-        SmartComicModeSettings.manageableForumIDs.contains {
-            inputs.smartComicModeSettings.isEnabled(forumID: $0)
-        }
     }
 
     // MARK: - Collections
