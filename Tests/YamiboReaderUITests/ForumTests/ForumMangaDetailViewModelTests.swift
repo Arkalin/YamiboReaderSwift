@@ -406,6 +406,151 @@ import YamiboReaderTestSupport
     #expect(model.directory?.chapters.map(\.tid) == ["960", "961"])
 }
 
+/// Cover regression: the favorites organizer's `.smartManga` cover backfill
+/// only runs over favorited directories, so the detail page must resolve its
+/// own automatic cover when the store has none — otherwise an unfavorited
+/// manga's detail page shows the placeholder forever.
+@MainActor
+@Test func forumMangaDetailResolvesMissingSmartMangaCoverAfterReload() async throws {
+    let suiteName = YamiboTestDefaults.suiteName(prefix: "manga-detail-cover-backfill")
+    _ = try YamiboTestDefaults.make(suiteName: suiteName)
+    let mangaDirectoryStore = try makeForumMangaDetailTestDirectoryStore(suiteName: suiteName)
+    let readingProgressStore = ReadingProgressStore(
+        defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
+        key: "reading-progress"
+    )
+
+    // `lastUpdatedAt` keeps `reload()` from scheduling the fresh-tag
+    // automatic update, so cover resolution starts directly from `reload()`.
+    let directory = MangaDirectory(
+        cleanBookName: "测试漫画六",
+        strategy: .tag,
+        sourceKey: "测试漫画六",
+        chapters: [
+            MangaChapter(tid: "970", rawTitle: "第一话", chapterNumber: 1, view: 1),
+            MangaChapter(tid: "971", rawTitle: "第二话", chapterNumber: 2, view: 2)
+        ],
+        lastUpdatedAt: Date()
+    )
+    try await mangaDirectoryStore.saveDirectory(directory)
+
+    let dependencies = try makeForumMangaDetailDependencies(
+        readingProgressStore: readingProgressStore,
+        mangaDirectoryStore: mangaDirectoryStore,
+        projectionLoader: FakeMangaReaderProjectionLoader(projectionsByTID: [
+            "971": makeTestMangaReaderProjection(tid: "971", chapterTitle: "第二话")
+        ])
+    )
+    // The resolvable page is served for the directory's FIRST chapter (970),
+    // while the detail page itself is opened for chapter 971 — the cover
+    // must come from the earliest chapter, matching the favorites backfill.
+    let owner = BlogReaderUser(uid: "42", name: "作者")
+    let coverPage = ForumThreadPage(
+        thread: ThreadIdentity(tid: "970", fid: "30"),
+        title: "第一话",
+        posts: [
+            ForumThreadPost(
+                postID: "p1",
+                floorText: "1#",
+                author: owner,
+                contentHTML: "",
+                contentText: "",
+                images: [ForumThreadPostImage(url: "https://img.example.com/cover-970.jpg")]
+            )
+        ],
+        pageNavigation: ForumPageNavigation(currentPage: 1, totalPages: 1)
+    )
+    let model = makeForumMangaDetailViewModel(
+        dependencies: dependencies,
+        threadTID: "971",
+        threadCoverPageRepository: FixedPageThreadCoverPageRepository(firstPage: coverPage)
+    )
+
+    await model.reload()
+    #expect(model.errorMessage == nil)
+    #expect(model.coverURL == nil)
+
+    for _ in 0..<50 where model.coverURL == nil {
+        try await Task.sleep(nanoseconds: 10_000_000)
+    }
+
+    #expect(model.coverURL?.absoluteString == "https://img.example.com/cover-970.jpg")
+    let stored = await dependencies.contentCoverStore.cover(for: .smartManga(cleanBookName: "测试漫画六"))
+    #expect(stored?.automaticCoverURL?.absoluteString == "https://img.example.com/cover-970.jpg")
+    #expect(stored?.manualCoverURL == nil)
+}
+
+/// A manually-chosen or text-forced cover must survive the detail page's
+/// automatic resolution untouched: resolution only fills genuinely missing
+/// covers.
+@MainActor
+@Test func forumMangaDetailDoesNotOverrideExistingSmartMangaCover() async throws {
+    let suiteName = YamiboTestDefaults.suiteName(prefix: "manga-detail-cover-existing")
+    _ = try YamiboTestDefaults.make(suiteName: suiteName)
+    let mangaDirectoryStore = try makeForumMangaDetailTestDirectoryStore(suiteName: suiteName)
+    let readingProgressStore = ReadingProgressStore(
+        defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
+        key: "reading-progress"
+    )
+
+    let directory = MangaDirectory(
+        cleanBookName: "测试漫画七",
+        strategy: .tag,
+        sourceKey: "测试漫画七",
+        chapters: [
+            MangaChapter(tid: "980", rawTitle: "第一话", chapterNumber: 1, view: 1)
+        ],
+        lastUpdatedAt: Date()
+    )
+    try await mangaDirectoryStore.saveDirectory(directory)
+
+    let dependencies = try makeForumMangaDetailDependencies(
+        readingProgressStore: readingProgressStore,
+        mangaDirectoryStore: mangaDirectoryStore,
+        projectionLoader: FakeMangaReaderProjectionLoader(projectionsByTID: [
+            "980": makeTestMangaReaderProjection(tid: "980", chapterTitle: "第一话")
+        ])
+    )
+    let manualURL = try #require(URL(string: "https://img.example.com/manual-980.jpg"))
+    _ = try await dependencies.contentCoverStore.setManualCover(
+        manualURL,
+        for: .smartManga(cleanBookName: "测试漫画七")
+    )
+
+    let owner = BlogReaderUser(uid: "42", name: "作者")
+    let coverPage = ForumThreadPage(
+        thread: ThreadIdentity(tid: "980", fid: "30"),
+        title: "第一话",
+        posts: [
+            ForumThreadPost(
+                postID: "p1",
+                floorText: "1#",
+                author: owner,
+                contentHTML: "",
+                contentText: "",
+                images: [ForumThreadPostImage(url: "https://img.example.com/auto-980.jpg")]
+            )
+        ],
+        pageNavigation: ForumPageNavigation(currentPage: 1, totalPages: 1)
+    )
+    let model = makeForumMangaDetailViewModel(
+        dependencies: dependencies,
+        threadTID: "980",
+        threadCoverPageRepository: FixedPageThreadCoverPageRepository(firstPage: coverPage)
+    )
+
+    await model.reload()
+    #expect(model.coverURL == manualURL)
+
+    // Give any (incorrectly started) resolution a chance to run before
+    // asserting the stored row still has no automatic URL.
+    try await Task.sleep(nanoseconds: 100_000_000)
+    let stored = await dependencies.contentCoverStore.cover(for: .smartManga(cleanBookName: "测试漫画七"))
+    #expect(stored?.manualCoverURL == manualURL)
+    #expect(stored?.automaticCoverURL == nil)
+    #expect(model.coverURL == manualURL)
+}
+
 /// `MangaStoreTestSupport.swift`'s `makeTestMangaDirectoryStore` lives in the
 /// `YamiboReaderCoreTests` target only, so this file builds its own GRDB pool
 /// directly — mirroring `LocalFavoriteOpenTargetResolverTests
@@ -473,20 +618,51 @@ private func makeForumMangaDetailDependencies(
     )
 }
 
+/// Always injects a thread-cover-page repository stub: the view model's
+/// automatic `.smartManga` cover resolution otherwise reaches the fixture's
+/// real network-backed `ForumThreadReaderRepository` in the background on
+/// every `reload()`. The default stub simply resolves nothing.
 @MainActor
 private func makeForumMangaDetailViewModel(
     dependencies: ForumDependencies,
     threadTID: String,
-    workflowConfiguration: MangaDirectoryWorkflowConfiguration = MangaDirectoryWorkflowConfiguration()
+    workflowConfiguration: MangaDirectoryWorkflowConfiguration = MangaDirectoryWorkflowConfiguration(),
+    threadCoverPageRepository: (any ThreadCoverPageResolving)? = nil
 ) -> ForumMangaDetailViewModel {
-    ForumMangaDetailViewModel(
+    let coverPageRepository = threadCoverPageRepository ?? FixedPageThreadCoverPageRepository(firstPage: nil)
+    return ForumMangaDetailViewModel(
         context: MangaDetailLaunchContext(
             thread: ThreadIdentity(tid: threadTID, fid: "30"),
             title: "测试漫画"
         ),
         dependencies: dependencies,
-        workflowConfiguration: workflowConfiguration
+        workflowConfiguration: workflowConfiguration,
+        makeThreadCoverPageRepository: { coverPageRepository }
     )
+}
+
+/// Serves one fixed first page (or nothing) to the automatic cover
+/// resolution, standing in for the network-backed thread reader repository.
+private struct FixedPageThreadCoverPageRepository: ThreadCoverPageResolving {
+    let firstPage: ForumThreadPage?
+
+    func cachedThreadPage(
+        thread _: ThreadIdentity,
+        title _: String,
+        authorID _: String?,
+        page: Int
+    ) async -> ForumThreadPage? {
+        page == 1 ? firstPage : nil
+    }
+
+    func fetchThreadPage(
+        thread _: ThreadIdentity,
+        title _: String,
+        authorID _: String?,
+        page _: Int
+    ) async throws -> ForumThreadPage {
+        throw YamiboError.parsingFailed(context: "thread cover page fetch is not exercised by ForumMangaDetailViewModelTests")
+    }
 }
 
 /// Configurable stand-in for the tag/search network repository, recording

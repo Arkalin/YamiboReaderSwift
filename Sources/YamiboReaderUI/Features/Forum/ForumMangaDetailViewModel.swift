@@ -28,17 +28,28 @@ final class ForumMangaDetailViewModel {
     @ObservationIgnored private var readingProgressUpdatesTask: Task<Void, Never>?
     @ObservationIgnored private var contentCoverUpdatesTask: Task<Void, Never>?
     @ObservationIgnored private var automaticDirectoryUpdateTask: Task<Void, Never>?
+    @ObservationIgnored private var automaticCoverResolutionTask: Task<Void, Never>?
+    @ObservationIgnored private var attemptedAutomaticCoverBookNames: Set<String> = []
     @ObservationIgnored private var directoryTickTask: Task<Void, Never>?
     @ObservationIgnored private let workflowConfiguration: MangaDirectoryWorkflowConfiguration
+    @ObservationIgnored private let makeThreadCoverPageRepository: @Sendable () async -> any ThreadCoverPageResolving
 
     init(
         context: MangaDetailLaunchContext,
         dependencies: ForumDependencies,
-        workflowConfiguration: MangaDirectoryWorkflowConfiguration = MangaDirectoryWorkflowConfiguration()
+        workflowConfiguration: MangaDirectoryWorkflowConfiguration = MangaDirectoryWorkflowConfiguration(),
+        // Test seam mirroring `MangaReaderDependencies.makeThreadCoverPageRepository`:
+        // the default resolves covers through the real forum thread reader
+        // repository, which tests must not reach over the network.
+        makeThreadCoverPageRepository: (@Sendable () async -> any ThreadCoverPageResolving)? = nil
     ) {
         self.context = context
         self.dependencies = dependencies
         self.workflowConfiguration = workflowConfiguration
+        self.makeThreadCoverPageRepository = makeThreadCoverPageRepository
+            ?? { [makeForumThreadReaderRepository = dependencies.makeForumThreadReaderRepository] in
+                await makeForumThreadReaderRepository()
+            }
         readingProgressUpdatesTask = Task { @MainActor [weak self, readingProgressStore = dependencies.readingProgressStore] in
             for await notification in NotificationCenter.default.notifications(named: ReadingProgressStore.didChangeNotification) {
                 guard !Task.isCancelled else { return }
@@ -67,6 +78,7 @@ final class ForumMangaDetailViewModel {
         readingProgressUpdatesTask?.cancel()
         contentCoverUpdatesTask?.cancel()
         automaticDirectoryUpdateTask?.cancel()
+        automaticCoverResolutionTask?.cancel()
         directoryTickTask?.cancel()
     }
 
@@ -192,7 +204,13 @@ final class ForumMangaDetailViewModel {
             readingProgress = await loadReadingProgress()
             contentCover = await loadContentCover()
             if resolution.shouldAutoUpdateAfterInitialLoad {
+                // The imminent directory update may rewrite the chapter
+                // list (and thus which chapter is "first"), so cover
+                // resolution waits for `performDirectoryUpdate` to trigger
+                // it with the updated directory.
                 startAutomaticDirectoryUpdate()
+            } else {
+                startAutomaticCoverResolutionIfNeeded()
             }
         } catch {
             currentDocument = nil
@@ -279,6 +297,7 @@ final class ForumMangaDetailViewModel {
             )
             guard !Task.isCancelled else { return }
             self.directory = result.directory
+            startAutomaticCoverResolutionIfNeeded()
             if let cooldownExpiresAt = result.cooldownExpiresAt {
                 directoryCooldownExpiresAt = cooldownExpiresAt
                 forcedSearchShortcutExpiresAt = nil
@@ -352,6 +371,7 @@ final class ForumMangaDetailViewModel {
             self.directory = updated
             readingProgress = await loadReadingProgress()
             contentCover = await loadContentCover()
+            startAutomaticCoverResolutionIfNeeded()
             directoryActionErrorMessage = cacheRenameError?.localizedDescription
         } catch is CancellationError {
         } catch {
@@ -442,6 +462,67 @@ final class ForumMangaDetailViewModel {
             return nil
         }
         return await dependencies.contentCoverStore.cover(for: .smartManga(cleanBookName: cleanBookName))
+    }
+
+    /// Resolves a missing `.smartManga` automatic cover for the loaded
+    /// directory, mirroring `FavoriteLibraryOrganizer`'s backfill (smart-
+    /// comic-mode decision #13): the earliest chapter's floor-1 owner image
+    /// via `ThreadCoverResolver` → `setAutomaticCover`. That backfill only
+    /// runs over *favorited* directories during favorites organization, so
+    /// without this, a detail page opened for an unfavorited manga (or
+    /// before the favorites page ever organized) never shows a cover.
+    private func startAutomaticCoverResolutionIfNeeded() {
+        guard automaticCoverResolutionTask == nil, let directory else { return }
+        let cleanBookName = directory.cleanBookName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanBookName.isEmpty,
+              let firstChapter = directory.chapters.first,
+              !attemptedAutomaticCoverBookNames.contains(cleanBookName) else {
+            return
+        }
+        // Same missing-check as the favorites backfill: a text-cover-forced
+        // row is a deliberate "no image", not a missing cover, and any
+        // resolved URL means there is nothing to do.
+        if let contentCover, contentCover.textCoverForced || contentCover.resolvedURL != nil {
+            return
+        }
+        attemptedAutomaticCoverBookNames.insert(cleanBookName)
+        automaticCoverResolutionTask = Task { @MainActor [weak self] in
+            await self?.performAutomaticCoverResolution(cleanBookName: cleanBookName, chapterTID: firstChapter.tid)
+            self?.automaticCoverResolutionTask = nil
+        }
+    }
+
+    private func performAutomaticCoverResolution(cleanBookName: String, chapterTID: String) async {
+        let key = ContentCoverKey.smartManga(cleanBookName: cleanBookName)
+        let store = dependencies.contentCoverStore
+        // Re-check right before resolving: the favorites backfill or a
+        // manual cover action may have raced a cover in since this page
+        // loaded its snapshot.
+        if let existing = await store.cover(for: key),
+           existing.textCoverForced || existing.resolvedURL != nil {
+            contentCover = await loadContentCover()
+            return
+        }
+        let repository = await makeThreadCoverPageRepository()
+        guard let coverURL = await ThreadCoverResolver().resolve(
+            thread: ThreadIdentity(tid: chapterTID),
+            title: cleanBookName,
+            repository: repository
+        ) else {
+            return
+        }
+        do {
+            _ = try await store.setAutomaticCover(coverURL, for: key)
+        } catch is CancellationError {
+            return
+        } catch {
+            YamiboLog.library.error("Failed to set automatic smartManga cover from manga detail for \(cleanBookName): \(error.localizedDescription)")
+            return
+        }
+        // `setAutomaticCover` also posts the store's change notification,
+        // but reloading directly keeps this page's cover from depending on
+        // notification delivery ordering.
+        contentCover = await loadContentCover()
     }
 
     /// Once `directory` is known, its stable `mangaID`+`cleanBookName`
