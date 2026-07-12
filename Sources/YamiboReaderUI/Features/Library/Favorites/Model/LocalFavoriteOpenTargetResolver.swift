@@ -109,20 +109,34 @@ struct LocalFavoriteOpenTargetResolver {
             // there is always a chapter to open — falling back to this
             // favorite's own thread at page 0 replaces the old
             // `mangaTitleUnresolved` failure mode, which can no longer occur.
+            //
+            // Mode off (or `.singleThread` scope): "从头打开" just resets this
+            // one thread's own page to 0, matching how such a card renders —
+            // a single, standalone chapter with no directory to speak of.
             guard mode != .start else {
-                return .mangaReader(
-                    MangaLaunchContext(
-                        originalThreadID: threadID,
-                        chapterTID: threadID,
-                        displayTitle: latestItem.resolvedDisplayTitle,
-                        source: .favorites,
-                        initialPage: 0,
-                        directoryName: nil,
-                        offlineCacheFavoriteID: latestItem.id,
-                        isSmartModeEnabled: smartModeEnabled,
-                        forumID: latestItem.forumID
+                guard smartModeEnabled else {
+                    return .mangaReader(
+                        MangaLaunchContext(
+                            originalThreadID: threadID,
+                            chapterTID: threadID,
+                            displayTitle: latestItem.resolvedDisplayTitle,
+                            source: .favorites,
+                            initialPage: 0,
+                            directoryName: nil,
+                            offlineCacheFavoriteID: latestItem.id,
+                            isSmartModeEnabled: false,
+                            forumID: latestItem.forumID
+                        )
                     )
-                )
+                }
+                // Mode on: the card this button lives on shows the *merged*
+                // directory, so "从头打开" must jump to the directory's actual
+                // first chapter — not just reset the representative member's
+                // own tid to page 0, which for an already-parsed directory is
+                // frequently a different chapter than #1 (the representative
+                // item is whichever member was favorited earliest, not
+                // necessarily the directory's first chapter).
+                return await mangaDirectoryStartTarget(threadID: threadID, item: latestItem)
             }
             // Deliberately an exact id lookup (`FavoriteContentTarget
             // .mangaThread(threadID:)`, not the generic OR-based
@@ -201,6 +215,50 @@ struct LocalFavoriteOpenTargetResolver {
                 source: .favorites,
                 chapterView: directoryProgress?.chapterView ?? firstChapter.view,
                 initialPage: directoryProgress?.mangaPageIndex ?? 0,
+                directoryName: directory.cleanBookName,
+                offlineCacheFavoriteID: item.id,
+                isSmartModeEnabled: true,
+                forumID: item.forumID
+            )
+        )
+    }
+
+    /// Mode-on `.mangaThread` "从头打开" (open from beginning): looks up the
+    /// `MangaDirectory` this chapter thread belongs to and always opens its
+    /// first chapter at page 0, ignoring any existing reading progress. If
+    /// the directory has never been resolved locally at all, falls back to
+    /// this favorite's own thread at page 0 (still launching with
+    /// `isSmartModeEnabled: true` so the reader resolves a real directory on
+    /// this open, matching `mangaDirectoryResumeTarget`'s same fallback).
+    private func mangaDirectoryStartTarget(
+        threadID: String,
+        item: FavoriteItem
+    ) async -> LocalFavoriteOpenTarget {
+        guard let directory = try? await mangaDirectoryStore.directory(containingTID: threadID),
+              let firstChapter = directory.chapters.first else {
+            return .mangaReader(
+                MangaLaunchContext(
+                    originalThreadID: threadID,
+                    chapterTID: threadID,
+                    displayTitle: item.resolvedDisplayTitle,
+                    source: .favorites,
+                    initialPage: 0,
+                    directoryName: nil,
+                    offlineCacheFavoriteID: item.id,
+                    isSmartModeEnabled: true,
+                    forumID: item.forumID
+                )
+            )
+        }
+
+        return .mangaReader(
+            MangaLaunchContext(
+                originalThreadID: threadID,
+                chapterTID: firstChapter.tid,
+                displayTitle: directory.cleanBookName,
+                source: .favorites,
+                chapterView: firstChapter.view,
+                initialPage: 0,
                 directoryName: directory.cleanBookName,
                 offlineCacheFavoriteID: item.id,
                 isSmartModeEnabled: true,
