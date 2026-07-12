@@ -592,6 +592,31 @@ private func persistedResumeRoute(_ route: ReaderResumeRoute) throws -> ReaderRe
     #expect(clearedUsage == 0)
 }
 
+@Test func novelReaderProjectionStorePrunesToMostRecentOneHundredEntries() async throws {
+    let root = makeTemporaryDirectory(prefix: "novel-projection-prune-tests")
+    let pool = try YamiboDatabase.openPool(rootDirectory: root)
+    nonisolated(unsafe) var now = Date(timeIntervalSince1970: 100)
+    let diskCache = DiskCacheStore(writer: pool, rootDirectory: root, now: { now })
+    let store = NovelReaderProjectionStore(diskCacheStore: diskCache)
+
+    for view in 1...101 {
+        now = Date(timeIntervalSince1970: 100 + TimeInterval(view))
+        try await store.save(
+            NovelReaderProjection(
+                threadID: "950",
+                view: view,
+                maxView: 101,
+                segments: [.text("第\(view)页", chapterTitle: nil)]
+            )
+        )
+    }
+
+    let request = { (view: Int) in NovelPageRequest(threadID: "950", view: view, authorID: nil) }
+    #expect(await store.loadProjection(for: request(1)) == nil)
+    #expect(await store.loadProjection(for: request(2))?.view == 2)
+    #expect(await store.loadProjection(for: request(101))?.view == 101)
+}
+
 @Test func favoriteBackgroundImageStoreSavesLoadsDeletesAndPrunes() async throws {
     let baseDirectory = makeTemporaryDirectory(prefix: "favorite-background-tests")
     let store = FavoriteBackgroundImageStore(baseDirectory: baseDirectory)

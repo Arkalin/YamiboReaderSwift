@@ -50,6 +50,7 @@ public actor MangaReaderProjectionStore: MangaReaderProjectionPersisting {
             namespace: Self.projectionNamespace,
             key: projectionCacheKey(identity: projection.sourceIdentity)
         )
+        try await cacheStore.trimNamespace(Self.projectionNamespace, maximumEntryCount: 100)
     }
 
     public func clearAll() async throws {

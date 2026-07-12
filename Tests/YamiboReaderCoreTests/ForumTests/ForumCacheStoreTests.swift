@@ -110,6 +110,34 @@ import Testing
     ))
 }
 
+@Test func forumCacheStorePrunesBoardsToMostRecentFiftyEntries() async throws {
+    let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+    nonisolated(unsafe) var now = Date(timeIntervalSince1970: 100)
+    let store = ForumCacheStore(baseDirectory: directory, now: { now })
+    let board = ForumBoardSummary(
+        fid: "49",
+        name: "百合小说",
+        url: ForumRouteResolver.boardURL(fid: "49")
+    )
+
+    for page in 1...51 {
+        now = Date(timeIntervalSince1970: 100 + TimeInterval(page))
+        try await store.saveBoard(
+            ForumBoardPage(
+                board: board,
+                pageNavigation: ForumPageNavigation(currentPage: page, totalPages: nil),
+                fetchedAt: now
+            ),
+            fid: "49",
+            pageNumber: page
+        )
+    }
+
+    #expect(await store.loadBoard(fid: "49", page: 1, allowExpired: true) == nil)
+    #expect(await store.loadBoard(fid: "49", page: 2, allowExpired: true)?.pageNavigation?.currentPage == 2)
+    #expect(await store.loadBoard(fid: "49", page: 51, allowExpired: true)?.pageNavigation?.currentPage == 51)
+}
+
 @Test func forumCacheStoreCachesThreadPagesByThreadPageAndAuthor() async throws {
     let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
     nonisolated(unsafe) var now = Date(timeIntervalSince1970: 100)

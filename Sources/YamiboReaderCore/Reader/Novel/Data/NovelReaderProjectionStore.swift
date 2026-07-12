@@ -60,6 +60,7 @@ public actor NovelReaderProjectionStore {
     public func save(_ projection: NovelReaderProjection) async throws {
         let key = projectionCacheKey(projection: projection)
         try await cacheStore.set(projection, namespace: Self.projectionNamespace, key: key)
+        try await cacheStore.trimNamespace(Self.projectionNamespace, maximumEntryCount: 100)
         memoryCache.setObject(CacheBox(projection: projection), forKey: key as NSString)
     }
 
