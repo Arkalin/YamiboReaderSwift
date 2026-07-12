@@ -20,8 +20,7 @@ public struct NovelReaderView: View {
     @State private var verticalRestoreController = ReaderVerticalRestoreController()
     @State private var verticalRestoreRetryTask: Task<Void, Never>?
     @State private var verticalViewportPositionUpdateTask: Task<Void, Never>?
-    @State private var verticalSurfaceFrames: [Int: NovelReaderVerticalSurfaceFrameValue] = [:]
-    @State private var verticalTextViewportSample: NovelTextViewportSample?
+    @State private var verticalViewportSampling = NovelReaderVerticalViewportSamplingBox()
     @State private var lastVerticalPositioningFingerprint: NovelReaderVerticalPositioningFingerprint?
     @State private var isVerticalProgressScrubbing = false
     @State private var verticalTapSuppressionUntil: CFTimeInterval = 0
@@ -533,14 +532,14 @@ public struct NovelReaderView: View {
                 }
             },
             onSurfaceFramesChange: { frames in
-                guard verticalSurfaceFrames != frames else { return }
-                verticalSurfaceFrames = frames
+                guard verticalViewportSampling.surfaceFrames != frames else { return }
+                verticalViewportSampling.surfaceFrames = frames
                 tryAdvanceVerticalRestore()
                 applyVerticalViewportPositionUpdate(for: .viewportGeometryChanged)
             },
             onTextViewportSampleChange: { sample in
-                guard verticalTextViewportSample != sample else { return }
-                verticalTextViewportSample = sample
+                guard verticalViewportSampling.textViewportSample != sample else { return }
+                verticalViewportSampling.textViewportSample = sample
                 applyVerticalViewportPositionUpdate(for: .textViewportSampleChanged)
             },
             onViewportChange: {
@@ -1291,7 +1290,7 @@ public struct NovelReaderView: View {
             return
         }
 
-        if let sample = verticalTextViewportSample {
+        if let sample = verticalViewportSampling.textViewportSample {
             model.updateVerticalViewportPosition(sample: sample)
             rememberCurrentVerticalPositioningFingerprint()
         }
@@ -1382,7 +1381,7 @@ public struct NovelReaderView: View {
     }
 
     private var currentVerticalSurfaceFrames: [Int: CGRect] {
-        verticalSurfaceFrames.compactMapValues { value in
+        verticalViewportSampling.surfaceFrames.compactMapValues { value in
             value.documentView == model.visibleView ? value.frame : nil
         }
     }
