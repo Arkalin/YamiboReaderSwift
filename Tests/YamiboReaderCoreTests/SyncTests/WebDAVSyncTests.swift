@@ -74,7 +74,7 @@ private enum WebDAVTestError: Error {
     let threadID = "940"
     var document = FavoriteLibraryDocument()
     let target = FavoriteItemTarget(kind: .novelThread, threadID: threadID)
-    try document.addItem(
+    try document.upsertItem(
         FavoriteItem(
             target: target,
             title: "本地优先收藏",
@@ -222,7 +222,7 @@ private enum WebDAVTestError: Error {
     try await fixture.signIn(accountUID: "123")
 
     var document = FavoriteLibraryDocument()
-    try document.addItem(
+    try document.upsertItem(
         FavoriteItem(
             target: FavoriteItemTarget(kind: .normalThread, threadID: "965"),
             title: "自动同步收藏",

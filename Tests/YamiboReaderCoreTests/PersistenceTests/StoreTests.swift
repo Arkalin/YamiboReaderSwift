@@ -718,7 +718,7 @@ private func persistedResumeRoute(_ route: ReaderResumeRoute) throws -> ReaderRe
     )
     var localLibrary = FavoriteLibraryDocument()
     let localTarget = FavoriteItemTarget(kind: .normalThread, threadID: "700")
-    try localLibrary.addItem(
+    try localLibrary.upsertItem(
         FavoriteItem(
             target: localTarget,
             title: "本地优先收藏",
@@ -1009,7 +1009,7 @@ private func persistedResumeRoute(_ route: ReaderResumeRoute) throws -> ReaderRe
 
     // Document saves fully rewrite the favorite rows; covers must survive.
     var document = FavoriteLibraryDocument()
-    document.addItem(try FavoriteItem(
+    document.upsertItem(try FavoriteItem(
         target: FavoriteItemTarget(kind: .normalThread, threadID: "555"),
         title: "主题",
         locations: [.category(document.defaultCategory.id)]

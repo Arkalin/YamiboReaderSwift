@@ -169,7 +169,7 @@ private enum YamiboAccountTestError: Error {
         title: "退出保留漫画",
         locations: [.category(favoriteLibrary.defaultCategory.id)]
     )
-    favoriteLibrary.addItem(favoriteItem)
+    favoriteLibrary.upsertItem(favoriteItem)
     let favoriteURL = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=viewthread&tid=970&mobile=2"))
     let imageURL = try #require(URL(string: "https://img.example.com/signout-offline.jpg"))
 

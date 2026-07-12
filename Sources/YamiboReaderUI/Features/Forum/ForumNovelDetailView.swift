@@ -57,6 +57,11 @@ struct ForumNovelDetailView: View {
                     await model.toggleFavorite()
                 }
             },
+            onFavoriteLongPress: {
+                Task {
+                    await model.presentFavoriteLocationPicker()
+                }
+            },
             onAuthorTap: onUserTap,
             onCopyText: copyText,
             onViewThread: onViewThread
@@ -93,6 +98,15 @@ struct ForumNovelDetailView: View {
                 Task { await model.confirmFavoriteRemoval(favorite, removeRemote: removeRemote, remember: remember) }
             }
         )
+        .sheet(item: Bindable(model).favoriteLocationPickerContext) { context in
+            FavoriteLocationPickerSheet(
+                context: context,
+                onCancel: { model.favoriteLocationPickerContext = nil },
+                onConfirm: { locations in
+                    Task { await model.confirmFavoriteLocationSelection(locations) }
+                }
+            )
+        }
         .alert(
             L10n.string("forum.thread_route.copied"),
             isPresented: Binding(
@@ -136,6 +150,7 @@ private struct ForumNovelDetailBodyView: View {
     let onReadStart: () -> Void
     let hasReadingProgress: Bool
     let onFavoriteTap: () -> Void
+    let onFavoriteLongPress: () -> Void
     let onAuthorTap: (String, String?) -> Void
     let onCopyText: ((String) -> Void)?
     let onViewThread: () -> Void
@@ -148,6 +163,7 @@ private struct ForumNovelDetailBodyView: View {
                     canReadStart: !isLoading && errorMessage == nil,
                     hasReadingProgress: hasReadingProgress,
                     onFavoriteTap: onFavoriteTap,
+                    onFavoriteLongPress: onFavoriteLongPress,
                     onAuthorTap: onAuthorTap,
                     onCopyText: onCopyText,
                     onReadStart: onReadStart,
@@ -374,6 +390,7 @@ private struct ForumNovelDetailHeader: View {
     let canReadStart: Bool
     let hasReadingProgress: Bool
     let onFavoriteTap: () -> Void
+    let onFavoriteLongPress: () -> Void
     let onAuthorTap: (String, String?) -> Void
     let onCopyText: ((String) -> Void)?
     let onReadStart: () -> Void
@@ -441,6 +458,7 @@ private struct ForumNovelDetailHeader: View {
                 hasReadingProgress: hasReadingProgress,
                 threadID: summary.threadID,
                 onFavoriteTap: onFavoriteTap,
+                onFavoriteLongPress: onFavoriteLongPress,
                 onReadStart: onReadStart,
                 onViewThread: onViewThread
             )
@@ -504,6 +522,7 @@ private struct ForumNovelHeaderActions: View {
     let hasReadingProgress: Bool
     let threadID: String
     let onFavoriteTap: () -> Void
+    let onFavoriteLongPress: () -> Void
     let onReadStart: () -> Void
     let onViewThread: () -> Void
 
@@ -555,6 +574,7 @@ private struct ForumNovelHeaderActions: View {
                 .background(ForumColors.brownPrimary.opacity(0.16), in: Capsule())
         }
         .buttonStyle(.plain)
+        .simultaneousGesture(LongPressGesture(minimumDuration: 0.5).onEnded { _ in onFavoriteLongPress() })
         .accessibilityLabel(isFavorited ? L10n.string("forum.thread.favorited") : L10n.string("forum.thread.favorite"))
     }
 

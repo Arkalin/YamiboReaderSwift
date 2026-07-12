@@ -31,6 +31,7 @@ final class BrowsingHistoryViewModel {
     var transientMessage: String?
     var favoriteAddPromptPresented = false
     var favoriteRemovePrompt: FavoriteRemovePrompt?
+    var favoriteLocationPickerContext: FavoriteLocationPickerContext?
     var clearAllConfirmationPresented = false
 
     @ObservationIgnored private let browsingHistoryStore: BrowsingHistoryStore?
@@ -41,6 +42,13 @@ final class BrowsingHistoryViewModel {
     @ObservationIgnored private let openTargetResolver: BrowsingHistoryOpenTargetResolver
     /// The entry whose heart raised the currently presented add prompt.
     @ObservationIgnored private var pendingFavoriteAddEntry: BrowsingHistoryEntry?
+    /// The entry whose heart long-press raised `favoriteLocationPickerContext`.
+    @ObservationIgnored private var pendingFavoriteLocationEntry: BrowsingHistoryEntry?
+    /// Locations picked in `favoriteLocationPickerContext`, consumed by the
+    /// next `performFavoriteAdd` — set only by
+    /// `confirmFavoriteLocationSelection`, so a plain (non-long-press) heart
+    /// tap still falls through to `addFavorite`'s default-category behavior.
+    @ObservationIgnored private var pendingFavoriteLocations: [FavoriteLocation]?
     /// Debounces the reload storms this page is exposed to: store-change
     /// notifications fire every ~350ms while a reader opened from here keeps
     /// saving positions, and the search field fires per keystroke.
@@ -230,6 +238,69 @@ final class BrowsingHistoryViewModel {
         await performFavoriteRemoval(favorite, removeRemote: removeRemote)
     }
 
+    /// Heart long-press: opens the location picker pre-filled with this
+    /// row's current locations (empty if not yet favorited).
+    func presentFavoriteLocationPicker(_ entry: BrowsingHistoryEntry) async {
+        guard let threadID = heartThreadID(for: entry) else { return }
+        let document = (try? await favoriteLibraryStore.load()) ?? FavoriteLibraryDocument()
+        let currentLocations = document.items.first { $0.target.threadID == threadID }?.locations ?? []
+        pendingFavoriteLocationEntry = entry
+        favoriteLocationPickerContext = FavoriteLocationPickerContext(
+            document: document,
+            initialSelection: Set(currentLocations),
+            isFavorited: favoritedThreadIDs.contains(threadID),
+            localFavoriteLibraryStore: favoriteLibraryStore
+        )
+    }
+
+    /// Routes the picker's confirmed selection: not-yet-favorited creates
+    /// with those locations (still subject to the add-sync prompt); already
+    /// favorited with a non-empty selection re-pins locally; already
+    /// favorited with everything cleared is treated as unfavoriting, through
+    /// the normal remove-sync decision — mirroring Android.
+    func confirmFavoriteLocationSelection(_ locations: Set<FavoriteLocation>) async {
+        favoriteLocationPickerContext = nil
+        guard let entry = pendingFavoriteLocationEntry else { return }
+        pendingFavoriteLocationEntry = nil
+        guard let threadID = heartThreadID(for: entry) else { return }
+
+        if let item = await storedFavoriteItem(threadID: threadID) {
+            let favorite = Favorite(
+                id: item.id,
+                title: item.title,
+                displayName: item.displayName,
+                threadID: threadID,
+                remoteFavoriteID: item.remoteMapping?.yamiboFavoriteID,
+                type: .other,
+                tagIDs: item.tagIDs
+            )
+            guard !locations.isEmpty else {
+                let settings = await settingsStore.load().favorites
+                let canRemoveRemote = favorite.remoteFavoriteID?.isEmpty == false
+                switch FavoriteRemoveRemoteDecision.resolve(settings: settings, canRemoveRemote: canRemoveRemote) {
+                case .prompt:
+                    favoriteRemovePrompt = FavoriteRemovePrompt(favorite: favorite)
+                case let .silent(removeRemote):
+                    await performFavoriteRemoval(favorite, removeRemote: removeRemote)
+                }
+                return
+            }
+            await performFavoriteRelocate(threadID: threadID, locations: Array(locations))
+            return
+        }
+
+        guard !locations.isEmpty else { return }
+        pendingFavoriteLocations = Array(locations)
+        let settings = await settingsStore.load().favorites
+        switch FavoriteAddSyncDecision.resolve(settings: settings, canSyncRemote: true) {
+        case .prompt:
+            pendingFavoriteAddEntry = entry
+            favoriteAddPromptPresented = true
+        case let .silent(syncToRemote):
+            await performFavoriteAdd(entry, syncToRemote: syncToRemote)
+        }
+    }
+
     func clearTransientMessage() {
         transientMessage = nil
     }
@@ -240,6 +311,8 @@ final class BrowsingHistoryViewModel {
 
     private func performFavoriteAdd(_ entry: BrowsingHistoryEntry, syncToRemote: Bool) async {
         guard let threadID = heartThreadID(for: entry) else { return }
+        let locations = pendingFavoriteLocations
+        pendingFavoriteLocations = nil
         do {
             let result = try await FavoriteQuickActions.addFavorite(
                 threadID: threadID,
@@ -248,6 +321,7 @@ final class BrowsingHistoryViewModel {
                 authorID: entry.authorID,
                 forumID: entry.forumID,
                 localTargetKindOverride: favoriteTargetKind(for: entry),
+                locations: locations,
                 formHash: nil,
                 syncToRemote: syncToRemote,
                 boardReaderSettings: await settingsStore.load().boardReader,
@@ -259,6 +333,19 @@ final class BrowsingHistoryViewModel {
         } catch {
             errorMessage = error.localizedDescription
             await refreshFavoritedThreadIDs()
+        }
+    }
+
+    private func performFavoriteRelocate(threadID: String, locations: [FavoriteLocation]) async {
+        do {
+            try await FavoriteQuickActions.relocateFavorite(
+                threadID: threadID,
+                locations: locations,
+                localFavoriteLibraryStore: favoriteLibraryStore
+            )
+            transientMessage = L10n.string("favorites.quick.relocated")
+        } catch {
+            errorMessage = error.localizedDescription
         }
     }
 
@@ -333,25 +420,11 @@ final class BrowsingHistoryViewModel {
     }
 
     private func rememberAddSyncChoice(_ syncToRemote: Bool) async {
-        var settings = await settingsStore.load()
-        settings.favorites.addSyncPromptEnabled = false
-        settings.favorites.addSyncDefault = syncToRemote
-        do {
-            try await settingsStore.save(settings)
-        } catch {
-            YamiboLog.library.error("Failed to save remembered add-sync choice from history page: \(error)")
-        }
+        await FavoriteQuickActions.rememberAddSyncChoice(syncToRemote, settingsStore: settingsStore)
     }
 
     private func rememberRemoveRemoteChoice(_ removeRemote: Bool) async {
-        var settings = await settingsStore.load()
-        settings.favorites.removeRemotePromptEnabled = false
-        settings.favorites.removeRemoteDefault = removeRemote
-        do {
-            try await settingsStore.save(settings)
-        } catch {
-            YamiboLog.library.error("Failed to save remembered remove-remote choice from history page: \(error)")
-        }
+        await FavoriteQuickActions.rememberRemoveRemoteChoice(removeRemote, settingsStore: settingsStore)
     }
 }
 

@@ -7,7 +7,7 @@ import Testing
 @Test func forumThreadReaderLoadsExistingLocalFavoriteState() async throws {
     let fixture = try ForumThreadReaderViewModelFixture()
     var document = FavoriteLibraryDocument()
-    document.addItem(try FavoriteItem(
+    document.upsertItem(try FavoriteItem(
         target: FavoriteItemTarget(kind: .normalThread, threadID: "704"),
         title: "已收藏标题",
         locations: [.category(document.defaultCategory.id)]
@@ -174,7 +174,7 @@ import Testing
     // re-checks isSmartComicModeEnabled(forumID:) per sibling (mirroring the
     // Favorites page's per-member merge rule), and a missing fid reads as
     // smart-off under the strict one-rule semantics.
-    seedDocument.addItem(try FavoriteItem(
+    seedDocument.upsertItem(try FavoriteItem(
         target: .mangaThread(threadID: "700"),
         title: "第一话",
         sourceGroup: .forumBoard(id: "30", label: "中文百合漫画区"),
@@ -218,7 +218,7 @@ import Testing
     settings.boardReader.setEntry(.init(mode: .manga(smartEnabled: false)), forumID: "30")
     try await fixture.settingsStore.save(settings)
     var seedDocument = try await fixture.localFavoriteLibraryStore.load()
-    seedDocument.addItem(try FavoriteItem(
+    seedDocument.upsertItem(try FavoriteItem(
         target: .mangaThread(threadID: "700"),
         title: "第一话",
         locations: [.category(seedDocument.defaultCategory.id)]

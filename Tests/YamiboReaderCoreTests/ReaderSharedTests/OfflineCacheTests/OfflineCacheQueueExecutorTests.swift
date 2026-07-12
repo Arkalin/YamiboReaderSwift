@@ -168,7 +168,7 @@ struct ReaderSharedTestsOfflineCacheQueueExecutor {
             title: "阅读进度漫画",
             locations: [.category(favoriteLibrary.defaultCategory.id)]
         )
-        favoriteLibrary.addItem(favorite)
+        favoriteLibrary.upsertItem(favorite)
         let resumeRoute = ReaderResumeRoute.manga(MangaLaunchContext(
             originalThreadID: "350",
             chapterTID: "350",

@@ -83,6 +83,28 @@ struct LocalFavoritesOrganizationView: View {
                 actions: dialogActions,
                 message: dialogMessage
             )
+            .confirmationDialog(
+                L10n.string("favorites.quick.remove_prompt.title"),
+                isPresented: removeRemotePromptBinding,
+                titleVisibility: .visible,
+                presenting: organizer.removeRemotePrompt
+            ) { _ in
+                Button(L10n.string("favorites.quick.remove_prompt.both"), role: .destructive) {
+                    Task { await organizer.confirmRemoveRemotePrompt(removeRemote: true, remember: false) }
+                }
+                Button(L10n.string("favorites.quick.remove_prompt.local_only"), role: .destructive) {
+                    Task { await organizer.confirmRemoveRemotePrompt(removeRemote: false, remember: false) }
+                }
+                Button(L10n.string("favorites.quick.remove_prompt.both_remember"), role: .destructive) {
+                    Task { await organizer.confirmRemoveRemotePrompt(removeRemote: true, remember: true) }
+                }
+                Button(L10n.string("favorites.quick.remove_prompt.local_remember"), role: .destructive) {
+                    Task { await organizer.confirmRemoveRemotePrompt(removeRemote: false, remember: true) }
+                }
+                Button(L10n.string("common.cancel"), role: .cancel) {}
+            } message: { _ in
+                Text(L10n.string("favorites.quick.remove_prompt.message"))
+            }
             .sheet(item: $routes.sheet) { sheet in
                 LocalFavoritesSheetContent(
                     sheet: sheet,
@@ -574,6 +596,19 @@ struct LocalFavoritesOrganizationView: View {
         )
     }
 
+    /// Dismissing without picking aborts the pending delete entirely — the
+    /// prompt IS the delete's remote-decision step, not an optional add-on.
+    private var removeRemotePromptBinding: Binding<Bool> {
+        Binding(
+            get: { organizer.removeRemotePrompt != nil },
+            set: { isPresented in
+                if !isPresented {
+                    organizer.removeRemotePrompt = nil
+                }
+            }
+        )
+    }
+
     private var dialogTitle: Text {
         switch routes.dialog {
         case .dissolveCollection, .dissolveSelectedCollections:
@@ -599,21 +634,21 @@ struct LocalFavoritesOrganizationView: View {
             Button(L10n.string("common.cancel"), role: .cancel) {}
             if item.locations.count > 1 {
                 Button(L10n.string("favorites.delete_scope.current_location"), role: .destructive) {
-                    Task { await organizer.deleteItem(item, scope: .currentLocation) }
+                    Task { await organizer.requestDeleteItem(item, scope: .currentLocation) }
                 }
             }
             Button(L10n.string("favorites.delete_scope.everywhere"), role: .destructive) {
-                Task { await organizer.deleteItem(item, scope: .everywhere) }
+                Task { await organizer.requestDeleteItem(item, scope: .everywhere) }
             }
         case .deleteSelection:
             Button(L10n.string("common.cancel"), role: .cancel) {}
             if organizer.selectedFavoritesCanRemoveCurrentLocation {
                 Button(L10n.string("favorites.delete_scope.current_location"), role: .destructive) {
-                    Task { await organizer.deleteSelection(scope: .currentLocation) }
+                    Task { await organizer.requestDeleteSelection(scope: .currentLocation) }
                 }
             }
             Button(L10n.string("favorites.delete_scope.everywhere"), role: .destructive) {
-                Task { await organizer.deleteSelection(scope: .everywhere) }
+                Task { await organizer.requestDeleteSelection(scope: .everywhere) }
             }
         case .dissolveSelectedCollections:
             Button(L10n.string("common.cancel"), role: .cancel) {}

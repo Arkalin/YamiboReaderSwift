@@ -252,7 +252,7 @@ private func makeCacheFixture(
         // Phase A decision #3/#9 — there is no cleanBookName-keyed identity
         // left to look up by directory title), so the seeded favorite must be
         // `.mangaThread`-targeted at the launch context's own thread id.
-        document.addItem(try FavoriteItem(
+        document.upsertItem(try FavoriteItem(
             target: .mangaThread(threadID: "900"),
             title: "测试漫画",
             locations: [.category(document.defaultCategory.id)]

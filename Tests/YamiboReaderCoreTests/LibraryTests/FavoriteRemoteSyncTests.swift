@@ -165,7 +165,7 @@ private func makeSettingsStore(_ boardReader: BoardReaderSettings) async throws 
         forumName: "中文百合漫画区",
         locations: [.category(categoryID)]
     )
-    document.addItem(existingSibling)
+    document.upsertItem(existingSibling)
     try await store.save(document)
 
     let mangaDirectoryStore = try makeTestMangaDirectoryStore()
@@ -219,7 +219,7 @@ private func makeSettingsStore(_ boardReader: BoardReaderSettings) async throws 
         forumName: "中文百合漫画区",
         locations: [.category(categoryID)]
     )
-    document.addItem(existingSibling)
+    document.upsertItem(existingSibling)
     try await store.save(document)
 
     let mangaDirectoryStore = try makeTestMangaDirectoryStore()
@@ -279,7 +279,7 @@ private func makeSettingsStore(_ boardReader: BoardReaderSettings) async throws 
         forumName: "另一个漫画区",
         locations: [.category(categoryID)]
     )
-    document.addItem(existingSibling)
+    document.upsertItem(existingSibling)
     try await store.save(document)
 
     let mangaDirectoryStore = try makeTestMangaDirectoryStore()
@@ -362,8 +362,8 @@ private func makeSettingsStore(_ boardReader: BoardReaderSettings) async throws 
         forumName: "中文百合漫画区",
         locations: [.category(categoryID)]
     )
-    document.addItem(modeOffSibling)
-    document.addItem(modeOnSibling)
+    document.upsertItem(modeOffSibling)
+    document.upsertItem(modeOnSibling)
     try await store.save(document)
 
     let mangaDirectoryStore = try makeTestMangaDirectoryStore()
@@ -468,7 +468,7 @@ private func makeSettingsStore(_ boardReader: BoardReaderSettings) async throws 
         title: "本地已有",
         locations: [.category(document.defaultCategory.id)]
     )
-    document.addItem(existing)
+    document.upsertItem(existing)
     try await store.save(document)
 
     let recorder = SyncCallRecorder()
@@ -498,7 +498,7 @@ private func makeSettingsStore(_ boardReader: BoardReaderSettings) async throws 
         remoteMapping: FavoriteRemoteMapping(yamiboFavoriteID: "r-old", yamiboRemoteOrder: 9),
         locations: [.category(document.defaultCategory.id)]
     )
-    document.addItem(existing)
+    document.upsertItem(existing)
     let categoryID = document.defaultCategory.id
     try await store.save(document)
 
@@ -611,8 +611,8 @@ private func makeSettingsStore(_ boardReader: BoardReaderSettings) async throws 
     // `.mangaThread` — so there is no favorite kind left that the upload
     // filter's `item.target.threadID.map { ... }` would ever skip for
     // lacking one. See smart-comic-mode Phase A decision #3/#9.)
-    document.addItem(unmapped)
-    document.addItem(remoteDeleted)
+    document.upsertItem(unmapped)
+    document.upsertItem(remoteDeleted)
     try await store.save(document)
 
     let recorder = SyncCallRecorder()
@@ -664,7 +664,7 @@ private func makeSettingsStore(_ boardReader: BoardReaderSettings) async throws 
         title: "本地专属",
         locations: [.category(categoryID)]
     )
-    document.addItem(localOnly)
+    document.upsertItem(localOnly)
     try await store.save(document)
 
     let recorder = SyncCallRecorder()

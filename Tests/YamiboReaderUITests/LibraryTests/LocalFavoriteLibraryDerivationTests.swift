@@ -67,9 +67,9 @@ final class LocalFavoriteLibraryDerivationTests: XCTestCase {
             locations: collectionLocations,
             updatedAt: secondChapterUpdatedAt
         )
-        document.addItem(normalItem)
-        document.addItem(firstChapterItem)
-        document.addItem(secondChapterItem)
+        document.upsertItem(normalItem)
+        document.upsertItem(firstChapterItem)
+        document.upsertItem(secondChapterItem)
 
         let normalCoverURL = try XCTUnwrap(URL(string: "https://example.com/normal-cover.jpg"))
         let perThreadCoverURL = try XCTUnwrap(URL(string: "https://example.com/per-thread-cover.jpg"))
@@ -161,8 +161,8 @@ final class LocalFavoriteLibraryDerivationTests: XCTestCase {
             locations: collectionLocations,
             updatedAt: secondUpdatedAt
         )
-        document.addItem(firstItem)
-        document.addItem(secondItem)
+        document.upsertItem(firstItem)
+        document.upsertItem(secondItem)
 
         let firstItemCoverURL = try XCTUnwrap(URL(string: "https://example.com/unresolved-first-cover.jpg"))
         let secondItemCoverURL = try XCTUnwrap(URL(string: "https://example.com/unresolved-second-cover.jpg"))

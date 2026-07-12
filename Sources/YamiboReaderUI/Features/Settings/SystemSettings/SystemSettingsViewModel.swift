@@ -10,6 +10,14 @@ final class SystemSettingsViewModel: ObservableObject {
     @Published var favoriteSortOrder: LocalFavoriteLibrarySortOrder = .organization
     @Published var favoriteSortDescending = false
     @Published var favoriteShowsCategoryCounts = true
+    /// Android-style favorite sync behavior switches: each action has an
+    /// "ask every time" toggle and, when asking is off, a silent default.
+    /// The quick-action prompts' "remember" variants write the same fields,
+    /// so this page is where a remembered choice can be revisited.
+    @Published var favoriteAddSyncPromptEnabled = true
+    @Published var favoriteAddSyncDefault = true
+    @Published var favoriteRemoveRemotePromptEnabled = true
+    @Published var favoriteRemoveRemoteDefault = false
     @Published var novelOfflineCache = NovelOfflineCacheSettings()
     @Published var applePencilPageTurn = ApplePencilPageTurnSettings()
     @Published var gamepad = GamepadSettings()
@@ -76,6 +84,10 @@ final class SystemSettingsViewModel: ObservableObject {
         favoriteSortOrder = settings.favorites.sortOrder
         favoriteSortDescending = settings.favorites.sortDescending
         favoriteShowsCategoryCounts = settings.favorites.showsCategoryCounts
+        favoriteAddSyncPromptEnabled = settings.favorites.addSyncPromptEnabled
+        favoriteAddSyncDefault = settings.favorites.addSyncDefault
+        favoriteRemoveRemotePromptEnabled = settings.favorites.removeRemotePromptEnabled
+        favoriteRemoveRemoteDefault = settings.favorites.removeRemoteDefault
         novelOfflineCache = settings.novelOfflineCache
         applePencilPageTurn = settings.system.applePencilPageTurn
         gamepad = settings.system.gamepad
@@ -344,6 +356,62 @@ final class SystemSettingsViewModel: ObservableObject {
         var updated = keyboard
         updated.restoreDefaultBindings()
         updateKeyboard(updated)
+    }
+
+    func updateFavoriteAddSyncPromptEnabled(_ value: Bool) {
+        let previous = favoriteAddSyncPromptEnabled
+        favoriteAddSyncPromptEnabled = value
+        persistFavoriteSyncBehavior { settings in
+            settings.favorites.addSyncPromptEnabled = value
+        } revert: { [weak self] in
+            self?.favoriteAddSyncPromptEnabled = previous
+        }
+    }
+
+    func updateFavoriteAddSyncDefault(_ value: Bool) {
+        let previous = favoriteAddSyncDefault
+        favoriteAddSyncDefault = value
+        persistFavoriteSyncBehavior { settings in
+            settings.favorites.addSyncDefault = value
+        } revert: { [weak self] in
+            self?.favoriteAddSyncDefault = previous
+        }
+    }
+
+    func updateFavoriteRemoveRemotePromptEnabled(_ value: Bool) {
+        let previous = favoriteRemoveRemotePromptEnabled
+        favoriteRemoveRemotePromptEnabled = value
+        persistFavoriteSyncBehavior { settings in
+            settings.favorites.removeRemotePromptEnabled = value
+        } revert: { [weak self] in
+            self?.favoriteRemoveRemotePromptEnabled = previous
+        }
+    }
+
+    func updateFavoriteRemoveRemoteDefault(_ value: Bool) {
+        let previous = favoriteRemoveRemoteDefault
+        favoriteRemoveRemoteDefault = value
+        persistFavoriteSyncBehavior { settings in
+            settings.favorites.removeRemoteDefault = value
+        } revert: { [weak self] in
+            self?.favoriteRemoveRemoteDefault = previous
+        }
+    }
+
+    private func persistFavoriteSyncBehavior(
+        _ mutate: @escaping @Sendable (inout AppSettings) -> Void,
+        revert: @escaping @MainActor () -> Void
+    ) {
+        Task {
+            do {
+                _ = try await dependencies.settingsStore.update(mutate)
+            } catch {
+                await MainActor.run {
+                    revert()
+                    errorMessage = error.localizedDescription
+                }
+            }
+        }
     }
 
     func updateNovelOfflineCacheRetainsInlineImages(_ retainsInlineImages: Bool) {

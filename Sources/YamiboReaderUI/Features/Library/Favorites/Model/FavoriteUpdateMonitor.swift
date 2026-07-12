@@ -513,10 +513,10 @@ final class FavoriteUpdateMonitor: ObservableObject {
             var existing = existingByID[item.target.id] ?? FavoriteUpdateTrackedTarget(
                 target: item.target,
                 title: item.resolvedDisplayTitle,
-                mode: item.target.kind == .novelThread ? .novelThread : .normalThread
+                mode: FavoriteUpdateTargetMode(kind: item.target.kind)
             )
             existing.title = item.resolvedDisplayTitle
-            existing.mode = item.target.kind == .novelThread ? .novelThread : .normalThread
+            existing.mode = FavoriteUpdateTargetMode(kind: item.target.kind)
             existing.categoryIDs = Set(item.locations.compactMap(\.categoryID))
             if case let .forumBoard(id, label) = item.sourceGroup {
                 existing.fid = id
@@ -547,7 +547,7 @@ final class FavoriteUpdateMonitor: ObservableObject {
         var target = state.trackedTargets.first { $0.target == item.target } ?? FavoriteUpdateTrackedTarget(
             target: item.target,
             title: item.resolvedDisplayTitle,
-            mode: item.target.kind == .novelThread ? .novelThread : .normalThread
+            mode: FavoriteUpdateTargetMode(kind: item.target.kind)
         )
 
         if target.consecutiveFailures >= Self.circuitBreakerThreshold,
@@ -610,7 +610,7 @@ final class FavoriteUpdateMonitor: ObservableObject {
         let event = FavoriteUpdateEvent(
             target: item.target,
             title: item.resolvedDisplayTitle,
-            mode: item.target.kind == .novelThread ? .novelThread : .normalThread,
+            mode: FavoriteUpdateTargetMode(kind: item.target.kind),
             fid: target.fid,
             forumName: target.forumName,
             summary: summary,

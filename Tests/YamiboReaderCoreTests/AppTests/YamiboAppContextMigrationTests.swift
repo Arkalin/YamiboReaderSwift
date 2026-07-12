@@ -319,7 +319,7 @@ private func saveMigratedAppState(
 ) async throws {
     var library = FavoriteLibraryDocument()
     let favoriteTarget = FavoriteItemTarget(kind: .novelThread, threadID: chapterTID)
-    library.addItem(
+    library.upsertItem(
         try FavoriteItem(
             target: favoriteTarget,
             title: "Shared GRDB favorite",

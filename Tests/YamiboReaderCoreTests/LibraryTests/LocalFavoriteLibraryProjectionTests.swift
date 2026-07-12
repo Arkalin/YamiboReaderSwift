@@ -39,8 +39,8 @@ import Testing
         forumName: "版块B",
         locations: [.category(categoryID)]
     )
-    document.addItem(second)
-    document.addItem(first)
+    document.upsertItem(second)
+    document.upsertItem(first)
 
     let cards = LocalFavoriteLibraryProjection.cards(
         in: document,
@@ -66,8 +66,8 @@ import Testing
         sourceGroup: .forumBoard(id: "30", label: "旧版名"),
         locations: [.category(categoryID)]
     )
-    document.addItem(current)
-    document.addItem(legacy)
+    document.upsertItem(current)
+    document.upsertItem(legacy)
 
     let cards = LocalFavoriteLibraryProjection.cards(
         in: document,
@@ -88,7 +88,7 @@ import Testing
         forumName: "闭板漫画区",
         locations: [.category(categoryID)]
     )
-    document.addItem(item)
+    document.upsertItem(item)
 
     // No dedicated "智能漫画" filter bucket anymore — a `.mangaThread`
     // favorite always buckets by its real forum board, regardless of that
@@ -125,8 +125,8 @@ import Testing
         title: "【作者】无板块漫画 第2话",
         locations: [.category(categoryID)]
     )
-    document.addItem(first)
-    document.addItem(second)
+    document.upsertItem(first)
+    document.upsertItem(second)
 
     let settings = BoardReaderSettings()
 
@@ -164,7 +164,7 @@ import Testing
         forumID: "40",
         locations: [.category(categoryID)]
     )
-    document.addItem(item)
+    document.upsertItem(item)
 
     var boardReader = BoardReaderSettings(entries: [:])
     boardReader.setEntry(.init(mode: .novel), forumID: "40")
@@ -331,8 +331,8 @@ import Testing
         forumID: "30",
         locations: [.collection(categoryID: categoryID, collectionID: collection.id)]
     )
-    document.addItem(firstChapterFavorite)
-    document.addItem(secondChapterFavorite)
+    document.upsertItem(firstChapterFavorite)
+    document.upsertItem(secondChapterFavorite)
 
     let mangaDirectoriesByTID = ["801": directory, "802": directory]
     // Board 30 is mode-on by `BoardReaderSettings`'s own default.
@@ -410,8 +410,8 @@ import Testing
         forumID: "30",
         locations: [.category(otherCategory.id)]
     )
-    document.addItem(firstChapterFavorite)
-    document.addItem(secondChapterFavorite)
+    document.upsertItem(firstChapterFavorite)
+    document.upsertItem(secondChapterFavorite)
 
     let mangaDirectoriesByTID = ["811": directory, "812": directory]
     // Board 30 is mode-on by `BoardReaderSettings`'s own default.
@@ -477,9 +477,9 @@ import Testing
         forumID: "30",
         locations: [.category(categoryID)]
     )
-    document.addItem(firstChapter)
-    document.addItem(secondChapter)
-    document.addItem(solitaryFavorite)
+    document.upsertItem(firstChapter)
+    document.upsertItem(secondChapter)
+    document.upsertItem(solitaryFavorite)
 
     // Board 30 is mode-on by `BoardReaderSettings`'s own default; none of
     // these tids have ever been resolved to a `MangaDirectory` yet (empty
@@ -544,8 +544,8 @@ import Testing
         forumID: "46",
         locations: [.category(categoryID)]
     )
-    document.addItem(first)
-    document.addItem(second)
+    document.upsertItem(first)
+    document.upsertItem(second)
 
     // fid 46 is off by `BoardReaderSettings`'s own default — the
     // directory resolves locally (e.g. leftover from when the board used to
@@ -575,8 +575,8 @@ import Testing
     )
     let firstMember = try FavoriteItem(target: .mangaThread(threadID: "821"), title: "第1话", forumID: "30", locations: [.category(categoryID)])
     let secondMember = try FavoriteItem(target: .mangaThread(threadID: "822"), title: "第2话", forumID: "30", locations: [.category(categoryID)])
-    document.addItem(firstMember)
-    document.addItem(secondMember)
+    document.upsertItem(firstMember)
+    document.upsertItem(secondMember)
 
     let loneDirectory = MangaDirectory(
         cleanBookName: "单独进度漫画",
@@ -585,7 +585,7 @@ import Testing
         chapters: [MangaChapter(tid: "831", rawTitle: "第1话", chapterNumber: 1)]
     )
     let loneMember = try FavoriteItem(target: .mangaThread(threadID: "831"), title: "第1话", forumID: "30", locations: [.category(categoryID)])
-    document.addItem(loneMember)
+    document.upsertItem(loneMember)
 
     // The merged card's own representative (821)'s per-thread progress is a
     // stale earlier page; the directory-level record is the manga's actual
@@ -655,8 +655,8 @@ import Testing
         title: "普通主题标题",
         locations: [.category(categoryID)]
     )
-    document.addItem(mangaFavorite)
-    document.addItem(plainFavorite)
+    document.upsertItem(mangaFavorite)
+    document.upsertItem(plainFavorite)
 
     let cards = LocalFavoriteLibraryProjection.cards(
         in: document,
@@ -703,8 +703,8 @@ import Testing
         forumID: "46",
         locations: [.category(categoryID)]
     )
-    document.addItem(unresolvedModeOnFavorite)
-    document.addItem(unresolvedModeOffFavorite)
+    document.upsertItem(unresolvedModeOnFavorite)
+    document.upsertItem(unresolvedModeOffFavorite)
 
     let unrelatedDirectory = MangaDirectory(
         cleanBookName: "无关漫画",
@@ -877,8 +877,8 @@ private func makeMixedEntryDocument() throws -> (FavoriteLibraryDocument, MixedE
         contentUpdatedAt: Date(timeIntervalSince1970: 200),
         locations: [.category(categoryID)]
     )
-    document.addItem(first)
-    document.addItem(second)
+    document.upsertItem(first)
+    document.upsertItem(second)
     return (document, MixedEntryItems(first: first, second: second), collection)
 }
 
@@ -928,10 +928,10 @@ private func makeProjectionDocument() throws -> (FavoriteLibraryDocument, Projec
         locations: [.category(categoryID)],
         updatedAt: Date(timeIntervalSince1970: 40)
     )
-    document.addItem(normal)
-    document.addItem(novel)
-    document.addItem(manga)
-    document.addItem(unknown)
+    document.upsertItem(normal)
+    document.upsertItem(novel)
+    document.upsertItem(manga)
+    document.upsertItem(unknown)
     return (document, ProjectionItems(normal: normal, novel: novel, manga: manga, unknown: unknown))
 }
 

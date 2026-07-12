@@ -26,27 +26,27 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
         let fourthTarget = FavoriteItemTarget(kind: .normalThread, threadID: "943")
         var document = try await localFavoriteLibraryStore.load()
         let tag = document.createTag(name: "筛选", color: .blue)
-        document.addItem(try FavoriteItem(
+        document.upsertItem(try FavoriteItem(
             target: firstTarget,
             title: "同名主题一",
             sourceGroup: boardA,
             locations: [.category(document.defaultCategory.id)],
             tagIDs: [tag.id]
         ))
-        document.addItem(try FavoriteItem(
+        document.upsertItem(try FavoriteItem(
             target: secondTarget,
             title: "同名主题二",
             sourceGroup: boardB,
             locations: [.category(document.defaultCategory.id)],
             tagIDs: [tag.id]
         ))
-        document.addItem(try FavoriteItem(
+        document.upsertItem(try FavoriteItem(
             target: thirdTarget,
             title: "其他主题",
             sourceGroup: boardA,
             locations: [.category(document.defaultCategory.id)]
         ))
-        document.addItem(try FavoriteItem(
+        document.upsertItem(try FavoriteItem(
             target: fourthTarget,
             title: "同名主题三",
             sourceGroup: boardALegacy,
@@ -125,8 +125,8 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
             forumName: "关闭板块",
             locations: [.category(document.defaultCategory.id)]
         )
-        document.addItem(firstItem)
-        document.addItem(secondItem)
+        document.upsertItem(firstItem)
+        document.upsertItem(secondItem)
         try await localFavoriteLibraryStore.save(document)
 
         let organizer = try makeOrganizer(
@@ -257,8 +257,8 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
             forumName: "任意板块",
             locations: [.category(document.defaultCategory.id)]
         )
-        document.addItem(firstItem)
-        document.addItem(secondItem)
+        document.upsertItem(firstItem)
+        document.upsertItem(secondItem)
         try await localFavoriteLibraryStore.save(document)
 
         // Seeded before the organizer exists (no load-modify-save race with
@@ -366,7 +366,7 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
             forumName: "中文百合漫画区",
             locations: [.category(document.defaultCategory.id)]
         )
-        document.addItem(item)
+        document.upsertItem(item)
         try await localFavoriteLibraryStore.save(document)
 
         let organizer = try makeOrganizer(
@@ -430,7 +430,7 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
             forumName: "中文百合漫画区",
             locations: [.category(document.defaultCategory.id)]
         )
-        document.addItem(item)
+        document.upsertItem(item)
         try await localFavoriteLibraryStore.save(document)
 
         // No directory resolved locally yet at organizer construction time —
@@ -481,12 +481,12 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
         let firstTarget = FavoriteItemTarget(kind: .normalThread, threadID: "930")
         let secondTarget = FavoriteItemTarget(kind: .normalThread, threadID: "931")
         var document = try await localFavoriteLibraryStore.load()
-        document.addItem(try FavoriteItem(
+        document.upsertItem(try FavoriteItem(
             target: firstTarget,
             title: "第一条",
             locations: [.category(document.defaultCategory.id)]
         ))
-        document.addItem(try FavoriteItem(
+        document.upsertItem(try FavoriteItem(
             target: secondTarget,
             title: "第二条",
             locations: [.category(document.defaultCategory.id)]
@@ -541,12 +541,12 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
         let firstTarget = FavoriteItemTarget(kind: .normalThread, threadID: "920")
         let secondTarget = FavoriteItemTarget(kind: .normalThread, threadID: "921")
         var document = try await localFavoriteLibraryStore.load()
-        document.addItem(try FavoriteItem(
+        document.upsertItem(try FavoriteItem(
             target: firstTarget,
             title: "第一条",
             locations: [.category(category.id)]
         ))
-        document.addItem(try FavoriteItem(
+        document.upsertItem(try FavoriteItem(
             target: secondTarget,
             title: "第二条",
             locations: [.category(category.id)]
@@ -581,7 +581,7 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
         XCTAssertFalse(organizer.collections.contains { $0.id == existingCollection.id })
 
         organizer.selection.toggleFavoriteSelection(id: secondTarget.id)
-        await organizer.deleteSelection()
+        await organizer.deleteSelection(scope: .everywhere, removeRemote: false)
         let deletedItem = try await localFavoriteLibraryStore.load().items.first { $0.target == secondTarget }
         XCTAssertNil(deletedItem)
     }
@@ -608,7 +608,7 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
 
         let target = FavoriteItemTarget(kind: .normalThread, threadID: "940")
         var document = try await localFavoriteLibraryStore.load()
-        document.addItem(try FavoriteItem(
+        document.upsertItem(try FavoriteItem(
             target: target,
             title: "多路径收藏",
             locations: [.category(sourceCategory.id)]
@@ -665,7 +665,7 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
         let destinationCategory = try XCTUnwrap(createdDestinationCategory)
         let target = FavoriteItemTarget(kind: .normalThread, threadID: "952")
         var document = try await localFavoriteLibraryStore.load()
-        document.addItem(try FavoriteItem(
+        document.upsertItem(try FavoriteItem(
             target: target,
             title: "多位置远端收藏",
             remoteMapping: FavoriteRemoteMapping(yamiboFavoriteID: "remote-952"),
@@ -676,7 +676,7 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
         await organizer.reload()
 
         organizer.selection.toggleFavoriteSelection(id: target.id)
-        await organizer.deleteSelection(scope: .currentLocation)
+        await organizer.deleteSelection(scope: .currentLocation, removeRemote: false)
 
         let loadedDocument = try await localFavoriteLibraryStore.load()
         let storedItem = try XCTUnwrap(loadedDocument.items.first { $0.target == target })
@@ -703,7 +703,7 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
         organizer.closeCollection()
         let target = FavoriteItemTarget(kind: .normalThread, threadID: "956")
         var document = try await localFavoriteLibraryStore.load()
-        document.addItem(try FavoriteItem(
+        document.upsertItem(try FavoriteItem(
             target: target,
             title: "多位置收藏",
             locations: [
@@ -717,7 +717,7 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
 
         organizer.selection.toggleFavoriteSelection(id: target.id)
         organizer.toggleCollectionSelection(id: collection.id)
-        await organizer.deleteSelection(scope: .currentLocation)
+        await organizer.deleteSelection(scope: .currentLocation, removeRemote: false)
 
         let loadedDocument = try await localFavoriteLibraryStore.load()
         XCTAssertTrue(loadedDocument.collections.contains { $0.id == collection.id })
@@ -744,7 +744,7 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
 
         let target = FavoriteItemTarget(kind: .normalThread, threadID: "953")
         var document = try await localFavoriteLibraryStore.load()
-        document.addItem(try FavoriteItem(
+        document.upsertItem(try FavoriteItem(
             target: target,
             title: "远端删除失败收藏",
             remoteMapping: FavoriteRemoteMapping(yamiboFavoriteID: "remote-953"),
@@ -754,7 +754,7 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
         await organizer.reload()
 
         organizer.selection.toggleFavoriteSelection(id: target.id)
-        await organizer.deleteSelection(scope: .everywhere)
+        await organizer.deleteSelection(scope: .everywhere, removeRemote: true)
 
         let storedItem = try await localFavoriteLibraryStore.load().items.first { $0.target == target }
         let recordedTargetIDs = await recorder.recordedTargetIDs()
@@ -786,11 +786,11 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
             remoteMapping: FavoriteRemoteMapping(yamiboFavoriteID: ""),
             locations: [.category(document.defaultCategory.id)]
         )
-        document.addItem(item)
+        document.upsertItem(item)
         try await localFavoriteLibraryStore.save(document)
         await organizer.reload()
 
-        await organizer.deleteItem(item, scope: .everywhere)
+        await organizer.deleteItem(item, scope: .everywhere, removeRemote: true)
 
         let storedItem = try await localFavoriteLibraryStore.load().items.first { $0.target == target }
         XCTAssertNil(storedItem)
@@ -815,15 +815,263 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
             title: "纯本地收藏",
             locations: [.category(document.defaultCategory.id)]
         )
-        document.addItem(item)
+        document.upsertItem(item)
         try await localFavoriteLibraryStore.save(document)
         await organizer.reload()
 
-        await organizer.deleteItem(item, scope: .everywhere)
+        await organizer.deleteItem(item, scope: .everywhere, removeRemote: true)
 
         let storedItem = try await localFavoriteLibraryStore.load().items.first { $0.target == target }
         XCTAssertNil(storedItem)
         XCTAssertNil(organizer.errorMessage)
+    }
+
+    /// The favorites page's delete-everywhere must honor the SAME remembered
+    /// "also remove from Yamibo?" choice as every quick-action entry point —
+    /// a user who remembered "local only" on a detail page must never have
+    /// this page silently delete the website favorite anyway.
+    func testRequestDeleteEverywhereHonorsRememberedLocalOnlyChoice() async throws {
+        let suiteName = YamiboTestDefaults.suiteName(prefix: "local-favorites-request-delete-local-only")
+        _ = try YamiboTestDefaults.make(suiteName: suiteName)
+        let localFavoriteLibraryStore = FavoriteLibraryStore(
+            defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
+            key: "local-favorites"
+        )
+        let settingsStore = SettingsStore(
+            defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
+            key: "settings"
+        )
+        _ = try await settingsStore.update { settings in
+            settings.favorites.removeRemotePromptEnabled = false
+            settings.favorites.removeRemoteDefault = false
+        }
+        let recorder = FavoriteDeleteTestRecorder()
+        let organizer = try makeOrganizer(
+            libraryStore: localFavoriteLibraryStore,
+            settingsStore: settingsStore,
+            remoteFavoriteDeleteHandler: { items in
+                try await recorder.record(items)
+            }
+        )
+        await organizer.load()
+
+        let target = FavoriteItemTarget(kind: .normalThread, threadID: "9701")
+        var document = try await localFavoriteLibraryStore.load()
+        let item = try FavoriteItem(
+            target: target,
+            title: "记住仅本地的收藏",
+            remoteMapping: FavoriteRemoteMapping(yamiboFavoriteID: "remote-9701"),
+            locations: [.category(document.defaultCategory.id)]
+        )
+        document.upsertItem(item)
+        try await localFavoriteLibraryStore.save(document)
+        await organizer.reload()
+
+        await organizer.requestDeleteItem(item, scope: .everywhere)
+
+        let storedItem = try await localFavoriteLibraryStore.load().items.first { $0.target == target }
+        let recordedTargetIDs = await recorder.recordedTargetIDs()
+        XCTAssertNil(storedItem)
+        XCTAssertTrue(recordedTargetIDs.isEmpty)
+        XCTAssertNil(organizer.removeRemotePrompt)
+        XCTAssertNil(organizer.errorMessage)
+    }
+
+    func testRequestDeleteEverywhereHonorsRememberedRemoveRemoteChoice() async throws {
+        let suiteName = YamiboTestDefaults.suiteName(prefix: "local-favorites-request-delete-remote")
+        _ = try YamiboTestDefaults.make(suiteName: suiteName)
+        let localFavoriteLibraryStore = FavoriteLibraryStore(
+            defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
+            key: "local-favorites"
+        )
+        let settingsStore = SettingsStore(
+            defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
+            key: "settings"
+        )
+        _ = try await settingsStore.update { settings in
+            settings.favorites.removeRemotePromptEnabled = false
+            settings.favorites.removeRemoteDefault = true
+        }
+        let recorder = FavoriteDeleteTestRecorder()
+        let organizer = try makeOrganizer(
+            libraryStore: localFavoriteLibraryStore,
+            settingsStore: settingsStore,
+            remoteFavoriteDeleteHandler: { items in
+                try await recorder.record(items)
+            }
+        )
+        await organizer.load()
+
+        let target = FavoriteItemTarget(kind: .normalThread, threadID: "9702")
+        var document = try await localFavoriteLibraryStore.load()
+        let item = try FavoriteItem(
+            target: target,
+            title: "记住同删远端的收藏",
+            remoteMapping: FavoriteRemoteMapping(yamiboFavoriteID: "remote-9702"),
+            locations: [.category(document.defaultCategory.id)]
+        )
+        document.upsertItem(item)
+        try await localFavoriteLibraryStore.save(document)
+        await organizer.reload()
+
+        await organizer.requestDeleteItem(item, scope: .everywhere)
+
+        let storedItem = try await localFavoriteLibraryStore.load().items.first { $0.target == target }
+        let recordedTargetIDs = await recorder.recordedTargetIDs()
+        XCTAssertNil(storedItem)
+        XCTAssertEqual(recordedTargetIDs, [target.id])
+        XCTAssertNil(organizer.removeRemotePrompt)
+    }
+
+    func testRequestDeleteEverywherePromptsThenConfirmAppliesAndRemembers() async throws {
+        let suiteName = YamiboTestDefaults.suiteName(prefix: "local-favorites-request-delete-prompt")
+        _ = try YamiboTestDefaults.make(suiteName: suiteName)
+        let localFavoriteLibraryStore = FavoriteLibraryStore(
+            defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
+            key: "local-favorites"
+        )
+        let settingsStore = SettingsStore(
+            defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
+            key: "settings"
+        )
+        let recorder = FavoriteDeleteTestRecorder()
+        let organizer = try makeOrganizer(
+            libraryStore: localFavoriteLibraryStore,
+            settingsStore: settingsStore,
+            remoteFavoriteDeleteHandler: { items in
+                try await recorder.record(items)
+            }
+        )
+        await organizer.load()
+
+        let target = FavoriteItemTarget(kind: .normalThread, threadID: "9703")
+        var document = try await localFavoriteLibraryStore.load()
+        let item = try FavoriteItem(
+            target: target,
+            title: "需要询问的收藏",
+            remoteMapping: FavoriteRemoteMapping(yamiboFavoriteID: "remote-9703"),
+            locations: [.category(document.defaultCategory.id)]
+        )
+        document.upsertItem(item)
+        try await localFavoriteLibraryStore.save(document)
+        await organizer.reload()
+
+        await organizer.requestDeleteItem(item, scope: .everywhere)
+
+        // The prompt is the delete's remote-decision step: nothing may have
+        // been deleted anywhere until the user answers.
+        XCTAssertNotNil(organizer.removeRemotePrompt)
+        let itemBeforeConfirm = try await localFavoriteLibraryStore.load().items.first { $0.target == target }
+        let recordedBeforeConfirm = await recorder.recordedTargetIDs()
+        XCTAssertNotNil(itemBeforeConfirm)
+        XCTAssertTrue(recordedBeforeConfirm.isEmpty)
+
+        await organizer.confirmRemoveRemotePrompt(removeRemote: true, remember: true)
+
+        XCTAssertNil(organizer.removeRemotePrompt)
+        let storedItem = try await localFavoriteLibraryStore.load().items.first { $0.target == target }
+        let recordedTargetIDs = await recorder.recordedTargetIDs()
+        XCTAssertNil(storedItem)
+        XCTAssertEqual(recordedTargetIDs, [target.id])
+        let favorites = await settingsStore.load().favorites
+        XCTAssertFalse(favorites.removeRemotePromptEnabled)
+        XCTAssertTrue(favorites.removeRemoteDefault)
+    }
+
+    /// A favorite with no plausible Yamibo counterpart has nothing to ask
+    /// about — the prompt must not appear even when asking is enabled.
+    func testRequestDeleteEverywhereSkipsPromptWithoutRemoteCandidate() async throws {
+        let suiteName = YamiboTestDefaults.suiteName(prefix: "local-favorites-request-delete-no-candidate")
+        _ = try YamiboTestDefaults.make(suiteName: suiteName)
+        let localFavoriteLibraryStore = FavoriteLibraryStore(
+            defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
+            key: "local-favorites"
+        )
+        let recorder = FavoriteDeleteTestRecorder()
+        let organizer = try makeOrganizer(
+            libraryStore: localFavoriteLibraryStore,
+            remoteFavoriteDeleteHandler: { items in
+                try await recorder.record(items)
+            }
+        )
+        await organizer.load()
+
+        let target = FavoriteItemTarget(kind: .normalThread, threadID: "9704")
+        var document = try await localFavoriteLibraryStore.load()
+        let item = try FavoriteItem(
+            target: target,
+            title: "纯本地无映射收藏",
+            locations: [.category(document.defaultCategory.id)]
+        )
+        document.upsertItem(item)
+        try await localFavoriteLibraryStore.save(document)
+        await organizer.reload()
+
+        await organizer.requestDeleteItem(item, scope: .everywhere)
+
+        let storedItem = try await localFavoriteLibraryStore.load().items.first { $0.target == target }
+        let recordedTargetIDs = await recorder.recordedTargetIDs()
+        XCTAssertNil(organizer.removeRemotePrompt)
+        XCTAssertNil(storedItem)
+        XCTAssertTrue(recordedTargetIDs.isEmpty)
+    }
+
+    func testRequestDeleteSelectionPromptAppliesChoiceToWholeBatch() async throws {
+        let suiteName = YamiboTestDefaults.suiteName(prefix: "local-favorites-request-delete-selection")
+        _ = try YamiboTestDefaults.make(suiteName: suiteName)
+        let localFavoriteLibraryStore = FavoriteLibraryStore(
+            defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
+            key: "local-favorites"
+        )
+        let settingsStore = SettingsStore(
+            defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
+            key: "settings"
+        )
+        let recorder = FavoriteDeleteTestRecorder()
+        let organizer = try makeOrganizer(
+            libraryStore: localFavoriteLibraryStore,
+            settingsStore: settingsStore,
+            remoteFavoriteDeleteHandler: { items in
+                try await recorder.record(items)
+            }
+        )
+        await organizer.load()
+
+        let firstTarget = FavoriteItemTarget(kind: .normalThread, threadID: "9705")
+        let secondTarget = FavoriteItemTarget(kind: .normalThread, threadID: "9706")
+        var document = try await localFavoriteLibraryStore.load()
+        document.upsertItem(try FavoriteItem(
+            target: firstTarget,
+            title: "批量删除收藏一",
+            remoteMapping: FavoriteRemoteMapping(yamiboFavoriteID: "remote-9705"),
+            locations: [.category(document.defaultCategory.id)]
+        ))
+        document.upsertItem(try FavoriteItem(
+            target: secondTarget,
+            title: "批量删除收藏二",
+            remoteMapping: FavoriteRemoteMapping(yamiboFavoriteID: "remote-9706"),
+            locations: [.category(document.defaultCategory.id)]
+        ))
+        try await localFavoriteLibraryStore.save(document)
+        await organizer.reload()
+
+        organizer.selection.toggleFavoriteSelection(id: firstTarget.id)
+        organizer.selection.toggleFavoriteSelection(id: secondTarget.id)
+        await organizer.requestDeleteSelection(scope: .everywhere)
+
+        XCTAssertNotNil(organizer.removeRemotePrompt)
+
+        await organizer.confirmRemoveRemotePrompt(removeRemote: false, remember: false)
+
+        let loadedDocument = try await localFavoriteLibraryStore.load()
+        let recordedTargetIDs = await recorder.recordedTargetIDs()
+        XCTAssertNil(loadedDocument.items.first { $0.target == firstTarget })
+        XCTAssertNil(loadedDocument.items.first { $0.target == secondTarget })
+        XCTAssertTrue(recordedTargetIDs.isEmpty)
+        XCTAssertFalse(organizer.selection.isSelectionMode)
+        // A one-off answer without "remember" must leave the ask-me switch on.
+        let favorites = await settingsStore.load().favorites
+        XCTAssertTrue(favorites.removeRemotePromptEnabled)
     }
 
     /// Phase E gap (smart-comic-mode design doc, Phase E's "两个不构成缺陷、
@@ -877,8 +1125,8 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
             forumName: "中文百合漫画区",
             locations: [.category(document.defaultCategory.id)]
         )
-        document.addItem(firstItem)
-        document.addItem(secondItem)
+        document.upsertItem(firstItem)
+        document.upsertItem(secondItem)
         try await localFavoriteLibraryStore.save(document)
 
         let organizer = try makeOrganizer(
@@ -924,7 +1172,7 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
         let firstTarget = FavoriteItemTarget(kind: .normalThread, threadID: "910")
         let secondTarget = FavoriteItemTarget(kind: .normalThread, threadID: "911")
         var document = try await localFavoriteLibraryStore.load()
-        document.addItem(try FavoriteItem(
+        document.upsertItem(try FavoriteItem(
             target: firstTarget,
             title: "合集内主题",
             locations: [
@@ -932,7 +1180,7 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
                 .collection(categoryID: category.id, collectionID: firstCollection.id)
             ]
         ))
-        document.addItem(try FavoriteItem(
+        document.upsertItem(try FavoriteItem(
             target: secondTarget,
             title: "分类根主题",
             locations: [.category(category.id)]
@@ -994,7 +1242,7 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
         let collectionTarget = FavoriteItemTarget(kind: .normalThread, threadID: "920")
         let rootTarget = FavoriteItemTarget(kind: .normalThread, threadID: "921")
         var document = try await localFavoriteLibraryStore.load()
-        document.addItem(try FavoriteItem(
+        document.upsertItem(try FavoriteItem(
             target: collectionTarget,
             title: "合集内主题",
             locations: [
@@ -1002,7 +1250,7 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
                 .collection(categoryID: category.id, collectionID: collection.id)
             ]
         ))
-        document.addItem(try FavoriteItem(
+        document.upsertItem(try FavoriteItem(
             target: rootTarget,
             title: "分类根主题",
             locations: [.category(category.id)]
@@ -1079,8 +1327,8 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
             forumName: "中文百合漫画区",
             locations: [.category(document.defaultCategory.id)]
         )
-        document.addItem(firstItem)
-        document.addItem(secondItem)
+        document.upsertItem(firstItem)
+        document.upsertItem(secondItem)
         try await localFavoriteLibraryStore.save(document)
 
         let organizer = try makeOrganizer(
@@ -1163,14 +1411,14 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
         let firstTarget = FavoriteItemTarget(kind: .mangaThread, threadID: "970")
         let secondTarget = FavoriteItemTarget(kind: .mangaThread, threadID: "971")
         var document = try await localFavoriteLibraryStore.load()
-        document.addItem(try FavoriteItem(
+        document.upsertItem(try FavoriteItem(
             target: firstTarget,
             title: "第一话",
             forumID: "30",
             forumName: "中文百合漫画区",
             locations: [.category(document.defaultCategory.id)]
         ))
-        document.addItem(try FavoriteItem(
+        document.upsertItem(try FavoriteItem(
             target: secondTarget,
             title: "第二话",
             forumID: "30",
@@ -1246,8 +1494,8 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
             forumName: "中文百合漫画区",
             locations: [.category(document.defaultCategory.id)]
         )
-        document.addItem(firstItem)
-        document.addItem(secondItem)
+        document.upsertItem(firstItem)
+        document.upsertItem(secondItem)
         try await localFavoriteLibraryStore.save(document)
 
         let organizer = try makeOrganizer(
@@ -1260,7 +1508,7 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
         XCTAssertEqual(organizer.derived.cards.count, 2)
         let firstCard = try XCTUnwrap(organizer.derived.cards.first { $0.item.target == firstTarget })
 
-        await organizer.deleteItem(firstCard.item, scope: .everywhere)
+        await organizer.deleteItem(firstCard.item, scope: .everywhere, removeRemote: false)
         XCTAssertNil(organizer.errorMessage)
 
         // Still open, still scoped — now showing only the sibling member.
@@ -1304,11 +1552,11 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
         let firstTarget = FavoriteItemTarget(kind: .mangaThread, threadID: "4141")
         let secondTarget = FavoriteItemTarget(kind: .mangaThread, threadID: "4142")
         var document = try await localFavoriteLibraryStore.load()
-        document.addItem(try FavoriteItem(
+        document.upsertItem(try FavoriteItem(
             target: firstTarget, title: "第一话", forumID: "30", forumName: "中文百合漫画区",
             locations: [.category(document.defaultCategory.id)]
         ))
-        document.addItem(try FavoriteItem(
+        document.upsertItem(try FavoriteItem(
             target: secondTarget, title: "第二话", forumID: "30", forumName: "中文百合漫画区",
             locations: [.category(document.defaultCategory.id)]
         ))
@@ -1420,10 +1668,10 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
             forumName: "中文百合漫画区",
             locations: [.category(document.defaultCategory.id)]
         )
-        document.addItem(firstItem)
-        document.addItem(secondItem)
-        document.addItem(standaloneItem)
-        document.addItem(loneResolvedItem)
+        document.upsertItem(firstItem)
+        document.upsertItem(secondItem)
+        document.upsertItem(standaloneItem)
+        document.upsertItem(loneResolvedItem)
         try await localFavoriteLibraryStore.save(document)
 
         let organizer = try makeOrganizer(
@@ -1497,7 +1745,7 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
             forumName: "中文百合漫画区",
             locations: [.category(document.defaultCategory.id)]
         )
-        document.addItem(item)
+        document.upsertItem(item)
         try await localFavoriteLibraryStore.save(document)
 
         let organizer = try makeOrganizer(
@@ -1550,7 +1798,7 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
             forumName: "中文百合漫画区",
             locations: [.category(document.defaultCategory.id)]
         )
-        document.addItem(item)
+        document.upsertItem(item)
         try await localFavoriteLibraryStore.save(document)
 
         // No `mangaDirectoryStore` at all — this favorite's directory has
@@ -1633,8 +1881,8 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
             forumName: "中文百合漫画区",
             locations: [.category(document.defaultCategory.id)]
         )
-        document.addItem(firstItem)
-        document.addItem(secondItem)
+        document.upsertItem(firstItem)
+        document.upsertItem(secondItem)
         try await localFavoriteLibraryStore.save(document)
 
         let organizer = try makeOrganizer(
@@ -1714,15 +1962,15 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
         let secondTarget = FavoriteItemTarget(kind: .mangaThread, threadID: "4002")
         let loneTarget = FavoriteItemTarget(kind: .mangaThread, threadID: "4010")
         var document = try await localFavoriteLibraryStore.load()
-        document.addItem(try FavoriteItem(
+        document.upsertItem(try FavoriteItem(
             target: firstTarget, title: "第一话", forumID: "30", forumName: "中文百合漫画区",
             locations: [.category(document.defaultCategory.id)]
         ))
-        document.addItem(try FavoriteItem(
+        document.upsertItem(try FavoriteItem(
             target: secondTarget, title: "第二话", forumID: "30", forumName: "中文百合漫画区",
             locations: [.category(document.defaultCategory.id)]
         ))
-        document.addItem(try FavoriteItem(
+        document.upsertItem(try FavoriteItem(
             target: loneTarget, title: "第一话", forumID: "30", forumName: "中文百合漫画区",
             locations: [.category(document.defaultCategory.id)]
         ))
@@ -1769,11 +2017,11 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
         let secondTarget = FavoriteItemTarget(kind: .mangaThread, threadID: "4102")
         var document = try await localFavoriteLibraryStore.load()
         let defaultCategoryID = document.defaultCategory.id
-        document.addItem(try FavoriteItem(
+        document.upsertItem(try FavoriteItem(
             target: firstTarget, title: "第一话", forumID: "30", forumName: "中文百合漫画区",
             locations: [.category(defaultCategoryID)]
         ))
-        document.addItem(try FavoriteItem(
+        document.upsertItem(try FavoriteItem(
             target: secondTarget, title: "第二话", forumID: "30", forumName: "中文百合漫画区",
             locations: [.category(defaultCategoryID)]
         ))
@@ -1848,14 +2096,14 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
         let partialCollection = document.createCollection(categoryID: defaultCategoryID, name: "部分归属合集", color: .blue)
         // Neither archived member carries this second collection at all.
         let emptyCollection = document.createCollection(categoryID: defaultCategoryID, name: "空合集", color: .gray)
-        document.addItem(try FavoriteItem(
+        document.upsertItem(try FavoriteItem(
             target: firstTarget, title: "第一话", forumID: "30", forumName: "中文百合漫画区",
             locations: [
                 .category(defaultCategoryID),
                 .collection(categoryID: defaultCategoryID, collectionID: partialCollection.id),
             ]
         ))
-        document.addItem(try FavoriteItem(
+        document.upsertItem(try FavoriteItem(
             target: secondTarget, title: "第二话", forumID: "30", forumName: "中文百合漫画区",
             locations: [.category(defaultCategoryID)]
         ))
@@ -1915,11 +2163,11 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
         let firstTarget = FavoriteItemTarget(kind: .mangaThread, threadID: "4201")
         let secondTarget = FavoriteItemTarget(kind: .mangaThread, threadID: "4202")
         var document = try await localFavoriteLibraryStore.load()
-        document.addItem(try FavoriteItem(
+        document.upsertItem(try FavoriteItem(
             target: firstTarget, title: "第一话", forumID: "30", forumName: "中文百合漫画区",
             locations: [.category(document.defaultCategory.id)]
         ))
-        document.addItem(try FavoriteItem(
+        document.upsertItem(try FavoriteItem(
             target: secondTarget, title: "第二话", forumID: "30", forumName: "中文百合漫画区",
             locations: [.category(document.defaultCategory.id)]
         ))
@@ -1965,11 +2213,11 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
         let firstTarget = FavoriteItemTarget(kind: .mangaThread, threadID: "4301")
         let secondTarget = FavoriteItemTarget(kind: .mangaThread, threadID: "4302")
         var document = try await localFavoriteLibraryStore.load()
-        document.addItem(try FavoriteItem(
+        document.upsertItem(try FavoriteItem(
             target: firstTarget, title: "第一话", forumID: "30", forumName: "中文百合漫画区",
             locations: [.category(document.defaultCategory.id)]
         ))
-        document.addItem(try FavoriteItem(
+        document.upsertItem(try FavoriteItem(
             target: secondTarget, title: "第二话", forumID: "30", forumName: "中文百合漫画区",
             locations: [.category(document.defaultCategory.id)]
         ))
@@ -2018,11 +2266,11 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
         let firstTarget = FavoriteItemTarget(kind: .mangaThread, threadID: "4401")
         let secondTarget = FavoriteItemTarget(kind: .mangaThread, threadID: "4402")
         var document = try await localFavoriteLibraryStore.load()
-        document.addItem(try FavoriteItem(
+        document.upsertItem(try FavoriteItem(
             target: firstTarget, title: "第一话", forumID: "30", forumName: "中文百合漫画区",
             locations: [.category(document.defaultCategory.id)]
         ))
-        document.addItem(try FavoriteItem(
+        document.upsertItem(try FavoriteItem(
             target: secondTarget, title: "第二话", forumID: "30", forumName: "中文百合漫画区",
             locations: [.category(document.defaultCategory.id)]
         ))
@@ -2072,15 +2320,15 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
         let secondTarget = FavoriteItemTarget(kind: .mangaThread, threadID: "4502")
         let normalTarget = FavoriteItemTarget(kind: .normalThread, threadID: "4510")
         var document = try await localFavoriteLibraryStore.load()
-        document.addItem(try FavoriteItem(
+        document.upsertItem(try FavoriteItem(
             target: firstTarget, title: "第一话", forumID: "30", forumName: "中文百合漫画区",
             locations: [.category(document.defaultCategory.id)]
         ))
-        document.addItem(try FavoriteItem(
+        document.upsertItem(try FavoriteItem(
             target: secondTarget, title: "第二话", forumID: "30", forumName: "中文百合漫画区",
             locations: [.category(document.defaultCategory.id)]
         ))
-        document.addItem(try FavoriteItem(
+        document.upsertItem(try FavoriteItem(
             target: normalTarget, title: "普通收藏",
             locations: [.category(document.defaultCategory.id)]
         ))
@@ -2094,7 +2342,7 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
         organizer.selection.toggleFavoriteSelection(id: normalTarget.id)
         organizer.transientMessage = nil
 
-        await organizer.deleteSelection()
+        await organizer.deleteSelection(scope: .everywhere, removeRemote: false)
 
         let loadedDocument = try await localFavoriteLibraryStore.load()
         XCTAssertNil(loadedDocument.items.first { $0.target == normalTarget })
@@ -2129,11 +2377,11 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
         let smartTarget = FavoriteItemTarget(kind: .mangaThread, threadID: "4601")
         let normalTarget = FavoriteItemTarget(kind: .normalThread, threadID: "4610")
         var document = try await localFavoriteLibraryStore.load()
-        document.addItem(try FavoriteItem(
+        document.upsertItem(try FavoriteItem(
             target: smartTarget, title: "第一话", forumID: "30", forumName: "中文百合漫画区",
             locations: [.category(document.defaultCategory.id)]
         ))
-        document.addItem(try FavoriteItem(
+        document.upsertItem(try FavoriteItem(
             target: normalTarget, title: "普通收藏",
             locations: [.category(document.defaultCategory.id)]
         ))
@@ -2186,11 +2434,11 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
         let firstTarget = FavoriteItemTarget(kind: .mangaThread, threadID: "4901")
         let secondTarget = FavoriteItemTarget(kind: .mangaThread, threadID: "4902")
         var document = try await localFavoriteLibraryStore.load()
-        document.addItem(try FavoriteItem(
+        document.upsertItem(try FavoriteItem(
             target: firstTarget, title: "第一话", forumID: "30", forumName: "中文百合漫画区",
             locations: [.category(document.defaultCategory.id)]
         ))
-        document.addItem(try FavoriteItem(
+        document.upsertItem(try FavoriteItem(
             target: secondTarget, title: "第二话", forumID: "30", forumName: "中文百合漫画区",
             locations: [.category(document.defaultCategory.id)]
         ))
@@ -2209,7 +2457,7 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
         XCTAssertTrue(organizer.derived.cards.isEmpty)
         XCTAssertTrue(organizer.selection.selectedFavoriteIDs.contains(mergedCard.id))
 
-        await organizer.deleteSelection()
+        await organizer.deleteSelection(scope: .everywhere, removeRemote: false)
 
         let loadedDocument = try await localFavoriteLibraryStore.load()
         // Both members survive — the smart card was skipped, not
@@ -2249,11 +2497,11 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
         let secondTarget = FavoriteItemTarget(kind: .mangaThread, threadID: "4912")
         var document = try await localFavoriteLibraryStore.load()
         let defaultCategoryID = document.defaultCategory.id
-        document.addItem(try FavoriteItem(
+        document.upsertItem(try FavoriteItem(
             target: firstTarget, title: "第一话", forumID: "30", forumName: "中文百合漫画区",
             locations: [.category(defaultCategoryID)]
         ))
-        document.addItem(try FavoriteItem(
+        document.upsertItem(try FavoriteItem(
             target: secondTarget, title: "第二话", forumID: "30", forumName: "中文百合漫画区",
             locations: [.category(defaultCategoryID)]
         ))
@@ -2316,11 +2564,11 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
         let firstTarget = FavoriteItemTarget(kind: .mangaThread, threadID: "4601")
         let secondTarget = FavoriteItemTarget(kind: .mangaThread, threadID: "4602")
         var document = try await localFavoriteLibraryStore.load()
-        document.addItem(try FavoriteItem(
+        document.upsertItem(try FavoriteItem(
             target: firstTarget, title: "第一话", forumID: "30", forumName: "中文百合漫画区",
             locations: [.category(document.defaultCategory.id)], tagIDs: [tagA.id]
         ))
-        document.addItem(try FavoriteItem(
+        document.upsertItem(try FavoriteItem(
             target: secondTarget, title: "第二话", forumID: "30", forumName: "中文百合漫画区",
             locations: [.category(document.defaultCategory.id)], tagIDs: [tagB.id]
         ))
@@ -2358,7 +2606,7 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
         let firstTarget = FavoriteItemTarget(kind: .mangaThread, threadID: "4701")
         let secondTarget = FavoriteItemTarget(kind: .mangaThread, threadID: "4702")
         var document = try await localFavoriteLibraryStore.load()
-        document.addItem(try FavoriteItem(
+        document.upsertItem(try FavoriteItem(
             target: firstTarget,
             title: "【作者】未解析标签合并作品 第1话",
             forumID: "30",
@@ -2366,7 +2614,7 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
             locations: [.category(document.defaultCategory.id)],
             tagIDs: [tagA.id]
         ))
-        document.addItem(try FavoriteItem(
+        document.upsertItem(try FavoriteItem(
             target: secondTarget,
             title: "【作者】未解析标签合并作品 第2话",
             forumID: "30",
@@ -2422,15 +2670,15 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
         let normalTarget = FavoriteItemTarget(kind: .normalThread, threadID: "4810")
         var document = try await localFavoriteLibraryStore.load()
         let defaultCategoryID = document.defaultCategory.id
-        document.addItem(try FavoriteItem(
+        document.upsertItem(try FavoriteItem(
             target: firstTarget, title: "第一话", forumID: "30", forumName: "中文百合漫画区",
             locations: [.category(defaultCategoryID)]
         ))
-        document.addItem(try FavoriteItem(
+        document.upsertItem(try FavoriteItem(
             target: secondTarget, title: "第二话", forumID: "30", forumName: "中文百合漫画区",
             locations: [.category(defaultCategoryID)]
         ))
-        document.addItem(try FavoriteItem(
+        document.upsertItem(try FavoriteItem(
             target: normalTarget, title: "普通收藏",
             locations: [.category(defaultCategoryID)]
         ))
@@ -2488,7 +2736,7 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
             title: "主题",
             locations: [.category(category.id)]
         )
-        document.addItem(item)
+        document.upsertItem(item)
         try await localFavoriteLibraryStore.save(document)
         await organizer.reload()
         XCTAssertEqual(organizer.derived.categoryEntryCounts[category.id], 1)
@@ -2674,7 +2922,7 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
             title: "普通主题",
             locations: [.category(document.defaultCategory.id)]
         )
-        document.addItem(item)
+        document.upsertItem(item)
         try await localFavoriteLibraryStore.save(document)
         try await contentCoverStore.setAutomaticCover(
             coverURL,
@@ -2704,7 +2952,7 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
         let target = FavoriteItemTarget(kind: .novelThread, threadID: "905")
         let resolvedCoverURL = try XCTUnwrap(URL(string: "https://img.example.com/resolved-novel-cover.jpg"))
         var document = FavoriteLibraryDocument()
-        document.addItem(try FavoriteItem(
+        document.upsertItem(try FavoriteItem(
             target: target,
             title: "小说主题",
             locations: [.category(document.defaultCategory.id)]
@@ -2744,7 +2992,7 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
             title: "长按封面主题",
             locations: [.category(document.defaultCategory.id)]
         )
-        document.addItem(item)
+        document.upsertItem(item)
         try await localFavoriteLibraryStore.save(document)
         try await contentCoverStore.setAutomaticCover(coverURL, for: ContentCoverKey(targetType: .thread, targetID: "906"))
 
@@ -2809,8 +3057,8 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
             forumName: "中文百合漫画区",
             locations: [.category(document.defaultCategory.id)]
         )
-        document.addItem(firstItem)
-        document.addItem(try FavoriteItem(
+        document.upsertItem(firstItem)
+        document.upsertItem(try FavoriteItem(
             target: FavoriteItemTarget(kind: .mangaThread, threadID: "981"),
             title: "第二话",
             forumID: "30",
@@ -2891,12 +3139,12 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
         let firstTarget = FavoriteItemTarget(kind: .normalThread, threadID: "950")
         let secondTarget = FavoriteItemTarget(kind: .normalThread, threadID: "951")
         let thirdTarget = FavoriteItemTarget(kind: .normalThread, threadID: "952")
-        document.addItem(try FavoriteItem(
+        document.upsertItem(try FavoriteItem(
             target: firstTarget,
             title: "命中默认分类",
             locations: [.category(document.defaultCategory.id)]
         ))
-        document.addItem(try FavoriteItem(
+        document.upsertItem(try FavoriteItem(
             target: secondTarget,
             title: "其他默认分类",
             locations: [
@@ -2904,7 +3152,7 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
                 .collection(categoryID: document.defaultCategory.id, collectionID: matchingCollection.id)
             ]
         ))
-        document.addItem(try FavoriteItem(
+        document.upsertItem(try FavoriteItem(
             target: thirdTarget,
             title: "命中第二分类",
             locations: [.category(secondCategory.id)]

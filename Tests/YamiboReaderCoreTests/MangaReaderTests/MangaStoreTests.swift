@@ -164,7 +164,7 @@ struct MangaReaderTestsMangaStores {
             title: "旧书名",
             locations: [.category(favorites.defaultCategory.id)]
         )
-        favorites.addItem(favoriteItem)
+        favorites.upsertItem(favoriteItem)
         try await favoriteStore.save(favorites)
         _ = try await progressStore.saveMangaTitle(
             cleanBookName: "旧书名",

@@ -21,6 +21,7 @@ struct ForumThreadReaderBodyView: View {
     let retry: () -> Void
     let goToPage: (Int) -> Void
     let toggleFavorite: () -> Void
+    let presentFavoriteLocationPicker: () -> Void
     let makeImageBrowserRequest: (String, URL, String?, URL) -> ForumThreadImageBrowserRequest?
     let imageBrowserCoverActionsProvider: ImageBrowserCoverActionsProvider
     let loadRatingResults: (String) async throws -> ForumThreadRatingResultsPage
@@ -177,7 +178,8 @@ struct ForumThreadReaderBodyView: View {
                     onReply: {
                         onURLTap(YamiboRoute.threadReply(tid: page.thread.tid, page: currentPage).url)
                     },
-                    onFavorite: toggleFavorite
+                    onFavorite: toggleFavorite,
+                    onFavoriteLongPress: presentFavoriteLocationPicker
                 )
             }
         }

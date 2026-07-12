@@ -10,7 +10,7 @@ import Testing
     document.reorderCategories(orderedIDs: [second.id, first.id])
     let target = FavoriteItemTarget(kind: .normalThread, threadID: "620")
     let item = try FavoriteItem(target: target, title: "主题", locations: [.category(second.id)])
-    document.addItem(item)
+    document.upsertItem(item)
 
     document.deleteCategory(id: second.id)
 
@@ -35,7 +35,7 @@ import Testing
         title: "主题",
         locations: [.collection(categoryID: categoryID, collectionID: first.id)]
     )
-    document.addItem(item)
+    document.upsertItem(item)
 
     document.dissolveCollection(id: first.id)
 
@@ -52,7 +52,7 @@ import Testing
     let secondCollection = document.createCollection(categoryID: categoryID, name: "合集二")
     let target = FavoriteItemTarget(kind: .normalThread, threadID: "622")
     let item = try FavoriteItem(target: target, title: "主题", locations: [.category(categoryID)])
-    document.addItem(item)
+    document.upsertItem(item)
 
     document.addLocation(.collection(categoryID: categoryID, collectionID: firstCollection.id), to: target)
     document.addLocation(.collection(categoryID: categoryID, collectionID: secondCollection.id), to: target)
@@ -71,7 +71,7 @@ import Testing
     var document = FavoriteLibraryDocument()
     let target = FavoriteItemTarget(kind: .normalThread, threadID: "623")
     let item = try FavoriteItem(target: target, title: "主题", locations: [.category(document.defaultCategory.id)])
-    document.addItem(item)
+    document.upsertItem(item)
     let tag = document.createTag(name: "标签", color: .green, date: Date(timeIntervalSince1970: 1))
 
     document.assignTag(id: tag.id, to: target)

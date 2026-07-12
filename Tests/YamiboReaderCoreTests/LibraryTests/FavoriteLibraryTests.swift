@@ -87,7 +87,7 @@ import Testing
         locations: [.category(category.id)],
         tagIDs: [tag.id, tag.id]
     )
-    document.addItem(item)
+    document.upsertItem(item)
 
     try await store.save(document)
 
@@ -110,7 +110,7 @@ import Testing
         remoteMapping: FavoriteRemoteMapping(yamiboFavoriteID: "remote-324", yamiboRemoteOrder: 5),
         locations: [.category(document.defaultCategory.id)]
     )
-    document.addItem(item)
+    document.upsertItem(item)
 
     let date = Date(timeIntervalSince1970: 200)
     document.updateRemoteMapping(for: target, yamiboFavoriteID: nil, yamiboRemoteOrder: 7, date: date)
@@ -163,7 +163,7 @@ import Testing
         ],
         tagIDs: [tag.id]
     )
-    document.addItem(item)
+    document.upsertItem(item)
 
     try await store.save(document)
 
@@ -232,7 +232,7 @@ import Testing
             title: "原子写入",
             locations: [.category(document.defaultCategory.id)]
         )
-        document.addItem(item)
+        document.upsertItem(item)
         return item
     }
 
@@ -253,7 +253,7 @@ import Testing
             title: "既有收藏",
             locations: [.category(document.defaultCategory.id)]
         )
-        document.addItem(item)
+        document.upsertItem(item)
     }
 
     // The caller's error must come back unchanged (not wrapped in
@@ -287,7 +287,7 @@ import Testing
                         title: "并发收藏 \(threadID)",
                         locations: [.category(document.defaultCategory.id)]
                     )
-                    document.addItem(item)
+                    document.upsertItem(item)
                 }
             }
         }

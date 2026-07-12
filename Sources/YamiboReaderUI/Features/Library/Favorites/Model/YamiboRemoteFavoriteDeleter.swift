@@ -16,13 +16,7 @@ struct YamiboRemoteFavoriteDeleter {
             try await overrideHandler(items)
             return
         }
-        let remoteItems = items.filter { item in
-            if let remoteFavoriteID = item.remoteMapping?.yamiboFavoriteID?.trimmingCharacters(in: .whitespacesAndNewlines),
-               !remoteFavoriteID.isEmpty {
-                return true
-            }
-            return item.remoteMapping != nil && item.target.threadID != nil
-        }
+        let remoteItems = items.filter(\.hasYamiboRemoteCandidate)
         guard !remoteItems.isEmpty else { return }
         let repository = await makeFavoriteRepository()
         for item in remoteItems {

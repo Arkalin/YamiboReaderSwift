@@ -156,7 +156,7 @@ final class FavoriteRemoteSyncSessionTests: XCTestCase {
             forumName: "漫画区46",
             locations: [.category(document.defaultCategory.id)]
         )
-        document.addItem(existingSibling)
+        document.upsertItem(existingSibling)
         let targetCategory = document.createCategory(name: "远端")
         try await libraryStore.save(document)
 

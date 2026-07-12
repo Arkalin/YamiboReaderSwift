@@ -37,6 +37,7 @@ struct ForumThreadReaderView: View {
             retry: model.retry,
             goToPage: goToPage,
             toggleFavorite: toggleFavorite,
+            presentFavoriteLocationPicker: presentFavoriteLocationPicker,
             makeImageBrowserRequest: model.imageBrowserRequest,
             imageBrowserCoverActionsProvider: model.imageBrowserCoverActionsProvider,
             loadRatingResults: model.loadRatingResults,
@@ -84,6 +85,15 @@ struct ForumThreadReaderView: View {
                 Task { await model.confirmFavoriteRemoval(favorite, removeRemote: removeRemote, remember: remember) }
             }
         )
+        .sheet(item: Bindable(model).favoriteLocationPickerContext) { context in
+            FavoriteLocationPickerSheet(
+                context: context,
+                onCancel: { model.favoriteLocationPickerContext = nil },
+                onConfirm: { locations in
+                    Task { await model.confirmFavoriteLocationSelection(locations) }
+                }
+            )
+        }
         .task {
             await model.load()
         }
@@ -108,6 +118,12 @@ struct ForumThreadReaderView: View {
     private func toggleFavorite() {
         Task {
             await model.toggleFavorite()
+        }
+    }
+
+    private func presentFavoriteLocationPicker() {
+        Task {
+            await model.presentFavoriteLocationPicker()
         }
     }
 
