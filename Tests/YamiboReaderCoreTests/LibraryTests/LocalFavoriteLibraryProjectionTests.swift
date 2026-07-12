@@ -260,14 +260,20 @@ import Testing
 
     #expect(LocalFavoriteLibraryProjection.supportedSortOrders == [.organization, .contentUpdatedAt, .yamiboRemoteOrder, .displayTitle, .sourceGroup, .lastReadAt])
     #expect(LocalFavoriteLibraryProjection.cards(in: document, query: LocalFavoriteLibraryQuery(sortOrder: .organization)).map(\.id).prefix(2) == [items.novel.id, items.normal.id])
-    #expect(LocalFavoriteLibraryProjection.cards(in: document, query: LocalFavoriteLibraryQuery(sortOrder: .contentUpdatedAt)).map(\.id).prefix(3) == [items.normal.id, items.novel.id, items.manga.id])
+    // .contentUpdatedAt's default (ascending/not-descending) direction is
+    // newest-first — see the `compareDates` doc comment — so 300/200/100
+    // orders as manga/novel/normal, not the calendar-ascending 100/200/300.
+    #expect(LocalFavoriteLibraryProjection.cards(in: document, query: LocalFavoriteLibraryQuery(sortOrder: .contentUpdatedAt)).map(\.id).prefix(3) == [items.manga.id, items.novel.id, items.normal.id])
     #expect(LocalFavoriteLibraryProjection.cards(in: document, query: LocalFavoriteLibraryQuery(sortOrder: .yamiboRemoteOrder)).map(\.id).prefix(2) == [items.novel.id, items.normal.id])
     #expect(LocalFavoriteLibraryProjection.cards(in: document, query: LocalFavoriteLibraryQuery(sortOrder: .displayTitle, sortsDescending: true)).map(\.id).first == items.novel.id)
-    #expect(LocalFavoriteLibraryProjection.cards(in: document, query: LocalFavoriteLibraryQuery(sortOrder: .lastReadAt), readingProgress: progress).map(\.id).prefix(2) == [items.novel.id, items.normal.id])
+    // Same inverted direction for .lastReadAt: default (not descending) is
+    // newest-first, so normal@30 sorts ahead of novel@20.
+    #expect(LocalFavoriteLibraryProjection.cards(in: document, query: LocalFavoriteLibraryQuery(sortOrder: .lastReadAt), readingProgress: progress).map(\.id).prefix(2) == [items.normal.id, items.novel.id])
     // Undated items (manga/unknown, no progress record) stay last even in
-    // descending order; the two read items keep the correct most-recent-first
-    // relative order (normal@30 before novel@20) at the front.
-    #expect(LocalFavoriteLibraryProjection.cards(in: document, query: LocalFavoriteLibraryQuery(sortOrder: .lastReadAt, sortsDescending: true), readingProgress: progress).map(\.id).prefix(2) == [items.normal.id, items.novel.id])
+    // descending order; the two read items keep the correct oldest-first
+    // relative order (novel@20 before normal@30) at the front, since
+    // descending now means oldest-first for this recency key.
+    #expect(LocalFavoriteLibraryProjection.cards(in: document, query: LocalFavoriteLibraryQuery(sortOrder: .lastReadAt, sortsDescending: true), readingProgress: progress).map(\.id).prefix(2) == [items.novel.id, items.normal.id])
 }
 
 @Test func localFavoriteProjectionBuildsCardMetadataFromReadingProgressWithoutMutatingItems() throws {
@@ -775,7 +781,10 @@ import Testing
     let (document, items, collection) = try makeMixedEntryDocument()
     let cards = LocalFavoriteLibraryProjection.cards(in: document, query: LocalFavoriteLibraryQuery(sortOrder: .contentUpdatedAt))
 
-    // Collection's proxy update time sits strictly between the two cards'.
+    // Collection's proxy update time (150) sits strictly between the two
+    // cards' (100 and 200); default (not descending) direction is
+    // newest-first, so second(200) sorts ahead of the collection ahead of
+    // first(100).
     let entries = LocalFavoriteLibraryProjection.mixedEntries(
         cards: cards,
         collections: [collection],
@@ -784,7 +793,7 @@ import Testing
         descending: false
     )
 
-    #expect(entries.map(\.id) == ["item-\(items.first.id)", "collection-\(collection.id)", "item-\(items.second.id)"])
+    #expect(entries.map(\.id) == ["item-\(items.second.id)", "collection-\(collection.id)", "item-\(items.first.id)"])
 }
 
 @Test func localFavoriteMixedEntriesUsesLatestMemberReadAsCollectionProxyForLastReadAtSort() throws {
@@ -814,7 +823,9 @@ import Testing
     )
 
     // Collection's proxy read time (150) sits strictly between the two
-    // cards' recentReadingAt (50 and 250).
+    // cards' recentReadingAt (50 and 250); default (not descending)
+    // direction is newest-first, so second(250) sorts ahead of the
+    // collection ahead of first(50).
     let entries = LocalFavoriteLibraryProjection.mixedEntries(
         cards: cards,
         collections: [collection],
@@ -823,7 +834,7 @@ import Testing
         descending: false
     )
 
-    #expect(entries.map(\.id) == ["item-\(items.first.id)", "collection-\(collection.id)", "item-\(items.second.id)"])
+    #expect(entries.map(\.id) == ["item-\(items.second.id)", "collection-\(collection.id)", "item-\(items.first.id)"])
 }
 
 @Test func localFavoriteMixedEntriesPutsNeverReadEntriesLastRegardlessOfSortDirection() throws {
@@ -855,9 +866,11 @@ import Testing
     )
 
     // The never-read collection and never-read card stay behind the card
-    // that was actually read even in descending ("most recently read
-    // first") order — switching direction no longer fast-forwards undated
-    // entries to the top ahead of real read history.
+    // that was actually read even in descending (oldest-first, per the
+    // swapped direction for this recency key) order — switching direction
+    // no longer fast-forwards undated entries to the top ahead of real
+    // read history. Only one entry has a real date here, so the
+    // ascending/descending swap itself doesn't change this assertion.
     #expect(entries.map(\.id) == ["item-\(items.first.id)", "collection-\(collection.id)", "item-\(items.second.id)"])
 }
 
