@@ -52,7 +52,7 @@ final class YamiboImageDataPipeline: YamiboOrdinaryImageCacheClearing, @unchecke
         var configuration = ImagePipeline.Configuration(dataLoader: fallbackLoader)
         configuration.dataCache = dataCache
         configuration.dataCachePolicy = .storeOriginalData
-        configuration.isResumableDataEnabled = false
+        configuration.isResumableDataEnabled = true
         self.pipeline = ImagePipeline(
             configuration: configuration,
             delegate: YamiboImageDataPipelineDelegate()
