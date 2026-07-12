@@ -98,7 +98,11 @@ final class FavoriteUpdateMonitorTests: XCTestCase {
         let monitor = try makeUpdateMonitor(
             updateStore: favoriteUpdateStore,
             libraryStore: localFavoriteLibraryStore,
-            pageFetcher: { _ in throw YamiboError.offline }
+            // A non-offline failure (e.g. a parse error) is a genuine
+            // per-target failure, unlike `YamiboError.offline` — see
+            // `testUpdateCheckTreatsOfflineFetchFailureAsRunLevelSkipNotTargetFailure`
+            // below for that distinct offline-specific contract.
+            pageFetcher: { _ in throw YamiboError.parsingFailed(context: "test") }
         )
         await monitor.load()
 
@@ -107,6 +111,62 @@ final class FavoriteUpdateMonitorTests: XCTestCase {
 
         XCTAssertEqual(monitor.snapshot?.failedCount, 1)
         XCTAssertEqual(monitor.snapshot?.skippedCount, 0)
+    }
+
+    /// A network-unreachable fetch failure must not count toward any
+    /// target's circuit-breaker `consecutiveFailures`, and must abort the
+    /// rest of the run immediately instead of grinding through every
+    /// remaining candidate the same way — both pinned here across two
+    /// favorites, only the first of which the fetcher is ever asked for.
+    func testUpdateCheckTreatsOfflineFetchFailureAsRunLevelSkipNotTargetFailure() async throws {
+        let suiteName = YamiboTestDefaults.suiteName(prefix: "local-favorites-updates-offline")
+        _ = try YamiboTestDefaults.make(suiteName: suiteName)
+        let localFavoriteLibraryStore = FavoriteLibraryStore(
+            defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
+            key: "local-favorites"
+        )
+        let favoriteUpdateStore = FavoriteUpdateStore(
+            defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
+            key: "favorite-updates"
+        )
+        var document = FavoriteLibraryDocument()
+        let category = document.createCategory(name: "离线检测")
+        document.upsertItem(try FavoriteItem(
+            target: FavoriteItemTarget(kind: .normalThread, threadID: "970"),
+            title: "离线主题一",
+            sourceGroup: .forumBoard(id: "52", label: "测试板块"),
+            locations: [.category(category.id)]
+        ))
+        document.upsertItem(try FavoriteItem(
+            target: FavoriteItemTarget(kind: .normalThread, threadID: "971"),
+            title: "离线主题二",
+            sourceGroup: .forumBoard(id: "52", label: "测试板块"),
+            locations: [.category(category.id)]
+        ))
+        try await localFavoriteLibraryStore.save(document)
+
+        var fetchedThreadIDs: [String] = []
+        let monitor = try makeUpdateMonitor(
+            updateStore: favoriteUpdateStore,
+            libraryStore: localFavoriteLibraryStore,
+            pageFetcher: { item in
+                let threadID = try XCTUnwrap(item.target.threadID)
+                fetchedThreadIDs.append(threadID)
+                throw YamiboError.offline
+            }
+        )
+        await monitor.load()
+
+        _ = await monitor.startCheck()
+        try await waitForStatus(.failed, in: monitor)
+
+        XCTAssertEqual(fetchedThreadIDs.count, 1)
+        XCTAssertEqual(monitor.snapshot?.failedCount, 0)
+        XCTAssertEqual(monitor.snapshot?.errorMessage, YamiboError.offline.localizedDescription)
+
+        let state = await favoriteUpdateStore.loadState()
+        XCTAssertEqual(state.trackedTargets.count, 2)
+        XCTAssertTrue(state.trackedTargets.allSatisfy { $0.consecutiveFailures == 0 && $0.lastCheckedAt == nil })
     }
 
     /// Regression guard for the `.mangaTitle` dead-case cleanup. Two facts
