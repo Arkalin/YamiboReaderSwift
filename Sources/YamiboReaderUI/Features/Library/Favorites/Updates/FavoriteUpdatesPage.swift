@@ -1,7 +1,4 @@
 import SwiftUI
-#if canImport(UIKit)
-import UIKit
-#endif
 import YamiboReaderCore
 
 /// Dedicated favorite-updates page behind the favorites toolbar bell:
@@ -13,16 +10,10 @@ struct FavoriteUpdatesPage: View {
     let isEventVisible: (FavoriteUpdateEvent) -> Bool
     let onOpen: (FavoriteUpdateEvent) async -> Void
 
-    @State private var selectedInterval: FavoriteUpdateCheckInterval = .off
-    @State private var notificationsEnabled = false
-    @State private var notificationsBlockedBySystem = false
-    @State private var showsNotificationDeniedAlert = false
-
     var body: some View {
         List {
             statusSection
-            intervalSection
-            notificationSection
+            FavoriteUpdateSettingsSection(updateMonitor: updateMonitor)
             eventsSection
         }
         .navigationTitle(L10n.string("favorites.updates.title"))
@@ -36,26 +27,6 @@ struct FavoriteUpdatesPage: View {
                 }
                 .accessibilityLabel(L10n.string("favorites.updates.filters"))
             }
-        }
-        .task {
-            selectedInterval = await updateMonitor.configuredInterval() ?? .off
-            notificationsEnabled = await updateMonitor.notificationsEnabled()
-            notificationsBlockedBySystem = await updateMonitor.notificationsBlockedBySystem()
-        }
-        .alert(
-            L10n.string("favorites.updates.notifications_denied_title"),
-            isPresented: $showsNotificationDeniedAlert
-        ) {
-            #if canImport(UIKit)
-            Button(L10n.string("favorites.updates.notifications_open_settings")) {
-                if let url = URL(string: UIApplication.openSettingsURLString) {
-                    UIApplication.shared.open(url)
-                }
-            }
-            #endif
-            Button(L10n.string("common.cancel"), role: .cancel) {}
-        } message: {
-            Text(L10n.string("favorites.updates.notifications_denied_message"))
         }
     }
 
@@ -95,53 +66,6 @@ struct FavoriteUpdatesPage: View {
                 }
             }
         }
-    }
-
-    private var intervalSection: some View {
-        Section {
-            Picker(L10n.string("favorites.updates.interval"), selection: $selectedInterval) {
-                ForEach(FavoriteUpdateCheckInterval.allCases) { interval in
-                    Text(interval.title)
-                        .tag(interval)
-                }
-            }
-            .onChange(of: selectedInterval) { _, newValue in
-                Task { await updateMonitor.setConfiguredInterval(newValue) }
-            }
-        } footer: {
-            Text(L10n.string("favorites.updates.interval_footer"))
-        }
-    }
-
-    private var notificationSection: some View {
-        Section {
-            Toggle(L10n.string("favorites.updates.notifications"), isOn: notificationsBinding)
-        } footer: {
-            if notificationsBlockedBySystem {
-                Text(L10n.string("favorites.updates.notifications_blocked"))
-            } else {
-                Text(L10n.string("favorites.updates.notifications_footer"))
-            }
-        }
-    }
-
-    /// A custom binding (not `onChange`) so reverting a denied enable back to
-    /// off doesn't re-enter the setter and re-trigger the alert.
-    private var notificationsBinding: Binding<Bool> {
-        Binding(
-            get: { notificationsEnabled },
-            set: { requested in
-                notificationsEnabled = requested
-                Task {
-                    let effective = await updateMonitor.setNotificationsEnabled(requested)
-                    notificationsEnabled = effective
-                    notificationsBlockedBySystem = await updateMonitor.notificationsBlockedBySystem()
-                    if requested, !effective {
-                        showsNotificationDeniedAlert = true
-                    }
-                }
-            }
-        )
     }
 
     private var visibleEvents: [FavoriteUpdateEvent] {

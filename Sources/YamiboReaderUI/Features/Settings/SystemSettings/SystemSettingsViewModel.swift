@@ -4,7 +4,6 @@ import YamiboReaderCore
 @MainActor
 final class SystemSettingsViewModel: ObservableObject {
     @Published var homePage: AppHomePage = .forum
-    @Published var favoriteAppearance = FavoriteAppearanceSettings()
     @Published var favoriteBackground = FavoriteBackgroundSettings()
     @Published var favoriteLayoutMode: FavoriteLibraryLayoutMode = .rowCard
     @Published var favoriteSortOrder: LocalFavoriteLibrarySortOrder = .organization
@@ -78,7 +77,6 @@ final class SystemSettingsViewModel: ObservableObject {
 
         let settings = await dependencies.settingsStore.load()
         homePage = settings.system.homePage
-        favoriteAppearance = settings.favorites.appearance
         favoriteBackground = settings.favorites.background
         favoriteLayoutMode = settings.favorites.layoutMode
         favoriteSortOrder = settings.favorites.sortOrder
@@ -111,29 +109,6 @@ final class SystemSettingsViewModel: ObservableObject {
             } catch {
                 await MainActor.run {
                     homePage = previous
-                    errorMessage = error.localizedDescription
-                }
-            }
-        }
-    }
-
-    func updateFavoriteAppearanceColor(_ color: FavoriteAppearanceColor, for category: FavoriteAppearanceCategory) {
-        let previous = favoriteAppearance
-        var updated = favoriteAppearance
-        updated.setColor(color, for: category)
-        favoriteAppearance = updated
-
-        Task {
-            var settings = await dependencies.settingsStore.load()
-            settings.favorites.appearance = updated
-
-            do {
-                try await dependencies.settingsStore.save(settings)
-            } catch {
-                await MainActor.run {
-                    if favoriteAppearance == updated {
-                        favoriteAppearance = previous
-                    }
                     errorMessage = error.localizedDescription
                 }
             }
@@ -490,7 +465,6 @@ final class SystemSettingsViewModel: ObservableObject {
         do {
             try await dependencies.resetApplicationData()
             homePage = .forum
-            favoriteAppearance = .init()
             favoriteBackground = .init()
             novelOfflineCache = .init()
             applePencilPageTurn = .init()

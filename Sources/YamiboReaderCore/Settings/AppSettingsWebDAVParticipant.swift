@@ -56,23 +56,19 @@ struct AppSettingsWebDAVParticipant: WebDAVSyncParticipant {
 struct WebDAVSyncedAppSettings: Codable, Equatable, Sendable {
     var homePage: AppHomePage
     var webBrowser: WebBrowserSettings
-    var favoriteAppearance: FavoriteAppearanceSettings
 
     init(
         homePage: AppHomePage,
-        webBrowser: WebBrowserSettings,
-        favoriteAppearance: FavoriteAppearanceSettings
+        webBrowser: WebBrowserSettings
     ) {
         self.homePage = homePage
         self.webBrowser = webBrowser
-        self.favoriteAppearance = favoriteAppearance
     }
 
     init(settings: AppSettings) {
         self.init(
             homePage: settings.system.homePage,
-            webBrowser: settings.webBrowser,
-            favoriteAppearance: settings.favorites.appearance
+            webBrowser: settings.webBrowser
         )
     }
 
@@ -80,7 +76,6 @@ struct WebDAVSyncedAppSettings: Codable, Equatable, Sendable {
         var updated = settings
         updated.system.homePage = homePage
         updated.webBrowser = webBrowser
-        updated.favorites.appearance = favoriteAppearance
         return updated
     }
 }

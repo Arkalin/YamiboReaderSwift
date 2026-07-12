@@ -5,7 +5,7 @@ public struct MineHomeView: View {
     @State private var viewModel: MineHomeViewModel
     @State private var navigator: ForumDestinationNavigator
     @State private var showingLoginSheet = false
-    @State private var showingSettingsSheet = false
+    @State private var isSettingsPushed = false
     @State private var showingOfflineCacheQueueSheet = false
     @State private var isMyLikesPushed = false
     @State private var isHistoryPushed = false
@@ -87,7 +87,7 @@ public struct MineHomeView: View {
                 )
                 MineSettingsSection(
                     showSettings: {
-                        showingSettingsSheet = true
+                        isSettingsPushed = true
                     }
                 )
             }
@@ -119,8 +119,8 @@ public struct MineHomeView: View {
                     showingLoginSheet = false
                 }
             }
-            .sheet(isPresented: $showingSettingsSheet) {
-                SystemSettingsView(
+            .navigationDestination(isPresented: $isSettingsPushed) {
+                SettingsHomeView(
                     dependencies: settingsDependencies,
                     peripheralInput: appModel.peripheralInput,
                     onSignOut: {
@@ -128,10 +128,14 @@ public struct MineHomeView: View {
                         let message = viewModel.errorMessage
                         viewModel.errorMessage = nil
                         return message
+                    },
+                    onApplicationReset: {
+                        await appModel.bootstrap()
+                    },
+                    onClose: {
+                        isSettingsPushed = false
                     }
-                ) {
-                    await appModel.bootstrap()
-                }
+                )
             }
             .sheet(isPresented: $showingOfflineCacheQueueSheet) {
                 MineOfflineCacheQueueSheet(viewModel: viewModel)
