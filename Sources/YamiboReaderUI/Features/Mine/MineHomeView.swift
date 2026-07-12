@@ -3,9 +3,9 @@ import YamiboReaderCore
 
 public struct MineHomeView: View {
     @State private var viewModel: MineHomeViewModel
+    @State private var navigator: ForumDestinationNavigator
     @State private var showingLoginSheet = false
     @State private var showingSettingsSheet = false
-    @State private var showingSignOutConfirmation = false
     @State private var showingOfflineCacheQueueSheet = false
     @State private var isMyLikesPushed = false
     @State private var isHistoryPushed = false
@@ -21,13 +21,18 @@ public struct MineHomeView: View {
         likeDependencies: LikeDependencies
     ) {
         _viewModel = State(initialValue: MineHomeViewModel(dependencies: dependencies))
+        _navigator = State(wrappedValue: ForumDestinationNavigator(
+            dependencies: appModel.appContext.forumDependencies,
+            appModel: appModel,
+            mode: .forumTab
+        ))
         self.settingsDependencies = settingsDependencies
         self.appModel = appModel
         self.likeDependencies = likeDependencies
     }
 
     public var body: some View {
-        NavigationStack {
+        ForumDestinationStackView(navigator: navigator) {
             List {
                 if viewModel.isLoggedIn {
                     MineProfileSection(
@@ -36,8 +41,8 @@ public struct MineHomeView: View {
                         avatarReloadDate: viewModel.session.lastUpdatedAt,
                         isRefreshing: viewModel.isRefreshingProfile,
                         isInteractionDisabled: viewModel.isBusy,
-                        showSignOutConfirmation: {
-                            showingSignOutConfirmation = true
+                        showProfile: {
+                            navigator.push(.userSpace(uid: nil, name: nil, section: .space, subPage: .profile))
                         }
                     )
                 } else {
@@ -63,6 +68,13 @@ public struct MineHomeView: View {
                 )
                 MineLibraryEntriesSection(
                     offlineCacheQueueCount: viewModel.offlineCacheQueueEntryCount,
+                    showMessages: {
+                        if viewModel.isLoggedIn {
+                            navigator.openMessageCenter(tab: .privateMessages)
+                        } else {
+                            showingLoginSheet = true
+                        }
+                    },
                     showOfflineCacheQueue: {
                         showingOfflineCacheQueueSheet = true
                     },
@@ -102,25 +114,6 @@ public struct MineHomeView: View {
             }, message: {
                 Text(viewModel.checkInResultMessage ?? "")
             })
-            .confirmationDialog(
-                L10n.string("mine.sign_out"),
-                isPresented: $showingSignOutConfirmation,
-                titleVisibility: .hidden
-            ) {
-                Button(L10n.string("mine.sign_out"), role: .destructive) {
-                    Task {
-                        await viewModel.signOut()
-                    }
-                }
-                Button(L10n.string("common.cancel"), role: .cancel) {}
-            }
-            .overlay {
-                if viewModel.isSigningOut {
-                    ProgressView(L10n.string("mine.signing_out"))
-                        .padding()
-                        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                }
-            }
             .sheet(isPresented: $showingLoginSheet) {
                 MineLoginSheet(viewModel: viewModel) {
                     showingLoginSheet = false
@@ -129,7 +122,13 @@ public struct MineHomeView: View {
             .sheet(isPresented: $showingSettingsSheet) {
                 SystemSettingsView(
                     dependencies: settingsDependencies,
-                    peripheralInput: appModel.peripheralInput
+                    peripheralInput: appModel.peripheralInput,
+                    onSignOut: {
+                        await viewModel.signOut()
+                        let message = viewModel.errorMessage
+                        viewModel.errorMessage = nil
+                        return message
+                    }
                 ) {
                     await appModel.bootstrap()
                 }

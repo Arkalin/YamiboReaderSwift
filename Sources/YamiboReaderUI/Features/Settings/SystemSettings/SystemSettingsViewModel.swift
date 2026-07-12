@@ -15,6 +15,7 @@ final class SystemSettingsViewModel: ObservableObject {
     @Published var gamepad = GamepadSettings()
     @Published var keyboard = KeyboardSettings()
     @Published var boardReader = BoardReaderSettings()
+    @Published private(set) var isLoggedIn = false
     @Published private(set) var novelCacheBytes = 0
     @Published private(set) var mangaIndexCacheBytes = 0
     @Published private(set) var offlineCacheBytes = 0
@@ -80,6 +81,8 @@ final class SystemSettingsViewModel: ObservableObject {
         gamepad = settings.system.gamepad
         keyboard = settings.system.keyboard
         boardReader = settings.boardReader
+        let session = await dependencies.sessionStore.load()
+        isLoggedIn = session.isLoggedIn && SessionState.hasAuthenticationCookie(session.cookie)
         await refreshStorageUsage()
     }
 
