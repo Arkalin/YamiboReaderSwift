@@ -478,6 +478,207 @@ final class LocalFavoriteOpenTargetResolverTests: XCTestCase {
         XCTAssertFalse(context.isSmartModeEnabled)
     }
 
+    // MARK: - Open-time reader-mode dispatch (pluggable-reader-config R11)
+
+    // A favorite stored as `.normalThread` (e.g. synced in before its board
+    // was ever configured) must open with the reader the board is configured
+    // for NOW — the stored kind is an add-time classification, not an open
+    // contract. The stored kind itself must survive untouched (decision #5).
+    func testNovelConfiguredBoardOpensStoredNormalThreadFavoriteInNovelReader() async throws {
+        let suiteName = YamiboTestDefaults.suiteName(prefix: "local-favorites-open-target-config-novel")
+        _ = try YamiboTestDefaults.make(suiteName: suiteName)
+        let localFavoriteLibraryStore = FavoriteLibraryStore(
+            defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
+            key: "local-favorites"
+        )
+        let readingProgressStore = ReadingProgressStore(
+            defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
+            key: "reading-progress"
+        )
+        let settingsStore = SettingsStore(
+            defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
+            key: "settings"
+        )
+        var boardReader = BoardReaderSettings()
+        boardReader.setEntry(.init(mode: .novel), forumID: "40")
+        try await settingsStore.save(AppSettings(boardReader: boardReader))
+
+        var document = FavoriteLibraryDocument()
+        let item = try FavoriteItem(
+            target: FavoriteItemTarget(kind: .normalThread, threadID: "5001"),
+            title: "配置前收藏的小说",
+            sourceGroup: .forumBoard(id: "40", label: "小说板块"),
+            forumID: "40",
+            forumName: "小说板块",
+            locations: [.category(document.defaultCategory.id)]
+        )
+        document.addItem(item)
+        try await localFavoriteLibraryStore.save(document)
+
+        let resolver = LocalFavoriteOpenTargetResolver(
+            libraryStore: localFavoriteLibraryStore,
+            readingProgressStore: readingProgressStore,
+            mangaDirectoryStore: try makeMangaDirectoryStore(suiteName: suiteName),
+            settingsStore: settingsStore
+        )
+        let opened = try await resolver.openTarget(for: item)
+
+        guard case let .novelReader(context)? = opened else {
+            return XCTFail("Expected a novel reader open target")
+        }
+        XCTAssertEqual(context.threadID, "5001")
+        XCTAssertEqual(context.threadTitle, "配置前收藏的小说")
+        let storedItem = try await localFavoriteLibraryStore.load().items.first { $0.id == item.id }
+        XCTAssertEqual(storedItem?.target.kind, .normalThread)
+    }
+
+    // The reverse flip: a board reconfigured 漫画 (smart off) opens even a
+    // stored `.normalThread` favorite in the manga reader's single-thread
+    // track, exactly like tapping the same thread on the board page would.
+    func testMangaConfiguredBoardOpensStoredNormalThreadFavoriteInMangaReader() async throws {
+        let suiteName = YamiboTestDefaults.suiteName(prefix: "local-favorites-open-target-config-manga")
+        _ = try YamiboTestDefaults.make(suiteName: suiteName)
+        let localFavoriteLibraryStore = FavoriteLibraryStore(
+            defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
+            key: "local-favorites"
+        )
+        let readingProgressStore = ReadingProgressStore(
+            defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
+            key: "reading-progress"
+        )
+        let settingsStore = SettingsStore(
+            defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
+            key: "settings"
+        )
+        var boardReader = BoardReaderSettings()
+        boardReader.setEntry(.init(mode: .manga(smartEnabled: false)), forumID: "40")
+        try await settingsStore.save(AppSettings(boardReader: boardReader))
+
+        var document = FavoriteLibraryDocument()
+        let item = try FavoriteItem(
+            target: FavoriteItemTarget(kind: .normalThread, threadID: "5002"),
+            title: "改配漫画板块的旧收藏",
+            sourceGroup: .forumBoard(id: "40", label: "漫画板块"),
+            forumID: "40",
+            forumName: "漫画板块",
+            locations: [.category(document.defaultCategory.id)]
+        )
+        document.addItem(item)
+        try await localFavoriteLibraryStore.save(document)
+
+        let resolver = LocalFavoriteOpenTargetResolver(
+            libraryStore: localFavoriteLibraryStore,
+            readingProgressStore: readingProgressStore,
+            mangaDirectoryStore: try makeMangaDirectoryStore(suiteName: suiteName),
+            settingsStore: settingsStore
+        )
+        let opened = try await resolver.openTarget(for: item)
+
+        guard case let .mangaReader(context)? = opened else {
+            return XCTFail("Expected a manga reader open target")
+        }
+        XCTAssertEqual(context.originalThreadID, "5002")
+        XCTAssertEqual(context.chapterTID, "5002")
+        XCTAssertNil(context.directoryName)
+        XCTAssertFalse(context.isSmartModeEnabled)
+    }
+
+    // A `.mangaThread` favorite whose board is reconfigured 小说 follows the
+    // configuration too — the manga-flavored stored kind grants nothing once
+    // the board says novel.
+    func testNovelConfiguredBoardOpensStoredMangaThreadFavoriteInNovelReader() async throws {
+        let suiteName = YamiboTestDefaults.suiteName(prefix: "local-favorites-open-target-config-novel-from-manga")
+        _ = try YamiboTestDefaults.make(suiteName: suiteName)
+        let localFavoriteLibraryStore = FavoriteLibraryStore(
+            defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
+            key: "local-favorites"
+        )
+        let readingProgressStore = ReadingProgressStore(
+            defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
+            key: "reading-progress"
+        )
+        let settingsStore = SettingsStore(
+            defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
+            key: "settings"
+        )
+        var boardReader = BoardReaderSettings()
+        boardReader.setEntry(.init(mode: .novel), forumID: "46")
+        try await settingsStore.save(AppSettings(boardReader: boardReader))
+
+        var document = FavoriteLibraryDocument()
+        let item = try FavoriteItem(
+            target: .mangaThread(threadID: "5003"),
+            title: "改配小说板块的漫画收藏",
+            sourceGroup: .forumBoard(id: "46", label: "改配小说"),
+            forumID: "46",
+            forumName: "改配小说",
+            locations: [.category(document.defaultCategory.id)]
+        )
+        document.addItem(item)
+        try await localFavoriteLibraryStore.save(document)
+
+        let resolver = LocalFavoriteOpenTargetResolver(
+            libraryStore: localFavoriteLibraryStore,
+            readingProgressStore: readingProgressStore,
+            mangaDirectoryStore: try makeMangaDirectoryStore(suiteName: suiteName),
+            settingsStore: settingsStore
+        )
+        let opened = try await resolver.openTarget(for: item)
+
+        guard case let .novelReader(context)? = opened else {
+            return XCTFail("Expected a novel reader open target")
+        }
+        XCTAssertEqual(context.threadID, "5003")
+    }
+
+    // No entry for the board (普通/never configured/no fid) → the stored kind
+    // still decides, so a novel-TYPE favorite keeps opening as a novel even
+    // though the strict classification rule would call new adds on this
+    // board `.normalThread`. Open-time dispatch must not "downgrade" kinds
+    // that came from the content type rather than board configuration.
+    func testUnconfiguredBoardKeepsStoredNovelThreadFavoriteInNovelReader() async throws {
+        let suiteName = YamiboTestDefaults.suiteName(prefix: "local-favorites-open-target-unconfigured-novel")
+        _ = try YamiboTestDefaults.make(suiteName: suiteName)
+        let localFavoriteLibraryStore = FavoriteLibraryStore(
+            defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
+            key: "local-favorites"
+        )
+        let readingProgressStore = ReadingProgressStore(
+            defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
+            key: "reading-progress"
+        )
+        let settingsStore = SettingsStore(
+            defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
+            key: "settings"
+        )
+        try await settingsStore.save(AppSettings(boardReader: BoardReaderSettings(entries: [:])))
+
+        var document = FavoriteLibraryDocument()
+        let item = try FavoriteItem(
+            target: FavoriteItemTarget(kind: .novelThread, threadID: "5004"),
+            title: "未配置板块的小说收藏",
+            sourceGroup: .forumBoard(id: "88", label: "未配置板块"),
+            forumID: "88",
+            forumName: "未配置板块",
+            locations: [.category(document.defaultCategory.id)]
+        )
+        document.addItem(item)
+        try await localFavoriteLibraryStore.save(document)
+
+        let resolver = LocalFavoriteOpenTargetResolver(
+            libraryStore: localFavoriteLibraryStore,
+            readingProgressStore: readingProgressStore,
+            mangaDirectoryStore: try makeMangaDirectoryStore(suiteName: suiteName),
+            settingsStore: settingsStore
+        )
+        let opened = try await resolver.openTarget(for: item)
+
+        guard case let .novelReader(context)? = opened else {
+            return XCTFail("Expected a novel reader open target")
+        }
+        XCTAssertEqual(context.threadID, "5004")
+    }
+
     private func makeMangaDirectoryStore(suiteName: String) throws -> MangaDirectoryStore {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("local-favorite-open-target-resolver-tests", isDirectory: true)

@@ -69,9 +69,14 @@ struct LocalFavoriteOpenTargetResolver {
         guard let latestItem = latestDocument.items.first(where: { $0.id == item.id }) else {
             return nil
         }
+        guard let threadID = latestItem.target.threadID else { return nil }
+        // One settings snapshot backs both the effective-kind dispatch and
+        // the manga path's smart bit, so a concurrent configuration change
+        // can't make the two disagree within a single resolve.
+        let boardReader = await settingsStore.load().boardReader
 
-        switch latestItem.target {
-        case let .novelThread(threadID):
+        switch effectiveOpenKind(for: latestItem, boardReader: boardReader) {
+        case .novelThread:
             let novel = await readingProgressStore.load(threadID: threadID)?.novel
             let resumePoint = mode == .start ? nil : novel?.novelResumePoint
             return .novelReader(
@@ -85,10 +90,9 @@ struct LocalFavoriteOpenTargetResolver {
                 )
             )
         case .normalThread:
-            guard let threadID = latestItem.target.threadID else { return nil }
             let url = YamiboRoute.threadByID(tid: threadID, page: 1, authorID: nil, reverse: false).url
             return .nativeThread(url: url, title: latestItem.resolvedDisplayTitle)
-        case let .mangaThread(threadID):
+        case .mangaThread:
             // `.singleThread` scope short-circuits to the mode-off path
             // below without consulting the board switch at all — the archive
             // page's tapped member must open as exactly the thread its
@@ -96,7 +100,7 @@ struct LocalFavoriteOpenTargetResolver {
             let smartModeEnabled: Bool
             switch mangaScope {
             case .boardDefault:
-                smartModeEnabled = await isSmartComicModeEnabled(forItem: latestItem)
+                smartModeEnabled = boardReader.isSmartComicModeEnabled(forumID: latestItem.forumID)
             case .singleThread:
                 smartModeEnabled = false
             }
@@ -205,13 +209,31 @@ struct LocalFavoriteOpenTargetResolver {
         )
     }
 
-    /// `FavoriteItem.forumID` is only populated once metadata for the item
-    /// has been resolved (remote sync probing or a healed unknown source
-    /// group), so this can legitimately be `nil` for older/unresolved items
-    /// — a missing forumID reports `false` like any board not currently
-    /// configured as `.manga(smartEnabled: true)`, so such favorites resume
-    /// on the single-thread track and never join a merged directory.
-    private func isSmartComicModeEnabled(forItem item: FavoriteItem) async -> Bool {
-        await settingsStore.load().isSmartComicModeEnabled(forumID: item.forumID)
+    /// Which reader a favorite opens with follows the board's *current*
+    /// 阅读方式 configuration, not the kind stamped into the item at add
+    /// time (pluggable-reader-config R11): a board entry configured 小说
+    /// opens the novel reader, 漫画 opens the manga path (smart bit queried
+    /// live as before), regardless of what the board was set to when the
+    /// favorite was created. Only when the item's board has NO entry —
+    /// 普通 boards, never-configured boards, and items with no `forumID`
+    /// (older/unresolved metadata) — does the stored kind decide, preserving
+    /// content-type-derived kinds (a novel-TYPE favorite stays a novel even
+    /// on an unconfigured board) and the decided mode-off `.mangaThread`
+    /// behavior (still rendered by the manga reader, decision #2/#15).
+    /// Stored kinds themselves are never rewritten (decision #5) — this is
+    /// purely an open-time dispatch.
+    private func effectiveOpenKind(
+        for item: FavoriteItem,
+        boardReader: BoardReaderSettings
+    ) -> FavoriteItemTargetKind {
+        guard let entry = boardReader.entry(forumID: item.forumID) else {
+            return item.target.kind
+        }
+        switch entry.mode {
+        case .novel:
+            return .novelThread
+        case .manga:
+            return .mangaThread
+        }
     }
 }
