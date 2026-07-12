@@ -182,11 +182,45 @@ final class UserSpaceViewModelTests: XCTestCase {
         let calls = await repository.calls()
         XCTAssertEqual(calls, ["addFriendForm:705216:张瑞泽", "addFriend:705216:form123:你好:2"])
     }
+
+    /// generation-guard coverage: quickly switching sub-tabs must not let a
+    /// slow response for the tab that's no longer selected land after the
+    /// newly selected tab's faster response and overwrite its content.
+    func testStaleSubTabResponseDoesNotOverwriteNewerSubTabContent() async throws {
+        let repository = UserSpaceRepositoryStub()
+        await repository.setGatedThreadsPages([1])
+        let model = UserSpaceViewModel(uid: "705216", titleHint: "张瑞泽", repository: repository)
+
+        let staleTask = Task { await model.selectTab(.threads) }
+        await repository.waitUntilThreadsBlocked()
+
+        await model.selectTab(.replies)
+        if case .replies = model.content {
+        } else {
+            XCTFail("Expected replies content")
+        }
+        XCTAssertEqual(model.selectedSubPage, .replies)
+
+        await repository.releaseThreads()
+        await staleTask.value
+
+        if case .replies = model.content {
+        } else {
+            XCTFail("Expected replies content to remain after the stale threads response landed")
+        }
+        XCTAssertEqual(model.selectedSubPage, .replies)
+    }
 }
 
 private actor UserSpaceRepositoryStub: UserSpacePageLoading {
     let error: Error?
     var recordedCalls: [String] = []
+    /// Gate used by the stale-response race test to hold a `fetchThreads`
+    /// call in flight until the newer sub-tab's response has already landed.
+    private var gatedThreadsPages: Set<Int> = []
+    private var continuation: CheckedContinuation<Void, Never>?
+    private var isBlocking = false
+    private var released = false
 
     init(error: Error? = nil) {
         self.error = error
@@ -200,6 +234,9 @@ private actor UserSpaceRepositoryStub: UserSpacePageLoading {
 
     func fetchThreads(uid: String?, page: Int) async throws -> UserSpaceThreadPage {
         recordedCalls.append("threads:\(uid ?? "self"):\(page)")
+        if gatedThreadsPages.contains(page) {
+            await waitIfNeeded()
+        }
         if let error { throw error }
         return UserSpaceThreadPage(
             threads: [ForumThreadSummary(tid: "thread-\(page)", title: "Thread", url: URL(string: "https://bbs.yamibo.com/thread-\(page)-1-1.html")!)],
@@ -265,5 +302,29 @@ private actor UserSpaceRepositoryStub: UserSpacePageLoading {
 
     func calls() -> [String] {
         recordedCalls
+    }
+
+    func setGatedThreadsPages(_ pages: Set<Int>) {
+        gatedThreadsPages = pages
+    }
+
+    private func waitIfNeeded() async {
+        guard !released else { return }
+        await withCheckedContinuation { continuation in
+            self.continuation = continuation
+            isBlocking = true
+        }
+    }
+
+    func waitUntilThreadsBlocked() async {
+        while !isBlocking {
+            await Task.yield()
+        }
+    }
+
+    func releaseThreads() {
+        released = true
+        continuation?.resume()
+        continuation = nil
     }
 }

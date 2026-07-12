@@ -318,6 +318,31 @@ import Testing
     #expect(fixture.repository.fetchPageCalls() == [1])
 }
 
+/// generation-guard coverage: a slow `goToPage(2)` response landing after a
+/// faster, later `goToPage(3)` must be discarded rather than clobbering the
+/// already-displayed page 3 content back to page 2.
+@MainActor
+@Test func forumThreadReaderStaleGoToPageResponseDoesNotOverwriteNewerPage() async throws {
+    let fixture = try ForumThreadReaderViewModelFixture()
+    let model = fixture.makeModel()
+    await model.load()
+
+    fixture.repository.gatedPages = [2]
+    let staleTask = Task { await model.goToPage(2) }
+    await fixture.repository.gate.waitUntilBlocked()
+
+    await model.goToPage(3)
+    #expect(model.currentPage == 3)
+    #expect(model.page?.pageNavigation?.currentPage == 3)
+
+    await fixture.repository.gate.release()
+    await staleTask.value
+
+    #expect(model.currentPage == 3)
+    #expect(model.page?.pageNavigation?.currentPage == 3)
+    #expect(model.errorMessage == nil)
+}
+
 @MainActor
 @Test func forumThreadReaderInitialLoadFailureWithoutCacheUsesPageError() async throws {
     let fixture = try ForumThreadReaderViewModelFixture(fetchError: ForumThreadReaderTestError.plannedFailure)
@@ -536,8 +561,39 @@ private struct ForumThreadReaderViewModelFixture {
     }
 }
 
+/// Blocks a gated `fetchThreadPage` call until `release()` is invoked —
+/// lets tests deterministically hold a "slow" response in flight past a
+/// faster later response without relying on wall-clock sleeps.
+private actor ForumThreadPageFetchGate {
+    private var continuation: CheckedContinuation<Void, Never>?
+    private var isBlocking = false
+    private var released = false
+
+    func waitIfNeeded() async {
+        guard !released else { return }
+        await withCheckedContinuation { continuation in
+            self.continuation = continuation
+            isBlocking = true
+        }
+    }
+
+    func waitUntilBlocked() async {
+        while !isBlocking {
+            await Task.yield()
+        }
+    }
+
+    func release() {
+        released = true
+        continuation?.resume()
+        continuation = nil
+    }
+}
+
 private final class FakeForumThreadPageLoader: ForumThreadPageLoading, @unchecked Sendable {
     let threadURL: URL
+    let gate = ForumThreadPageFetchGate()
+    var gatedPages: Set<Int> = []
     private let cachedPages: [Int: ForumThreadPage]
     private let formHash: String?
     var fetchError: Error?
@@ -566,6 +622,9 @@ private final class FakeForumThreadPageLoader: ForumThreadPageLoading, @unchecke
 
     func fetchThreadPage(context: ThreadNovelLaunchContext, page: Int) async throws -> ForumThreadPage {
         recordedFetchPages.append(page)
+        if gatedPages.contains(page) {
+            await gate.waitIfNeeded()
+        }
         if let fetchError {
             throw fetchError
         }

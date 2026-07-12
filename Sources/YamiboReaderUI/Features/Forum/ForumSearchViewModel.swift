@@ -30,6 +30,7 @@ final class ForumSearchViewModel {
 
     @ObservationIgnored private let repositoryProvider: @Sendable () async -> any ForumSearchPageLoading
     @ObservationIgnored private let formHashProvider: @Sendable () async -> String?
+    @ObservationIgnored private var generation = 0
     @ObservationIgnored private lazy var pageNavigator = ForumPageNavigator<PageSnapshot>(
         capture: { [unowned self] in
             PageSnapshot(
@@ -40,6 +41,7 @@ final class ForumSearchViewModel {
             )
         },
         restore: { [unowned self] snapshot in
+            generation += 1
             page = snapshot.page
             errorMessage = snapshot.errorMessage
             currentPage = snapshot.currentPage
@@ -114,6 +116,8 @@ final class ForumSearchViewModel {
             pageNavigator.recordCurrentPage()
         }
 
+        generation += 1
+        let requestGeneration = generation
         isLoading = true
         errorMessage = nil
         defer { isLoading = false }
@@ -121,24 +125,35 @@ final class ForumSearchViewModel {
         do {
             let repository = await repositoryProvider()
             let nextPage: ForumSearchPage
+            // Double-optional: outer nil means "leave currentSearchID
+            // untouched" (the searchForumPage branch); `.some(nil)` means
+            // "overwrite it with nil", matching the original unconditional
+            // assignment in the searchForum branch.
+            let resolvedSearchID: String??
             if pageNumber == 1 || currentSearchID == nil {
                 nextPage = try await repository.searchForum(
                     query: trimmedQuery,
                     forumID: forumID,
                     formHash: await formHashProvider()
                 )
-                currentSearchID = nextPage.searchID
+                resolvedSearchID = .some(nextPage.searchID)
             } else {
                 nextPage = try await repository.searchForumPage(
                     query: trimmedQuery,
                     searchID: currentSearchID ?? "",
                     page: pageNumber
                 )
+                resolvedSearchID = nil
+            }
+            guard requestGeneration == generation else { return }
+            if let resolvedSearchID {
+                currentSearchID = resolvedSearchID
             }
             page = nextPage
             currentPage = nextPage.pageNavigation?.currentPage ?? pageNumber
             errorMessage = nil
         } catch {
+            guard requestGeneration == generation else { return }
             if recordsHistory {
                 pageNavigator.discardLastRecord()
             }

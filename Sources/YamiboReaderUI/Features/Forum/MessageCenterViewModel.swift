@@ -24,6 +24,7 @@ final class MessageCenterViewModel {
     var errorMessage: String?
 
     @ObservationIgnored private let repositoryProvider: @Sendable () async -> any MessageCenterPageLoading
+    @ObservationIgnored private var generation = 0
 
     init(initialTab: MessageCenterTab = .privateMessages, dependencies: ForumDependencies) {
         selectedTab = initialTab
@@ -88,20 +89,26 @@ final class MessageCenterViewModel {
     }
 
     private func loadSelectedTab(page: Int) async {
+        generation += 1
+        let requestGeneration = generation
         isLoading = true
         errorMessage = nil
         defer { isLoading = false }
 
         do {
             let repository = await repositoryProvider()
+            let loadedContent: Content
             switch selectedTab {
             case .privateMessages:
-                content = .privateMessages(try await repository.fetchPrivateMessages(page: page))
+                loadedContent = .privateMessages(try await repository.fetchPrivateMessages(page: page))
             case .notices:
-                content = .notices(try await repository.fetchNotices(page: page))
+                loadedContent = .notices(try await repository.fetchNotices(page: page))
             }
+            guard requestGeneration == generation else { return }
+            content = loadedContent
             currentPage = pageNavigation?.currentPage ?? page
         } catch {
+            guard requestGeneration == generation else { return }
             content = nil
             currentPage = page
             errorMessage = error.localizedDescription

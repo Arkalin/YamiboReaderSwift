@@ -50,6 +50,7 @@ final class UserSpaceViewModel {
 
     @ObservationIgnored private let repositoryProvider: @Sendable () async -> any UserSpacePageLoading
     @ObservationIgnored private let accountUIDProvider: @Sendable () async -> String?
+    @ObservationIgnored private var generation = 0
 
     init(
         uid: String?,
@@ -273,49 +274,60 @@ final class UserSpaceViewModel {
     }
 
     private func loadProfile() async {
+        generation += 1
+        let requestGeneration = generation
         isLoadingProfile = true
         errorMessage = nil
         defer { isLoadingProfile = false }
 
         do {
             let repository = await repositoryProvider()
-            profile = try await repository.fetchProfile(uid: uid, titleHint: titleHint)
+            let loadedProfile = try await repository.fetchProfile(uid: uid, titleHint: titleHint)
+            guard requestGeneration == generation else { return }
+            profile = loadedProfile
         } catch {
+            guard requestGeneration == generation else { return }
             errorMessage = error.localizedDescription
         }
     }
 
     private func loadSelectedSubPage(page: Int) async {
+        generation += 1
+        let requestGeneration = generation
         isLoadingContent = true
         errorMessage = nil
         defer { isLoadingContent = false }
 
         do {
             let repository = await repositoryProvider()
+            let loadedContent: Content?
             switch selectedSubPage {
             case .profile:
-                break
+                loadedContent = content
             case .threads:
-                content = .threads(try await repository.fetchThreads(uid: uid, page: page))
+                loadedContent = .threads(try await repository.fetchThreads(uid: uid, page: page))
             case .replies:
-                content = .replies(try await repository.fetchReplies(uid: uid, page: page))
+                loadedContent = .replies(try await repository.fetchReplies(uid: uid, page: page))
             case .myBlogs:
-                content = .blogs(try await repository.fetchMyBlogs(uid: uid, page: page))
+                loadedContent = .blogs(try await repository.fetchMyBlogs(uid: uid, page: page))
             case .friendBlogs:
-                content = .blogs(try await repository.fetchFriendBlogs(page: page))
+                loadedContent = .blogs(try await repository.fetchFriendBlogs(page: page))
             case .viewAllBlogs:
-                content = .blogs(try await repository.fetchViewAllBlogs(filter: viewAllBlogFilter, page: page))
+                loadedContent = .blogs(try await repository.fetchViewAllBlogs(filter: viewAllBlogFilter, page: page))
             case .friends:
-                content = .friends(try await repository.fetchFriendPage(type: .myFriend, page: page))
+                loadedContent = .friends(try await repository.fetchFriendPage(type: .myFriend, page: page))
             case .online:
-                content = .friends(try await repository.fetchFriendPage(type: .onlineMember, page: page))
+                loadedContent = .friends(try await repository.fetchFriendPage(type: .onlineMember, page: page))
             case .visitors:
-                content = .friends(try await repository.fetchFriendPage(type: .myVisitor, page: page))
+                loadedContent = .friends(try await repository.fetchFriendPage(type: .myVisitor, page: page))
             case .traces:
-                content = .friends(try await repository.fetchFriendPage(type: .myTrace, page: page))
+                loadedContent = .friends(try await repository.fetchFriendPage(type: .myTrace, page: page))
             }
-            currentPage = self.pageNavigation?.currentPage ?? page
+            guard requestGeneration == generation else { return }
+            content = loadedContent
+            currentPage = pageNavigation?.currentPage ?? page
         } catch {
+            guard requestGeneration == generation else { return }
             content = nil
             currentPage = page
             errorMessage = error.localizedDescription

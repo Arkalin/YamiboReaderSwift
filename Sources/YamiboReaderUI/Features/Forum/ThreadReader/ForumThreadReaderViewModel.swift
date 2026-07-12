@@ -56,6 +56,7 @@ final class ForumThreadReaderViewModel {
     @ObservationIgnored private let settingsStoreProvider: @Sendable () async -> SettingsStore?
     @ObservationIgnored private let progressSync: ProgressSyncModule?
     @ObservationIgnored private var latestVisibleAnchorPostID: String?
+    @ObservationIgnored private var generation = 0
 
     init(context: ThreadNovelLaunchContext, dependencies: ForumDependencies) {
         self.context = context
@@ -583,6 +584,8 @@ final class ForumThreadReaderViewModel {
         preservesCurrentContentOnFailure: Bool = false,
         usesCachedFallbackOnFailure: Bool = false
     ) async {
+        generation += 1
+        let requestGeneration = generation
         isLoading = true
         errorMessage = nil
         transientMessage = nil
@@ -596,13 +599,16 @@ final class ForumThreadReaderViewModel {
             } else {
                 try await repository.fetchThreadPage(context: context, page: page)
             }
+            guard requestGeneration == generation else { return }
             self.page = loaded
             currentPage = loaded.pageNavigation?.currentPage ?? page
             handlePageLoadSuccess(previousLoadedPage: previousLoadedPage)
         } catch {
+            guard requestGeneration == generation else { return }
             let repository = await repositoryProvider()
             if usesCachedFallbackOnFailure,
                let cached = await repository.cachedThreadPage(context: context, page: page) {
+                guard requestGeneration == generation else { return }
                 self.page = cached
                 currentPage = cached.pageNavigation?.currentPage ?? page
                 errorMessage = nil
