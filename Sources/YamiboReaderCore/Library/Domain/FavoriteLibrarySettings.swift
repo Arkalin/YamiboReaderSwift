@@ -1,52 +1,5 @@
 import Foundation
 
-public enum FavoriteAppearanceColor: String, Codable, Hashable, CaseIterable, Sendable {
-    case red
-    case pink
-    case orange
-    case yellow
-    case green
-    case mint
-    case cyan
-    case blue
-    case purple
-    case gray
-
-    public var title: String {
-        switch self {
-        case .red: L10n.string("color.red")
-        case .pink: L10n.string("color.pink")
-        case .orange: L10n.string("color.orange")
-        case .yellow: L10n.string("color.yellow")
-        case .green: L10n.string("color.green")
-        case .mint: L10n.string("color.mint")
-        case .cyan: L10n.string("color.cyan")
-        case .blue: L10n.string("color.blue")
-        case .purple: L10n.string("color.purple")
-        case .gray: L10n.string("color.gray")
-        }
-    }
-}
-
-public struct FavoriteAppearanceSettings: Codable, Hashable, Sendable {
-    public var collection: FavoriteAppearanceColor
-    public var novel: FavoriteAppearanceColor
-    public var manga: FavoriteAppearanceColor
-    public var other: FavoriteAppearanceColor
-
-    public init(
-        collection: FavoriteAppearanceColor = .orange,
-        novel: FavoriteAppearanceColor = .pink,
-        manga: FavoriteAppearanceColor = .blue,
-        other: FavoriteAppearanceColor = .cyan
-    ) {
-        self.collection = collection
-        self.novel = novel
-        self.manga = manga
-        self.other = other
-    }
-}
-
 public struct FavoriteBackgroundSettings: Codable, Hashable, Sendable {
     public static let minimumScale = 1.0
     public static let maximumScale = 3.0
@@ -377,7 +330,6 @@ public enum SmartMangaUpdateCheckInterval: String, Codable, Hashable, CaseIterab
 }
 
 public struct FavoriteLibrarySettings: Codable, Hashable, Sendable {
-    public var appearance: FavoriteAppearanceSettings
     public var background: FavoriteBackgroundSettings
     public var layoutMode: FavoriteLibraryLayoutMode
     public var sortOrder: LocalFavoriteLibrarySortOrder
@@ -409,7 +361,6 @@ public struct FavoriteLibrarySettings: Codable, Hashable, Sendable {
     public var smartMangaUpdateCheckInterval: SmartMangaUpdateCheckInterval
 
     public init(
-        appearance: FavoriteAppearanceSettings = .init(),
         background: FavoriteBackgroundSettings = .init(),
         layoutMode: FavoriteLibraryLayoutMode = .rowCard,
         sortOrder: LocalFavoriteLibrarySortOrder = .organization,
@@ -426,7 +377,6 @@ public struct FavoriteLibrarySettings: Codable, Hashable, Sendable {
         updateNotificationsEnabled: Bool = false,
         smartMangaUpdateCheckInterval: SmartMangaUpdateCheckInterval = .threeDays
     ) {
-        self.appearance = appearance
         self.background = background
         self.layoutMode = layoutMode
         self.sortOrder = sortOrder
@@ -447,7 +397,6 @@ public struct FavoriteLibrarySettings: Codable, Hashable, Sendable {
     public init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         self.init(
-            appearance: try container.decodeIfPresent(FavoriteAppearanceSettings.self, forKey: .appearance) ?? .init(),
             background: try container.decodeIfPresent(FavoriteBackgroundSettings.self, forKey: .background) ?? .init(),
             layoutMode: try container.decodeIfPresent(FavoriteLibraryLayoutMode.self, forKey: .layoutMode) ?? .rowCard,
             sortOrder: try container.decodeIfPresent(LocalFavoriteLibrarySortOrder.self, forKey: .sortOrder) ?? .organization,

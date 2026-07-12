@@ -186,12 +186,6 @@ import YamiboReaderTestSupport
             directorySortOrder: .descending
         ),
         favorites: FavoriteLibrarySettings(
-            appearance: FavoriteAppearanceSettings(
-                collection: .purple,
-                novel: .red,
-                manga: .green,
-                other: .gray
-            ),
             collapsesSections: true
         ),
         webBrowser: WebBrowserSettings(showsNavigationBar: false),

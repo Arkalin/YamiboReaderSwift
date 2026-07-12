@@ -214,6 +214,123 @@ final class LocalFavoriteOpenTargetResolverTests: XCTestCase {
         XCTAssertEqual(context.directoryName, "无进度漫画")
     }
 
+    // Long-pressing an already-parsed smart-comic favorite card and choosing
+    // "从头打开" (`.start`) must jump to the directory's actual first
+    // chapter, not just reset the tapped/representative member's own tid to
+    // page 0 — the representative item is whichever member was favorited
+    // earliest, which is frequently a *different* chapter than #1 once a
+    // directory has multiple favorited members. It must also ignore any
+    // existing directory-level progress (unlike plain resume).
+    func testMangaThreadOpenTargetOnModeOnBoardWithStartModeOpensDirectoryFirstChapter() async throws {
+        let suiteName = YamiboTestDefaults.suiteName(prefix: "local-favorites-open-target-manga-mode-on-start")
+        _ = try YamiboTestDefaults.make(suiteName: suiteName)
+        let localFavoriteLibraryStore = FavoriteLibraryStore(
+            defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
+            key: "local-favorites"
+        )
+        let readingProgressStore = ReadingProgressStore(
+            defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
+            key: "reading-progress"
+        )
+        let mangaDirectoryStore = try makeMangaDirectoryStore(suiteName: suiteName)
+        let directory = MangaDirectory(
+            cleanBookName: "从头打开漫画",
+            strategy: .tag,
+            sourceKey: "从头打开漫画",
+            chapters: [
+                MangaChapter(tid: "6001", rawTitle: "第一话", chapterNumber: 1, view: 1),
+                MangaChapter(tid: "6002", rawTitle: "第二话", chapterNumber: 2, view: 1),
+                MangaChapter(tid: "6003", rawTitle: "第三话", chapterNumber: 3, view: 1)
+            ]
+        )
+        try await mangaDirectoryStore.saveDirectory(directory)
+        // Existing progress sits at chapter 3 — "从头打开" must ignore this
+        // entirely and still land on chapter 1.
+        _ = try await readingProgressStore.saveMangaTitle(
+            cleanBookName: directory.cleanBookName,
+            chapterThreadID: "6003",
+            chapterTitle: "第三话",
+            pageIndex: 5,
+            mangaID: directory.favoriteIdentity
+        )
+
+        var document = FavoriteLibraryDocument()
+        // The favorite/representative item points at chapter 2's thread —
+        // this must NOT be what "从头打开" opens.
+        let item = try FavoriteItem(
+            target: .mangaThread(threadID: "6002"),
+            title: "从头打开漫画 第二话",
+            sourceGroup: .forumBoard(id: "30", label: "中文百合漫画区"),
+            forumID: "30",
+            forumName: "中文百合漫画区",
+            locations: [.category(document.defaultCategory.id)]
+        )
+        document.upsertItem(item)
+        try await localFavoriteLibraryStore.save(document)
+
+        let resolver = LocalFavoriteOpenTargetResolver(
+            libraryStore: localFavoriteLibraryStore,
+            readingProgressStore: readingProgressStore,
+            mangaDirectoryStore: mangaDirectoryStore
+        )
+        let opened = try await resolver.openTarget(for: item, mode: .start)
+
+        guard case let .mangaReader(context)? = opened else {
+            return XCTFail("Expected a manga reader open target")
+        }
+        XCTAssertEqual(context.originalThreadID, "6002")
+        XCTAssertEqual(context.chapterTID, "6001")
+        XCTAssertEqual(context.initialPage, 0)
+        XCTAssertEqual(context.directoryName, "从头打开漫画")
+        XCTAssertTrue(context.isSmartModeEnabled)
+    }
+
+    // If the directory has never been resolved locally at all (e.g. a
+    // favorite synced in from another device that was never opened here),
+    // "从头打开" on a mode-on board falls back to the favorite's own thread
+    // at page 0, still launching with Smart Comic Mode on so the reader
+    // resolves a real directory on this open — mirroring the equivalent
+    // resume-path fallback.
+    func testMangaThreadOpenTargetOnModeOnBoardWithStartModeFallsBackWhenDirectoryNeverResolved() async throws {
+        let suiteName = YamiboTestDefaults.suiteName(prefix: "local-favorites-open-target-manga-mode-on-start-unresolved")
+        _ = try YamiboTestDefaults.make(suiteName: suiteName)
+        let localFavoriteLibraryStore = FavoriteLibraryStore(
+            defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
+            key: "local-favorites"
+        )
+        let readingProgressStore = ReadingProgressStore(
+            defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
+            key: "reading-progress"
+        )
+
+        var document = FavoriteLibraryDocument()
+        let item = try FavoriteItem(
+            target: .mangaThread(threadID: "6101"),
+            title: "未解析漫画 第一话",
+            sourceGroup: .forumBoard(id: "30", label: "中文百合漫画区"),
+            forumID: "30",
+            forumName: "中文百合漫画区",
+            locations: [.category(document.defaultCategory.id)]
+        )
+        document.upsertItem(item)
+        try await localFavoriteLibraryStore.save(document)
+
+        let resolver = LocalFavoriteOpenTargetResolver(
+            libraryStore: localFavoriteLibraryStore,
+            readingProgressStore: readingProgressStore,
+            mangaDirectoryStore: try makeMangaDirectoryStore(suiteName: suiteName)
+        )
+        let opened = try await resolver.openTarget(for: item, mode: .start)
+
+        guard case let .mangaReader(context)? = opened else {
+            return XCTFail("Expected a manga reader open target")
+        }
+        XCTAssertEqual(context.chapterTID, "6101")
+        XCTAssertEqual(context.initialPage, 0)
+        XCTAssertNil(context.directoryName)
+        XCTAssertTrue(context.isSmartModeEnabled)
+    }
+
     // Mode-off (smart-comic-mode design decision #15): resume must use only
     // this thread's own `.mangaThread` progress record, never the
     // directory-level one, even when a resolved directory with progress

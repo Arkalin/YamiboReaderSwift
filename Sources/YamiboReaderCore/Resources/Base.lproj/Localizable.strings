@@ -114,10 +114,6 @@
 "error.persistence_failed" = "本地数据保存失败：%@";
 "error.search_cooldown" = "搜索冷却中，请等待%d秒";
 "error.unreadable_body" = "响应内容无法解析为文本";
-"favorite_category.collection" = "合集";
-"favorite_category.manga" = "漫画";
-"favorite_category.novel" = "小说";
-"favorite_category.other" = "其他";
 "favorite_background.blur" = "高斯模糊";
 "favorite_background.change_image" = "选取图片";
 "favorite_background.load_failed" = "无法载入这张图片，请换一张";
@@ -926,6 +922,14 @@
 "settings.section.storage" = "存储管理";
 "settings.section.support" = "支持";
 "settings.section.account" = "账户";
+"settings.section.favorites" = "收藏";
+"settings.section.reading" = "阅读";
+"settings.section.data_storage" = "数据与存储";
+"settings.section.backup_sync" = "备份与同步";
+"settings.section.reset" = "重置";
+"settings.section.favorites_browsing" = "浏览与排序";
+"settings.search.placeholder" = "搜索设置";
+"settings.search.no_results" = "没有找到相关设置";
 "settings.confirm_sign_out" = "确认退出登录";
 "settings.sign_out_message" = "确定要退出登录吗？";
 "settings.shortcuts_open_failed" = "无法打开快捷指令，请手动打开“快捷指令 > 自动化”创建百合会签到自动化。";
