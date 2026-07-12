@@ -113,6 +113,7 @@ struct LikeWorkItemsView: View {
                 }
             }
         }
+        .toolbar(isSelecting ? .hidden : .automatic, for: .tabBar)
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if isSelecting && !likeSelectionUsesSystemBottomToolbar {
                 LikeSelectionActionBar(selectedCount: selectedItemIDs.count) {
