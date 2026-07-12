@@ -28,6 +28,43 @@ struct MangaReaderTestsOfflineCacheStore {
         #expect(loaded?.imageURLs == [imageURL])
     }
 
+    @Test func rereadingMembershipAfterSourcePageContentChangesReturnsFreshDataNotStaleCache() async throws {
+        let directory = try makeTemporaryOfflineCacheDirectory()
+        let store = try makeTestOfflineCacheStore(rootDirectory: directory)
+        let firstImage = try #require(URL(string: "https://img.example.com/replace-1.jpg"))
+        let secondImage = try #require(URL(string: "https://img.example.com/replace-2.jpg"))
+
+        try await store.saveMangaOfflineCacheMembership(
+            MangaOfflineCacheMembership(
+                ownerName: "作品C",
+                tid: "700",
+                chapterTitle: "第700话",
+                imageURLs: [firstImage],
+                sourcePage: makeTestMangaOfflineSourcePage(tid: "700")
+            )
+        )
+        let originalLoaded = await store.mangaOfflineCacheMembership(ownerName: "作品C", tid: "700")
+        #expect(originalLoaded?.chapterTitle == "第700话")
+        #expect(originalLoaded?.imageURLs == [firstImage])
+
+        var updatedSourcePage = makeTestMangaOfflineSourcePage(tid: "700")
+        updatedSourcePage.title = "第700话-已更新"
+        try await store.saveMangaOfflineCacheMembership(
+            MangaOfflineCacheMembership(
+                ownerName: "作品C",
+                tid: "700",
+                chapterTitle: "第700话-已更新",
+                imageURLs: [firstImage, secondImage],
+                sourcePage: updatedSourcePage
+            )
+        )
+
+        let reloaded = await store.mangaOfflineCacheMembership(ownerName: "作品C", tid: "700")
+        #expect(reloaded?.chapterTitle == "第700话-已更新")
+        #expect(reloaded?.imageURLs == [firstImage, secondImage])
+        #expect(reloaded?.sourcePage.title == "第700话-已更新")
+    }
+
     @Test func usageReportsStoredOfflineImagesByOwner() async throws {
         let directory = try makeTemporaryOfflineCacheDirectory()
         let store = try makeTestOfflineCacheStore(rootDirectory: directory)
