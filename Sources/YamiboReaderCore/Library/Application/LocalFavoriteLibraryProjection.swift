@@ -1013,14 +1013,18 @@ public enum LocalFavoriteLibraryProjection {
         }
     }
 
-    /// Dated items compare by date, oldest/most-recent-first per
+    /// Dated items compare by date, most-recent/oldest-first per
     /// `descending`; undated items always sort last, in both directions,
     /// so switching direction can't fast-forward "never read"/"never
     /// updated" entries to the very top ahead of real recent activity.
+    /// Direction is intentionally inverted from the other sort modes:
+    /// `descending == false` (the default) shows newest-first, since these
+    /// are the two "recency" keys (最近更新/最近阅读) and that's the useful
+    /// reading without the user having to flip the toggle first.
     private static func compareDates(_ lhs: Date?, _ rhs: Date?, lhsID: String, rhsID: String, descending: Bool) -> Bool {
         switch (lhs, rhs) {
         case let (lhs?, rhs?) where lhs != rhs:
-            return descending ? lhs > rhs : lhs < rhs
+            return descending ? lhs < rhs : lhs > rhs
         case (_?, nil):
             return true
         case (nil, _?):
