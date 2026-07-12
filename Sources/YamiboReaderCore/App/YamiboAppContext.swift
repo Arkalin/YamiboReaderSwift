@@ -167,6 +167,7 @@ public final class YamiboAppContext: Sendable {
             settingsStore: settingsStore,
             contentCoverStore: contentCoverStore,
             mangaDirectoryStore: mangaDirectoryStore,
+            favoriteBackgroundImageStore: favoriteBackgroundImageStore,
             makeFavoriteRepository: { [self] in await makeFavoriteRepository() },
             makeForumThreadReaderRepository: { [self] in await makeForumThreadReaderRepository() },
             makeThreadRouteResolver: { [self] in await makeThreadRouteResolver() }

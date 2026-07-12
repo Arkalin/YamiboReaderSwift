@@ -20,6 +20,7 @@ struct LocalFavoritesRootView: View {
             readingProgressStore: dependencies.readingProgressStore,
             settingsStore: dependencies.settingsStore,
             contentCoverStore: dependencies.contentCoverStore,
+            favoriteBackgroundImageStore: dependencies.favoriteBackgroundImageStore,
             mangaDirectoryStore: dependencies.mangaDirectoryStore,
             makeForumThreadReaderRepository: dependencies.makeForumThreadReaderRepository,
             makeFavoriteRepository: dependencies.makeFavoriteRepository
