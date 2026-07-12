@@ -9,7 +9,6 @@ struct MineSettingsSection: View {
             MineEntryButtonRow(
                 title: L10n.string("settings.title"),
                 systemImage: "gearshape.fill",
-                tint: .gray,
                 action: showSettings
             )
         }
@@ -28,7 +27,6 @@ struct MineCheckInSection: View {
             MineEntryButtonRow(
                 title: title,
                 systemImage: "checkmark.seal.fill",
-                tint: .green,
                 showsProgress: isCheckingIn,
                 showsDisclosureIndicator: !hasCheckedInToday,
                 action: checkIn
@@ -73,25 +71,21 @@ struct MineLibraryEntriesSection: View {
             MineEntryButtonRow(
                 title: L10n.string("message_center.private_messages"),
                 systemImage: "envelope.fill",
-                tint: .orange,
                 action: showMessages
             )
             MineEntryButtonRow(
                 title: L10n.string("forum.history"),
                 systemImage: "clock.arrow.circlepath",
-                tint: .blue,
                 action: showHistory
             )
             MineEntryButtonRow(
                 title: L10n.string("mine.my_likes"),
                 systemImage: "heart.fill",
-                tint: .pink,
                 action: showMyLikes
             )
             MineEntryButtonRow(
                 title: L10n.string("mine.download_queue"),
                 systemImage: "arrow.down.circle.fill",
-                tint: .indigo,
                 badgeText: String(offlineCacheQueueCount),
                 action: showOfflineCacheQueue
             )
@@ -102,7 +96,6 @@ struct MineLibraryEntriesSection: View {
 private struct MineEntryButtonRow: View {
     let title: String
     let systemImage: String
-    let tint: Color
     var badgeText: String? = nil
     var showsProgress = false
     var showsDisclosureIndicator = true
@@ -113,7 +106,6 @@ private struct MineEntryButtonRow: View {
             MineEntryRowContent(
                 title: title,
                 systemImage: systemImage,
-                tint: tint,
                 badgeText: badgeText,
                 showsProgress: showsProgress,
                 showsDisclosureIndicator: showsDisclosureIndicator
@@ -126,7 +118,6 @@ private struct MineEntryButtonRow: View {
 private struct MineEntryRowContent: View {
     let title: String
     let systemImage: String
-    let tint: Color
     var badgeText: String? = nil
     var showsProgress = false
     var showsDisclosureIndicator = true
@@ -135,12 +126,11 @@ private struct MineEntryRowContent: View {
         HStack(spacing: 12) {
             Image(systemName: systemImage)
                 .font(.body.weight(.semibold))
-                .foregroundStyle(.white)
+                .foregroundStyle(Color.accentColor)
                 .frame(width: 28, height: 28)
-                .background(tint, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
 
             Text(title)
-                .foregroundStyle(.primary)
+                .foregroundStyle(Color.accentColor)
 
             Spacer(minLength: 8)
 
