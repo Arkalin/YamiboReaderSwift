@@ -22,11 +22,18 @@ final class ForumMangaDetailViewModel {
     var forcedSearchShortcutRemaining: Int?
     var directoryActionErrorMessage: String?
 
+    var favorite: Favorite?
+    var favoriteErrorMessage: String?
+    var transientMessage: String?
+    var favoriteAddPromptPresented = false
+    var favoriteRemovePrompt: FavoriteRemovePrompt?
+
     let context: MangaDetailLaunchContext
 
     @ObservationIgnored private let dependencies: ForumDependencies
     @ObservationIgnored private var readingProgressUpdatesTask: Task<Void, Never>?
     @ObservationIgnored private var contentCoverUpdatesTask: Task<Void, Never>?
+    @ObservationIgnored private var favoriteUpdatesTask: Task<Void, Never>?
     @ObservationIgnored private var automaticDirectoryUpdateTask: Task<Void, Never>?
     @ObservationIgnored private var automaticCoverResolutionTask: Task<Void, Never>?
     @ObservationIgnored private var attemptedAutomaticCoverBookNames: Set<String> = []
@@ -83,11 +90,23 @@ final class ForumMangaDetailViewModel {
                 contentCover = await self.loadContentCover()
             }
         }
+        favoriteUpdatesTask = Task { @MainActor [weak self, localFavoriteLibraryStore = dependencies.localFavoriteLibraryStore] in
+            for await notification in NotificationCenter.default.notifications(named: FavoriteLibraryStore.didChangeNotification) {
+                guard !Task.isCancelled else { return }
+                guard let self else { return }
+                guard let changeID = notification.userInfo?[FavoriteLibraryStore.changeIDUserInfoKey] as? String,
+                      changeID == localFavoriteLibraryStore.changeID else {
+                    continue
+                }
+                await self.refreshFavorite(from: localFavoriteLibraryStore)
+            }
+        }
     }
 
     deinit {
         readingProgressUpdatesTask?.cancel()
         contentCoverUpdatesTask?.cancel()
+        favoriteUpdatesTask?.cancel()
         automaticDirectoryUpdateTask?.cancel()
         automaticCoverResolutionTask?.cancel()
         directoryTickTask?.cancel()
@@ -173,6 +192,8 @@ final class ForumMangaDetailViewModel {
         isLoading = true
         errorMessage = nil
         readingProgress = await loadReadingProgress()
+        favorite = await localFavoriteItem()?.favorite(type: .manga)
+        favoriteErrorMessage = nil
         defer { isLoading = false }
 
         do {
@@ -235,6 +256,10 @@ final class ForumMangaDetailViewModel {
 
     var hasReadingProgress: Bool {
         readingProgress?.manga != nil
+    }
+
+    var isFavorited: Bool {
+        favorite != nil
     }
 
     func continueLaunchContext() -> MangaLaunchContext? {
@@ -336,6 +361,142 @@ final class ForumMangaDetailViewModel {
                 forcedSearchShortcutExpiresAt = nil
             }
             directoryActionErrorMessage = error.localizedDescription
+        }
+    }
+
+    // MARK: - Favorite
+
+    /// Routes the favorite button through the remembered add/remove sync
+    /// choices: either performs the action silently or raises the prompt.
+    func toggleFavorite() async {
+        favoriteErrorMessage = nil
+        let settings = await dependencies.settingsStore.load().favorites
+
+        if let favorite {
+            let canRemoveRemote = favorite.remoteFavoriteID?.isEmpty == false
+            switch FavoriteRemoveRemoteDecision.resolve(settings: settings, canRemoveRemote: canRemoveRemote) {
+            case .prompt:
+                favoriteRemovePrompt = FavoriteRemovePrompt(favorite: favorite)
+            case let .silent(removeRemote):
+                await performFavoriteRemoval(favorite, removeRemote: removeRemote)
+            }
+            return
+        }
+
+        switch FavoriteAddSyncDecision.resolve(settings: settings, canSyncRemote: true) {
+        case .prompt:
+            favoriteAddPromptPresented = true
+        case let .silent(syncToRemote):
+            await performFavoriteAdd(syncToRemote: syncToRemote)
+        }
+    }
+
+    func confirmFavoriteAdd(syncToRemote: Bool, remember: Bool) async {
+        favoriteAddPromptPresented = false
+        if remember {
+            await rememberAddSyncChoice(syncToRemote)
+        }
+        await performFavoriteAdd(syncToRemote: syncToRemote)
+    }
+
+    func confirmFavoriteRemoval(_ favorite: Favorite, removeRemote: Bool, remember: Bool) async {
+        favoriteRemovePrompt = nil
+        if remember {
+            await rememberRemoveRemoteChoice(removeRemote)
+        }
+        await performFavoriteRemoval(favorite, removeRemote: removeRemote)
+    }
+
+    private func performFavoriteAdd(syncToRemote: Bool) async {
+        do {
+            let boardReaderSettings = await dependencies.settingsStore.load().boardReader
+            let result = try await FavoriteQuickActions.addFavorite(
+                threadID: context.thread.tid,
+                title: favoriteTitle,
+                type: .manga,
+                authorID: nil,
+                forumID: context.thread.fid,
+                forumName: boardReaderSettings.entry(forumID: context.thread.fid)?.boardName,
+                contentUpdatedAt: directory?.lastUpdatedAt,
+                formHash: nil,
+                syncToRemote: syncToRemote,
+                boardReaderSettings: boardReaderSettings,
+                localFavoriteLibraryStore: dependencies.localFavoriteLibraryStore,
+                remoteRepository: await dependencies.makeFavoriteRepository()
+            )
+            favorite = result.favorite
+            transientMessage = result.remote.addFeedbackMessage
+        } catch {
+            favoriteErrorMessage = error.localizedDescription
+            favorite = await localFavoriteItem()?.favorite(type: .manga)
+        }
+    }
+
+    private func performFavoriteRemoval(_ favorite: Favorite, removeRemote: Bool) async {
+        do {
+            try await FavoriteQuickActions.removeFavorite(
+                favorite,
+                removeRemote: removeRemote,
+                boardReaderSettings: await dependencies.settingsStore.load().boardReader,
+                localFavoriteLibraryStore: dependencies.localFavoriteLibraryStore,
+                remoteRepository: await dependencies.makeFavoriteRepository()
+            )
+            self.favorite = nil
+            transientMessage = removeRemote
+                ? L10n.string("favorites.quick.removed_with_remote")
+                : L10n.string("favorites.quick.removed")
+        } catch {
+            favoriteErrorMessage = error.localizedDescription
+            self.favorite = await localFavoriteItem()?.favorite(type: .manga)
+        }
+    }
+
+    private func rememberAddSyncChoice(_ syncToRemote: Bool) async {
+        var settings = await dependencies.settingsStore.load()
+        settings.favorites.addSyncPromptEnabled = false
+        settings.favorites.addSyncDefault = syncToRemote
+        do {
+            try await dependencies.settingsStore.save(settings)
+        } catch {
+            YamiboLog.forum.error("Failed to save remembered add-sync choice: \(error)")
+        }
+    }
+
+    private func rememberRemoveRemoteChoice(_ removeRemote: Bool) async {
+        var settings = await dependencies.settingsStore.load()
+        settings.favorites.removeRemotePromptEnabled = false
+        settings.favorites.removeRemoteDefault = removeRemote
+        do {
+            try await dependencies.settingsStore.save(settings)
+        } catch {
+            YamiboLog.forum.error("Failed to save remembered remove-remote choice: \(error)")
+        }
+    }
+
+    func clearFavoriteError() {
+        favoriteErrorMessage = nil
+    }
+
+    func clearTransientMessage() {
+        transientMessage = nil
+    }
+
+    private func refreshFavorite(from localFavoriteLibraryStore: FavoriteLibraryStore) async {
+        favorite = await localFavoriteItem(from: localFavoriteLibraryStore)?.favorite(type: .manga)
+    }
+
+    private var favoriteTitle: String {
+        directory?.cleanBookName ?? context.title
+    }
+
+    private func localFavoriteItem() async -> FavoriteItem? {
+        await localFavoriteItem(from: dependencies.localFavoriteLibraryStore)
+    }
+
+    private func localFavoriteItem(from store: FavoriteLibraryStore) async -> FavoriteItem? {
+        let target = FavoriteItemTarget.mangaThread(threadID: context.thread.tid)
+        return (try? await store.load())?.items.first { item in
+            item.target.id == target.id || item.target.threadID == target.threadID
         }
     }
 
@@ -587,6 +748,23 @@ final class ForumMangaDetailViewModel {
         updated.lastUpdatedAt = Date()
         try await store.saveDirectory(updated)
         return updated
+    }
+}
+
+private extension FavoriteItem {
+    func favorite(type: FavoriteType) -> Favorite {
+        guard let threadID = target.threadID else {
+            preconditionFailure("Thread favorite conversion requires thread target")
+        }
+        return Favorite(
+            id: id,
+            title: title,
+            displayName: displayName,
+            threadID: threadID,
+            remoteFavoriteID: remoteMapping?.yamiboFavoriteID,
+            type: type,
+            tagIDs: tagIDs
+        )
     }
 }
 
