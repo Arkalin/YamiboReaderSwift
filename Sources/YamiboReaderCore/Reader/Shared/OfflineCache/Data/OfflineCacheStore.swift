@@ -12,6 +12,11 @@ actor OfflineCacheStore {
     private let updateNotifier = OfflineCacheUpdateNotifier()
     private var didRecoverQueueState = false
     private static let mangaReaderKind = "manga"
+    nonisolated(unsafe) let sourcePageCache: NSCache<NSString, SourcePageCacheEntry> = {
+        let cache = NSCache<NSString, SourcePageCacheEntry>()
+        cache.countLimit = 128
+        return cache
+    }()
 
     init(
         databasePool: DatabasePool? = nil,
@@ -41,6 +46,7 @@ actor OfflineCacheStore {
                     tid: id.tid,
                     fileManager: fileManager,
                     mangaSourcePagesDirectory: mangaSourcePagesDirectory,
+                    sourcePageCache: sourcePageCache,
                     in: db
                 )
             }
@@ -59,6 +65,7 @@ actor OfflineCacheStore {
                     ownerName: ownerName,
                     fileManager: fileManager,
                     mangaSourcePagesDirectory: mangaSourcePagesDirectory,
+                    sourcePageCache: sourcePageCache,
                     in: db
                 )
             }
@@ -75,6 +82,7 @@ actor OfflineCacheStore {
                 try Self.allMangaMemberships(
                     fileManager: fileManager,
                     mangaSourcePagesDirectory: mangaSourcePagesDirectory,
+                    sourcePageCache: sourcePageCache,
                     in: db
                 )
             }
@@ -210,6 +218,7 @@ actor OfflineCacheStore {
                         ownerName: oldOwnerName,
                         fileManager: fileManager,
                         mangaSourcePagesDirectory: mangaSourcePagesDirectory,
+                        sourcePageCache: sourcePageCache,
                         in: db
                     ),
                     Self.rawWorks(readerKind: .manga, ownerKey: oldOwnerName, in: db)
@@ -306,6 +315,7 @@ actor OfflineCacheStore {
                     tid: normalizedRequest.tid,
                     fileManager: fileManager,
                     mangaSourcePagesDirectory: mangaSourcePagesDirectory,
+                    sourcePageCache: sourcePageCache,
                     in: db
                 ),
                    try Self.isMembershipComplete(membership, fileManager: fileManager, imagesDirectory: imagesDirectory, in: db) {
@@ -389,6 +399,7 @@ actor OfflineCacheStore {
                     tid: id.tid,
                     fileManager: fileManager,
                     mangaSourcePagesDirectory: mangaSourcePagesDirectory,
+                    sourcePageCache: sourcePageCache,
                     in: db
                 ),
                    try Self.isMembershipComplete(membership, fileManager: fileManager, imagesDirectory: imagesDirectory, in: db) {
@@ -578,6 +589,10 @@ actor OfflineCacheStore {
         }
     }
 
+    // Diffs against what's already stored instead of DELETE-then-reinsert-everything, since
+    // callers (e.g. per-image progress updates) invoke this repeatedly for the same
+    // (owner, tid) with a list that mostly repeats its previous contents; a full rewrite
+    // each time is O(n) per call and O(n^2) across a whole chapter's download.
     static func replaceImageList(
         table: String,
         readerKind: String,
@@ -586,26 +601,45 @@ actor OfflineCacheStore {
         imageURLs: [URL],
         in db: Database
     ) throws {
-        try db.execute(
-            sql: "DELETE FROM \(table) WHERE reader_kind = ? AND owner_name = ? AND tid = ?",
-            arguments: [readerKind, ownerName, tid]
-        )
+        var desiredByPosition: [Int: String] = [:]
         for (index, imageURL) in imageURLs.enumerated() {
+            desiredByPosition[index] = imageURL.absoluteString
+        }
+
+        var existingByPosition: [Int: String] = [:]
+        for row in try Row.fetchAll(
+            db,
+            sql: "SELECT manual_order, image_url FROM \(table) WHERE reader_kind = ? AND owner_name = ? AND tid = ?",
+            arguments: [readerKind, ownerName, tid]
+        ) {
+            existingByPosition[row["manual_order"] as Int] = row["image_url"] as String
+        }
+
+        guard existingByPosition != desiredByPosition else { return }
+
+        for position in existingByPosition.keys where desiredByPosition[position] != existingByPosition[position] {
+            try db.execute(
+                sql: "DELETE FROM \(table) WHERE reader_kind = ? AND owner_name = ? AND tid = ? AND manual_order = ?",
+                arguments: [readerKind, ownerName, tid, position]
+            )
+        }
+        for (position, imageURLString) in desiredByPosition where existingByPosition[position] != imageURLString {
             try db.execute(
                 sql: """
                 INSERT INTO \(table) (reader_kind, owner_name, tid, manual_order, image_url)
                 VALUES (?, ?, ?, ?, ?)
                 """,
-                arguments: [readerKind, ownerName, tid, index, imageURL.absoluteString]
+                arguments: [readerKind, ownerName, tid, position, imageURLString]
             )
         }
     }
 
-    private static func membership(
+    static func membership(
         ownerName: String,
         tid: String,
         fileManager: FileManager,
         mangaSourcePagesDirectory: URL,
+        sourcePageCache: NSCache<NSString, SourcePageCacheEntry>,
         in db: Database
     ) throws -> MangaOfflineCacheMembership? {
         guard let row = try Row.fetchOne(
@@ -623,6 +657,7 @@ actor OfflineCacheStore {
             from: row,
             fileManager: fileManager,
             mangaSourcePagesDirectory: mangaSourcePagesDirectory,
+            sourcePageCache: sourcePageCache,
             in: db
         )
     }
@@ -631,6 +666,7 @@ actor OfflineCacheStore {
         ownerName: String,
         fileManager: FileManager,
         mangaSourcePagesDirectory: URL,
+        sourcePageCache: NSCache<NSString, SourcePageCacheEntry>,
         in db: Database
     ) throws -> [MangaOfflineCacheMembership] {
         try Row.fetchAll(
@@ -647,6 +683,7 @@ actor OfflineCacheStore {
                 from: $0,
                 fileManager: fileManager,
                 mangaSourcePagesDirectory: mangaSourcePagesDirectory,
+                sourcePageCache: sourcePageCache,
                 in: db
             )
         }
@@ -655,6 +692,7 @@ actor OfflineCacheStore {
     static func allMangaMemberships(
         fileManager: FileManager,
         mangaSourcePagesDirectory: URL,
+        sourcePageCache: NSCache<NSString, SourcePageCacheEntry>,
         in db: Database
     ) throws -> [MangaOfflineCacheMembership] {
         try Row.fetchAll(
@@ -669,6 +707,7 @@ actor OfflineCacheStore {
                 from: $0,
                 fileManager: fileManager,
                 mangaSourcePagesDirectory: mangaSourcePagesDirectory,
+                sourcePageCache: sourcePageCache,
                 in: db
             )
         }
@@ -678,6 +717,7 @@ actor OfflineCacheStore {
         from row: Row,
         fileManager: FileManager,
         mangaSourcePagesDirectory: URL,
+        sourcePageCache: NSCache<NSString, SourcePageCacheEntry>,
         in db: Database
     ) throws -> MangaOfflineCacheMembership? {
         let tid = row["tid"] as String
@@ -688,7 +728,8 @@ actor OfflineCacheStore {
             byteCount: row["byte_count"] as Int?,
             tid: tid,
             fileManager: fileManager,
-            mangaSourcePagesDirectory: mangaSourcePagesDirectory
+            mangaSourcePagesDirectory: mangaSourcePagesDirectory,
+            sourcePageCache: sourcePageCache
         ) else {
             return nil
         }
@@ -793,16 +834,29 @@ actor OfflineCacheStore {
         byteCount: Int?,
         tid: String,
         fileManager: FileManager,
-        mangaSourcePagesDirectory: URL
+        mangaSourcePagesDirectory: URL,
+        sourcePageCache: NSCache<NSString, SourcePageCacheEntry>
     ) -> ForumThreadPage? {
         guard let fileName = fileName?.mangaReaderTrimmedNonEmpty,
               schemaVersion == 1,
-              let fingerprint = fingerprint?.mangaReaderTrimmedNonEmpty else {
+              let fingerprint = fingerprint?.mangaReaderTrimmedNonEmpty,
+              let byteCount else {
             return nil
         }
         let fileURL = mangaSourcePagesDirectory.appendingPathComponent(fileName, isDirectory: false)
-        guard fileManager.fileExists(atPath: fileURL.path),
-              let data = try? Data(contentsOf: fileURL) else {
+        guard fileManager.fileExists(atPath: fileURL.path) else {
+            return nil
+        }
+
+        // Keying on (tid, fileName, fingerprint, byteCount) means a legitimately replaced
+        // source page file (different content -> different fingerprint/byteCount) naturally
+        // misses the cache without any explicit invalidation.
+        let cacheKey = sourcePageCacheKey(tid: tid, fileName: fileName, fingerprint: fingerprint, byteCount: byteCount) as NSString
+        if let cached = sourcePageCache.object(forKey: cacheKey) {
+            return cached.sourcePage
+        }
+
+        guard let data = try? Data(contentsOf: fileURL) else {
             return nil
         }
         guard byteCount == data.count,
@@ -815,7 +869,12 @@ actor OfflineCacheStore {
             YamiboLog.offlineCache.error("Failed to decode manga source page file \(fileName) or tid mismatch for tid \(tid)")
             return nil
         }
+        sourcePageCache.setObject(SourcePageCacheEntry(sourcePage: sourcePage), forKey: cacheKey)
         return sourcePage
+    }
+
+    private static func sourcePageCacheKey(tid: String, fileName: String, fingerprint: String, byteCount: Int) -> String {
+        "\(tid)#\(fileName)#\(fingerprint)#\(byteCount)"
     }
 
     private static func sourcePageFingerprint(for data: Data) -> String {
@@ -955,6 +1014,14 @@ private struct MangaSourcePagePayload {
     var fingerprint: String
     var byteCount: Int
     var fileExistedBeforeWrite: Bool
+}
+
+final class SourcePageCacheEntry {
+    let sourcePage: ForumThreadPage
+
+    init(sourcePage: ForumThreadPage) {
+        self.sourcePage = sourcePage
+    }
 }
 
 private final class OfflineCacheUpdateNotifier: @unchecked Sendable {
