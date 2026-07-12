@@ -38,7 +38,7 @@ import YamiboReaderTestSupport
         sourceGroup: .forumBoard(id: "fid", label: "版块"),
         locations: [.category(category.id), .collection(categoryID: category.id, collectionID: collection.id)]
     )
-    document.addItem(item)
+    document.upsertItem(item)
     try await libraryStore.save(document)
 
     let organizer = FavoriteLibraryOrganizer(

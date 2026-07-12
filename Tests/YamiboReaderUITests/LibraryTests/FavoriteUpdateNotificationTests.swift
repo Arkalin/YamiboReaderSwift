@@ -208,7 +208,7 @@ private final class NotificationFixture {
     func makeLoadedMonitor(pages: [ForumThreadPage]) async throws -> FavoriteUpdateMonitor {
         var document = FavoriteLibraryDocument()
         let category = document.createCategory(name: "更新通知")
-        document.addItem(try FavoriteItem(
+        document.upsertItem(try FavoriteItem(
             target: target,
             title: "更新主题",
             sourceGroup: .forumBoard(id: "50", label: "测试板块"),

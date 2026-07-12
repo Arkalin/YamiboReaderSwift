@@ -440,7 +440,7 @@ final class SystemSettingsViewModelTests: XCTestCase {
             system: SystemSettings(homePage: .favorites)
         ))
         var favoriteLibrary = FavoriteLibraryDocument()
-        favoriteLibrary.addItem(try FavoriteItem(
+        favoriteLibrary.upsertItem(try FavoriteItem(
             target: FavoriteItemTarget(kind: .normalThread, threadID: "905"),
             title: "收藏条目",
             locations: [.category(favoriteLibrary.defaultCategory.id)]

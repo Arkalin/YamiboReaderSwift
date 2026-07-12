@@ -37,7 +37,7 @@ import Testing
     var stored = item
     stored.forumID = "  fid-explicit  "
     stored.forumName = "  版块显式名  "
-    document.addItem(stored)
+    document.upsertItem(stored)
 
     let normalized = try #require(document.items.first)
     #expect(normalized.forumID == "fid-explicit")
@@ -86,7 +86,7 @@ import Testing
         sourceGroup: .forumBoard(id: "fid-old", label: "旧版块"),
         locations: [.category(document.defaultCategory.id)]
     )
-    document.addItem(existing)
+    document.upsertItem(existing)
 
     let imported = try document.importThreadFavorite(
         probeResult: FavoriteThreadProbeResult(
@@ -127,7 +127,7 @@ import Testing
         locations: [.category(document.defaultCategory.id)],
         tagIDs: [tag.id]
     )
-    document.addItem(existing)
+    document.upsertItem(existing)
 
     let imported = try await document.importThreadFavorite(threadID: "422") { _ in
         FavoriteThreadProbeResult(target: novelTarget, title: "轻小说主题")

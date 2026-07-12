@@ -72,7 +72,7 @@ struct LocalFavoriteCardActions {
                 Task { await organizer.toggleTextCover(for: card) }
             },
             syncToRemote: { item in
-                Task { await organizer.syncItemToYamibo(item) }
+                Task { await organizer.pushItemToYamibo(item) }
             },
             delete: { card in
                 routes.dialog = .deleteItem(card.item)

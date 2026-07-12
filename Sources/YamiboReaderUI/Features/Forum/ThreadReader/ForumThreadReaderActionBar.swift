@@ -6,6 +6,7 @@ struct ForumThreadReaderActionBar: View {
     let isFavorited: Bool
     let onReply: () -> Void
     let onFavorite: () -> Void
+    let onFavoriteLongPress: () -> Void
 
     var body: some View {
         HStack(spacing: 10) {
@@ -27,6 +28,7 @@ struct ForumThreadReaderActionBar: View {
             }
             .buttonStyle(.bordered)
             .tint(ForumColors.brownEmphasis)
+            .simultaneousGesture(LongPressGesture(minimumDuration: 0.5).onEnded { _ in onFavoriteLongPress() })
             .accessibilityLabel(
                 isFavorited ? L10n.string("forum.thread.favorited") : L10n.string("forum.thread.favorite")
             )

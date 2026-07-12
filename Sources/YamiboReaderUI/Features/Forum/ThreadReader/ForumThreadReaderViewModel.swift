@@ -34,6 +34,8 @@ final class ForumThreadReaderViewModel {
     var favoriteErrorMessage: String?
     var favoriteAddPromptPresented = false
     var favoriteRemovePrompt: FavoriteRemovePrompt?
+    var favoriteLocationPickerContext: FavoriteLocationPickerContext?
+    @ObservationIgnored private var pendingFavoriteLocations: [FavoriteLocation]?
     /// Floor anchor loaded from saved reading progress, pending its one
     /// restore scroll (browsing-history decision #8). The body view scrolls
     /// to it once the page renders, then calls `consumeRestoredAnchor()`.
@@ -255,7 +257,59 @@ final class ForumThreadReaderViewModel {
         await performFavoriteRemoval(favorite, removeRemote: removeRemote)
     }
 
+    /// Star button long-press: opens the location picker pre-filled with
+    /// this item's current locations (empty if not yet favorited).
+    func presentFavoriteLocationPicker() async {
+        guard let localFavoriteLibraryStore = await localFavoriteLibraryStoreProvider() else { return }
+        let document = (try? await localFavoriteLibraryStore.load()) ?? FavoriteLibraryDocument()
+        let currentLocations = await localFavoriteItem(forThreadID: context.thread.tid)?.locations ?? []
+        favoriteLocationPickerContext = FavoriteLocationPickerContext(
+            document: document,
+            initialSelection: Set(currentLocations),
+            isFavorited: isFavorited,
+            localFavoriteLibraryStore: localFavoriteLibraryStore
+        )
+    }
+
+    /// Routes the picker's confirmed selection: not-yet-favorited creates
+    /// with those locations (still subject to the add-sync prompt); already
+    /// favorited with a non-empty selection re-pins locally; already
+    /// favorited with everything cleared is treated as unfavoriting, through
+    /// the normal remove-sync decision — mirroring Android.
+    func confirmFavoriteLocationSelection(_ locations: Set<FavoriteLocation>) async {
+        favoriteLocationPickerContext = nil
+        guard let favoriteItem = await localFavoriteItem(forThreadID: context.thread.tid) else {
+            guard !locations.isEmpty else { return }
+            pendingFavoriteLocations = Array(locations)
+            let settings = await favoriteSettings()
+            let canSyncRemote = await favoriteRepositoryProvider() != nil
+            switch FavoriteAddSyncDecision.resolve(settings: settings, canSyncRemote: canSyncRemote) {
+            case .prompt:
+                favoriteAddPromptPresented = true
+            case let .silent(syncToRemote):
+                await performFavoriteAdd(syncToRemote: syncToRemote)
+            }
+            return
+        }
+        let favorite = favoriteItem.favorite(type: .other)
+        guard !locations.isEmpty else {
+            let settings = await favoriteSettings()
+            let canRemoveRemote = await favoriteRepositoryProvider() != nil
+                && favorite.remoteFavoriteID?.isEmpty == false
+            switch FavoriteRemoveRemoteDecision.resolve(settings: settings, canRemoveRemote: canRemoveRemote) {
+            case .prompt:
+                favoriteRemovePrompt = FavoriteRemovePrompt(favorite: favorite)
+            case let .silent(removeRemote):
+                await performFavoriteRemoval(favorite, removeRemote: removeRemote)
+            }
+            return
+        }
+        await performFavoriteRelocate(Array(locations))
+    }
+
     private func performFavoriteAdd(syncToRemote: Bool) async {
+        let locations = pendingFavoriteLocations
+        pendingFavoriteLocations = nil
         do {
             guard let localFavoriteLibraryStore = await localFavoriteLibraryStoreProvider() else {
                 throw YamiboError.persistenceFailed("Local favorite library store is unavailable")
@@ -268,6 +322,7 @@ final class ForumThreadReaderViewModel {
                 forumID: resolvedForumID,
                 forumName: page?.forumName,
                 contentUpdatedAt: Self.contentUpdatedAt(from: page),
+                locations: locations,
                 formHash: page?.formHash,
                 syncToRemote: syncToRemote,
                 boardReaderSettings: await boardReaderSettings(),
@@ -313,6 +368,22 @@ final class ForumThreadReaderViewModel {
         } catch {
             favoriteErrorMessage = error.localizedDescription
             await refreshFavoriteState()
+        }
+    }
+
+    private func performFavoriteRelocate(_ locations: [FavoriteLocation]) async {
+        do {
+            guard let localFavoriteLibraryStore = await localFavoriteLibraryStoreProvider() else {
+                throw YamiboError.persistenceFailed("Local favorite library store is unavailable")
+            }
+            try await FavoriteQuickActions.relocateFavorite(
+                threadID: context.thread.tid,
+                locations: locations,
+                localFavoriteLibraryStore: localFavoriteLibraryStore
+            )
+            transientMessage = L10n.string("favorites.quick.relocated")
+        } catch {
+            favoriteErrorMessage = error.localizedDescription
         }
     }
 
@@ -379,26 +450,12 @@ final class ForumThreadReaderViewModel {
 
     private func rememberAddSyncChoice(_ syncToRemote: Bool) async {
         guard let settingsStore = await settingsStoreProvider() else { return }
-        var settings = await settingsStore.load()
-        settings.favorites.addSyncPromptEnabled = false
-        settings.favorites.addSyncDefault = syncToRemote
-        do {
-            try await settingsStore.save(settings)
-        } catch {
-            YamiboLog.forum.error("Failed to save remembered add-sync choice: \(error)")
-        }
+        await FavoriteQuickActions.rememberAddSyncChoice(syncToRemote, settingsStore: settingsStore)
     }
 
     private func rememberRemoveRemoteChoice(_ removeRemote: Bool) async {
         guard let settingsStore = await settingsStoreProvider() else { return }
-        var settings = await settingsStore.load()
-        settings.favorites.removeRemotePromptEnabled = false
-        settings.favorites.removeRemoteDefault = removeRemote
-        do {
-            try await settingsStore.save(settings)
-        } catch {
-            YamiboLog.forum.error("Failed to save remembered remove-remote choice: \(error)")
-        }
+        await FavoriteQuickActions.rememberRemoveRemoteChoice(removeRemote, settingsStore: settingsStore)
     }
 
     func loadRatingResults(postID: String) async throws -> ForumThreadRatingResultsPage {

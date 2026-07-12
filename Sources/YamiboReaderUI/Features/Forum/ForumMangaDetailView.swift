@@ -45,6 +45,9 @@ struct ForumMangaDetailView: View {
             onFavoriteTap: {
                 Task { await model.toggleFavorite() }
             },
+            onFavoriteLongPress: {
+                Task { await model.presentFavoriteLocationPicker() }
+            },
             onCorrectionTap: presentCorrectionSheet,
             onCopyText: copyText,
             onViewThread: onViewThread
@@ -91,6 +94,15 @@ struct ForumMangaDetailView: View {
                 Task { await model.confirmFavoriteRemoval(favorite, removeRemote: removeRemote, remember: remember) }
             }
         )
+        .sheet(item: Bindable(model).favoriteLocationPickerContext) { context in
+            FavoriteLocationPickerSheet(
+                context: context,
+                onCancel: { model.favoriteLocationPickerContext = nil },
+                onConfirm: { locations in
+                    Task { await model.confirmFavoriteLocationSelection(locations) }
+                }
+            )
+        }
         .alert(
             L10n.string("forum.thread_route.copied"),
             isPresented: Binding(
@@ -140,6 +152,7 @@ private struct ForumMangaDetailBodyView: View {
     let onChapterTap: (MangaChapter) -> Void
     let onUpdateDirectoryTap: () -> Void
     let onFavoriteTap: () -> Void
+    let onFavoriteLongPress: () -> Void
     let onCorrectionTap: () -> Void
     let onCopyText: ((String) -> Void)?
     let onViewThread: () -> Void
@@ -165,6 +178,7 @@ private struct ForumMangaDetailBodyView: View {
                             onContinueTap: onContinueTap,
                             onUpdateDirectoryTap: onUpdateDirectoryTap,
                             onFavoriteTap: onFavoriteTap,
+                            onFavoriteLongPress: onFavoriteLongPress,
                             onCorrectionTap: onCorrectionTap,
                             onCopyText: onCopyText,
                             onViewThread: onViewThread
@@ -238,6 +252,7 @@ private struct ForumMangaDetailHeader: View {
     let onContinueTap: () -> Void
     let onUpdateDirectoryTap: () -> Void
     let onFavoriteTap: () -> Void
+    let onFavoriteLongPress: () -> Void
     let onCorrectionTap: () -> Void
     let onCopyText: ((String) -> Void)?
     let onViewThread: () -> Void
@@ -292,6 +307,7 @@ private struct ForumMangaDetailHeader: View {
                 onContinueTap: onContinueTap,
                 onUpdateDirectoryTap: onUpdateDirectoryTap,
                 onFavoriteTap: onFavoriteTap,
+                onFavoriteLongPress: onFavoriteLongPress,
                 onViewThread: onViewThread
             )
         }
@@ -423,6 +439,7 @@ private struct ForumMangaHeaderActions: View {
     let onContinueTap: () -> Void
     let onUpdateDirectoryTap: () -> Void
     let onFavoriteTap: () -> Void
+    let onFavoriteLongPress: () -> Void
     let onViewThread: () -> Void
 
     var body: some View {
@@ -467,6 +484,7 @@ private struct ForumMangaHeaderActions: View {
                 .background(ForumColors.brownPrimary.opacity(0.16), in: Capsule())
         }
         .buttonStyle(.plain)
+        .simultaneousGesture(LongPressGesture(minimumDuration: 0.5).onEnded { _ in onFavoriteLongPress() })
         .accessibilityLabel(isFavorited ? L10n.string("forum.thread.favorited") : L10n.string("forum.thread.favorite"))
     }
 

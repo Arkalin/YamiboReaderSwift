@@ -24,7 +24,7 @@ final class LocalFavoriteOpenTargetResolverTests: XCTestCase {
             locations: [.category(document.defaultCategory.id)],
             updatedAt: originalUpdatedAt
         )
-        document.addItem(item)
+        document.upsertItem(item)
         try await localFavoriteLibraryStore.save(document)
 
         let resolver = LocalFavoriteOpenTargetResolver(
@@ -72,7 +72,7 @@ final class LocalFavoriteOpenTargetResolverTests: XCTestCase {
             title: "漫画章节",
             locations: [.category(document.defaultCategory.id)]
         )
-        document.addItem(item)
+        document.upsertItem(item)
         try await localFavoriteLibraryStore.save(document)
 
         let resolver = LocalFavoriteOpenTargetResolver(
@@ -141,7 +141,7 @@ final class LocalFavoriteOpenTargetResolverTests: XCTestCase {
             forumName: "中文百合漫画区",
             locations: [.category(document.defaultCategory.id)]
         )
-        document.addItem(item)
+        document.upsertItem(item)
         try await localFavoriteLibraryStore.save(document)
 
         let resolver = LocalFavoriteOpenTargetResolver(
@@ -196,7 +196,7 @@ final class LocalFavoriteOpenTargetResolverTests: XCTestCase {
             forumName: "中文百合漫画区",
             locations: [.category(document.defaultCategory.id)]
         )
-        document.addItem(item)
+        document.upsertItem(item)
         try await localFavoriteLibraryStore.save(document)
 
         let resolver = LocalFavoriteOpenTargetResolver(
@@ -265,7 +265,7 @@ final class LocalFavoriteOpenTargetResolverTests: XCTestCase {
             forumName: "关闭板块",
             locations: [.category(document.defaultCategory.id)]
         )
-        document.addItem(item)
+        document.upsertItem(item)
         try await localFavoriteLibraryStore.save(document)
 
         let resolver = LocalFavoriteOpenTargetResolver(
@@ -341,7 +341,7 @@ final class LocalFavoriteOpenTargetResolverTests: XCTestCase {
             forumName: "未配置板块",
             locations: [.category(document.defaultCategory.id)]
         )
-        document.addItem(item)
+        document.upsertItem(item)
         try await localFavoriteLibraryStore.save(document)
 
         let resolver = LocalFavoriteOpenTargetResolver(
@@ -416,7 +416,7 @@ final class LocalFavoriteOpenTargetResolverTests: XCTestCase {
             forumName: "中文百合漫画区",
             locations: [.category(document.defaultCategory.id)]
         )
-        document.addItem(item)
+        document.upsertItem(item)
         try await localFavoriteLibraryStore.save(document)
 
         let resolver = LocalFavoriteOpenTargetResolver(
@@ -459,7 +459,7 @@ final class LocalFavoriteOpenTargetResolverTests: XCTestCase {
             forumName: "中文百合漫画区",
             locations: [.category(document.defaultCategory.id)]
         )
-        document.addItem(item)
+        document.upsertItem(item)
         try await localFavoriteLibraryStore.save(document)
 
         let resolver = LocalFavoriteOpenTargetResolver(
@@ -512,7 +512,7 @@ final class LocalFavoriteOpenTargetResolverTests: XCTestCase {
             forumName: "小说板块",
             locations: [.category(document.defaultCategory.id)]
         )
-        document.addItem(item)
+        document.upsertItem(item)
         try await localFavoriteLibraryStore.save(document)
 
         let resolver = LocalFavoriteOpenTargetResolver(
@@ -563,7 +563,7 @@ final class LocalFavoriteOpenTargetResolverTests: XCTestCase {
             forumName: "漫画板块",
             locations: [.category(document.defaultCategory.id)]
         )
-        document.addItem(item)
+        document.upsertItem(item)
         try await localFavoriteLibraryStore.save(document)
 
         let resolver = LocalFavoriteOpenTargetResolver(
@@ -614,7 +614,7 @@ final class LocalFavoriteOpenTargetResolverTests: XCTestCase {
             forumName: "改配小说",
             locations: [.category(document.defaultCategory.id)]
         )
-        document.addItem(item)
+        document.upsertItem(item)
         try await localFavoriteLibraryStore.save(document)
 
         let resolver = LocalFavoriteOpenTargetResolver(
@@ -662,7 +662,7 @@ final class LocalFavoriteOpenTargetResolverTests: XCTestCase {
             forumName: "未配置板块",
             locations: [.category(document.defaultCategory.id)]
         )
-        document.addItem(item)
+        document.upsertItem(item)
         try await localFavoriteLibraryStore.save(document)
 
         let resolver = LocalFavoriteOpenTargetResolver(
@@ -711,7 +711,7 @@ final class LocalFavoriteOpenTargetResolverTests: XCTestCase {
             forumName: "改回普通的板块",
             locations: [.category(document.defaultCategory.id)]
         )
-        document.addItem(item)
+        document.upsertItem(item)
         try await localFavoriteLibraryStore.save(document)
 
         let resolver = LocalFavoriteOpenTargetResolver(

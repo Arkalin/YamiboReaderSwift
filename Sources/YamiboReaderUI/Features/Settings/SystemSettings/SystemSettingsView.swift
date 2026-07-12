@@ -163,6 +163,46 @@ public struct SystemSettingsView: View {
                     }
                 }
 
+                Section {
+                    Toggle(
+                        L10n.string("settings.favorite_add_sync_prompt"),
+                        isOn: favoriteAddSyncPromptBinding
+                    )
+                    .disabled(viewModel.isBusy)
+
+                    if !viewModel.favoriteAddSyncPromptEnabled {
+                        Picker(
+                            L10n.string("settings.favorite_add_sync_default"),
+                            selection: favoriteAddSyncDefaultBinding
+                        ) {
+                            Text(L10n.string("favorites.quick.add_prompt.sync")).tag(true)
+                            Text(L10n.string("favorites.quick.add_prompt.local_only")).tag(false)
+                        }
+                        .disabled(viewModel.isBusy)
+                    }
+
+                    Toggle(
+                        L10n.string("settings.favorite_remove_sync_prompt"),
+                        isOn: favoriteRemoveRemotePromptBinding
+                    )
+                    .disabled(viewModel.isBusy)
+
+                    if !viewModel.favoriteRemoveRemotePromptEnabled {
+                        Picker(
+                            L10n.string("settings.favorite_remove_sync_default"),
+                            selection: favoriteRemoveRemoteDefaultBinding
+                        ) {
+                            Text(L10n.string("favorites.quick.remove_prompt.both")).tag(true)
+                            Text(L10n.string("favorites.quick.remove_prompt.local_only")).tag(false)
+                        }
+                        .disabled(viewModel.isBusy)
+                    }
+                } header: {
+                    Text(L10n.string("settings.section.favorite_sync_behavior"))
+                } footer: {
+                    Text(L10n.string("settings.favorite_sync_behavior.footer"))
+                }
+
                 Section(L10n.string("settings.section.novel_offline_cache")) {
                     Toggle(
                         L10n.string("settings.novel_offline_cache.retain_inline_images"),
@@ -450,6 +490,34 @@ public struct SystemSettingsView: View {
         Binding(
             get: { viewModel.favoriteShowsCategoryCounts },
             set: { viewModel.updateFavoriteShowsCategoryCounts($0) }
+        )
+    }
+
+    private var favoriteAddSyncPromptBinding: Binding<Bool> {
+        Binding(
+            get: { viewModel.favoriteAddSyncPromptEnabled },
+            set: { viewModel.updateFavoriteAddSyncPromptEnabled($0) }
+        )
+    }
+
+    private var favoriteAddSyncDefaultBinding: Binding<Bool> {
+        Binding(
+            get: { viewModel.favoriteAddSyncDefault },
+            set: { viewModel.updateFavoriteAddSyncDefault($0) }
+        )
+    }
+
+    private var favoriteRemoveRemotePromptBinding: Binding<Bool> {
+        Binding(
+            get: { viewModel.favoriteRemoveRemotePromptEnabled },
+            set: { viewModel.updateFavoriteRemoveRemotePromptEnabled($0) }
+        )
+    }
+
+    private var favoriteRemoveRemoteDefaultBinding: Binding<Bool> {
+        Binding(
+            get: { viewModel.favoriteRemoveRemoteDefault },
+            set: { viewModel.updateFavoriteRemoveRemoteDefault($0) }
         )
     }
 

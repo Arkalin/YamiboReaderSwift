@@ -10,12 +10,30 @@ protocol ForumThreadFavoriteRemoteOperating: Sendable {
 extension FavoriteRepository: ForumThreadFavoriteRemoteOperating {}
 
 /// Local-first quick actions for single favorites (reader star button, detail
-/// pages, favorite item menus).
+/// pages, favorite item menus), plus the shared decision/remember layer every
+/// favorite entry point routes through.
 ///
 /// Adding writes the local library first and reports the optional Yamibo push
 /// separately — a remote failure never rolls the local favorite back. Deleting
 /// with `removeRemote` inverts that: the remote delete runs first, so its
 /// failure throws and leaves the local item intact (no half-deleted state).
+///
+/// ## Terminology (add/import/push/sync boundaries)
+/// - **add** — a user-initiated favorite creation: local write first, then
+///   an optional immediate Yamibo push per `FavoriteAddSyncDecision`.
+/// - **upsert** — the document-level write primitive
+///   (`FavoriteLibraryDocument.upsertItem`); replaces by target, never
+///   touches the network.
+/// - **import** — the sync engine materializing a remote favorite locally
+///   (`FavoriteLibraryDocument.importThreadFavorite`).
+/// - **push** — transmitting one existing local favorite to Yamibo
+///   (`pushFavoriteItemToYamibo`); no local content change beyond the
+///   remote mapping.
+/// - **sync** — reserved for the bidirectional union engine
+///   (`FavoriteYamiboSyncEngine`), which never deletes on either side.
+/// - **remove/delete** — local record removal; whether the Yamibo
+///   counterpart is deleted too is a separate decision resolved through
+///   `FavoriteRemoveRemoteDecision` (never implied by the operation itself).
 enum FavoriteQuickActions {
     /// Outcome of a Yamibo push attached to an add or single-item sync.
     enum RemotePushResult: Equatable, Sendable {
@@ -41,6 +59,11 @@ enum FavoriteQuickActions {
         forumName: String? = nil,
         contentUpdatedAt: Date? = nil,
         localTargetKindOverride: FavoriteItemTargetKind? = nil,
+        /// Locations to file the new favorite under, e.g. from the star
+        /// button's long-press location picker. Nil or empty falls back to
+        /// the default category — every existing call site keeps working
+        /// unchanged.
+        locations: [FavoriteLocation]? = nil,
         formHash: String?,
         syncToRemote: Bool,
         boardReaderSettings: BoardReaderSettings,
@@ -54,6 +77,7 @@ enum FavoriteQuickActions {
             forumName: forumName,
             contentUpdatedAt: contentUpdatedAt,
             localTargetKindOverride: localTargetKindOverride,
+            locations: locations,
             boardReaderSettings: boardReaderSettings,
             localFavoriteLibraryStore: localFavoriteLibraryStore
         )
@@ -118,9 +142,39 @@ enum FavoriteQuickActions {
         }
     }
 
+    /// Re-pins an already-favorited item to exactly `locations` — the star
+    /// button's long-press location picker, applied to an item that's
+    /// already favorited. A diff/replace (built from the existing
+    /// single-location `addLocation`/`removeLocation` primitives, additions
+    /// applied before removals so the item is never transiently locationless),
+    /// not an additive append — matching Android's "重新指定位置" semantics.
+    /// Local-only: unlike add/remove, relocating never asks about Yamibo,
+    /// since location membership has no server counterpart. No-ops (returns
+    /// without writing) for an empty `locations` — callers must route an
+    /// empty selection through the normal remove flow instead, since a
+    /// favorite can never end up with zero locations.
+    static func relocateFavorite(
+        threadID: String,
+        locations: [FavoriteLocation],
+        localFavoriteLibraryStore: FavoriteLibraryStore
+    ) async throws {
+        let desiredLocations = Set(locations)
+        guard !desiredLocations.isEmpty else { return }
+        try await localFavoriteLibraryStore.update { document in
+            guard let target = document.items.first(where: { $0.target.threadID == threadID })?.target else { return }
+            let currentLocations = Set(document.items.first { $0.target.id == target.id }?.locations ?? [])
+            for location in desiredLocations.subtracting(currentLocations) {
+                document.addLocation(location, to: target)
+            }
+            for location in currentLocations.subtracting(desiredLocations) {
+                document.removeLocation(location, from: target)
+            }
+        }
+    }
+
     /// Pushes one existing favorite item to Yamibo (favorites item menu's
     /// "sync to Yamibo" action).
-    static func syncFavoriteItemToRemote(
+    static func pushFavoriteItemToYamibo(
         _ item: FavoriteItem,
         localFavoriteLibraryStore: FavoriteLibraryStore,
         remoteRepository: any ForumThreadFavoriteRemoteOperating
@@ -145,6 +199,38 @@ enum FavoriteQuickActions {
         return .synced
     }
 
+    // MARK: - Remembered sync choices
+
+    /// Persists a remembered "sync new favorites to Yamibo?" choice: turns
+    /// the add prompt off and records the picked default. The one shared
+    /// write path for every entry point offering a remember variant (detail
+    /// pages, thread reader, browsing history) and for the system settings
+    /// UI's re-editable switches.
+    static func rememberAddSyncChoice(_ syncToRemote: Bool, settingsStore: SettingsStore) async {
+        do {
+            _ = try await settingsStore.update { settings in
+                settings.favorites.addSyncPromptEnabled = false
+                settings.favorites.addSyncDefault = syncToRemote
+            }
+        } catch {
+            YamiboLog.library.error("Failed to save remembered add-sync choice: \(error)")
+        }
+    }
+
+    /// Same shared write path for the delete flow's "also remove from
+    /// Yamibo?" remembered choice, including the favorites page's
+    /// delete-everywhere prompt.
+    static func rememberRemoveRemoteChoice(_ removeRemote: Bool, settingsStore: SettingsStore) async {
+        do {
+            _ = try await settingsStore.update { settings in
+                settings.favorites.removeRemotePromptEnabled = false
+                settings.favorites.removeRemoteDefault = removeRemote
+            }
+        } catch {
+            YamiboLog.library.error("Failed to save remembered remove-remote choice: \(error)")
+        }
+    }
+
     // MARK: - Helpers
 
     @discardableResult
@@ -154,6 +240,7 @@ enum FavoriteQuickActions {
         forumName: String?,
         contentUpdatedAt: Date?,
         localTargetKindOverride: FavoriteItemTargetKind? = nil,
+        locations: [FavoriteLocation]? = nil,
         boardReaderSettings: BoardReaderSettings,
         localFavoriteLibraryStore: FavoriteLibraryStore
     ) async throws -> FavoriteItem {
@@ -176,12 +263,12 @@ enum FavoriteQuickActions {
                 forumID: forumID,
                 forumName: forumName,
                 contentUpdatedAt: contentUpdatedAt,
-                locations: [.category(document.defaultCategory.id)],
+                locations: locations?.isEmpty == false ? locations! : [.category(document.defaultCategory.id)],
                 tagIDs: favorite.tagIDs,
                 createdAt: .now,
                 updatedAt: .now
             )
-            document.addItem(item)
+            document.upsertItem(item)
             return item
         }
     }

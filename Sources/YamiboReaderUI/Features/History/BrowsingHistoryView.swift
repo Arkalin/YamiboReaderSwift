@@ -53,6 +53,15 @@ struct BrowsingHistoryView: View {
                 Task { await model.confirmFavoriteRemoval(favorite, removeRemote: removeRemote, remember: remember) }
             }
         )
+        .sheet(item: Bindable(model).favoriteLocationPickerContext) { context in
+            FavoriteLocationPickerSheet(
+                context: context,
+                onCancel: { model.favoriteLocationPickerContext = nil },
+                onConfirm: { locations in
+                    Task { await model.confirmFavoriteLocationSelection(locations) }
+                }
+            )
+        }
         .alert(L10n.string("common.operation_failed"), isPresented: errorIsPresented, actions: {
             Button(L10n.string("common.ok")) {
                 model.clearError()
@@ -123,6 +132,9 @@ struct BrowsingHistoryView: View {
             },
             onToggleFavorite: {
                 Task { await model.toggleFavorite(entry) }
+            },
+            onToggleFavoriteLongPress: {
+                Task { await model.presentFavoriteLocationPicker(entry) }
             }
         )
         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
@@ -262,6 +274,7 @@ private struct BrowsingHistoryRow: View {
     let canToggleFavorite: Bool
     let onOpen: () -> Void
     let onToggleFavorite: () -> Void
+    let onToggleFavoriteLongPress: () -> Void
 
     var body: some View {
         HStack(spacing: 12) {
@@ -305,6 +318,9 @@ private struct BrowsingHistoryRow: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .simultaneousGesture(
+                    LongPressGesture(minimumDuration: 0.5).onEnded { _ in onToggleFavoriteLongPress() }
+                )
                 .accessibilityLabel(
                     isFavorited
                         ? L10n.string("history.favorite.remove")

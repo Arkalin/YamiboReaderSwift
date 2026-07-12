@@ -11,6 +11,29 @@ enum LocalFavoriteDeleteScope: Equatable {
     case everywhere
 }
 
+/// Pending "also delete from Yamibo?" question raised by a favorites-page
+/// delete-everywhere action — the same second decision the quick-action
+/// remove flow models with `FavoriteRemovePrompt`, kept as its own type
+/// because the subject here is an item or the whole selection, not a
+/// `Favorite`.
+struct LocalFavoriteRemoveRemotePrompt: Identifiable, Equatable {
+    enum Subject: Equatable {
+        case item(FavoriteItem)
+        case selection
+    }
+
+    let subject: Subject
+
+    var id: String {
+        switch subject {
+        case let .item(item):
+            "item-\(item.id)"
+        case .selection:
+            "selection"
+        }
+    }
+}
+
 /// Coordinates the local favorite library document: category, collection, tag
 /// and item organization, navigation state, and filter-driven derivation of
 /// the rendered cards.
@@ -82,6 +105,11 @@ final class FavoriteLibraryOrganizer: ObservableObject {
     @Published var errorMessage: String?
     /// Short-lived toast feedback (single-item sync results and similar).
     @Published var transientMessage: String?
+    /// Non-nil while a delete-everywhere action waits for the user's "also
+    /// delete from Yamibo?" answer (`removeRemotePromptEnabled`). The view
+    /// renders it as a confirmation dialog; both confirm variants route back
+    /// through `confirmRemoveRemotePrompt`, dismissal aborts the delete.
+    @Published var removeRemotePrompt: LocalFavoriteRemoveRemotePrompt?
 
     /// Selection and search-mode session shared with the views.
     let selection = LocalFavoriteBrowseSession()
@@ -469,10 +497,10 @@ final class FavoriteLibraryOrganizer: ObservableObject {
 
     @discardableResult
     /// Pushes one favorite item to Yamibo (card context menu action).
-    func syncItemToYamibo(_ item: FavoriteItem) async {
+    func pushItemToYamibo(_ item: FavoriteItem) async {
         do {
             let repository = await makeFavoriteRepository()
-            let result = try await FavoriteQuickActions.syncFavoriteItemToRemote(
+            let result = try await FavoriteQuickActions.pushFavoriteItemToYamibo(
                 item,
                 localFavoriteLibraryStore: libraryStore,
                 remoteRepository: repository
@@ -960,6 +988,69 @@ final class FavoriteLibraryOrganizer: ObservableObject {
         selection.exitSelectionMode()
     }
 
+    /// Entry point for the selection bar's delete: resolves whether the
+    /// Yamibo counterparts should be deleted too through the SAME remembered
+    /// choice every other remove entry point uses
+    /// (`FavoriteRemoveRemoteDecision`), prompting when the user has not
+    /// remembered one. `.currentLocation` never touches the website, so it
+    /// skips the decision entirely.
+    func requestDeleteSelection(scope: LocalFavoriteDeleteScope) async {
+        switch scope {
+        case .currentLocation:
+            await deleteSelection(scope: .currentLocation, removeRemote: false)
+        case .everywhere:
+            let deletableIDs = selection.selectedFavoriteIDs.filter { !isSmartCardFavoriteID($0) }
+            let candidates = document.items.filter { deletableIDs.contains($0.id) }
+            switch await resolveRemoveRemoteDecision(candidates: candidates) {
+            case .prompt:
+                removeRemotePrompt = LocalFavoriteRemoveRemotePrompt(subject: .selection)
+            case let .silent(removeRemote):
+                await deleteSelection(scope: .everywhere, removeRemote: removeRemote)
+            }
+        }
+    }
+
+    /// Same decision routing for a single card's delete dialog.
+    func requestDeleteItem(_ item: FavoriteItem, scope: LocalFavoriteDeleteScope) async {
+        switch scope {
+        case .currentLocation:
+            await deleteItem(item, scope: .currentLocation, removeRemote: false)
+        case .everywhere:
+            let latestItem = document.items.first { $0.id == item.id } ?? item
+            switch await resolveRemoveRemoteDecision(candidates: [latestItem]) {
+            case .prompt:
+                removeRemotePrompt = LocalFavoriteRemoveRemotePrompt(subject: .item(item))
+            case let .silent(removeRemote):
+                await deleteItem(item, scope: .everywhere, removeRemote: removeRemote)
+            }
+        }
+    }
+
+    /// Completes a pending `removeRemotePrompt`: optionally persists the
+    /// remembered choice (through the shared quick-actions write path), then
+    /// runs the delete that raised the prompt.
+    func confirmRemoveRemotePrompt(removeRemote: Bool, remember: Bool) async {
+        guard let prompt = removeRemotePrompt else { return }
+        removeRemotePrompt = nil
+        if remember {
+            await FavoriteQuickActions.rememberRemoveRemoteChoice(removeRemote, settingsStore: settingsStore)
+        }
+        switch prompt.subject {
+        case let .item(item):
+            await deleteItem(item, scope: .everywhere, removeRemote: removeRemote)
+        case .selection:
+            await deleteSelection(scope: .everywhere, removeRemote: removeRemote)
+        }
+    }
+
+    /// Silent when no candidate plausibly exists on the website (nothing to
+    /// ask about) or when the user remembered a choice; `.prompt` otherwise.
+    private func resolveRemoveRemoteDecision(candidates: [FavoriteItem]) async -> FavoriteRemoveRemoteDecision {
+        let canRemoveRemote = candidates.contains(where: \.hasYamiboRemoteCandidate)
+        let settings = await settingsStore.load().favorites
+        return FavoriteRemoveRemoteDecision.resolve(settings: settings, canRemoveRemote: canRemoveRemote)
+    }
+
     /// Deliberately NOT routed through `expandedSelectionFavoriteIDs` —
     /// unlike every other selection-consuming operation, delete must keep
     /// requiring the dedicated "查看归档收藏" archive page for a smart card.
@@ -969,7 +1060,7 @@ final class FavoriteLibraryOrganizer: ObservableObject {
     /// member favorited would orphan them from their now-partially-deleted
     /// group, with no corresponding cleanup — the exact bug that originally
     /// justified excluding smart cards from selection altogether.
-    func deleteSelection(scope: LocalFavoriteDeleteScope = .everywhere) async {
+    func deleteSelection(scope: LocalFavoriteDeleteScope, removeRemote: Bool) async {
         guard selection.selectedEntryCount > 0 else { return }
         let allSelectedFavoriteIDs = selection.selectedFavoriteIDs
         // `isSmartCardFavoriteID` deliberately does NOT look the id up in
@@ -999,7 +1090,9 @@ final class FavoriteLibraryOrganizer: ObservableObject {
                 document.removeItems(ids: favoriteIDs, from: source)
             case .everywhere:
                 let selectedItems = document.items.filter { favoriteIDs.contains($0.id) }
-                try await deleter.deleteRemoteFavorites(for: selectedItems)
+                if removeRemote {
+                    try await deleter.deleteRemoteFavorites(for: selectedItems)
+                }
                 for item in selectedItems {
                     document.removeItem(target: item.target)
                 }
@@ -1014,7 +1107,7 @@ final class FavoriteLibraryOrganizer: ObservableObject {
 
     // MARK: - Items
 
-    func deleteItem(_ item: FavoriteItem, scope: LocalFavoriteDeleteScope = .everywhere) async {
+    func deleteItem(_ item: FavoriteItem, scope: LocalFavoriteDeleteScope, removeRemote: Bool) async {
         let currentLocation = selectionSourceLocation
         let deleter = remoteDeleter
         await commit { document in
@@ -1027,7 +1120,9 @@ final class FavoriteLibraryOrganizer: ObservableObject {
                     _ = document.removeLocation(currentLocation, from: latestItem.target)
                 }
             case .everywhere:
-                try await deleter.deleteRemoteFavorites(for: [latestItem])
+                if removeRemote {
+                    try await deleter.deleteRemoteFavorites(for: [latestItem])
+                }
                 document.removeItem(target: latestItem.target)
             }
         }

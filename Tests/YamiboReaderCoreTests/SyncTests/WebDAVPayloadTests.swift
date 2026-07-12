@@ -27,7 +27,7 @@ import Testing
     let collection = localDocument.createCollection(categoryID: category.id, name: "合集")
     let tag = localDocument.createTag(name: "标签", color: .blue)
     var localItem = try FavoriteItem(target: target, title: "主题", locations: [.category(category.id)], tagIDs: [tag.id], updatedAt: baseDate)
-    localDocument.addItem(localItem)
+    localDocument.upsertItem(localItem)
 
     var remoteDocument = localDocument
     localItem.locations = [.collection(categoryID: category.id, collectionID: collection.id)]

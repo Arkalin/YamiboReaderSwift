@@ -551,6 +551,141 @@ import YamiboReaderTestSupport
     #expect(model.coverURL == manualURL)
 }
 
+/// Long-press "choose favorite location" feature: not-yet-favorited creates
+/// with exactly the picked locations (not the default category), and the
+/// add-sync prompt still applies afterward — this test disables it so the
+/// add completes silently and `favorite` ends up set.
+@MainActor
+@Test func forumMangaDetailLocationPickerCreatesNewFavoriteWithPickedLocations() async throws {
+    let suiteName = YamiboTestDefaults.suiteName(prefix: "manga-detail-location-picker-add")
+    _ = try YamiboTestDefaults.make(suiteName: suiteName)
+    let mangaDirectoryStore = try makeForumMangaDetailTestDirectoryStore(suiteName: suiteName)
+    let readingProgressStore = ReadingProgressStore(
+        defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
+        key: "reading-progress"
+    )
+    let dependencies = try makeForumMangaDetailDependencies(
+        readingProgressStore: readingProgressStore,
+        mangaDirectoryStore: mangaDirectoryStore,
+        projectionLoader: FakeMangaReaderProjectionLoader(projectionsByTID: [:])
+    )
+    _ = try await dependencies.settingsStore.update { settings in
+        settings.favorites.addSyncPromptEnabled = false
+        settings.favorites.addSyncDefault = false
+    }
+    var document = try await dependencies.localFavoriteLibraryStore.load()
+    let category = document.createCategory(name: "长按新建分类")
+    try await dependencies.localFavoriteLibraryStore.save(document)
+
+    let model = makeForumMangaDetailViewModel(dependencies: dependencies, threadTID: "920")
+
+    await model.presentFavoriteLocationPicker()
+    let context = try #require(model.favoriteLocationPickerContext)
+    #expect(context.initialSelection.isEmpty)
+    #expect(context.isFavorited == false)
+
+    await model.confirmFavoriteLocationSelection([.category(category.id)])
+
+    #expect(model.favoriteLocationPickerContext == nil)
+    let favorite = try #require(model.favorite)
+    #expect(favorite.threadID == "920")
+    let storedDocument = try await dependencies.localFavoriteLibraryStore.load()
+    let storedItem = try #require(storedDocument.items.first { $0.target.threadID == "920" })
+    #expect(storedItem.locations == [.category(category.id)])
+}
+
+/// Already-favorited: a non-empty selection re-pins locations locally (diff
+/// replace, not additive) without touching Yamibo — no add/remove prompt,
+/// just the "已更新收藏位置" toast.
+@MainActor
+@Test func forumMangaDetailLocationPickerRelocatesAlreadyFavoritedItem() async throws {
+    let suiteName = YamiboTestDefaults.suiteName(prefix: "manga-detail-location-picker-relocate")
+    _ = try YamiboTestDefaults.make(suiteName: suiteName)
+    let mangaDirectoryStore = try makeForumMangaDetailTestDirectoryStore(suiteName: suiteName)
+    let readingProgressStore = ReadingProgressStore(
+        defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
+        key: "reading-progress"
+    )
+    let dependencies = try makeForumMangaDetailDependencies(
+        readingProgressStore: readingProgressStore,
+        mangaDirectoryStore: mangaDirectoryStore,
+        projectionLoader: FakeMangaReaderProjectionLoader(projectionsByTID: [:])
+    )
+    let target = FavoriteItemTarget(kind: .mangaThread, threadID: "921")
+    var document = try await dependencies.localFavoriteLibraryStore.load()
+    let categoryA = document.createCategory(name: "分类A")
+    let categoryB = document.createCategory(name: "分类B")
+    document.upsertItem(try FavoriteItem(
+        target: target,
+        title: "已收藏漫画",
+        locations: [.category(categoryA.id)]
+    ))
+    try await dependencies.localFavoriteLibraryStore.save(document)
+
+    let model = makeForumMangaDetailViewModel(dependencies: dependencies, threadTID: "921")
+    model.favorite = Favorite(title: "已收藏漫画", threadID: "921", type: .manga)
+
+    await model.presentFavoriteLocationPicker()
+    let context = try #require(model.favoriteLocationPickerContext)
+    #expect(context.initialSelection == [.category(categoryA.id)])
+    #expect(context.isFavorited == true)
+
+    await model.confirmFavoriteLocationSelection([.category(categoryB.id)])
+
+    #expect(model.favoriteLocationPickerContext == nil)
+    let storedDocument = try await dependencies.localFavoriteLibraryStore.load()
+    let storedItem = try #require(storedDocument.items.first { $0.target.id == target.id })
+    #expect(storedItem.locations == [.category(categoryB.id)])
+    #expect(model.transientMessage == L10n.string("favorites.quick.relocated"))
+    #expect(model.favorite != nil)
+}
+
+/// Already-favorited: clearing every checkbox is a deliberate unfavorite —
+/// routed through the normal remove-sync decision, not a silent relocate to
+/// an empty location set (which the domain model forbids anyway).
+@MainActor
+@Test func forumMangaDetailLocationPickerWithEmptySelectionRemovesFavorite() async throws {
+    let suiteName = YamiboTestDefaults.suiteName(prefix: "manga-detail-location-picker-remove")
+    _ = try YamiboTestDefaults.make(suiteName: suiteName)
+    let mangaDirectoryStore = try makeForumMangaDetailTestDirectoryStore(suiteName: suiteName)
+    let readingProgressStore = ReadingProgressStore(
+        defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
+        key: "reading-progress"
+    )
+    let dependencies = try makeForumMangaDetailDependencies(
+        readingProgressStore: readingProgressStore,
+        mangaDirectoryStore: mangaDirectoryStore,
+        projectionLoader: FakeMangaReaderProjectionLoader(projectionsByTID: [:])
+    )
+    _ = try await dependencies.settingsStore.update { settings in
+        settings.favorites.removeRemotePromptEnabled = false
+        settings.favorites.removeRemoteDefault = false
+    }
+    let target = FavoriteItemTarget(kind: .mangaThread, threadID: "922")
+    var document = try await dependencies.localFavoriteLibraryStore.load()
+    let category = document.createCategory(name: "待清空分类")
+    document.upsertItem(try FavoriteItem(
+        target: target,
+        title: "待取消收藏的漫画",
+        locations: [.category(category.id)]
+    ))
+    try await dependencies.localFavoriteLibraryStore.save(document)
+
+    let model = makeForumMangaDetailViewModel(dependencies: dependencies, threadTID: "922")
+    model.favorite = Favorite(title: "待取消收藏的漫画", threadID: "922", type: .manga)
+
+    await model.presentFavoriteLocationPicker()
+    #expect(model.favoriteLocationPickerContext != nil)
+
+    await model.confirmFavoriteLocationSelection([])
+
+    #expect(model.favoriteLocationPickerContext == nil)
+    #expect(model.favoriteRemovePrompt == nil)
+    #expect(model.favorite == nil)
+    let storedItem = try await dependencies.localFavoriteLibraryStore.load().items.first { $0.target.id == target.id }
+    #expect(storedItem == nil)
+}
+
 /// `MangaStoreTestSupport.swift`'s `makeTestMangaDirectoryStore` lives in the
 /// `YamiboReaderCoreTests` target only, so this file builds its own GRDB pool
 /// directly — mirroring `LocalFavoriteOpenTargetResolverTests

@@ -19,7 +19,7 @@ final class FavoriteUpdateMonitorTests: XCTestCase {
         let target = FavoriteItemTarget(kind: .normalThread, threadID: "960")
         var document = FavoriteLibraryDocument()
         let category = document.createCategory(name: "更新检测")
-        document.addItem(try FavoriteItem(
+        document.upsertItem(try FavoriteItem(
             target: target,
             title: "更新主题",
             sourceGroup: .forumBoard(id: "50", label: "测试板块"),
@@ -87,7 +87,7 @@ final class FavoriteUpdateMonitorTests: XCTestCase {
         let target = FavoriteItemTarget(kind: .normalThread, threadID: "961")
         var document = FavoriteLibraryDocument()
         let category = document.createCategory(name: "更新检测失败")
-        document.addItem(try FavoriteItem(
+        document.upsertItem(try FavoriteItem(
             target: target,
             title: "失败主题",
             sourceGroup: .forumBoard(id: "51", label: "测试板块"),
@@ -107,6 +107,54 @@ final class FavoriteUpdateMonitorTests: XCTestCase {
 
         XCTAssertEqual(monitor.snapshot?.failedCount, 1)
         XCTAssertEqual(monitor.snapshot?.skippedCount, 0)
+    }
+
+    /// Regression guard for the `.mangaTitle` dead-case cleanup. Two facts
+    /// pinned here: the mode label now mirrors `FavoriteItemTargetKind`
+    /// faithfully (`init(kind:)` is total — no more ternary stamping
+    /// `.normalThread` on everything non-novel), and manga-thread favorites
+    /// remain EXCLUDED from update checking by `candidates(in:)`, which is
+    /// why `.mangaThread` is documented as unreached at runtime.
+    func testUpdateCheckExcludesMangaThreadFavoritesAndModeMappingStaysFaithful() async throws {
+        XCTAssertEqual(FavoriteUpdateTargetMode(kind: .normalThread), .normalThread)
+        XCTAssertEqual(FavoriteUpdateTargetMode(kind: .novelThread), .novelThread)
+        XCTAssertEqual(FavoriteUpdateTargetMode(kind: .mangaThread), .mangaThread)
+
+        let suiteName = YamiboTestDefaults.suiteName(prefix: "local-favorites-updates-manga-mode")
+        _ = try YamiboTestDefaults.make(suiteName: suiteName)
+        let localFavoriteLibraryStore = FavoriteLibraryStore(
+            defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
+            key: "local-favorites"
+        )
+        let favoriteUpdateStore = FavoriteUpdateStore(
+            defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
+            key: "favorite-updates"
+        )
+        let target = FavoriteItemTarget(kind: .mangaThread, threadID: "962")
+        var document = FavoriteLibraryDocument()
+        let category = document.createCategory(name: "漫画更新检测")
+        document.upsertItem(try FavoriteItem(
+            target: target,
+            title: "漫画主题",
+            sourceGroup: .forumBoard(id: "30", label: "漫画板块"),
+            locations: [.category(category.id)]
+        ))
+        try await localFavoriteLibraryStore.save(document)
+
+        let page = try makeThreadPage(threadID: "962", postID: "p1", title: "漫画主题", replyCount: 1, pageCount: 1)
+        let monitor = try makeUpdateMonitor(
+            updateStore: favoriteUpdateStore,
+            libraryStore: localFavoriteLibraryStore,
+            pageFetcher: { _ in page }
+        )
+        await monitor.load()
+
+        _ = await monitor.startCheck()
+        try await waitForStatus(.completed, in: monitor)
+
+        let state = await favoriteUpdateStore.loadState()
+        XCTAssertTrue(state.trackedTargets.isEmpty)
+        XCTAssertEqual(monitor.snapshot?.totalCount, 0)
     }
 
     private func waitForStatus(

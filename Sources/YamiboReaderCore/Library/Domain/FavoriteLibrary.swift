@@ -699,6 +699,20 @@ public struct FavoriteItem: Codable, Hashable, Identifiable, Sendable {
         displayName?.nilIfEmpty ?? title
     }
 
+    /// Whether this item plausibly has a Yamibo-website counterpart worth a
+    /// remote delete attempt: a usable mapped favorite id, or a mapping whose
+    /// id never resolved but whose thread id still allows a favorites-list
+    /// lookup. The single source of truth shared by the remote deleter and
+    /// the delete flow's "also remove from Yamibo?" decision gate — keep the
+    /// two from ever diverging again.
+    public var hasYamiboRemoteCandidate: Bool {
+        if let remoteFavoriteID = remoteMapping?.yamiboFavoriteID?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !remoteFavoriteID.isEmpty {
+            return true
+        }
+        return remoteMapping != nil && target.threadID != nil
+    }
+
     static func normalizedLocations(_ locations: [FavoriteLocation]) -> [FavoriteLocation] {
         var seen: Set<String> = []
         return locations.filter { seen.insert($0.id).inserted }
@@ -733,7 +747,12 @@ public struct FavoriteLibraryDocument: Codable, Equatable, Sendable {
         categories.first(where: \.isDefault) ?? .defaultCategory
     }
 
-    public mutating func addItem(_ item: FavoriteItem) {
+    /// Inserts `item`, replacing any existing item with the same target —
+    /// an upsert, not a plain append. (Terminology: `upsert*` writes the
+    /// local document directly; `import*` materializes a remote favorite
+    /// locally during sync; pushing local→Yamibo lives in the UI action
+    /// layer as `push*`.)
+    public mutating func upsertItem(_ item: FavoriteItem) {
         removeItem(target: item.target)
         items.append(Self.normalizedItem(item, categories: categories, collections: collections))
         sortItems()
@@ -815,7 +834,7 @@ public struct FavoriteLibraryDocument: Codable, Equatable, Sendable {
             createdAt: date,
             updatedAt: date
         )
-        addItem(item)
+        upsertItem(item)
         return item
     }
 

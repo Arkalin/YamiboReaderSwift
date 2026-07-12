@@ -1,9 +1,28 @@
 import Foundation
 
+/// Descriptive label mirroring the tracked favorite's
+/// `FavoriteItemTargetKind` — one case per kind, mapped via `init(kind:)` so
+/// a manga-thread favorite is never mislabeled as a normal thread.
+/// `.mangaThread` is currently unreached at runtime: update checking's
+/// candidate filter (`FavoriteUpdateMonitor.candidates(in:)`) excludes
+/// `.mangaThread` favorites entirely. The case exists for kind-parity so the
+/// mapping stays total — if manga favorites ever enter update detection they
+/// get labeled honestly instead of falling back to `.normalThread`.
 public enum FavoriteUpdateTargetMode: String, Codable, Hashable, Sendable {
     case normalThread
     case novelThread
-    case mangaTitle
+    case mangaThread
+
+    public init(kind: FavoriteItemTargetKind) {
+        switch kind {
+        case .normalThread:
+            self = .normalThread
+        case .novelThread:
+            self = .novelThread
+        case .mangaThread:
+            self = .mangaThread
+        }
+    }
 }
 
 public enum FavoriteUpdateRunStatus: String, Codable, Hashable, Sendable {

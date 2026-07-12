@@ -137,9 +137,9 @@
 "favorites.boards.missing_delete_id" = "未能解析该收藏的编号，无法删除。";
 "favorites.boards.open" = "打开板块";
 "favorites.boards.title" = "板块收藏";
-"favorites.bulk_delete_favorites_message" = "确定要删除已选中的收藏吗？这会同步删除远端收藏，但会保留本地缓存和阅读进度。";
-"favorites.bulk_delete_mixed_message" = "确定要删除已选中的内容吗？合集会被解散，收藏会同步删除远端收藏。";
-"favorites.bulk_delete_scope_message" = "已选收藏中有多位置项目。可以只从当前位置移除，或彻底删除收藏；彻底删除会同步删除远端收藏。";
+"favorites.bulk_delete_favorites_message" = "确定要删除已选中的收藏吗？本地缓存和阅读进度会保留；是否同时删除百合会收藏会按你的偏好询问或执行。";
+"favorites.bulk_delete_mixed_message" = "确定要删除已选中的内容吗？合集会被解散；是否同时删除百合会收藏会按你的偏好询问或执行。";
+"favorites.bulk_delete_scope_message" = "已选收藏中有多位置项目。可以只从当前位置移除，或彻底删除收藏；彻底删除时是否同删百合会收藏会按你的偏好询问或执行。";
 "favorites.bulk_delete_skipped_smart_manga_message" = "已选中的智能漫画收藏未被删除，请前往其“查看归档收藏”页面删除。";
 "favorites.bulk_dissolve_collections_message" = "确定要解散已选中的合集吗？其中的收藏会返回根页，不会被删除。";
 "favorites.card.last_updated" = "最后更新 %@";
@@ -165,8 +165,8 @@
 "favorites.create_collection" = "创建合集";
 "favorites.create_collection_message" = "创建后会把当前选中的收藏移入新合集。";
 "favorites.delete_favorite" = "删除收藏";
-"favorites.delete_favorite_message" = "确定要删除“%@”吗？这会同步删除远端收藏，但会保留本地缓存和阅读进度。";
-"favorites.delete_favorite_scope_message" = "“%@”在多个位置中出现。可以只从当前位置移除，或彻底删除收藏；彻底删除会同步删除远端收藏。";
+"favorites.delete_favorite_message" = "确定要删除“%@”吗？本地缓存和阅读进度会保留；是否同时删除百合会收藏会按你的偏好询问或执行。";
+"favorites.delete_favorite_scope_message" = "“%@”在多个位置中出现。可以只从当前位置移除，或彻底删除收藏；彻底删除时是否同删百合会收藏会按你的偏好询问或执行。";
 "favorites.delete_failed" = "删除失败";
 "favorites.delete_selection" = "删除所选内容";
 "favorites.delete_scope.current_location" = "仅从当前位置移除";
@@ -236,6 +236,8 @@
 "favorites.sort" = "排序";
 "favorites.sort.descending" = "倒序";
 "favorites.sort.manual" = "默认";
+"favorites.location_picker.clear_all_hint" = "取消勾选全部位置将取消收藏。";
+"favorites.location_picker.title" = "选择收藏位置";
 "favorites.quick.add_prompt.local_only" = "仅本地收藏";
 "favorites.quick.add_prompt.local_remember" = "仅本地（不再询问）";
 "favorites.quick.add_prompt.message" = "把这条收藏也加入你的百合会网站收藏吗？";
@@ -255,6 +257,7 @@
 "favorites.quick.remove_prompt.title" = "删除收藏";
 "favorites.quick.removed" = "已删除收藏";
 "favorites.quick.removed_with_remote" = "已删除收藏并移除百合会收藏";
+"favorites.quick.relocated" = "已更新收藏位置";
 "favorites.quick.sync_item.pending" = "已同步到百合会，映射将在下次同步补齐";
 "favorites.quick.sync_item.synced" = "已同步到百合会";
 "favorites.sort.recent_read" = "最近阅读";
@@ -847,6 +850,11 @@
 "settings.favorite_background" = "收藏页背景";
 "settings.favorite_background.custom" = "自定义";
 "settings.favorite_background.default" = "默认";
+"settings.favorite_add_sync_default" = "新增收藏默认动作";
+"settings.favorite_add_sync_prompt" = "新增收藏时询问是否同步";
+"settings.favorite_remove_sync_default" = "移除收藏默认动作";
+"settings.favorite_remove_sync_prompt" = "移除收藏时询问是否同步删除";
+"settings.favorite_sync_behavior.footer" = "适用于所有收藏入口，包括详情页、阅读页、浏览历史，以及收藏页的“彻底删除”。关闭询问后将按默认动作静默执行；在任意询问弹窗中选择“不再询问”也会更新这里的开关。";
 "settings.home_page" = "App 主页";
 "settings.gamepad" = "手柄";
 "settings.gamepad.capture_prompt" = "请按下手柄按键…";
@@ -902,6 +910,7 @@
 "settings.board_reader.smart_toggle" = "智能漫画模式";
 "settings.about_app_with_version" = "关于Yamibo Reader(%@)";
 "settings.section.appearance" = "外观";
+"settings.section.favorite_sync_behavior" = "收藏同步偏好";
 "settings.section.general" = "通用";
 "settings.section.novel_offline_cache" = "小说离线缓存";
 "settings.section.board_reader" = "板块阅读方式";
