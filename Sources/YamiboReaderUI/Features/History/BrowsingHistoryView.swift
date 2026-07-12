@@ -79,6 +79,9 @@ struct BrowsingHistoryView: View {
         .task {
             await model.observeFavoriteChanges()
         }
+        .task {
+            await model.observeSettingsChanges()
+        }
         .onChange(of: model.selectedCategory) {
             Task { await model.reload() }
         }
@@ -111,6 +114,7 @@ struct BrowsingHistoryView: View {
     private func row(for entry: BrowsingHistoryEntry) -> some View {
         BrowsingHistoryRow(
             entry: entry,
+            category: model.effectiveCategory(for: entry),
             coverURL: model.coverURLsByEntryID[entry.id],
             isFavorited: model.isFavorited(entry),
             canToggleFavorite: model.heartThreadID(for: entry) != nil,
@@ -249,6 +253,10 @@ struct BrowsingHistoryView: View {
 
 private struct BrowsingHistoryRow: View {
     let entry: BrowsingHistoryEntry
+    /// Effective category (board configuration applied) — drives the
+    /// position-text format so the row reads like the reader it would
+    /// actually open with.
+    let category: BrowsingHistoryCategory
     let coverURL: URL?
     let isFavorited: Bool
     let canToggleFavorite: Bool
@@ -307,16 +315,27 @@ private struct BrowsingHistoryRow: View {
     }
 
     private var positionText: String? {
-        switch entry.category {
+        // The effective category can differ from the identity the row was
+        // recorded under (board configuration changed since), so each branch
+        // falls back across the recorded field shapes instead of assuming
+        // its own — e.g. a row recorded as a normal thread (page only) still
+        // shows its page under a now-小说 board rather than nothing.
+        switch category {
         case .normal:
-            guard let pageIndex = entry.pageIndex else { return nil }
-            if let pageCount = entry.pageCount, pageCount > 1 {
-                return L10n.string("history.progress.page_of_total", String(pageIndex), String(pageCount))
+            if let pageIndex = entry.pageIndex {
+                if let pageCount = entry.pageCount, pageCount > 1 {
+                    return L10n.string("history.progress.page_of_total", String(pageIndex), String(pageCount))
+                }
+                return L10n.string("history.progress.page", String(pageIndex))
             }
-            return L10n.string("history.progress.page", String(pageIndex))
-        case .novel:
-            guard let chapterTitle = entry.chapterTitle else { return nil }
+            guard let chapterTitle = entry.chapterTitle, chapterTitle != entry.title else { return nil }
             return L10n.string("history.progress.chapter", chapterTitle)
+        case .novel:
+            if let chapterTitle = entry.chapterTitle {
+                return L10n.string("history.progress.chapter", chapterTitle)
+            }
+            guard let pageIndex = entry.pageIndex else { return nil }
+            return L10n.string("history.progress.page", String(pageIndex))
         case .manga:
             let pageText = entry.pageIndex.map { L10n.string("history.progress.page", String($0 + 1)) }
             if let chapterTitle = entry.chapterTitle, chapterTitle != entry.title {

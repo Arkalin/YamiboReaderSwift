@@ -141,10 +141,19 @@ public struct NovelImageLikeAnchor: Codable, Hashable, Sendable {
 public struct MangaImageLikeAnchor: Codable, Hashable, Sendable {
     public var chapterTID: String
     public var pageLocalIndex: Int
+    /// Board fid snapshot from the capturing reader's launch context, so
+    /// opening the like can follow the board's *current* 阅读方式 configuration
+    /// (pluggable-reader-config R11/R13) instead of assuming the capture-time
+    /// mode. `nil` on rows captured before this field existed (and when the
+    /// capturing reader itself had no board context): those open with the
+    /// pre-R13 behavior — smart mode assumed on.
+    public var forumID: String?
 
-    public init(chapterTID: String, pageLocalIndex: Int) {
+    public init(chapterTID: String, pageLocalIndex: Int, forumID: String? = nil) {
         self.chapterTID = chapterTID.trimmingCharacters(in: .whitespacesAndNewlines)
         self.pageLocalIndex = max(0, pageLocalIndex)
+        let trimmedForumID = forumID?.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.forumID = (trimmedForumID?.isEmpty ?? true) ? nil : trimmedForumID
     }
 }
 

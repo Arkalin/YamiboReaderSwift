@@ -648,7 +648,7 @@ public final class MangaReaderViewModel: ObservableObject {
 
     func likePage(_ page: MangaReaderPageProjection) async -> LikeCaptureOutcome? {
         guard let workKey = likeWorkKey, let like = dependencies.makeLikeDependencies() else { return nil }
-        let anchor = MangaImageLikeAnchor(chapterTID: page.tid, pageLocalIndex: page.localIndex)
+        let anchor = MangaImageLikeAnchor(chapterTID: page.tid, pageLocalIndex: page.localIndex, forumID: context.forumID)
         let source = imageSource(for: page)
         let service = MangaImageLikeCaptureService(likeStore: like.likeStore, likeImageStore: like.likeImageStore)
         let outcome = try? await service.like(

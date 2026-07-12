@@ -6,6 +6,7 @@ struct LikeWorkListView: View {
     let likeDependencies: LikeDependencies
     let contentCoverStore: ContentCoverStore
     let favoriteLibraryStore: FavoriteLibraryStore
+    let settingsStore: SettingsStore
     let appModel: YamiboAppModel
 
     @State private var summaries: [LikeWorkSummary] = []
@@ -137,31 +138,20 @@ struct LikeWorkListView: View {
                 )
             )
         case let .mangaImage(mangaAnchor):
-            appModel.presentMangaReader(
-                MangaLaunchContext(
-                    originalThreadID: mangaAnchor.chapterTID,
-                    chapterTID: mangaAnchor.chapterTID,
-                    displayTitle: workTitle,
-                    source: .like,
-                    initialPage: mangaAnchor.pageLocalIndex,
-                    directoryName: work.id,
-                    isPreview: true,
-                    // Likes are keyed by `LikeWorkKey.mangaTitle(cleanBookName:)`
-                    // (a `MangaDirectory`-level identity, `work.id` above),
-                    // which can only exist once a directory has actually been
-                    // resolved — and per decision #12, that only ever happens
-                    // for a mode-on board. So every liked manga image
-                    // necessarily came from a mode-on read.
-                    isSmartModeEnabled: true,
-                    // Like items carry no board fid (`LikeItem`/`LikeWorkKey`
-                    // are keyed by cleanBookName only), so there is nothing
-                    // to pass — the reader view model's configuration
-                    // fallback substitutes "30", matching this launch path's
-                    // behavior before `forumID` existed. Known gap,
-                    // pluggable-reader-config R4.
-                    forumID: nil
+            // The smart bit follows the board's *current* configuration when
+            // the anchor recorded its fid (R13); legacy fid-less anchors keep
+            // the pre-R13 smart-on assumption. See LikeMangaOpenTargetPolicy.
+            Task {
+                let boardReader = await settingsStore.load().boardReader
+                appModel.presentMangaReader(
+                    LikeMangaOpenTargetPolicy.launchContext(
+                        anchor: mangaAnchor,
+                        workID: work.id,
+                        workTitle: workTitle,
+                        boardReader: boardReader
+                    )
                 )
-            )
+            }
         }
     }
 

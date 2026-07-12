@@ -19,7 +19,14 @@ public struct MangaImageLikeCaptureService: Sendable {
     ) async throws -> LikeCaptureOutcome {
         let payload = LikeAnchorPayload.mangaImage(anchor)
         let existing = await likeStore.likes(for: workKey)
-        if let match = existing.first(where: { $0.kind == .image && $0.anchor == payload }) {
+        // Match by the anchor's identity fields only — `forumID` is a board
+        // snapshot (R13 metadata), not identity, so a row captured before the
+        // field existed must still count as "already liked" for the same page.
+        if let match = existing.first(where: { item in
+            guard item.kind == .image, case let .mangaImage(existingAnchor) = item.anchor else { return false }
+            return existingAnchor.chapterTID == anchor.chapterTID
+                && existingAnchor.pageLocalIndex == anchor.pageLocalIndex
+        }) {
             return .alreadyLiked(match)
         }
 

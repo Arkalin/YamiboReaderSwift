@@ -16,6 +16,12 @@ import YamiboReaderCore
 final class BrowsingHistoryViewModel {
     var entries: [BrowsingHistoryEntry] = []
     var selectedCategory: BrowsingHistoryCategory?
+    /// Snapshot of the per-board reader configuration taken at reload time —
+    /// rows display and filter by their *effective* category (the board's
+    /// current 阅读方式, falling back to the recorded identity;
+    /// pluggable-reader-config R13), so the chip a row appears under always
+    /// matches the reader it would open with.
+    private(set) var boardReaderSettings = BoardReaderSettings()
     var searchText = ""
     var isLoading = false
     var hasLoaded = false
@@ -72,14 +78,27 @@ final class BrowsingHistoryViewModel {
         reloadGeneration += 1
         let generation = reloadGeneration
         let searchQuery = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        // The persisted `category` column holds the recorded identity; the
+        // chip filter must match by *effective* category instead (board
+        // configuration can remap rows after the fact), so category
+        // filtering happens here rather than in SQL.
+        let boardReader = await settingsStore.load().boardReader
         let loadedEntries = await browsingHistoryStore.entries(
-            category: selectedCategory,
+            category: nil,
             searchText: searchQuery.isEmpty ? nil : searchQuery
         )
         guard generation == reloadGeneration else { return }
-        entries = loadedEntries
+        boardReaderSettings = boardReader
+        entries = loadedEntries.filter { entry in
+            guard let selectedCategory else { return true }
+            return entry.category(boardReader: boardReader) == selectedCategory
+        }
         await refreshFavoritedThreadIDs()
-        await refreshCovers(for: loadedEntries, generation: generation)
+        await refreshCovers(for: entries, generation: generation)
+    }
+
+    func effectiveCategory(for entry: BrowsingHistoryEntry) -> BrowsingHistoryCategory {
+        entry.category(boardReader: boardReaderSettings)
     }
 
     /// Coalesces reload triggers behind a short debounce; `reload()` itself
@@ -107,6 +126,17 @@ final class BrowsingHistoryViewModel {
         for await _ in NotificationCenter.default.notifications(named: FavoriteLibraryStore.didChangeNotification) {
             guard !Task.isCancelled else { return }
             await refreshFavoritedThreadIDs()
+        }
+    }
+
+    /// A board's 阅读方式 change remaps rows' effective categories live —
+    /// without this, a page kept alive in the navigation stack would keep
+    /// showing (and filtering by) the stale mapping until some history
+    /// change happened to trigger a reload.
+    func observeSettingsChanges() async {
+        for await _ in NotificationCenter.default.notifications(named: SettingsStore.didChangeNotification) {
+            guard !Task.isCancelled else { return }
+            scheduleReload()
         }
     }
 

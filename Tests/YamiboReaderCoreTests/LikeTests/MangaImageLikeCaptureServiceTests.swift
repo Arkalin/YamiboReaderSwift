@@ -58,6 +58,36 @@ import Testing
     #expect(await store.likes(for: workKey).count == 1)
 }
 
+// Re-liking a page whose stored row predates the anchor's fid field (anchor
+// equality differs only by `forumID`, R13) must still report already-liked —
+// the dedup matches identity fields (chapterTID + pageLocalIndex), never the
+// board snapshot.
+@Test func mangaImageLikeCaptureServiceMatchesLegacyRowByIdentityFieldsOnly() async throws {
+    let store = LikeStore(databasePool: try makeImageCaptureTestDatabasePool(prefix: "manga-image-legacy-dedup"))
+    let imageStore = LikeImageStore(baseDirectory: makeImageCaptureTestDirectory(prefix: "manga-image-legacy-dedup"))
+    let workKey = LikeWorkKey.mangaTitle(cleanBookName: "去重漫画")
+    let legacy = try await store.upsertImageLike(
+        workKey: workKey,
+        anchor: .mangaImage(MangaImageLikeAnchor(chapterTID: "700", pageLocalIndex: 3)),
+        sourceImageURL: nil
+    )
+
+    let service = MangaImageLikeCaptureService(likeStore: store, likeImageStore: imageStore)
+    let outcome = try await service.like(
+        workKey: workKey,
+        anchor: MangaImageLikeAnchor(chapterTID: "700", pageLocalIndex: 3, forumID: "46"),
+        sourceImageURL: nil,
+        imageData: { Data([0xFF]) }
+    )
+
+    guard case let .alreadyLiked(match) = outcome else {
+        Issue.record("expected alreadyLiked, got \(outcome)")
+        return
+    }
+    #expect(match.id == legacy.id)
+    #expect(await store.likes(for: workKey).count == 1)
+}
+
 private func makeImageCaptureTestDatabasePool(prefix: String) throws -> DatabasePool {
     let root = FileManager.default.temporaryDirectory
         .appendingPathComponent("\(prefix)-\(UUID().uuidString)", isDirectory: true)

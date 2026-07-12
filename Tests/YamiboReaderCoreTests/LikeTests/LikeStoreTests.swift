@@ -210,6 +210,38 @@ import Testing
     #expect(deletedItem.updatedAt == deletedAt)
 }
 
+// The anchor's board-fid snapshot (pluggable-reader-config R13) must survive
+// the `anchor_json` roundtrip, and rows persisted before the field existed
+// must keep decoding — as `forumID == nil`, which the open policy maps to the
+// pre-R13 smart-on behavior.
+@Test func mangaImageAnchorForumIDRoundTripsAndLegacyRowsDecodeAsNil() async throws {
+    let store = LikeStore(databasePool: try makeLikeStoreTestDatabasePool(prefix: "like-store-anchor-fid"))
+    let workKey = LikeWorkKey.mangaTitle(cleanBookName: "测试漫画")
+    let anchor = MangaImageLikeAnchor(chapterTID: "700", pageLocalIndex: 3, forumID: "46")
+
+    _ = try await store.upsertImageLike(
+        workKey: workKey,
+        anchor: .mangaImage(anchor),
+        sourceImageURL: nil
+    )
+
+    let likes = await store.likes(for: workKey)
+    guard case let .mangaImage(storedAnchor) = likes.first?.anchor else {
+        Issue.record("expected a mangaImage anchor")
+        return
+    }
+    #expect(storedAnchor.forumID == "46")
+
+    let legacyJSON = Data(#"{"mangaImage":{"_0":{"chapterTID":"700","pageLocalIndex":3}}}"#.utf8)
+    let legacyPayload = try JSONDecoder().decode(LikeAnchorPayload.self, from: legacyJSON)
+    guard case let .mangaImage(legacyAnchor) = legacyPayload else {
+        Issue.record("expected a mangaImage anchor")
+        return
+    }
+    #expect(legacyAnchor.forumID == nil)
+    #expect(legacyAnchor.chapterTID == "700")
+}
+
 private func makeLikeStoreTestDatabasePool(prefix: String) throws -> DatabasePool {
     let root = FileManager.default.temporaryDirectory
         .appendingPathComponent("\(prefix)-\(UUID().uuidString)", isDirectory: true)

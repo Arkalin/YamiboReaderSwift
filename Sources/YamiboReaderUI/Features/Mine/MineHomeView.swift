@@ -142,6 +142,7 @@ public struct MineHomeView: View {
                     likeDependencies: likeDependencies,
                     contentCoverStore: settingsDependencies.library.contentCoverStore,
                     favoriteLibraryStore: settingsDependencies.library.localFavoriteLibraryStore,
+                    settingsStore: settingsDependencies.settingsStore,
                     appModel: appModel
                 )
             }

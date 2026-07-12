@@ -52,6 +52,25 @@ public struct BrowsingHistoryEntry: Codable, Hashable, Identifiable, Sendable {
         }
     }
 
+    /// Category the row should *display and open* as right now, following
+    /// the board's current 阅读方式 configuration (pluggable-reader-config
+    /// R11/R13): a configured entry dictates the category; a board with no
+    /// entry (never configured, or the row carries no fid) falls back to the
+    /// stored identity-derived `category`. The persisted `category` column
+    /// keeps the recorded value — this is pure read-time presentation.
+    public func category(boardReader: BoardReaderSettings) -> BrowsingHistoryCategory {
+        switch boardReader.entry(forumID: forumID)?.mode {
+        case .normal:
+            .normal
+        case .novel:
+            .novel
+        case .manga:
+            .manga
+        case nil:
+            category
+        }
+    }
+
     public init(
         target: FavoriteContentTarget,
         title: String,
