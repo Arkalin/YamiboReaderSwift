@@ -157,6 +157,42 @@ final class FavoriteUpdateMonitorTests: XCTestCase {
         XCTAssertEqual(monitor.snapshot?.totalCount, 0)
     }
 
+    // The smart-manga interval Picker's setter/getter round-trip: separate
+    // storage from `updateCheckInterval` (the thread-check lane's own
+    // interval), so setting one must never perturb the other.
+    func testConfiguredMangaIntervalRoundTripsThroughSettingsIndependentlyOfThreadInterval() async throws {
+        let suiteName = YamiboTestDefaults.suiteName(prefix: "local-favorites-updates-manga-interval")
+        _ = try YamiboTestDefaults.make(suiteName: suiteName)
+        let localFavoriteLibraryStore = FavoriteLibraryStore(
+            defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
+            key: "local-favorites"
+        )
+        let favoriteUpdateStore = FavoriteUpdateStore(
+            defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
+            key: "favorite-updates"
+        )
+        let settingsStore = SettingsStore(
+            defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
+            key: "settings"
+        )
+        let monitor = try makeUpdateMonitor(
+            updateStore: favoriteUpdateStore,
+            libraryStore: localFavoriteLibraryStore,
+            settingsStore: settingsStore
+        )
+
+        let defaultInterval = await monitor.configuredMangaInterval()
+        XCTAssertEqual(defaultInterval, .threeDays)
+
+        await monitor.setConfiguredMangaInterval(.week)
+        await monitor.setConfiguredInterval(.day)
+
+        let updatedMangaInterval = await monitor.configuredMangaInterval()
+        let updatedThreadInterval = await monitor.configuredInterval()
+        XCTAssertEqual(updatedMangaInterval, .week)
+        XCTAssertEqual(updatedThreadInterval, .day)
+    }
+
     private func waitForStatus(
         _ status: FavoriteUpdateRunStatus,
         in monitor: FavoriteUpdateMonitor
@@ -201,7 +237,10 @@ final class FavoriteUpdateMonitorTests: XCTestCase {
 private func makeUpdateMonitor(
     updateStore: FavoriteUpdateStore,
     libraryStore: FavoriteLibraryStore,
-    pageFetcher: ((FavoriteItem) async throws -> ForumThreadPage)? = nil
+    pageFetcher: ((FavoriteItem) async throws -> ForumThreadPage)? = nil,
+    settingsStore: SettingsStore? = nil,
+    mangaDirectoryStore: (any MangaDirectoryPersisting)? = nil,
+    makeMangaDirectoryWorkflow: (@Sendable (_ searchForumID: String) async -> MangaDirectoryWorkflow)? = nil
 ) throws -> FavoriteUpdateMonitor {
     let suiteName = YamiboTestDefaults.suiteName(prefix: "favorite-update-monitor-deps")
     let defaults = try YamiboTestDefaults.make(suiteName: suiteName)
@@ -223,6 +262,517 @@ private func makeUpdateMonitor(
             )
             return ForumThreadReaderRepository(client: client, cacheStore: forumCacheStore)
         },
-        pageFetcher: pageFetcher
+        settingsStore: settingsStore,
+        pageFetcher: pageFetcher,
+        mangaDirectoryStore: mangaDirectoryStore,
+        makeMangaDirectoryWorkflow: makeMangaDirectoryWorkflow
     )
+}
+
+// MARK: - Smart-manga directory check lane
+
+@MainActor
+final class FavoriteUpdateMonitorSmartMangaTests: XCTestCase {
+    private func makeSettingsStore(
+        smartModeForumIDs: Set<String>,
+        interval: SmartMangaUpdateCheckInterval = .day
+    ) async throws -> SettingsStore {
+        let suiteName = YamiboTestDefaults.suiteName(prefix: "smart-manga-update-settings")
+        let defaults = try YamiboTestDefaults.make(suiteName: suiteName)
+        let store = SettingsStore(defaults: defaults, key: "settings")
+        var boardReader = BoardReaderSettings(entries: [:])
+        for fid in smartModeForumIDs {
+            boardReader.setEntry(.init(mode: .manga(smartEnabled: true)), forumID: fid)
+        }
+        var favorites = FavoriteLibrarySettings()
+        favorites.smartMangaUpdateCheckInterval = interval
+        try await store.save(AppSettings(favorites: favorites, boardReader: boardReader))
+        return store
+    }
+
+    private func makeFavoritesDocument(mangaItems: [(tid: String, forumID: String, forumName: String)]) throws -> FavoriteLibraryDocument {
+        var document = FavoriteLibraryDocument()
+        let category = document.createCategory(name: "智能漫画更新检测")
+        for (tid, forumID, forumName) in mangaItems {
+            document.upsertItem(try FavoriteItem(
+                target: .mangaThread(threadID: tid),
+                title: "漫画收藏-\(tid)",
+                sourceGroup: .forumBoard(id: forumID, label: forumName),
+                forumID: forumID,
+                forumName: forumName,
+                locations: [.category(category.id)]
+            ))
+        }
+        return document
+    }
+
+    private func waitForStatus(
+        _ status: FavoriteUpdateRunStatus,
+        in monitor: FavoriteUpdateMonitor
+    ) async throws {
+        for _ in 0..<100 {
+            if monitor.snapshot?.status == status {
+                return
+            }
+            try await Task.sleep(nanoseconds: 10_000_000)
+        }
+        XCTFail("Timed out waiting for favorite update status \(status)")
+    }
+
+    /// Backdates a tracked directory target's `lastCheckedAt` far enough
+    /// into the past that it's due again under any of this test file's
+    /// intervals, without needing to actually wait real time.
+    private func backdateLastCheckedAt(
+        cleanBookName: String,
+        in updateStore: FavoriteUpdateStore
+    ) async throws {
+        let state = await updateStore.loadState()
+        guard var target = state.trackedTargets.first(where: { $0.target == .mangaDirectory(cleanBookName: cleanBookName) }) else {
+            XCTFail("Expected an existing tracked target for \(cleanBookName)")
+            return
+        }
+        target.lastCheckedAt = Date.now.addingTimeInterval(-30 * 24 * 3600)
+        try await updateStore.upsertTrackedTarget(target)
+    }
+
+    func testEligibilityGateExcludesModeOffAndUnresolvedThenSeedsResolvedGroupWithoutAnEvent() async throws {
+        let suiteName = YamiboTestDefaults.suiteName(prefix: "smart-manga-eligibility")
+        _ = try YamiboTestDefaults.make(suiteName: suiteName)
+        let libraryStore = FavoriteLibraryStore(defaults: try YamiboTestDefaults.defaults(suiteName: suiteName), key: "local-favorites")
+        let updateStore = FavoriteUpdateStore(defaults: try YamiboTestDefaults.defaults(suiteName: suiteName), key: "favorite-updates")
+        let settingsStore = try await makeSettingsStore(smartModeForumIDs: ["30"])
+
+        // "5001"/"5002" are mode-on and both resolve to the same directory —
+        // they must collapse into ONE tracked target. "5003" is mode-off
+        // (fid "46" has no smart entry). "5004" is mode-on but its tid was
+        // never resolved into any directory.
+        let document = try makeFavoritesDocument(mangaItems: [
+            ("5001", "30", "智能漫画板块"),
+            ("5002", "30", "智能漫画板块"),
+            ("5003", "46", "普通漫画板块"),
+            ("5004", "30", "智能漫画板块"),
+        ])
+        try await libraryStore.save(document)
+
+        let directoryStore = RecordingMangaDirectoryStore(directories: [
+            MangaDirectory(
+                cleanBookName: "合并测试漫画",
+                strategy: .tag,
+                sourceKey: "31",
+                chapters: [makeChapter(tid: "5001", title: "第1话", chapterNumber: 1), makeChapter(tid: "5002", title: "第2话", chapterNumber: 2)]
+            ),
+        ])
+        let repository = RecordingMangaDirectoryRepository()
+
+        let monitor = try makeUpdateMonitor(
+            updateStore: updateStore,
+            libraryStore: libraryStore,
+            settingsStore: settingsStore,
+            mangaDirectoryStore: directoryStore,
+            makeMangaDirectoryWorkflow: { forumID in
+                MangaDirectoryWorkflow(repository: repository, store: directoryStore, configuration: MangaDirectoryWorkflowConfiguration(searchForumID: forumID))
+            }
+        )
+        await monitor.load()
+        _ = await monitor.startCheck()
+        try await waitForStatus(.completed, in: monitor)
+
+        let state = await updateStore.loadState()
+        let mangaTargets = state.trackedTargets.filter { $0.mode == .mangaDirectory }
+        XCTAssertEqual(mangaTargets.count, 1)
+        XCTAssertEqual(mangaTargets.first?.target, .mangaDirectory(cleanBookName: "合并测试漫画"))
+        XCTAssertEqual(mangaTargets.first?.knownChapterTIDs, ["5001", "5002"])
+        XCTAssertTrue(mangaTargets.first?.baselineReady ?? false)
+        // First sighting: baseline seeding must be zero-network and must not
+        // create an event.
+        let tagRequests = await repository.tagRequestCount
+        let searchRequests = await repository.searchRequestCount
+        XCTAssertEqual(tagRequests, 0)
+        XCTAssertEqual(searchRequests, 0)
+        XCTAssertTrue(monitor.events.filter { $0.mode == .mangaDirectory }.isEmpty)
+    }
+
+    func testNewChapterDetectionMergesFavoritesAndBaselineNeverShrinksAcrossRetentionPruning() async throws {
+        let suiteName = YamiboTestDefaults.suiteName(prefix: "smart-manga-new-chapters")
+        _ = try YamiboTestDefaults.make(suiteName: suiteName)
+        let libraryStore = FavoriteLibraryStore(defaults: try YamiboTestDefaults.defaults(suiteName: suiteName), key: "local-favorites")
+        let updateStore = FavoriteUpdateStore(defaults: try YamiboTestDefaults.defaults(suiteName: suiteName), key: "favorite-updates")
+        let settingsStore = try await makeSettingsStore(smartModeForumIDs: ["30"])
+
+        let document = try makeFavoritesDocument(mangaItems: [
+            ("6001", "30", "智能漫画板块"),
+            ("6002", "30", "智能漫画板块"),
+        ])
+        try await libraryStore.save(document)
+
+        let directoryStore = RecordingMangaDirectoryStore(directories: [
+            MangaDirectory(
+                cleanBookName: "连载测试漫画",
+                strategy: .tag,
+                sourceKey: "31",
+                chapters: [makeChapter(tid: "6001", title: "普通帖子", chapterNumber: 1), makeChapter(tid: "6002", title: "第2话", chapterNumber: 2)]
+            ),
+        ])
+        let repository = RecordingMangaDirectoryRepository(
+            tagChapters: [
+                makeChapter(tid: "6001", title: "普通帖子", chapterNumber: 1),
+                makeChapter(tid: "6002", title: "第2话", chapterNumber: 2),
+                makeChapter(tid: "6003", title: "第3话", chapterNumber: 3),
+            ]
+        )
+
+        func makeMonitor() throws -> FavoriteUpdateMonitor {
+            try makeUpdateMonitor(
+                updateStore: updateStore,
+                libraryStore: libraryStore,
+                settingsStore: settingsStore,
+                mangaDirectoryStore: directoryStore,
+                makeMangaDirectoryWorkflow: { forumID in
+                    MangaDirectoryWorkflow(repository: repository, store: directoryStore, configuration: MangaDirectoryWorkflowConfiguration(searchForumID: forumID))
+                }
+            )
+        }
+
+        // Run 1: seeds the baseline from the two favorited chapters, no
+        // network, no event.
+        let firstMonitor = try makeMonitor()
+        await firstMonitor.load()
+        _ = await firstMonitor.startCheck()
+        try await waitForStatus(.completed, in: firstMonitor)
+        XCTAssertTrue(firstMonitor.events.filter { $0.mode == .mangaDirectory }.isEmpty)
+
+        // Run 2: due; the workflow's tag refresh finds a new chapter "6003"
+        // — ONE merged event for the directory, not one per favorite.
+        try await backdateLastCheckedAt(cleanBookName: "连载测试漫画", in: updateStore)
+        let secondMonitor = try makeMonitor()
+        await secondMonitor.load()
+        _ = await secondMonitor.startCheck()
+        try await waitForStatus(.completed, in: secondMonitor)
+
+        let mangaEvents = secondMonitor.events.filter { $0.mode == .mangaDirectory }
+        XCTAssertEqual(mangaEvents.count, 1)
+        XCTAssertEqual(mangaEvents.first?.target, .mangaDirectory(cleanBookName: "连载测试漫画"))
+        XCTAssertEqual(mangaEvents.first?.summary, .newChapters(count: 1))
+        XCTAssertEqual(mangaEvents.first?.detailIDs, ["6003"])
+
+        var state = await updateStore.loadState()
+        var tracked = try XCTUnwrap(state.trackedTargets.first { $0.target == .mangaDirectory(cleanBookName: "连载测试漫画") })
+        XCTAssertEqual(tracked.knownChapterTIDs, ["6001", "6002", "6003"])
+
+        // Run 3: the directory's own retention logic prunes "6001" from what
+        // the workflow returns (simulating `MangaDirectoryChapterRetention`)
+        // — the tracked baseline must NOT shrink in lockstep.
+        try await backdateLastCheckedAt(cleanBookName: "连载测试漫画", in: updateStore)
+        await repository.setTagChapters([
+            makeChapter(tid: "6002", title: "第2话", chapterNumber: 2),
+            makeChapter(tid: "6003", title: "第3话", chapterNumber: 3),
+        ])
+        let thirdMonitor = try makeMonitor()
+        await thirdMonitor.load()
+        _ = await thirdMonitor.startCheck()
+        try await waitForStatus(.completed, in: thirdMonitor)
+        let thirdRunMangaEvents = thirdMonitor.events.filter { $0.mode == .mangaDirectory && $0.dismissedAt == nil }
+        XCTAssertEqual(thirdRunMangaEvents.count, 1, "pruning must not fabricate a spurious new-chapter event")
+        XCTAssertEqual(thirdRunMangaEvents.first?.summary, .newChapters(count: 1), "the run-2 event must stay unchanged, not merged with a zero delta")
+
+        state = await updateStore.loadState()
+        tracked = try XCTUnwrap(state.trackedTargets.first { $0.target == .mangaDirectory(cleanBookName: "连载测试漫画") })
+        XCTAssertEqual(tracked.knownChapterTIDs, ["6001", "6002", "6003"], "baseline must not shrink when the directory prunes a stale chapter")
+
+        // Run 4: "6001" reappears in what the workflow returns — because the
+        // baseline never dropped it, this must NOT falsely re-report as new.
+        try await backdateLastCheckedAt(cleanBookName: "连载测试漫画", in: updateStore)
+        await repository.setTagChapters([
+            makeChapter(tid: "6001", title: "普通帖子", chapterNumber: 1),
+            makeChapter(tid: "6002", title: "第2话", chapterNumber: 2),
+            makeChapter(tid: "6003", title: "第3话", chapterNumber: 3),
+        ])
+        let fourthMonitor = try makeMonitor()
+        await fourthMonitor.load()
+        _ = await fourthMonitor.startCheck()
+        try await waitForStatus(.completed, in: fourthMonitor)
+        // Still just the run-2-detected event (accumulated), no fresh
+        // "6001 is new" report.
+        let finalEvents = fourthMonitor.events.filter { $0.mode == .mangaDirectory && $0.dismissedAt == nil }
+        XCTAssertEqual(finalEvents.count, 1)
+        XCTAssertEqual(finalEvents.first?.summary, .newChapters(count: 1))
+    }
+
+    func testCooldownAndFloodControlSkipsDoNotAdvanceBaselineOrTripCircuitBreaker() async throws {
+        let suiteName = YamiboTestDefaults.suiteName(prefix: "smart-manga-cooldown")
+        _ = try YamiboTestDefaults.make(suiteName: suiteName)
+        let libraryStore = FavoriteLibraryStore(defaults: try YamiboTestDefaults.defaults(suiteName: suiteName), key: "local-favorites")
+        let updateStore = FavoriteUpdateStore(defaults: try YamiboTestDefaults.defaults(suiteName: suiteName), key: "favorite-updates")
+        let settingsStore = try await makeSettingsStore(smartModeForumIDs: ["30"])
+
+        let document = try makeFavoritesDocument(mangaItems: [("7001", "30", "智能漫画板块")])
+        try await libraryStore.save(document)
+
+        // `.links` (non-`.tag`) strategy always goes through the
+        // search-cooldown-guarded path.
+        let directoryStore = RecordingMangaDirectoryStore(directories: [
+            MangaDirectory(
+                cleanBookName: "冷却测试漫画",
+                strategy: .links,
+                sourceKey: "冷却测试漫画",
+                chapters: [makeChapter(tid: "7001", title: "第1话", chapterNumber: 1)]
+            ),
+        ])
+        let repository = RecordingMangaDirectoryRepository(searchError: YamiboError.floodControl)
+
+        func makeMonitor() throws -> FavoriteUpdateMonitor {
+            try makeUpdateMonitor(
+                updateStore: updateStore,
+                libraryStore: libraryStore,
+                settingsStore: settingsStore,
+                mangaDirectoryStore: directoryStore,
+                makeMangaDirectoryWorkflow: { forumID in
+                    MangaDirectoryWorkflow(repository: repository, store: directoryStore, configuration: MangaDirectoryWorkflowConfiguration(searchForumID: forumID))
+                }
+            )
+        }
+
+        let firstMonitor = try makeMonitor()
+        await firstMonitor.load()
+        _ = await firstMonitor.startCheck()
+        try await waitForStatus(.completed, in: firstMonitor)
+
+        try await backdateLastCheckedAt(cleanBookName: "冷却测试漫画", in: updateStore)
+        let stateBeforeSkip = await updateStore.loadState()
+        let beforeSkip = try XCTUnwrap(stateBeforeSkip.trackedTargets.first { $0.target == .mangaDirectory(cleanBookName: "冷却测试漫画") })
+
+        let secondMonitor = try makeMonitor()
+        await secondMonitor.load()
+        _ = await secondMonitor.startCheck()
+        try await waitForStatus(.completed, in: secondMonitor)
+
+        XCTAssertTrue(secondMonitor.events.filter { $0.mode == .mangaDirectory }.isEmpty)
+        let stateAfterSkip = await updateStore.loadState()
+        let afterSkip = try XCTUnwrap(stateAfterSkip.trackedTargets.first { $0.target == .mangaDirectory(cleanBookName: "冷却测试漫画") })
+        // A cooldown/flood-control hit is a pure skip: nothing about the
+        // tracked target changes, in contrast to a real failure below.
+        XCTAssertEqual(afterSkip.knownChapterTIDs, beforeSkip.knownChapterTIDs)
+        XCTAssertEqual(afterSkip.consecutiveFailures, 0)
+        XCTAssertEqual(afterSkip.lastCheckedAt, beforeSkip.lastCheckedAt)
+
+        // Contrast: a real (non-cooldown, non-flood) failure DOES feed the
+        // circuit breaker.
+        await repository.setSearchError(YamiboError.underlying("boom"))
+        try await backdateLastCheckedAt(cleanBookName: "冷却测试漫画", in: updateStore)
+        let thirdMonitor = try makeMonitor()
+        await thirdMonitor.load()
+        _ = await thirdMonitor.startCheck()
+        try await waitForStatus(.completed, in: thirdMonitor)
+
+        let stateAfterRealFailure = await updateStore.loadState()
+        let afterRealFailure = try XCTUnwrap(stateAfterRealFailure.trackedTargets.first { $0.target == .mangaDirectory(cleanBookName: "冷却测试漫画") })
+        XCTAssertEqual(afterRealFailure.consecutiveFailures, 1)
+        XCTAssertNotNil(afterRealFailure.lastError)
+    }
+
+    func testNonTagDirectoryCapLimitsHowManySearchTriggeringGroupsRunPerCheck() async throws {
+        let suiteName = YamiboTestDefaults.suiteName(prefix: "smart-manga-cap")
+        _ = try YamiboTestDefaults.make(suiteName: suiteName)
+        let libraryStore = FavoriteLibraryStore(defaults: try YamiboTestDefaults.defaults(suiteName: suiteName), key: "local-favorites")
+        let updateStore = FavoriteUpdateStore(defaults: try YamiboTestDefaults.defaults(suiteName: suiteName), key: "favorite-updates")
+        let settingsStore = try await makeSettingsStore(smartModeForumIDs: ["30"])
+
+        let document = try makeFavoritesDocument(mangaItems: [
+            ("8001", "30", "智能漫画板块"),
+            ("8002", "30", "智能漫画板块"),
+        ])
+        try await libraryStore.save(document)
+
+        let directoryStore = RecordingMangaDirectoryStore(directories: [
+            MangaDirectory(cleanBookName: "非标签漫画A", strategy: .links, sourceKey: "非标签漫画A", chapters: [makeChapter(tid: "8001", title: "第1话", chapterNumber: 1)]),
+            MangaDirectory(cleanBookName: "非标签漫画B", strategy: .links, sourceKey: "非标签漫画B", chapters: [makeChapter(tid: "8002", title: "第1话", chapterNumber: 1)]),
+        ])
+        let repository = RecordingMangaDirectoryRepository(
+            searchChapters: [makeChapter(tid: "8001", title: "第1话", chapterNumber: 1)]
+        )
+
+        func makeMonitor() throws -> FavoriteUpdateMonitor {
+            try makeUpdateMonitor(
+                updateStore: updateStore,
+                libraryStore: libraryStore,
+                settingsStore: settingsStore,
+                mangaDirectoryStore: directoryStore,
+                makeMangaDirectoryWorkflow: { forumID in
+                    MangaDirectoryWorkflow(repository: repository, store: directoryStore, configuration: MangaDirectoryWorkflowConfiguration(searchForumID: forumID))
+                }
+            )
+        }
+
+        let firstMonitor = try makeMonitor()
+        await firstMonitor.load()
+        _ = await firstMonitor.startCheck()
+        try await waitForStatus(.completed, in: firstMonitor)
+
+        try await backdateLastCheckedAt(cleanBookName: "非标签漫画A", in: updateStore)
+        try await backdateLastCheckedAt(cleanBookName: "非标签漫画B", in: updateStore)
+
+        let secondMonitor = try makeMonitor()
+        await secondMonitor.load()
+        _ = await secondMonitor.startCheck(nonTagMangaDirectoryCheckCap: 1)
+        try await waitForStatus(.completed, in: secondMonitor)
+
+        // Cap of 1: exactly one non-tag directory's search actually ran.
+        let searchRequests = await repository.searchRequestCount
+        XCTAssertEqual(searchRequests, 1)
+
+        let state = await updateStore.loadState()
+        let trackedIDs: Set<String> = [
+            FavoriteUpdateTargetKey.mangaDirectory(cleanBookName: "非标签漫画A").id,
+            FavoriteUpdateTargetKey.mangaDirectory(cleanBookName: "非标签漫画B").id,
+        ]
+        let checkedCount = state.trackedTargets
+            .filter { trackedIDs.contains($0.target.id) }
+            .filter { target in
+                guard let lastCheckedAt = target.lastCheckedAt else { return false }
+                return Date.now.timeIntervalSince(lastCheckedAt) < 24 * 3600
+            }
+            .count
+        XCTAssertEqual(checkedCount, 1, "only the cap's worth of non-tag groups should have advanced lastCheckedAt this run")
+    }
+
+    /// Regression guard: the `.tag`-strategy lane must stop at the first
+    /// cooldown/flood-control skip in the same run, matching the non-tag
+    /// lane's existing behavior — otherwise every other due `.tag` group
+    /// that also falls back to a live search fires a real HTTP request in
+    /// the same run, even though the forum already flood-controlled the
+    /// first one.
+    func testTagDueLoopStopsAfterCooldownSkipSoLaterTagDirectoriesAreNeverChecked() async throws {
+        let suiteName = YamiboTestDefaults.suiteName(prefix: "smart-manga-tag-cooldown-break")
+        _ = try YamiboTestDefaults.make(suiteName: suiteName)
+        let libraryStore = FavoriteLibraryStore(defaults: try YamiboTestDefaults.defaults(suiteName: suiteName), key: "local-favorites")
+        let updateStore = FavoriteUpdateStore(defaults: try YamiboTestDefaults.defaults(suiteName: suiteName), key: "favorite-updates")
+        let settingsStore = try await makeSettingsStore(smartModeForumIDs: ["30"])
+
+        let document = try makeFavoritesDocument(mangaItems: [
+            ("9001", "30", "智能漫画板块"),
+            ("9002", "30", "智能漫画板块"),
+        ])
+        try await libraryStore.save(document)
+
+        // Two `.tag`-strategy directories, both due, both with an empty
+        // tag-page result so both fall back to a live search — the exact
+        // shape that lets a flood-control hit on the first one leak into a
+        // second real request for the second one if the loop doesn't break.
+        let directoryStore = RecordingMangaDirectoryStore(directories: [
+            MangaDirectory(cleanBookName: "标签漫画A", strategy: .tag, sourceKey: "40", chapters: [makeChapter(tid: "9001", title: "第1话", chapterNumber: 1)]),
+            MangaDirectory(cleanBookName: "标签漫画B", strategy: .tag, sourceKey: "41", chapters: [makeChapter(tid: "9002", title: "第1话", chapterNumber: 1)]),
+        ])
+        let repository = RecordingMangaDirectoryRepository(searchError: YamiboError.floodControl)
+
+        func makeMonitor() throws -> FavoriteUpdateMonitor {
+            try makeUpdateMonitor(
+                updateStore: updateStore,
+                libraryStore: libraryStore,
+                settingsStore: settingsStore,
+                mangaDirectoryStore: directoryStore,
+                makeMangaDirectoryWorkflow: { forumID in
+                    MangaDirectoryWorkflow(repository: repository, store: directoryStore, configuration: MangaDirectoryWorkflowConfiguration(searchForumID: forumID))
+                }
+            )
+        }
+
+        // Run 1: seeds both baselines, zero network.
+        let firstMonitor = try makeMonitor()
+        await firstMonitor.load()
+        _ = await firstMonitor.startCheck()
+        try await waitForStatus(.completed, in: firstMonitor)
+        let tagRequestsAfterSeed = await repository.tagRequestCount
+        let searchRequestsAfterSeed = await repository.searchRequestCount
+        XCTAssertEqual(tagRequestsAfterSeed, 0)
+        XCTAssertEqual(searchRequestsAfterSeed, 0)
+
+        try await backdateLastCheckedAt(cleanBookName: "标签漫画A", in: updateStore)
+        try await backdateLastCheckedAt(cleanBookName: "标签漫画B", in: updateStore)
+
+        // Run 2: both are due `.tag` groups, processed in cleanBookName
+        // order ("标签漫画A" before "标签漫画B"). A's empty tag result falls
+        // back to a search that hits flood control; B must never even be
+        // attempted.
+        let secondMonitor = try makeMonitor()
+        await secondMonitor.load()
+        _ = await secondMonitor.startCheck()
+        try await waitForStatus(.completed, in: secondMonitor)
+
+        let tagRequestsAfterRun2 = await repository.tagRequestCount
+        let searchRequestsAfterRun2 = await repository.searchRequestCount
+        XCTAssertEqual(tagRequestsAfterRun2, 1, "the second tag directory's tag-page lookup must never fire once the first hit flood control")
+        XCTAssertEqual(searchRequestsAfterRun2, 1, "the second tag directory's fallback search must never fire once the first hit flood control")
+        XCTAssertTrue(secondMonitor.events.filter { $0.mode == .mangaDirectory }.isEmpty)
+        XCTAssertEqual(secondMonitor.snapshot?.skippedCount, 1, "only the first group should be recorded as skipped this run")
+
+        let state = await updateStore.loadState()
+        let trackedB = try XCTUnwrap(state.trackedTargets.first { $0.target == .mangaDirectory(cleanBookName: "标签漫画B") })
+        XCTAssertEqual(trackedB.consecutiveFailures, 0, "an untouched group must not have its circuit breaker advanced either")
+    }
+}
+
+private func makeChapter(tid: String, title: String, chapterNumber: Double) -> MangaChapter {
+    MangaChapter(tid: tid, rawTitle: title, chapterNumber: chapterNumber)
+}
+
+private actor RecordingMangaDirectoryStore: MangaDirectoryPersisting {
+    private var directories: [String: MangaDirectory]
+
+    init(directories: [MangaDirectory] = []) {
+        self.directories = Dictionary(uniqueKeysWithValues: directories.map { ($0.cleanBookName, $0) })
+    }
+
+    func directory(named name: String) async throws -> MangaDirectory? {
+        directories[name.trimmingCharacters(in: .whitespacesAndNewlines)]
+    }
+
+    func directory(containingTID tid: String) async throws -> MangaDirectory? {
+        let normalized = tid.trimmingCharacters(in: .whitespacesAndNewlines)
+        return directories.values.first { $0.chapters.contains { $0.tid == normalized } }
+    }
+
+    func saveDirectory(_ directory: MangaDirectory) async throws {
+        directories[directory.cleanBookName] = directory
+    }
+
+    func deleteDirectory(named name: String) async throws {
+        directories.removeValue(forKey: name.trimmingCharacters(in: .whitespacesAndNewlines))
+    }
+}
+
+private actor RecordingMangaDirectoryRepository: MangaDirectoryRepository {
+    private var tagChapters: [MangaChapter]
+    private var searchChapters: [MangaChapter]
+    private var searchError: Error?
+    private(set) var tagRequestCount = 0
+    private(set) var searchRequestCount = 0
+
+    init(tagChapters: [MangaChapter] = [], searchChapters: [MangaChapter] = [], searchError: Error? = nil) {
+        self.tagChapters = tagChapters
+        self.searchChapters = searchChapters
+        self.searchError = searchError
+    }
+
+    func setTagChapters(_ chapters: [MangaChapter]) {
+        tagChapters = chapters
+    }
+
+    func setSearchError(_ error: Error?) {
+        searchError = error
+    }
+
+    func loadDirectorySeed(for threadID: String) async throws -> MangaDirectorySeed {
+        MangaDirectorySeed(currentChapter: makeChapter(tid: threadID, title: "第1话", chapterNumber: 1), tagIDs: [], cleanBookName: threadID)
+    }
+
+    func loadTagDirectory(tagIDs: [String], allowedForumID: String) async throws -> [MangaChapter] {
+        tagRequestCount += 1
+        return tagChapters
+    }
+
+    func searchDirectory(keyword: String, forumID: String) async throws -> [MangaChapter] {
+        searchRequestCount += 1
+        if let searchError { throw searchError }
+        return searchChapters
+    }
 }

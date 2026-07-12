@@ -4,16 +4,18 @@ import UIKit
 #endif
 import YamiboReaderCore
 
-/// The automatic-check-interval picker and notification toggle, shared
-/// between `FavoriteUpdatesPage` (behind the favorites bell) and the
-/// Settings > Favorites category page. Both embeddings read/write the same
-/// `FavoriteLibrarySettings` fields through their own `FavoriteUpdateMonitor`
-/// instance, so this view owns its own load state rather than relying on
-/// `@Published` fields the monitor doesn't publish for these.
+/// The automatic-check-interval picker, smart-manga-interval picker, and
+/// notification toggle, shared between `FavoriteUpdatesPage` (behind the
+/// favorites bell) and the Settings > Favorites category page. Both
+/// embeddings read/write the same `FavoriteLibrarySettings` fields through
+/// their own `FavoriteUpdateMonitor` instance, so this view owns its own
+/// load state rather than relying on `@Published` fields the monitor
+/// doesn't publish for these.
 struct FavoriteUpdateSettingsSection: View {
     @ObservedObject var updateMonitor: FavoriteUpdateMonitor
 
     @State private var selectedInterval: FavoriteUpdateCheckInterval = .off
+    @State private var selectedMangaInterval: SmartMangaUpdateCheckInterval = .threeDays
     @State private var notificationsEnabled = false
     @State private var notificationsBlockedBySystem = false
     @State private var showsNotificationDeniedAlert = false
@@ -21,6 +23,7 @@ struct FavoriteUpdateSettingsSection: View {
     var body: some View {
         Group {
             intervalSection
+            mangaIntervalSection
             notificationSection
         }
         .task {
@@ -55,6 +58,7 @@ struct FavoriteUpdateSettingsSection: View {
 
     private func reload() async {
         selectedInterval = await updateMonitor.configuredInterval() ?? .off
+        selectedMangaInterval = await updateMonitor.configuredMangaInterval() ?? .threeDays
         notificationsEnabled = await updateMonitor.notificationsEnabled()
         notificationsBlockedBySystem = await updateMonitor.notificationsBlockedBySystem()
     }
@@ -72,6 +76,25 @@ struct FavoriteUpdateSettingsSection: View {
             }
         } footer: {
             Text(L10n.string("favorites.updates.interval_footer"))
+        }
+    }
+
+    private var mangaIntervalSection: some View {
+        Section {
+            Picker(L10n.string("favorites.updates.manga_interval"), selection: $selectedMangaInterval) {
+                ForEach(SmartMangaUpdateCheckInterval.allCases) { interval in
+                    Text(interval.title)
+                        .tag(interval)
+                }
+            }
+            .onChange(of: selectedMangaInterval) { _, newValue in
+                Task { await updateMonitor.setConfiguredMangaInterval(newValue) }
+            }
+        } footer: {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(L10n.string("favorites.updates.manga_interval_footer_read_required"))
+                Text(L10n.string("favorites.updates.manga_interval_footer_mode_off"))
+            }
         }
     }
 

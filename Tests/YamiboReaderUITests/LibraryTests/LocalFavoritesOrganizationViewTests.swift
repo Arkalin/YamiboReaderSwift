@@ -69,6 +69,7 @@ import YamiboReaderTestSupport
         updateMonitor: updateMonitor,
         makeFavoriteRepository: { FavoriteRepository(client: await makeClient()) },
         onOpen: { _, _, _ in },
+        onOpenMangaDirectory: { _ in },
         onOpenBoard: { _ in }
     )
     _ = view

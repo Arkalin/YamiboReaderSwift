@@ -117,7 +117,10 @@ public final class YamiboAppContext: Sendable {
         self.likeImageStore = likeImageStore ?? LikeImageStore(
             baseDirectory: Self.likeImagesDirectory(rootDirectory: resolvedGRDBRootDirectory)
         )
-        self.mangaDirectoryStore = mangaDirectoryStore ?? MangaDirectoryStore(databasePool: resolvedGRDBDatabasePool)
+        self.mangaDirectoryStore = mangaDirectoryStore ?? MangaDirectoryStore(
+            databasePool: resolvedGRDBDatabasePool,
+            favoriteUpdateStore: favoriteUpdateStore
+        )
         self.mangaDirectorySearchCooldownState = mangaDirectorySearchCooldownState
         self.mangaReaderProjectionStore = mangaReaderProjectionStore ?? MangaReaderProjectionStore(diskCacheStore: diskCacheStore)
         self.offlineCacheStore = resolvedOfflineCacheStore
@@ -167,10 +170,12 @@ public final class YamiboAppContext: Sendable {
             settingsStore: settingsStore,
             contentCoverStore: contentCoverStore,
             mangaDirectoryStore: mangaDirectoryStore,
+            mangaDirectorySearchCooldownState: mangaDirectorySearchCooldownState,
             favoriteBackgroundImageStore: favoriteBackgroundImageStore,
             makeFavoriteRepository: { [self] in await makeFavoriteRepository() },
             makeForumThreadReaderRepository: { [self] in await makeForumThreadReaderRepository() },
-            makeThreadRouteResolver: { [self] in await makeThreadRouteResolver() }
+            makeThreadRouteResolver: { [self] in await makeThreadRouteResolver() },
+            makeMangaDirectoryRepository: { [self] in await makeMangaDirectoryRepository() }
         )
     }
 

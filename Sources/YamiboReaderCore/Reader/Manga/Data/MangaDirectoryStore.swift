@@ -7,9 +7,17 @@ public actor MangaDirectoryStore: MangaDirectoryPersisting, MangaDirectoryRenami
     public static let changeIDUserInfoKey = "changeID"
 
     private let database: DatabasePool
+    /// Not GRDB-backed (UserDefaults JSON blob), so unlike `ContentCoverStore`
+    /// / `LikeStore` its rename cascade step can't run inside the same
+    /// `db.write` transaction — `renameDirectory` calls it as a best-effort
+    /// follow-up after the transaction commits. `nil` (the default) makes
+    /// the cascade step a no-op, matching every other store's `nil`-safe
+    /// construction pattern in this file's callers/tests.
+    private let favoriteUpdateStore: FavoriteUpdateStore?
 
-    public init(databasePool: DatabasePool? = nil) {
+    public init(databasePool: DatabasePool? = nil, favoriteUpdateStore: FavoriteUpdateStore? = nil) {
         self.database = databasePool ?? Self.openDatabase()
+        self.favoriteUpdateStore = favoriteUpdateStore
     }
 
     public func directory(named name: String) async throws -> MangaDirectory? {
@@ -127,6 +135,13 @@ public actor MangaDirectoryStore: MangaDirectoryPersisting, MangaDirectoryRenami
             try Self.renameRelatedStructuredMetadata(from: oldName, to: newDirectory.cleanBookName, in: db)
             if oldName != newDirectory.cleanBookName {
                 try db.execute(sql: "DELETE FROM manga_directories WHERE clean_book_name = ?", arguments: [oldName])
+            }
+        }
+        if let favoriteUpdateStore {
+            do {
+                try await favoriteUpdateStore.renameMangaDirectoryTracking(from: oldName, to: newDirectory.cleanBookName)
+            } catch {
+                YamiboLog.persistence.error("Failed to migrate favorite-update tracking for directory rename '\(oldName)' -> '\(newDirectory.cleanBookName)': \(error.localizedDescription)")
             }
         }
         postChangeNotification()
@@ -270,6 +285,11 @@ public actor MangaDirectoryStore: MangaDirectoryPersisting, MangaDirectoryRenami
         )
     }
 
+    /// Steps 1-4 of the rename cascade, all inside the caller's GRDB
+    /// transaction. Step 5 — migrating `FavoriteUpdateStore`'s tracked-target
+    /// and event keys — is NOT here: that store isn't GRDB-backed and can't
+    /// join this transaction, so `renameDirectory` runs it separately, after
+    /// this transaction commits.
     static func renameRelatedStructuredMetadata(from oldName: String, to newName: String, in db: Database) throws {
         guard oldName != newName else { return }
         try renameFavoriteMangaTargets(from: oldName, to: newName, in: db)

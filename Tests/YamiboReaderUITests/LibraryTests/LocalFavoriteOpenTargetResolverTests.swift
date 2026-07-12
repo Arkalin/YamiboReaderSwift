@@ -846,6 +846,117 @@ final class LocalFavoriteOpenTargetResolverTests: XCTestCase {
         XCTAssertEqual(title, "改回普通板块的小说收藏")
     }
 
+    // MARK: - Smart-manga directory update-event re-derivation
+
+    // A directory-mode update event carries only a `cleanBookName`, never a
+    // pointer to one specific favorite (detection is per-directory). Tap
+    // routing must find ANY currently-favorited `.mangaThread` chapter whose
+    // tid resolves into that directory and route it through the same
+    // mode-on resume path a merged smart-manga card's tap already uses.
+    func testMangaDirectoryCleanBookNameOpenTargetFindsAnyFavoritedChapterInDirectory() async throws {
+        let suiteName = YamiboTestDefaults.suiteName(prefix: "local-favorites-open-target-manga-directory-event")
+        _ = try YamiboTestDefaults.make(suiteName: suiteName)
+        let localFavoriteLibraryStore = FavoriteLibraryStore(
+            defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
+            key: "local-favorites"
+        )
+        let readingProgressStore = ReadingProgressStore(
+            defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
+            key: "reading-progress"
+        )
+        let mangaDirectoryStore = try makeMangaDirectoryStore(suiteName: suiteName)
+        let directory = MangaDirectory(
+            cleanBookName: "更新事件测试漫画",
+            strategy: .tag,
+            sourceKey: "更新事件测试漫画",
+            chapters: [
+                MangaChapter(tid: "9001", rawTitle: "第一话", chapterNumber: 1, view: 1),
+                MangaChapter(tid: "9002", rawTitle: "第二话", chapterNumber: 2, view: 1)
+            ]
+        )
+        try await mangaDirectoryStore.saveDirectory(directory)
+
+        var document = FavoriteLibraryDocument()
+        let item = try FavoriteItem(
+            target: .mangaThread(threadID: "9002"),
+            title: "更新事件测试漫画 第二话",
+            sourceGroup: .forumBoard(id: "30", label: "中文百合漫画区"),
+            forumID: "30",
+            forumName: "中文百合漫画区",
+            locations: [.category(document.defaultCategory.id)]
+        )
+        document.upsertItem(item)
+        try await localFavoriteLibraryStore.save(document)
+
+        let resolver = LocalFavoriteOpenTargetResolver(
+            libraryStore: localFavoriteLibraryStore,
+            readingProgressStore: readingProgressStore,
+            mangaDirectoryStore: mangaDirectoryStore
+        )
+        let opened = try await resolver.openTarget(forMangaDirectoryCleanBookName: "更新事件测试漫画")
+
+        guard case let .mangaReader(context)? = opened else {
+            return XCTFail("Expected a manga reader open target")
+        }
+        XCTAssertEqual(context.directoryName, "更新事件测试漫画")
+        XCTAssertTrue(context.isSmartModeEnabled)
+    }
+
+    // Every favorited chapter in the directory was removed since the update
+    // was detected — the caller (in-app tap or notification tap) must fall
+    // back to its existing "favorite already deleted" handling instead of
+    // crashing or opening something stale.
+    func testMangaDirectoryCleanBookNameOpenTargetReturnsNilWhenNoFavoriteRemainsInDirectory() async throws {
+        let suiteName = YamiboTestDefaults.suiteName(prefix: "local-favorites-open-target-manga-directory-event-missing")
+        _ = try YamiboTestDefaults.make(suiteName: suiteName)
+        let localFavoriteLibraryStore = FavoriteLibraryStore(
+            defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
+            key: "local-favorites"
+        )
+        let readingProgressStore = ReadingProgressStore(
+            defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
+            key: "reading-progress"
+        )
+        let mangaDirectoryStore = try makeMangaDirectoryStore(suiteName: suiteName)
+        let directory = MangaDirectory(
+            cleanBookName: "已取消收藏的漫画",
+            strategy: .tag,
+            sourceKey: "已取消收藏的漫画",
+            chapters: [MangaChapter(tid: "9101", rawTitle: "第一话", chapterNumber: 1, view: 1)]
+        )
+        try await mangaDirectoryStore.saveDirectory(directory)
+
+        let resolver = LocalFavoriteOpenTargetResolver(
+            libraryStore: localFavoriteLibraryStore,
+            readingProgressStore: readingProgressStore,
+            mangaDirectoryStore: mangaDirectoryStore
+        )
+        let opened = try await resolver.openTarget(forMangaDirectoryCleanBookName: "已取消收藏的漫画")
+
+        XCTAssertNil(opened)
+    }
+
+    func testMangaDirectoryCleanBookNameOpenTargetReturnsNilForUnknownDirectory() async throws {
+        let suiteName = YamiboTestDefaults.suiteName(prefix: "local-favorites-open-target-manga-directory-event-unknown")
+        _ = try YamiboTestDefaults.make(suiteName: suiteName)
+        let localFavoriteLibraryStore = FavoriteLibraryStore(
+            defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
+            key: "local-favorites"
+        )
+        let readingProgressStore = ReadingProgressStore(
+            defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
+            key: "reading-progress"
+        )
+        let resolver = LocalFavoriteOpenTargetResolver(
+            libraryStore: localFavoriteLibraryStore,
+            readingProgressStore: readingProgressStore,
+            mangaDirectoryStore: try makeMangaDirectoryStore(suiteName: suiteName)
+        )
+        let opened = try await resolver.openTarget(forMangaDirectoryCleanBookName: "不存在的漫画")
+
+        XCTAssertNil(opened)
+    }
+
     private func makeMangaDirectoryStore(suiteName: String) throws -> MangaDirectoryStore {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("local-favorite-open-target-resolver-tests", isDirectory: true)

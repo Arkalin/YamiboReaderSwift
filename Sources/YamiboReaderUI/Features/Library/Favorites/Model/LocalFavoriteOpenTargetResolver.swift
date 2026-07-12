@@ -175,6 +175,28 @@ struct LocalFavoriteOpenTargetResolver {
         }
     }
 
+    /// Re-derives an open target for a smart-manga update event, which only
+    /// ever carries a `cleanBookName` (no pointer to one specific favorite —
+    /// detection is per-directory, see `FavoriteUpdateTargetKey
+    /// .mangaDirectory`). Finds any favorited `.mangaThread` chapter whose
+    /// tid currently resolves into this directory and routes it through the
+    /// same mode-on resume path a merged smart-manga card's tap already
+    /// uses, rather than reimplementing directory-to-reader resolution here.
+    /// Returns nil (never throws for this specific case) when no such
+    /// favorite exists any more — the caller falls back to whatever it
+    /// already does for a deleted favorite.
+    func openTarget(forMangaDirectoryCleanBookName cleanBookName: String) async throws -> LocalFavoriteOpenTarget? {
+        guard let directory = try await mangaDirectoryStore.directory(named: cleanBookName) else { return nil }
+        let chapterTIDs = Set(directory.chapters.map(\.tid))
+        let document = try await libraryStore.load()
+        guard let item = document.items.first(where: {
+            $0.target.kind == .mangaThread && chapterTIDs.contains($0.target.threadID ?? "")
+        }) else {
+            return nil
+        }
+        return try await openTarget(for: item, mode: .resume, mangaScope: .boardDefault)
+    }
+
     /// Mode-on `.mangaThread` resume (decision #15/#7): looks up the
     /// `MangaDirectory` this chapter thread belongs to and resumes via its
     /// single upserted `.mangaTitle` record, falling back to the directory's

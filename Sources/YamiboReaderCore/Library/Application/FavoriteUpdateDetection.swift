@@ -1,17 +1,25 @@
 import Foundation
 
-/// Descriptive label mirroring the tracked favorite's
-/// `FavoriteItemTargetKind` — one case per kind, mapped via `init(kind:)` so
-/// a manga-thread favorite is never mislabeled as a normal thread.
-/// `.mangaThread` is currently unreached at runtime: update checking's
-/// candidate filter (`FavoriteUpdateMonitor.candidates(in:)`) excludes
-/// `.mangaThread` favorites entirely. The case exists for kind-parity so the
-/// mapping stays total — if manga favorites ever enter update detection they
-/// get labeled honestly instead of falling back to `.normalThread`.
+/// Descriptive label mirroring the tracked target's kind.
+/// `.normalThread`/`.novelThread`/`.mangaThread` map 1:1 from
+/// `FavoriteItemTargetKind` via `init(kind:)` so a favorite is never
+/// mislabeled. `.mangaThread` is still unreached at runtime:
+/// per-favorite update checking's candidate filter
+/// (`FavoriteUpdateMonitor.candidates(in:)`) excludes `.mangaThread`
+/// favorites entirely — the case is kept only for kind-parity so
+/// `init(kind:)` stays a total mapping.
+///
+/// `.mangaDirectory` is a DIFFERENT thing, added for smart-manga chapter
+/// checking: it labels a *directory-level* tracked target/event, which has
+/// no single favorite kind to map from (multiple `.mangaThread` favorites
+/// that resolve to the same `MangaDirectory` collapse into one). It is only
+/// ever constructed directly (never via `init(kind:)`) and paired with
+/// `FavoriteUpdateTargetKey.mangaDirectory`.
 public enum FavoriteUpdateTargetMode: String, Codable, Hashable, Sendable {
     case normalThread
     case novelThread
     case mangaThread
+    case mangaDirectory
 
     public init(kind: FavoriteItemTargetKind) {
         switch kind {
@@ -22,6 +30,39 @@ public enum FavoriteUpdateTargetMode: String, Codable, Hashable, Sendable {
         case .mangaThread:
             self = .mangaThread
         }
+    }
+}
+
+/// Identifies what a tracked target / event is about. Thread-mode checking
+/// (`.normalThread`/`.novelThread` favorites) keys off the individual
+/// favorite's own `FavoriteItemTarget`. Smart-manga chapter checking keys
+/// off the `MangaDirectory` itself (`cleanBookName`) instead: multiple
+/// favorited chapters that resolve to the same directory collapse into ONE
+/// tracked target / ONE potential event, mirroring how the favorites page
+/// already merges them into one card (see design decision #4 in the
+/// smart-manga update-check plan).
+public enum FavoriteUpdateTargetKey: Codable, Hashable, Sendable {
+    case favorite(FavoriteItemTarget)
+    case mangaDirectory(cleanBookName: String)
+
+    private static let mangaDirectoryIDPrefix = "manga-directory:"
+
+    public var id: String {
+        switch self {
+        case let .favorite(target):
+            target.id
+        case let .mangaDirectory(cleanBookName):
+            "\(Self.mangaDirectoryIDPrefix)\(cleanBookName)"
+        }
+    }
+
+    /// Reverses `.mangaDirectory(cleanBookName:).id` for callers (e.g.
+    /// notification tap-routing) that only have the persisted id string, not
+    /// the original enum case. Returns nil for a `.favorite` id, never
+    /// guesses — the single source of truth for the prefix stays `id` above.
+    public static func mangaDirectoryCleanBookName(fromID id: String) -> String? {
+        guard id.hasPrefix(mangaDirectoryIDPrefix) else { return nil }
+        return String(id.dropFirst(mangaDirectoryIDPrefix.count))
     }
 }
 
@@ -104,7 +145,7 @@ public struct FavoriteUpdateRunSnapshot: Codable, Hashable, Identifiable, Sendab
 }
 
 public struct FavoriteUpdateTrackedTarget: Codable, Hashable, Identifiable, Sendable {
-    public var target: FavoriteItemTarget
+    public var target: FavoriteUpdateTargetKey
     public var title: String
     public var mode: FavoriteUpdateTargetMode
     public var categoryIDs: Set<String>
@@ -113,6 +154,14 @@ public struct FavoriteUpdateTrackedTarget: Codable, Hashable, Identifiable, Send
     public var knownLatestPostID: String?
     public var knownReplyCount: Int?
     public var knownPageCount: Int?
+    /// Chapter-tid baseline for `.mangaDirectory` targets only — always nil
+    /// for thread-mode targets. Monotonic: only ever grows (set union), even
+    /// though `MangaDirectoryWorkflow.updateDirectory`'s own retention logic
+    /// can prune stale chapters from the directory's stored list independent
+    /// of this baseline — shrinking the baseline in lockstep with that
+    /// pruning would make a pruned-then-reappearing chapter falsely
+    /// re-report as new.
+    public var knownChapterTIDs: Set<String>?
     public var baselineReady: Bool
     public var lastCheckedAt: Date?
     public var lastUpdatedAt: Date?
@@ -122,7 +171,7 @@ public struct FavoriteUpdateTrackedTarget: Codable, Hashable, Identifiable, Send
     public var id: String { target.id }
 
     public init(
-        target: FavoriteItemTarget,
+        target: FavoriteUpdateTargetKey,
         title: String,
         mode: FavoriteUpdateTargetMode,
         categoryIDs: Set<String> = [],
@@ -131,6 +180,7 @@ public struct FavoriteUpdateTrackedTarget: Codable, Hashable, Identifiable, Send
         knownLatestPostID: String? = nil,
         knownReplyCount: Int? = nil,
         knownPageCount: Int? = nil,
+        knownChapterTIDs: Set<String>? = nil,
         baselineReady: Bool = false,
         lastCheckedAt: Date? = nil,
         lastUpdatedAt: Date? = nil,
@@ -146,6 +196,7 @@ public struct FavoriteUpdateTrackedTarget: Codable, Hashable, Identifiable, Send
         self.knownLatestPostID = knownLatestPostID?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
         self.knownReplyCount = knownReplyCount
         self.knownPageCount = knownPageCount
+        self.knownChapterTIDs = knownChapterTIDs
         self.baselineReady = baselineReady
         self.lastCheckedAt = lastCheckedAt
         self.lastUpdatedAt = lastUpdatedAt
@@ -158,12 +209,15 @@ public struct FavoriteUpdateTrackedTarget: Codable, Hashable, Identifiable, Send
 public enum FavoriteUpdateSummary: Codable, Hashable, Sendable {
     case newReplies(count: Int)
     case newPages(count: Int)
+    /// New chapter-thread tids found for a `.mangaDirectory` target — the
+    /// directory-mode counterpart of `.newReplies`/`.newPages`.
+    case newChapters(count: Int)
     case changed
 }
 
 public struct FavoriteUpdateEvent: Codable, Hashable, Identifiable, Sendable {
     public var id: String
-    public var target: FavoriteItemTarget
+    public var target: FavoriteUpdateTargetKey
     public var title: String
     public var mode: FavoriteUpdateTargetMode
     public var fid: String?
@@ -177,7 +231,7 @@ public struct FavoriteUpdateEvent: Codable, Hashable, Identifiable, Sendable {
 
     public init(
         id: String = UUID().uuidString,
-        target: FavoriteItemTarget,
+        target: FavoriteUpdateTargetKey,
         title: String,
         mode: FavoriteUpdateTargetMode,
         fid: String? = nil,
@@ -321,6 +375,56 @@ public actor FavoriteUpdateStore {
         var state = loadStateSync()
         state.events.removeAll { $0.target == event.target && $0.dismissedAt == nil }
         state.events.append(event)
+        try persist(state)
+    }
+
+    /// Migrates a `.mangaDirectory` tracked target and its events from
+    /// `oldCleanBookName` to `newCleanBookName` when `MangaDirectoryStore`
+    /// renames/merges a directory (its 5th rename-cascade step). Unlike the
+    /// GRDB-backed `ContentCoverStore`/`LikeStore` cascades this store
+    /// mirrors, this store is UserDefaults-backed and cannot join the same
+    /// database transaction — the caller invokes this as a best-effort
+    /// follow-up after the GRDB write commits, not atomically with it.
+    /// A rename that merges into an ALREADY-tracked `newCleanBookName`
+    /// unions the two known-chapter-tid baselines (never shrinks either
+    /// side) and keeps only the more recently detected of any two
+    /// now-colliding undismissed events for the merged target.
+    public func renameMangaDirectoryTracking(from oldCleanBookName: String, to newCleanBookName: String) async throws {
+        guard oldCleanBookName != newCleanBookName else { return }
+        var state = loadStateSync()
+        let oldKey = FavoriteUpdateTargetKey.mangaDirectory(cleanBookName: oldCleanBookName)
+        let newKey = FavoriteUpdateTargetKey.mangaDirectory(cleanBookName: newCleanBookName)
+
+        if let oldTarget = state.trackedTargets.first(where: { $0.target == oldKey }) {
+            state.trackedTargets.removeAll { $0.target == oldKey }
+            if let existingIndex = state.trackedTargets.firstIndex(where: { $0.target == newKey }) {
+                var merged = state.trackedTargets[existingIndex]
+                merged.knownChapterTIDs = (merged.knownChapterTIDs ?? []).union(oldTarget.knownChapterTIDs ?? [])
+                merged.categoryIDs.formUnion(oldTarget.categoryIDs)
+                state.trackedTargets[existingIndex] = merged
+            } else {
+                var renamed = oldTarget
+                renamed.target = newKey
+                renamed.title = newCleanBookName
+                state.trackedTargets.append(renamed)
+            }
+        }
+
+        state.events = state.events.map { event in
+            guard event.target == oldKey else { return event }
+            var renamed = event
+            renamed.target = newKey
+            renamed.title = newCleanBookName
+            return renamed
+        }
+        var seenActiveTargetIDs: Set<String> = []
+        state.events = state.events
+            .sorted { $0.detectedAt > $1.detectedAt }
+            .filter { event in
+                guard event.dismissedAt == nil else { return true }
+                return seenActiveTargetIDs.insert(event.target.id).inserted
+            }
+
         try persist(state)
     }
 

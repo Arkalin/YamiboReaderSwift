@@ -199,6 +199,53 @@ struct MangaReaderTestsMangaStores {
         #expect(progress?.manga?.chapterThreadID == "912")
     }
 
+    @Test func directoryRenameMigratesFavoriteUpdateTrackingAsFifthCascadeStep() async throws {
+        let database = try YamiboDatabase.openPool(rootDirectory: makeMangaStoreRoot())
+        let updateStore = FavoriteUpdateStore(
+            defaults: try #require(UserDefaults(suiteName: "GRDBMangaStoreUpdateTracking.\(UUID().uuidString)")),
+            key: "favorite-updates"
+        )
+        let directoryStore = MangaDirectoryStore(databasePool: database, favoriteUpdateStore: updateStore)
+
+        try await directoryStore.saveDirectory(MangaDirectory(
+            cleanBookName: "旧漫画名",
+            strategy: .links,
+            sourceKey: "旧漫画名",
+            chapters: [makeChapter(tid: "913", title: "第1话", order: 1)]
+        ))
+        try await updateStore.upsertTrackedTarget(FavoriteUpdateTrackedTarget(
+            target: .mangaDirectory(cleanBookName: "旧漫画名"),
+            title: "旧漫画名",
+            mode: .mangaDirectory,
+            knownChapterTIDs: ["913"],
+            baselineReady: true
+        ))
+        try await updateStore.insertEvent(FavoriteUpdateEvent(
+            target: .mangaDirectory(cleanBookName: "旧漫画名"),
+            title: "旧漫画名",
+            mode: .mangaDirectory,
+            summary: .newChapters(count: 1),
+            detailIDs: ["914"]
+        ))
+
+        try await directoryStore.renameDirectory(
+            from: "旧漫画名",
+            to: MangaDirectory(
+                cleanBookName: "新漫画名",
+                strategy: .links,
+                sourceKey: "旧漫画名",
+                chapters: [makeChapter(tid: "913", title: "第1话", order: 1)]
+            )
+        )
+
+        let state = await updateStore.loadState()
+        #expect(state.trackedTargets.map(\.target) == [.mangaDirectory(cleanBookName: "新漫画名")])
+        #expect(state.trackedTargets.first?.knownChapterTIDs == ["913"])
+        #expect(state.events.count == 1)
+        #expect(state.events.first?.target == .mangaDirectory(cleanBookName: "新漫画名"))
+        #expect(state.events.first?.title == "新漫画名")
+    }
+
     @Test func readerProjectionSaveLoadPreservesOrderedImageURLsBySourceIdentity() async throws {
         let database = try YamiboDatabase.openPool(rootDirectory: makeMangaStoreRoot())
         let store = MangaReaderProjectionStore(databasePool: database)

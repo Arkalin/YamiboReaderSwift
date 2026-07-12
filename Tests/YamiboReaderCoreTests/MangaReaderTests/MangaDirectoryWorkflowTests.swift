@@ -163,6 +163,52 @@ struct MangaDirectoryWorkflowTests {
         #expect(await repository.searchRequests.count == 1)
     }
 
+    /// Regression guard: the cooldown gate must be reserved BEFORE the
+    /// network call, not after a successful one — otherwise a search that
+    /// fails (e.g. the forum's own flood control) leaves the gate unarmed
+    /// and the very next attempt repeats the same live request against a
+    /// forum that just rate-limited it.
+    @Test func searchFailureStillArmsCooldownSoTheNextAttemptIsRejectedWithoutHittingTheNetworkAgain() async throws {
+        let now = Date(timeIntervalSince1970: 5_000)
+        let directory = makeDirectory(name: "测试漫画", strategy: .searched, sourceKey: "测试漫画", tids: ["700"])
+        let store = RecordingDirectoryStore(directories: [directory])
+        let repository = RecordingDirectoryRepository(seed: makeSeed(tid: "700"), searchError: YamiboError.floodControl)
+        let workflow = MangaDirectoryWorkflow(
+            repository: repository,
+            store: store,
+            configuration: MangaDirectoryWorkflowConfiguration(now: { now })
+        )
+
+        await #expect(throws: YamiboError.floodControl) {
+            _ = try await workflow.updateDirectory(directory, currentTID: "700")
+        }
+        #expect(await repository.searchRequests.count == 1)
+
+        await #expect(throws: YamiboError.searchCooldown(seconds: 20)) {
+            _ = try await workflow.updateDirectory(directory, currentTID: "700")
+        }
+        #expect(await repository.searchRequests.count == 1, "the second attempt must be rejected by the cooldown gate before it ever reaches the network")
+    }
+
+    /// Regression guard: two callers racing `reserveCooldown` for the same
+    /// window must never both win — exactly one arms the cooldown, and the
+    /// other observes that reservation instead of independently deciding
+    /// no cooldown is active.
+    @Test func reserveCooldownIsAtomicUnderConcurrentCallers() async throws {
+        let state = MangaDirectorySearchCooldownState()
+        let now = Date(timeIntervalSince1970: 10_000)
+
+        async let first = state.reserveCooldown(now: now, duration: 20)
+        async let second = state.reserveCooldown(now: now, duration: 20)
+        let results = await [first, second]
+
+        let winners = results.filter { $0 == nil }
+        let losers = results.compactMap { $0 }
+        #expect(winners.count == 1, "exactly one caller must win the reservation")
+        #expect(losers.count == 1, "the other caller must lose and see the winner's deadline")
+        #expect(losers.first == now.addingTimeInterval(20))
+    }
+
     @Test func renameMergesIntoExistingTargetAndKeepsTargetSource() async throws {
         let now = Date(timeIntervalSince1970: 4_000)
         let current = makeDirectory(name: "旧标题", strategy: .searched, sourceKey: "旧标题", tids: ["700", "701"])
@@ -254,6 +300,7 @@ private actor RecordingDirectoryRepository: MangaDirectoryRepository {
     private let seed: MangaDirectorySeed
     private let tagChapters: [MangaChapter]
     private let searchChapters: [MangaChapter]
+    private let searchError: Error?
     private(set) var seedThreadIDs: [String] = []
     private(set) var tagDirectoryRequests: [(tagIDs: [String], allowedForumID: String)] = []
     private(set) var searchRequests: [(keyword: String, forumID: String)] = []
@@ -261,11 +308,13 @@ private actor RecordingDirectoryRepository: MangaDirectoryRepository {
     init(
         seed: MangaDirectorySeed,
         tagChapters: [MangaChapter] = [],
-        searchChapters: [MangaChapter] = []
+        searchChapters: [MangaChapter] = [],
+        searchError: Error? = nil
     ) {
         self.seed = seed
         self.tagChapters = tagChapters
         self.searchChapters = searchChapters
+        self.searchError = searchError
     }
 
     func loadDirectorySeed(for threadID: String) async throws -> MangaDirectorySeed {
@@ -280,6 +329,7 @@ private actor RecordingDirectoryRepository: MangaDirectoryRepository {
 
     func searchDirectory(keyword: String, forumID: String) async throws -> [MangaChapter] {
         searchRequests.append((keyword, forumID))
+        if let searchError { throw searchError }
         return searchChapters
     }
 }
