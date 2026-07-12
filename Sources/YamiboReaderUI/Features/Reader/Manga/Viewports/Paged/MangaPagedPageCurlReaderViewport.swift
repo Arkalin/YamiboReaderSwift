@@ -12,6 +12,7 @@ struct MangaPagedPageCurlReaderViewport: UIViewControllerRepresentable {
     let isChromeVisible: Bool
     let zoomEnabled: Bool
     let likedPageIDs: Set<String>
+    let controlPageTurnBridge: MangaPagedControlPageTurnBridge
     let onCurrentPageChange: (Int) -> Void
     let canBoundaryPageTurn: (Int) -> Bool
     let onBoundaryPageTurn: (Int) -> Void
@@ -91,6 +92,11 @@ struct MangaPagedPageCurlReaderViewport: UIViewControllerRepresentable {
             )
             context.coordinator.applyPageBackground(to: containerViewController)
             context.coordinator.zoom.updatePageCurlSpreadZoomAvailability(in: containerViewController, animated: true)
+        }
+        let gestures = context.coordinator.gestures
+        controlPageTurnBridge.attemptEdgeReveal = { [weak gestures, weak containerViewController] delta in
+            guard let gestures, let containerViewController else { return false }
+            return gestures.attemptControlPageTurnEdgeReveal(delta: delta, in: containerViewController)
         }
     }
 }

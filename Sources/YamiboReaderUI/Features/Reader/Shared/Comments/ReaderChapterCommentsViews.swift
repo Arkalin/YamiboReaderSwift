@@ -268,6 +268,14 @@ struct ReaderChapterCommentsSheet: View {
         // hidden; the cover is a touch-first surface, and close must not
         // tear down this sheet underneath it.
         guard threadOverlayItem == nil else { return }
+        // The next-page bound action is a dead no-op everywhere else in this
+        // sheet (dpad owns scrolling); only once already at the last loaded
+        // comment does it act as "load next page", mirroring the
+        // scroll-to-edge-then-cross feel of vertical-mode chapter boundaries.
+        if event == .bound(.nextPage), isAtCommentsBottomWithMorePages {
+            loadNextPage()
+            return
+        }
         switch ReaderControlCommandResolver.commentsCommand(for: event) {
         case .close:
             dismiss()
@@ -278,16 +286,27 @@ struct ReaderChapterCommentsSheet: View {
         }
     }
 
-    private func scrollComments(_ direction: ReaderControlScrollDirection) {
-        guard case let .loaded(_, page) = state, !page.comments.isEmpty else { return }
-        let ids = page.comments.map(\.id)
-        let currentIndex: Int = if let scrollTarget, let index = ids.firstIndex(of: scrollTarget) {
+    private func currentCommentIndex(ids: [String]) -> Int {
+        if let scrollTarget, let index = ids.firstIndex(of: scrollTarget) {
             index
         } else if scrollTarget == ReaderChapterCommentsContent.loadNextRowID {
             ids.count - 1
         } else {
             0
         }
+    }
+
+    private var isAtCommentsBottomWithMorePages: Bool {
+        guard case let .loaded(_, page) = state, !page.comments.isEmpty,
+              page.nextView != nil, !isLoadingMore else { return false }
+        let ids = page.comments.map(\.id)
+        return currentCommentIndex(ids: ids) >= ids.count - 1
+    }
+
+    private func scrollComments(_ direction: ReaderControlScrollDirection) {
+        guard case let .loaded(_, page) = state, !page.comments.isEmpty else { return }
+        let ids = page.comments.map(\.id)
+        let currentIndex = currentCommentIndex(ids: ids)
         let stride = ReaderControlCommandResolver.commentsScrollStride
         let desiredIndex = direction == .down ? currentIndex + stride : currentIndex - stride
         let clampedIndex = min(max(desiredIndex, 0), ids.count - 1)

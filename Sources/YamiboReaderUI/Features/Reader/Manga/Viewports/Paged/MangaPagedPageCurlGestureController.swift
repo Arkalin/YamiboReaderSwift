@@ -270,6 +270,21 @@ final class MangaPagedPageCurlGestureController: NSObject, UIGestureRecognizerDe
         return true
     }
 
+    /// Non-touch equivalent of the edge-zone tap check in `handleTap`: `delta`
+    /// is a reading-order step (+1 next/-1 previous), translated to a
+    /// physical edge the same way a tap zone is, so a keyboard/gamepad/Pencil
+    /// page turn defers to revealing hidden fit-height/zoomed content before
+    /// it's allowed to actually turn the page.
+    func attemptControlPageTurnEdgeReveal(
+        delta: Int,
+        in containerViewController: MangaPagedPageCurlContainerViewController
+    ) -> Bool {
+        let readingZone: ReaderPagedTapZone = delta > 0 ? .next : .previous
+        let physicalZone = directionalTapZone(for: readingZone)
+        return coordinator?.zoom.consumePageCurlSpreadEdgeTap(for: physicalZone, in: containerViewController) == true ||
+            consumeSurfaceEdgeTap(for: physicalZone, in: containerViewController.pageViewController)
+    }
+
     private func consumeSurfaceEdgeTap(for zone: ReaderPagedTapZone, in pageViewController: UIPageViewController) -> Bool {
         guard let coordinator,
               !coordinator.parent.sequence.usesTwoPageSpread,

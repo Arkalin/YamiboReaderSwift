@@ -10,6 +10,7 @@ struct MangaReaderPresentationContent: View {
     let isChromeVisible: Bool
     let likedPageIDs: Set<String>
     let controlScrollStep: ReaderControlScrollStepRequest?
+    let controlPageTurnBridge: MangaPagedControlPageTurnBridge
     let onRetryInitialLoad: () -> Void
     let onCurrentPageChange: (Int) -> Void
     let canBoundaryPageTurn: (Int, Bool) -> Bool
@@ -33,6 +34,7 @@ struct MangaReaderPresentationContent: View {
                     isChromeVisible: isChromeVisible,
                     likedPageIDs: likedPageIDs,
                     controlScrollStep: controlScrollStep,
+                    controlPageTurnBridge: controlPageTurnBridge,
                     onCurrentPageChange: onCurrentPageChange,
                     canBoundaryPageTurn: canBoundaryPageTurn,
                     onBoundaryPageTurn: onBoundaryPageTurn,
@@ -76,6 +78,7 @@ private struct MangaReaderLoadedContent: View {
     let isChromeVisible: Bool
     let likedPageIDs: Set<String>
     let controlScrollStep: ReaderControlScrollStepRequest?
+    let controlPageTurnBridge: MangaPagedControlPageTurnBridge
     let onCurrentPageChange: (Int) -> Void
     let canBoundaryPageTurn: (Int, Bool) -> Bool
     let onBoundaryPageTurn: (Int, Bool) -> Void
@@ -126,6 +129,7 @@ private struct MangaReaderLoadedContent: View {
                             isChromeVisible: isChromeVisible,
                             zoomEnabled: settings.zoomEnabled,
                             likedPageIDs: likedPageIDs,
+                            controlPageTurnBridge: controlPageTurnBridge,
                             onCurrentPageChange: onCurrentPageChange,
                             canBoundaryPageTurn: { delta in
                                 canBoundaryPageTurn(delta, usesTwoPageSpread)
@@ -147,6 +151,7 @@ private struct MangaReaderLoadedContent: View {
                             isChromeVisible: isChromeVisible,
                             zoomEnabled: settings.zoomEnabled,
                             likedPageIDs: likedPageIDs,
+                            controlPageTurnBridge: controlPageTurnBridge,
                             onCurrentPageChange: onCurrentPageChange,
                             canBoundaryPageTurn: { delta in
                                 canBoundaryPageTurn(delta, usesTwoPageSpread)

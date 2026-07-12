@@ -207,6 +207,16 @@ final class MangaPagedScrollGestureController: NSObject, UIGestureRecognizerDele
         )
     }
 
+    /// Non-touch equivalent of the edge-zone tap check in `handleTap`: `delta`
+    /// is a reading-order step (+1 next/-1 previous), translated to a
+    /// physical edge the same way a tap zone is, so a keyboard/gamepad/Pencil
+    /// page turn defers to revealing hidden fit-height/zoomed content before
+    /// it's allowed to actually turn the page.
+    func attemptControlPageTurnEdgeReveal(delta: Int, in collectionView: UICollectionView) -> Bool {
+        let readingZone: ReaderPagedTapZone = delta > 0 ? .next : .previous
+        return consumeSurfaceEdgeTap(for: directionalTapZone(for: readingZone), in: collectionView)
+    }
+
     private func consumeSurfaceEdgeTap(for zone: ReaderPagedTapZone, in collectionView: UICollectionView) -> Bool {
         guard let coordinator,
               let physicalEdge = MangaPagedSurfaceEdgeInteraction.physicalEdge(forTapZone: zone) else {

@@ -12,6 +12,7 @@ struct MangaPagedReaderViewport: UIViewRepresentable {
     let isChromeVisible: Bool
     let zoomEnabled: Bool
     let likedPageIDs: Set<String>
+    let controlPageTurnBridge: MangaPagedControlPageTurnBridge
     let onCurrentPageChange: (Int) -> Void
     let canBoundaryPageTurn: (Int) -> Bool
     let onBoundaryPageTurn: (Int) -> Void
@@ -72,6 +73,11 @@ struct MangaPagedReaderViewport: UIViewRepresentable {
         context.coordinator.updateGestureState(in: collectionView)
         context.coordinator.callbackScheduler.performViewUpdate {
             context.coordinator.updateContentIfNeeded(in: collectionView)
+        }
+        let gestures = context.coordinator.gestures
+        controlPageTurnBridge.attemptEdgeReveal = { [weak gestures, weak collectionView] delta in
+            guard let gestures, let collectionView else { return false }
+            return gestures.attemptControlPageTurnEdgeReveal(delta: delta, in: collectionView)
         }
     }
 }

@@ -23,6 +23,7 @@ public struct MangaReaderView: View {
     @State private var isSavingImage = false
     @State private var controlHandlerToken: UUID?
     @State private var controlScrollStep: ReaderControlScrollStepRequest?
+    @State private var controlPageTurnBridge = MangaPagedControlPageTurnBridge()
     @State private var controlUsesTwoPageSpread = false
 
     public init(context: MangaLaunchContext, dependencies: MangaReaderDependencies, appModel: YamiboAppModel) {
@@ -56,6 +57,7 @@ public struct MangaReaderView: View {
                 isChromeVisible: isChromeVisible,
                 likedPageIDs: model.likedPageIDs,
                 controlScrollStep: controlScrollStep,
+                controlPageTurnBridge: controlPageTurnBridge,
                 onRetryInitialLoad: {
                     Task { await model.retryInitialLoad() }
                 },
@@ -94,7 +96,7 @@ public struct MangaReaderView: View {
                     settings: model.applePencilPageTurnSettings,
                     canTurnPage: canReceiveApplePencilPageTurn
                 ) { delta in
-                    Task { await model.jumpRelativePage(delta, usesTwoPageSpread: usesTwoPageSpread) }
+                    performPageTurn(delta, usesTwoPageSpread: usesTwoPageSpread)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
@@ -400,7 +402,7 @@ public struct MangaReaderView: View {
             isChapterCommentsPresented = true
         case let .turnPage(delta):
             hideChromeForControlReading()
-            Task { await model.jumpRelativePage(delta, usesTwoPageSpread: controlUsesTwoPageSpread) }
+            performPageTurn(delta, usesTwoPageSpread: controlUsesTwoPageSpread)
         case let .scrollStep(direction):
             hideChromeForControlReading()
             controlScrollStep = ReaderControlScrollStepRequest(
@@ -408,6 +410,16 @@ public struct MangaReaderView: View {
                 revision: (controlScrollStep?.revision ?? 0) + 1
             )
         }
+    }
+
+    /// Non-touch page-turn triggers (keyboard, gamepad, Apple Pencil) share
+    /// this entry point so a fit-height/zoomed page reveals its hidden edge
+    /// content on the first press instead of jumping straight to the next
+    /// page — the same defer-to-surface decision a tap in the edge zone
+    /// already makes, surfaced through `controlPageTurnBridge`.
+    private func performPageTurn(_ delta: Int, usesTwoPageSpread: Bool) {
+        guard !controlPageTurnBridge.attemptPageTurn(delta) else { return }
+        Task { await model.jumpRelativePage(delta, usesTwoPageSpread: usesTwoPageSpread) }
     }
 
     /// A page turn while the chrome is up means "keep reading": perform it
