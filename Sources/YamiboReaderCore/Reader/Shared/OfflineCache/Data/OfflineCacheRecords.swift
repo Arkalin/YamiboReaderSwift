@@ -454,7 +454,7 @@ extension OfflineCacheStore {
         )
     }
 
-    private static func novelImageURLs(entryKey: String, in db: Database) throws -> [URL] {
+    static func novelImageURLs(entryKey: String, in db: Database) throws -> [URL] {
         try String.fetchAll(
             db,
             sql: """

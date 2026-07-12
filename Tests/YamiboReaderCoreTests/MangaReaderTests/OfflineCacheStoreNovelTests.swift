@@ -182,6 +182,85 @@ struct MangaReaderTestsNovelOfflineCacheStore {
         #expect(group.entries.count == 1)
     }
 
+    @Test func resavingIdenticalNovelSourcePageSkipsFileRewriteAndUpdateTimestamp() async throws {
+        let store = try makeTestOfflineCacheStore(rootDirectory: try makeTemporaryNovelOfflineCacheDirectory())
+        let request = try makeNovelWorkRequest(tid: "7020", view: 1)
+        let sourcePage = try makeNovelSourcePage(tid: "7020", view: 1, totalPages: 1)
+        let firstUpdatedAt = Date(timeIntervalSince1970: 70_200)
+
+        try await store.saveNovelOfflineSourcePage(
+            sourcePage,
+            request: request,
+            updatedAt: firstUpdatedAt
+        )
+
+        let fileURL = try await novelSourcePageFileURL(store, entryKey: request.entryKey)
+        let mtimeBefore = try #require(FileManager.default.attributesOfItem(atPath: fileURL.path)[.modificationDate] as? Date)
+
+        try await store.saveNovelOfflineSourcePage(
+            sourcePage,
+            request: request,
+            updatedAt: Date(timeIntervalSince1970: 70_201)
+        )
+
+        let mtimeAfter = try #require(FileManager.default.attributesOfItem(atPath: fileURL.path)[.modificationDate] as? Date)
+        let snapshot = await store.novelOfflineCacheViewsSnapshot(
+            ownerTitle: request.ownerTitle,
+            threadID: request.threadID,
+            authorID: request.authorID
+        )
+
+        #expect(snapshot.updateTimesByView[1] == firstUpdatedAt)
+        #expect(mtimeAfter == mtimeBefore)
+    }
+
+    @Test func resavingChangedNovelSourcePageRewritesFileAndUpdateTimestamp() async throws {
+        let store = try makeTestOfflineCacheStore(rootDirectory: try makeTemporaryNovelOfflineCacheDirectory())
+        let request = try makeNovelWorkRequest(tid: "7021", view: 1)
+        let originalSourcePage = try makeNovelSourcePage(tid: "7021", view: 1, totalPages: 1)
+        let updatedSourcePage = ForumThreadPage(
+            thread: originalSourcePage.thread,
+            title: originalSourcePage.title,
+            posts: [
+                ForumThreadPost(
+                    postID: originalSourcePage.posts[0].postID,
+                    author: originalSourcePage.posts[0].author,
+                    contentHTML: "<strong>第1章</strong><br>修改后的正文",
+                    contentText: "修改后的正文"
+                )
+            ],
+            pageNavigation: originalSourcePage.pageNavigation
+        )
+        let firstUpdatedAt = Date(timeIntervalSince1970: 70_210)
+        let secondUpdatedAt = Date(timeIntervalSince1970: 70_211)
+
+        try await store.saveNovelOfflineSourcePage(
+            originalSourcePage,
+            request: request,
+            updatedAt: firstUpdatedAt
+        )
+        try await store.saveNovelOfflineSourcePage(
+            updatedSourcePage,
+            request: request,
+            updatedAt: secondUpdatedAt
+        )
+
+        let snapshot = await store.novelOfflineCacheViewsSnapshot(
+            ownerTitle: request.ownerTitle,
+            threadID: request.threadID,
+            authorID: request.authorID
+        )
+        let loadedSource = await store.novelOfflineSourcePage(
+            ownerTitle: request.ownerTitle,
+            threadID: request.threadID,
+            view: request.view,
+            authorID: request.authorID
+        )
+
+        #expect(snapshot.updateTimesByView[1] == secondUpdatedAt)
+        #expect(loadedSource == updatedSourcePage)
+    }
+
     @Test func novelOfflineImageDataMatchesCanonicalRefererAndReferencedImage() async throws {
         let store = try makeTestOfflineCacheStore(rootDirectory: try makeTemporaryNovelOfflineCacheDirectory())
         let sharedImageURL = try #require(URL(string: "https://img.example.com/shared-inline.jpg"))
@@ -298,6 +377,12 @@ struct MangaReaderTestsNovelOfflineCacheStore {
         #expect(entry?.imageURLs == [imageURL])
         #expect(await store.offlineImageData(for: imageURL) == Data([7, 5]))
     }
+}
+
+private func novelSourcePageFileURL(_ store: OfflineCacheStore, entryKey: String) async throws -> URL {
+    let directory = await store.novelSourcePagesDirectory
+    let fileName = await store.novelPayloadFileName(prefix: "source", entryKey: entryKey)
+    return directory.appendingPathComponent(fileName, isDirectory: false)
 }
 
 private func makeNovelWorkRequest(
