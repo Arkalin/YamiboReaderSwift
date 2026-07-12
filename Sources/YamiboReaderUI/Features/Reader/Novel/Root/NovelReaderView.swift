@@ -11,7 +11,7 @@ public struct NovelReaderView: View {
     @State private var showingCacheProgress = false
     @State private var showingChapterSheet = false
     @State private var showingChapterComments = false
-    @State private var forumThreadOverlayItem: ReaderForumThreadOverlayItem?
+    @State private var forumThreadOverlayItem: ForumThreadOverlayItem?
     @State private var imageBrowserItem: ImageBrowserItem?
     @State private var chapterCommentsTarget: ReaderChapterCommentTarget?
     @State private var chromeState = NovelReaderChromeState()
@@ -715,7 +715,7 @@ public struct NovelReaderView: View {
     /// 打开原帖 layers the thread over the reader instead of dismissing it —
     /// closing the overlay drops straight back into the passage being read.
     private func openInForum() {
-        forumThreadOverlayItem = ReaderForumThreadOverlayItem(
+        forumThreadOverlayItem = ForumThreadOverlayItem(
             url: model.currentForumTargetURL,
             title: model.title
         )
@@ -1509,7 +1509,7 @@ private struct NovelReaderPresentationModifier: ViewModifier {
     @Binding var showingChapterSheet: Bool
     @Binding var showingChapterComments: Bool
     @Binding var showingLikes: Bool
-    @Binding var forumThreadOverlayItem: ReaderForumThreadOverlayItem?
+    @Binding var forumThreadOverlayItem: ForumThreadOverlayItem?
     @Binding var imageBrowserItem: ImageBrowserItem?
 
     let chapterCommentsTarget: ReaderChapterCommentTarget?
@@ -1550,10 +1550,11 @@ private struct NovelReaderPresentationModifier: ViewModifier {
                 )
             }
             .fullScreenCover(item: $forumThreadOverlayItem) { item in
-                ReaderForumThreadOverlayScreen(
+                ForumThreadOverlayScreen(
                     item: item,
                     dependencies: appModel.appContext.forumDependencies,
                     appModel: appModel,
+                    rootIsDiscussionView: true,
                     discussionWorkTIDs: [model.context.threadID]
                 )
             }
@@ -1605,7 +1606,7 @@ private struct NovelReaderStateObserverModifier: ViewModifier {
     @Binding var showingChapterSheet: Bool
     @Binding var showingChapterComments: Bool
     @Binding var showingLikes: Bool
-    @Binding var forumThreadOverlayItem: ReaderForumThreadOverlayItem?
+    @Binding var forumThreadOverlayItem: ForumThreadOverlayItem?
     @Binding var imageBrowserItem: ImageBrowserItem?
 
     let isStatusBarHidden: Bool

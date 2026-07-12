@@ -171,7 +171,7 @@ struct ReaderChapterCommentsSheet: View {
     private let appModel: YamiboAppModel
     private let discussionWorkTIDs: Set<String>
 
-    @State private var threadOverlayItem: ReaderForumThreadOverlayItem?
+    @State private var threadOverlayItem: ForumThreadOverlayItem?
     @State private var scrollTarget: String?
     @State private var controlHandlerToken: UUID?
 
@@ -240,10 +240,11 @@ struct ReaderChapterCommentsSheet: View {
             }
         }
         .fullScreenCover(item: $threadOverlayItem) { item in
-            ReaderForumThreadOverlayScreen(
+            ForumThreadOverlayScreen(
                 item: item,
                 dependencies: forumDependencies,
                 appModel: appModel,
+                rootIsDiscussionView: true,
                 discussionWorkTIDs: discussionWorkTIDs
             )
         }
@@ -320,7 +321,7 @@ struct ReaderChapterCommentsSheet: View {
     /// work must not write its own browsing-history row (browsing-history
     /// decision #14).
     private func openOriginalPost(_ url: URL) {
-        threadOverlayItem = ReaderForumThreadOverlayItem(url: url, title: target?.title)
+        threadOverlayItem = ForumThreadOverlayItem(url: url, title: target?.title)
     }
 }
 

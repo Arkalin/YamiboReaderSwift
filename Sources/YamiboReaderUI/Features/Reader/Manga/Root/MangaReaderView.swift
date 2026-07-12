@@ -13,7 +13,7 @@ public struct MangaReaderView: View {
     @State private var isChromeVisible = true
     @State private var isDirectoryPresented = false
     @State private var isChapterCommentsPresented = false
-    @State private var forumThreadOverlayItem: ReaderForumThreadOverlayItem?
+    @State private var forumThreadOverlayItem: ForumThreadOverlayItem?
     @State private var isSettingsPresented = false
     @State private var isCachePresented = false
     @State private var isLikesPresented = false
@@ -214,10 +214,11 @@ public struct MangaReaderView: View {
             )
         }
         .fullScreenCover(item: $forumThreadOverlayItem) { item in
-            ReaderForumThreadOverlayScreen(
+            ForumThreadOverlayScreen(
                 item: item,
                 dependencies: appModel.appContext.forumDependencies,
                 appModel: appModel,
+                rootIsDiscussionView: true,
                 discussionWorkTIDs: discussionWorkTIDs
             )
         }
@@ -431,7 +432,7 @@ public struct MangaReaderView: View {
     /// closing the overlay drops straight back into the page being read.
     private func openOriginalPost() {
         guard !isDismissing else { return }
-        forumThreadOverlayItem = ReaderForumThreadOverlayItem(
+        forumThreadOverlayItem = ForumThreadOverlayItem(
             url: YamiboRoute.threadByID(
                 tid: context.originalThreadID,
                 page: 1,

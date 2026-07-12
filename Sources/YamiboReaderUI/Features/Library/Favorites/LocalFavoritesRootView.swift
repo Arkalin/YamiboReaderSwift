@@ -3,11 +3,12 @@ import YamiboReaderCore
 
 /// Composition root for the favorites tab: creates the library organizer,
 /// the remote sync session, and the update monitor, and routes resolved open
-/// targets into the app-level readers.
+/// targets into the app-level readers or a full-screen thread overlay.
 struct LocalFavoritesRootView: View {
     @StateObject private var organizer: FavoriteLibraryOrganizer
     @StateObject private var remoteSync: FavoriteRemoteSyncSession
     @StateObject private var updateMonitor: FavoriteUpdateMonitor
+    @State private var threadOverlayItem: ForumThreadOverlayItem?
 
     private let openTargetResolver: LocalFavoriteOpenTargetResolver
     private let makeFavoriteRepository: @Sendable () async -> FavoriteRepository
@@ -65,6 +66,17 @@ struct LocalFavoritesRootView: View {
                 )
             }
         )
+        .fullScreenCover(item: $threadOverlayItem) { item in
+            ForumThreadOverlayScreen(
+                item: item,
+                dependencies: appModel.appContext.forumDependencies,
+                appModel: appModel,
+                // Opening a favorite is a real visit, not a discussion
+                // companion of a running reader — it must write its
+                // browsing-history row like the old forum-tab route did.
+                rootIsDiscussionView: false
+            )
+        }
         .task {
             async let organizerLoad: Void = organizer.load()
             async let remoteSyncLoad: Void = remoteSync.load()
@@ -85,7 +97,10 @@ struct LocalFavoritesRootView: View {
             case let .mangaReader(context):
                 appModel.presentMangaReader(context)
             case let .nativeThread(url, title):
-                appModel.openNativeForumThread(url: url, title: title)
+                // Plain-post favorites open in a full-screen overlay so the
+                // favorites tab stays put underneath, mirroring the reader's
+                // 打开原帖 behavior.
+                threadOverlayItem = ForumThreadOverlayItem(url: url, title: title)
             }
         } catch {
             YamiboLog.library.error("Failed to resolve open target for favorite \(item.id): \(error.localizedDescription)")
