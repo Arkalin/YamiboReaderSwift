@@ -22,6 +22,18 @@ struct NovelReaderParsedContent: Hashable, Sendable {
     }
 }
 
+// String.count walks all grapheme boundaries, so polling it once per appended character is O(n^2).
+// A single Character append changes the grapheme count by 0 (merges with the trailing cluster - can
+// happen after DOM-node/style-run splitting hands us a base letter and its combining mark as two
+// separate Characters) or 1 (starts a new cluster), never more, so this boundary-only check is
+// equivalent to recomputing String.count but O(1) instead of O(n).
+private func mergesWithPreviousGrapheme(of existing: String, appending next: Character) -> Bool {
+    guard let last = existing.last else { return false }
+    var probe = String(last)
+    probe.append(next)
+    return probe.count == 1
+}
+
 public enum NovelReaderProjectionBuilder {
     public static func build(
         from page: ForumThreadPage,
@@ -548,12 +560,13 @@ private enum NovelReaderPostHTMLProjectionParser {
         normalized = trimStyledWhitespaceAndNewlines(normalized)
 
         var output = ""
+        var outputCount = 0
         var inlineTextStyles: [NovelInlineTextStyleRange] = []
         var blockTextStyles: [NovelBlockTextStyleRange] = []
         var boldStart: Int?
         var quoteStart: Int?
         for character in normalized {
-            let location = output.count
+            let location = outputCount
             if character.isBold {
                 if boldStart == nil {
                     boldStart = location
@@ -584,21 +597,24 @@ private enum NovelReaderPostHTMLProjectionParser {
                 }
                 quoteStart = nil
             }
+            if !mergesWithPreviousGrapheme(of: output, appending: character.character) {
+                outputCount += 1
+            }
             output.append(character.character)
         }
-        if let start = boldStart, output.count > start {
+        if let start = boldStart, outputCount > start {
             inlineTextStyles.append(
                 NovelInlineTextStyleRange(
                     style: .bold,
-                    range: NovelCharacterRange(location: start, length: output.count - start)
+                    range: NovelCharacterRange(location: start, length: outputCount - start)
                 )
             )
         }
-        if let start = quoteStart, output.count > start {
+        if let start = quoteStart, outputCount > start {
             blockTextStyles.append(
                 NovelBlockTextStyleRange(
                     style: .quote,
-                    range: NovelCharacterRange(location: start, length: output.count - start)
+                    range: NovelCharacterRange(location: start, length: outputCount - start)
                 )
             )
         }
@@ -784,6 +800,7 @@ private enum NovelPostContentProjector {
 
     private struct TextBuffer {
         var text = ""
+        var textCount = 0
         var inlineTextStyles: [NovelInlineTextStyleRange] = []
         var blockTextStyles: [NovelBlockTextStyleRange] = []
 
@@ -793,8 +810,10 @@ private enum NovelPostContentProjector {
 
         mutating func append(_ value: String, inlineStyles: [NovelInlineTextStyleRange], isQuote: Bool) {
             guard !value.isEmpty else { return }
-            let start = text.count
+            let start = textCount
+            let mergesAtBoundary = value.first.map { mergesWithPreviousGrapheme(of: text, appending: $0) } ?? false
             text += value
+            textCount = start + value.count - (mergesAtBoundary ? 1 : 0)
             inlineTextStyles.append(
                 contentsOf: inlineStyles.map { style in
                     NovelInlineTextStyleRange(
@@ -831,6 +850,7 @@ private enum NovelPostContentProjector {
             let end = characters.lastIndex { !isTrimmable($0) }.map { $0 + 1 } ?? start
             guard start < end else {
                 text = ""
+                textCount = 0
                 inlineTextStyles = []
                 blockTextStyles = []
                 return nil
@@ -840,6 +860,7 @@ private enum NovelPostContentProjector {
             let inline = inlineTextStyles.compactMap { adjustedRange($0, trimStart: start, maxLength: maxLength) }
             let block = blockTextStyles.compactMap { adjustedRange($0, trimStart: start, maxLength: maxLength) }
             text = ""
+            textCount = 0
             inlineTextStyles = []
             blockTextStyles = []
             return (trimmed, inline, block)
