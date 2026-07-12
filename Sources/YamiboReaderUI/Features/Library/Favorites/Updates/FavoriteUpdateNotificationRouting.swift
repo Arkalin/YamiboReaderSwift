@@ -21,11 +21,6 @@ public enum FavoriteUpdateNotificationRouting {
 
     static func open(targetID: String, appModel: YamiboAppModel) async {
         let dependencies = appModel.appContext.libraryDependencies
-        let document = try? await dependencies.localFavoriteLibraryStore.load()
-        guard let item = document?.items.first(where: { $0.target.id == targetID }) else {
-            appModel.selectTab(.favorites)
-            return
-        }
         let resolver = LocalFavoriteOpenTargetResolver(
             libraryStore: dependencies.localFavoriteLibraryStore,
             readingProgressStore: dependencies.readingProgressStore,
@@ -33,7 +28,21 @@ public enum FavoriteUpdateNotificationRouting {
             settingsStore: dependencies.settingsStore
         )
         do {
-            guard let target = try await resolver.openTarget(for: item, mode: .resume, mangaScope: .boardDefault) else {
+            let target: LocalFavoriteOpenTarget?
+            if let cleanBookName = FavoriteUpdateTargetKey.mangaDirectoryCleanBookName(fromID: targetID) {
+                // A directory-mode event's notification carries no pointer to
+                // one specific favorite — re-derive fresh, same as the
+                // in-app updates page's tap handler.
+                target = try await resolver.openTarget(forMangaDirectoryCleanBookName: cleanBookName)
+            } else {
+                let document = try? await dependencies.localFavoriteLibraryStore.load()
+                guard let item = document?.items.first(where: { $0.target.id == targetID }) else {
+                    appModel.selectTab(.favorites)
+                    return
+                }
+                target = try await resolver.openTarget(for: item, mode: .resume, mangaScope: .boardDefault)
+            }
+            guard let target else {
                 appModel.selectTab(.favorites)
                 return
             }

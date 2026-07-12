@@ -55,7 +55,11 @@ public enum FavoriteUpdateBackgroundScheduler {
                 await monitor.interrupt()
             }
         }
-        let started = await monitor.startCheckIfDue()
+        // Background-task budget is tight — cap non-tag smart-manga
+        // directory checks (the ones that risk the forum's search
+        // flood-control) to just one per run, unlike the foreground
+        // catch-up's more generous cap.
+        let started = await monitor.startCheckIfDue(nonTagMangaDirectoryCheckCap: 1)
         if started {
             await monitor.waitForCompletion()
         }
@@ -71,7 +75,16 @@ public enum FavoriteUpdateBackgroundScheduler {
             libraryStore: dependencies.localFavoriteLibraryStore,
             makeForumThreadReaderRepository: dependencies.makeForumThreadReaderRepository,
             settingsStore: dependencies.settingsStore,
-            notifier: UserNotificationFavoriteUpdateNotifier()
+            notifier: UserNotificationFavoriteUpdateNotifier(),
+            mangaDirectoryStore: dependencies.mangaDirectoryStore,
+            makeMangaDirectoryWorkflow: { searchForumID in
+                MangaDirectoryWorkflow(
+                    repository: await dependencies.makeMangaDirectoryRepository(),
+                    store: dependencies.mangaDirectoryStore,
+                    configuration: MangaDirectoryWorkflowConfiguration(searchForumID: searchForumID),
+                    searchCooldownState: dependencies.mangaDirectorySearchCooldownState
+                )
+            }
         )
     }
 }

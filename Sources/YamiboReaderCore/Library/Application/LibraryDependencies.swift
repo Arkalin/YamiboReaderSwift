@@ -18,10 +18,17 @@ public struct LibraryDependencies: Sendable {
     public let settingsStore: SettingsStore
     public let contentCoverStore: ContentCoverStore
     public let mangaDirectoryStore: MangaDirectoryStore
+    /// Shared, single-instance cooldown state for the manga-directory search
+    /// flow (mirrors `ForumDependencies`' own copy) — the smart-manga update
+    /// check lane's `MangaDirectoryWorkflow` must share the same instance the
+    /// reader uses, or the two would independently think a just-triggered
+    /// forum search is still safe to repeat.
+    public let mangaDirectorySearchCooldownState: MangaDirectorySearchCooldownState
     public let favoriteBackgroundImageStore: FavoriteBackgroundImageStore
     public let makeFavoriteRepository: @Sendable () async -> FavoriteRepository
     public let makeForumThreadReaderRepository: @Sendable () async -> ForumThreadReaderRepository
     public let makeThreadRouteResolver: @Sendable () async -> YamiboThreadRouteResolver
+    public let makeMangaDirectoryRepository: @Sendable () async -> any MangaDirectoryRepository
 
     public init(
         localFavoriteLibraryStore: FavoriteLibraryStore,
@@ -32,10 +39,12 @@ public struct LibraryDependencies: Sendable {
         settingsStore: SettingsStore,
         contentCoverStore: ContentCoverStore,
         mangaDirectoryStore: MangaDirectoryStore,
+        mangaDirectorySearchCooldownState: MangaDirectorySearchCooldownState,
         favoriteBackgroundImageStore: FavoriteBackgroundImageStore,
         makeFavoriteRepository: @escaping @Sendable () async -> FavoriteRepository,
         makeForumThreadReaderRepository: @escaping @Sendable () async -> ForumThreadReaderRepository,
-        makeThreadRouteResolver: @escaping @Sendable () async -> YamiboThreadRouteResolver
+        makeThreadRouteResolver: @escaping @Sendable () async -> YamiboThreadRouteResolver,
+        makeMangaDirectoryRepository: @escaping @Sendable () async -> any MangaDirectoryRepository
     ) {
         self.localFavoriteLibraryStore = localFavoriteLibraryStore
         self.favoriteUpdateStore = favoriteUpdateStore
@@ -45,9 +54,11 @@ public struct LibraryDependencies: Sendable {
         self.settingsStore = settingsStore
         self.contentCoverStore = contentCoverStore
         self.mangaDirectoryStore = mangaDirectoryStore
+        self.mangaDirectorySearchCooldownState = mangaDirectorySearchCooldownState
         self.favoriteBackgroundImageStore = favoriteBackgroundImageStore
         self.makeFavoriteRepository = makeFavoriteRepository
         self.makeForumThreadReaderRepository = makeForumThreadReaderRepository
         self.makeThreadRouteResolver = makeThreadRouteResolver
+        self.makeMangaDirectoryRepository = makeMangaDirectoryRepository
     }
 }

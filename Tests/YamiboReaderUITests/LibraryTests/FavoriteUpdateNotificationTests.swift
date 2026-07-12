@@ -152,6 +152,32 @@ final class FavoriteUpdateNotificationTests: XCTestCase {
         let persisted = await monitor.notificationsEnabled()
         XCTAssertFalse(persisted)
     }
+
+    // A directory-mode event's identifier must be stable per `cleanBookName`
+    // (mirroring the per-favorite scheme) so re-detection replaces rather
+    // than stacks a duplicate notification — same invariant
+    // `insertEvent`/`removeDelivered` already rely on for `.favorite` events.
+    func testMangaDirectoryEventNotificationIdentifierIsStablePerCleanBookName() {
+        let key = FavoriteUpdateTargetKey.mangaDirectory(cleanBookName: "测试连载漫画")
+        let event = FavoriteUpdateEvent(
+            target: key,
+            title: "测试连载漫画",
+            mode: .mangaDirectory,
+            summary: .newChapters(count: 1),
+            detailIDs: ["1001"]
+        )
+
+        let first = FavoriteUpdateNotification(event: event, badgeCount: 1)
+        let second = FavoriteUpdateNotification(event: event, badgeCount: 2)
+
+        XCTAssertEqual(first.identifier, second.identifier)
+        XCTAssertEqual(first.identifier, "favorite-update:manga-directory:测试连载漫画")
+        XCTAssertEqual(first.targetID, key.id)
+        XCTAssertNotEqual(
+            first.identifier,
+            FavoriteUpdateNotification.identifier(forTargetID: FavoriteItemTarget(kind: .normalThread, threadID: "测试连载漫画").id)
+        )
+    }
 }
 
 /// Records notifier interactions instead of touching `UNUserNotificationCenter`.

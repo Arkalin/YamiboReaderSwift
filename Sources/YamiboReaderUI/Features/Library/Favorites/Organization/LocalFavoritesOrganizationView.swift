@@ -12,6 +12,12 @@ struct LocalFavoritesOrganizationView: View {
     @StateObject private var routes = LocalFavoritesRoutes()
 
     let onOpen: (FavoriteItem, FavoriteLaunchMode, FavoriteMangaReadingScope) async -> Void
+    /// Opens a smart-manga update event by its `cleanBookName` alone — a
+    /// directory-mode event carries no pointer to one specific favorite, so
+    /// the open target must be re-derived fresh rather than looked up in
+    /// `organizer.favoriteItems` the way `onOpen` above resolves a
+    /// per-favorite event.
+    let onOpenMangaDirectory: (String) async -> Void
     /// Feeds the pushed board-favorite page, which manages remote board
     /// favorites purely over the network (no local store involved).
     let makeFavoriteRepository: @Sendable () async -> FavoriteRepository
@@ -23,6 +29,7 @@ struct LocalFavoritesOrganizationView: View {
         updateMonitor: FavoriteUpdateMonitor,
         makeFavoriteRepository: @escaping @Sendable () async -> FavoriteRepository,
         onOpen: @escaping (FavoriteItem, FavoriteLaunchMode, FavoriteMangaReadingScope) async -> Void,
+        onOpenMangaDirectory: @escaping (String) async -> Void,
         onOpenBoard: @escaping (BoardFavorite) -> Void
     ) {
         self.organizer = organizer
@@ -30,6 +37,7 @@ struct LocalFavoritesOrganizationView: View {
         self.updateMonitor = updateMonitor
         self.selection = organizer.selection
         self.onOpen = onOpen
+        self.onOpenMangaDirectory = onOpenMangaDirectory
         self.makeFavoriteRepository = makeFavoriteRepository
         self.onOpenBoard = onOpenBoard
     }
@@ -129,11 +137,16 @@ struct LocalFavoritesOrganizationView: View {
                     routes: routes,
                     isEventVisible: isEventInFilterScope,
                     onOpen: { event in
-                        guard let item = organizer.favoriteItems.first(where: { $0.target.id == event.target.id }) else {
-                            organizer.transientMessage = L10n.string("favorites.updates.event_target_missing")
-                            return
+                        switch event.target {
+                        case .favorite:
+                            guard let item = organizer.favoriteItems.first(where: { $0.target.id == event.target.id }) else {
+                                organizer.transientMessage = L10n.string("favorites.updates.event_target_missing")
+                                return
+                            }
+                            await onOpen(item, .resume, .boardDefault)
+                        case let .mangaDirectory(cleanBookName):
+                            await onOpenMangaDirectory(cleanBookName)
                         }
-                        await onOpen(item, .resume, .boardDefault)
                     }
                 )
                 .toolbar(selection.isSelectionMode ? .hidden : .automatic, for: .tabBar)
@@ -412,11 +425,24 @@ struct LocalFavoritesOrganizationView: View {
         }
 
         let categoryMatches: Bool
-        if disabledCategoriesExist,
-           let item = organizer.favoriteItems.first(where: { $0.target.id == event.target.id }) {
-            let itemCategoryIDs = Set(item.locations.compactMap(\.categoryID))
+        if disabledCategoriesExist {
+            // `.favorite` reads live category membership off the favorite
+            // itself (never stale); `.mangaDirectory` has no single favorite
+            // to read, so it reads the tracked target's own `categoryIDs` —
+            // the authoritative per-directory field the check run already
+            // maintains, not a proxy inferred from unrelated state.
+            let itemCategoryIDs: Set<String>
+            switch event.target {
+            case .favorite:
+                itemCategoryIDs = Set(
+                    organizer.favoriteItems.first(where: { $0.target.id == event.target.id })?
+                        .locations.compactMap(\.categoryID) ?? []
+                )
+            case .mangaDirectory:
+                itemCategoryIDs = updateMonitor.trackedTargets.first(where: { $0.target == event.target })?.categoryIDs ?? []
+            }
             let enabledCategoryIDs = Set(categoryFilters.filter(\.enabled).map(\.categoryID))
-            categoryMatches = !itemCategoryIDs.isDisjoint(with: enabledCategoryIDs)
+            categoryMatches = itemCategoryIDs.isEmpty || !itemCategoryIDs.isDisjoint(with: enabledCategoryIDs)
         } else {
             categoryMatches = true
         }

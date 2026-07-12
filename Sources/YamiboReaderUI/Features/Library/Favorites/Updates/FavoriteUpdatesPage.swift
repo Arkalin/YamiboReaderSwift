@@ -14,6 +14,7 @@ struct FavoriteUpdatesPage: View {
     let onOpen: (FavoriteUpdateEvent) async -> Void
 
     @State private var selectedInterval: FavoriteUpdateCheckInterval = .off
+    @State private var selectedMangaInterval: SmartMangaUpdateCheckInterval = .threeDays
     @State private var notificationsEnabled = false
     @State private var notificationsBlockedBySystem = false
     @State private var showsNotificationDeniedAlert = false
@@ -22,6 +23,7 @@ struct FavoriteUpdatesPage: View {
         List {
             statusSection
             intervalSection
+            mangaIntervalSection
             notificationSection
             eventsSection
         }
@@ -39,6 +41,7 @@ struct FavoriteUpdatesPage: View {
         }
         .task {
             selectedInterval = await updateMonitor.configuredInterval() ?? .off
+            selectedMangaInterval = await updateMonitor.configuredMangaInterval() ?? .threeDays
             notificationsEnabled = await updateMonitor.notificationsEnabled()
             notificationsBlockedBySystem = await updateMonitor.notificationsBlockedBySystem()
         }
@@ -89,7 +92,11 @@ struct FavoriteUpdatesPage: View {
                 }
             } else {
                 Button {
-                    Task { _ = await updateMonitor.startCheck() }
+                    // Manual/foreground check: a larger non-tag directory cap
+                    // than the background task's is safe here since the user
+                    // is actively waiting on this run, not a tight
+                    // BGAppRefreshTask execution budget.
+                    Task { _ = await updateMonitor.startCheck(nonTagMangaDirectoryCheckCap: 3) }
                 } label: {
                     Label(L10n.string("favorites.updates.check"), systemImage: "arrow.clockwise.circle")
                 }
@@ -110,6 +117,25 @@ struct FavoriteUpdatesPage: View {
             }
         } footer: {
             Text(L10n.string("favorites.updates.interval_footer"))
+        }
+    }
+
+    private var mangaIntervalSection: some View {
+        Section {
+            Picker(L10n.string("favorites.updates.manga_interval"), selection: $selectedMangaInterval) {
+                ForEach(SmartMangaUpdateCheckInterval.allCases) { interval in
+                    Text(interval.title)
+                        .tag(interval)
+                }
+            }
+            .onChange(of: selectedMangaInterval) { _, newValue in
+                Task { await updateMonitor.setConfiguredMangaInterval(newValue) }
+            }
+        } footer: {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(L10n.string("favorites.updates.manga_interval_footer_read_required"))
+                Text(L10n.string("favorites.updates.manga_interval_footer_mode_off"))
+            }
         }
     }
 

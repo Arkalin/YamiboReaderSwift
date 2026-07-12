@@ -41,8 +41,17 @@ public actor MangaDirectorySearchCooldownState {
         return deadline
     }
 
-    public func startCooldown(until deadline: Date) {
-        self.deadline = deadline
+    /// Atomically checks-and-arms within a single actor call: two concurrent
+    /// callers (e.g. foreground + background monitor instances sharing this
+    /// state) can never both observe "no active cooldown" and both proceed
+    /// to fire a live search — the second one always sees the first's
+    /// reservation, even before that first request has completed.
+    public func reserveCooldown(now: Date, duration: TimeInterval) -> Date? {
+        if let deadline, deadline > now {
+            return deadline
+        }
+        deadline = now.addingTimeInterval(duration)
+        return nil
     }
 
     public func clear() {
@@ -172,7 +181,6 @@ public struct MangaDirectoryWorkflow: Sendable {
                     forumID: forumID
                 )
                 try Task.checkCancellation()
-                await searchCooldownState.startCooldown(until: pendingCooldownExpiresAt)
                 cooldownExpiresAt = pendingCooldownExpiresAt
             }
         } else {
@@ -183,7 +191,6 @@ public struct MangaDirectoryWorkflow: Sendable {
                 forumID: forumID
             )
             try Task.checkCancellation()
-            await searchCooldownState.startCooldown(until: pendingCooldownExpiresAt)
             cooldownExpiresAt = pendingCooldownExpiresAt
         }
 
@@ -326,8 +333,13 @@ public struct MangaDirectoryWorkflow: Sendable {
         return MangaTitleCleaner.searchKeyword(seedTitle)
     }
 
+    /// Reserves the cooldown window before the network call, not after: this
+    /// arms the gate even if the ensuing `searchDirectory` throws (including
+    /// forum flood control), so a failed request still blocks the next
+    /// attempt instead of leaving the gate open for it to repeat the same
+    /// live request against a forum that just rate-limited us.
     private func nextSearchCooldownDeadline(now: Date) async throws -> Date {
-        if let deadline = await searchCooldownState.cooldownExpiresAt(now: now) {
+        if let deadline = await searchCooldownState.reserveCooldown(now: now, duration: configuration.searchCooldownDuration) {
             let seconds = max(1, Int(ceil(deadline.timeIntervalSince(now))))
             throw YamiboError.searchCooldown(seconds: seconds)
         }

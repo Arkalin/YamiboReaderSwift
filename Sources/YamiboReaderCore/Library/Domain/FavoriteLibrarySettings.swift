@@ -334,6 +334,48 @@ public enum FavoriteUpdateCheckInterval: String, Codable, Hashable, CaseIterable
     }
 }
 
+/// Separate, LONGER-only sibling of `FavoriteUpdateCheckInterval` for
+/// smart-manga chapter checking. Deliberately has no 6h/12h-class tier by
+/// construction (not merely by convention): chapters change far less often
+/// than forum replies, and — critically — checking hits the manga
+/// directory's own search mechanism, which risks the forum's own
+/// flood-control if hammered. A misconfigured fast tier simply cannot exist
+/// for this enum.
+public enum SmartMangaUpdateCheckInterval: String, Codable, Hashable, CaseIterable, Identifiable, Sendable {
+    case off
+    case day
+    case threeDays
+    case week
+    /// Adaptive: mirrors `FavoriteUpdateCheckInterval.smart`'s shape
+    /// (checks more often while updates keep arriving, backs off otherwise)
+    /// but at chapter-appropriate cadence — the aggressive tier here is
+    /// still only once a day, never sub-day.
+    case smart
+
+    public var id: String { rawValue }
+
+    public var title: String {
+        switch self {
+        case .off: L10n.string("favorites.updates.manga_interval.off")
+        case .day: L10n.string("favorites.updates.manga_interval.day")
+        case .threeDays: L10n.string("favorites.updates.manga_interval.three_days")
+        case .week: L10n.string("favorites.updates.manga_interval.week")
+        case .smart: L10n.string("favorites.updates.manga_interval.smart")
+        }
+    }
+
+    /// Seconds until the next automatic check, or nil when disabled.
+    public func nextDelay(hasRecentEvents: Bool) -> TimeInterval? {
+        switch self {
+        case .off: nil
+        case .day: 24 * 3600
+        case .threeDays: 3 * 24 * 3600
+        case .week: 7 * 24 * 3600
+        case .smart: hasRecentEvents ? 24 * 3600 : 3 * 24 * 3600
+        }
+    }
+}
+
 public struct FavoriteLibrarySettings: Codable, Hashable, Sendable {
     public var appearance: FavoriteAppearanceSettings
     public var background: FavoriteBackgroundSettings
@@ -356,6 +398,15 @@ public struct FavoriteLibrarySettings: Codable, Hashable, Sendable {
     /// notifications. Off by default; enabling it prompts for notification
     /// permission, so the toggle only ever turns on after a grant.
     public var updateNotificationsEnabled: Bool
+    /// Separate cadence for smart-manga chapter checking (see
+    /// `SmartMangaUpdateCheckInterval`). Defaults to `.threeDays` rather than
+    /// `.off`: unlike the thread-check interval (whose `.off` default avoids
+    /// surprising a user who never asked for update checks), smart-manga
+    /// checking is additionally gated on smart-comic-mode being on AND a
+    /// directory already being resolved — both opt-in actions the user has
+    /// already taken — so a conservative-but-nonzero default doesn't spring
+    /// unexpected network activity on anyone who hasn't touched smart manga.
+    public var smartMangaUpdateCheckInterval: SmartMangaUpdateCheckInterval
 
     public init(
         appearance: FavoriteAppearanceSettings = .init(),
@@ -372,7 +423,8 @@ public struct FavoriteLibrarySettings: Codable, Hashable, Sendable {
         removeRemotePromptEnabled: Bool = true,
         removeRemoteDefault: Bool = false,
         updateCheckInterval: FavoriteUpdateCheckInterval = .off,
-        updateNotificationsEnabled: Bool = false
+        updateNotificationsEnabled: Bool = false,
+        smartMangaUpdateCheckInterval: SmartMangaUpdateCheckInterval = .threeDays
     ) {
         self.appearance = appearance
         self.background = background
@@ -389,6 +441,7 @@ public struct FavoriteLibrarySettings: Codable, Hashable, Sendable {
         self.removeRemoteDefault = removeRemoteDefault
         self.updateCheckInterval = updateCheckInterval
         self.updateNotificationsEnabled = updateNotificationsEnabled
+        self.smartMangaUpdateCheckInterval = smartMangaUpdateCheckInterval
     }
 
     public init(from decoder: any Decoder) throws {
@@ -408,7 +461,8 @@ public struct FavoriteLibrarySettings: Codable, Hashable, Sendable {
             removeRemotePromptEnabled: try container.decodeIfPresent(Bool.self, forKey: .removeRemotePromptEnabled) ?? true,
             removeRemoteDefault: try container.decodeIfPresent(Bool.self, forKey: .removeRemoteDefault) ?? false,
             updateCheckInterval: try container.decodeIfPresent(FavoriteUpdateCheckInterval.self, forKey: .updateCheckInterval) ?? .off,
-            updateNotificationsEnabled: try container.decodeIfPresent(Bool.self, forKey: .updateNotificationsEnabled) ?? false
+            updateNotificationsEnabled: try container.decodeIfPresent(Bool.self, forKey: .updateNotificationsEnabled) ?? false,
+            smartMangaUpdateCheckInterval: try container.decodeIfPresent(SmartMangaUpdateCheckInterval.self, forKey: .smartMangaUpdateCheckInterval) ?? .threeDays
         )
     }
 

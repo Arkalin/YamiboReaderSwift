@@ -355,6 +355,14 @@
 "favorites.updates.interval_footer" = "后台检查由系统调度，不保证准时；打开收藏页时会按间隔补查。";
 "favorites.updates.last_checked" = "上次检查：%@";
 "favorites.updates.loaded_targets" = "已载入 %d 个可检查收藏";
+"favorites.updates.manga_interval" = "智能漫画自动检查";
+"favorites.updates.manga_interval.day" = "每天";
+"favorites.updates.manga_interval.off" = "关闭";
+"favorites.updates.manga_interval.smart" = "智能";
+"favorites.updates.manga_interval.three_days" = "每 3 天";
+"favorites.updates.manga_interval.week" = "每周";
+"favorites.updates.manga_interval_footer_mode_off" = "已关闭智能漫画模式的板块，漫画收藏项不检查更新";
+"favorites.updates.manga_interval_footer_read_required" = "智能漫画收藏项需要阅读后才检查更新";
 "favorites.updates.mark_read" = "标为已读";
 "favorites.updates.no_events" = "暂无收藏更新";
 "favorites.updates.notifications" = "更新通知";
@@ -371,6 +379,7 @@
 "favorites.updates.status.interrupted" = "收藏更新检查已中断";
 "favorites.updates.status.running" = "正在检查收藏更新";
 "favorites.updates.summary.changed" = "内容有更新";
+"favorites.updates.summary.new_chapters" = "新增 %d 话";
 "favorites.updates.summary.pages" = "新增 %d 页";
 "favorites.updates.summary.replies" = "新增 %d 条回复";
 "favorites.syncing" = "同步收藏中…";
