@@ -96,6 +96,28 @@ private struct AboutLinksSection: View {
 
             Divider()
 
+            NavigationLink {
+                SpecialThanksView()
+            } label: {
+                HStack(spacing: 16) {
+                    Text(L10n.string("about.special_thanks"))
+                        .font(.title3)
+                        .foregroundStyle(.primary)
+
+                    Spacer(minLength: 16)
+
+                    Image(systemName: "chevron.right")
+                        .font(.title3.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                        .accessibilityHidden(true)
+                }
+                .frame(minHeight: 64)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            Divider()
+
             Button(action: checkForUpdates) {
                 HStack(spacing: 16) {
                     Text(L10n.string("about.check_update"))
@@ -124,7 +146,7 @@ private struct AboutLinksSection: View {
     }
 }
 
-private struct AboutExternalLinkRow: View {
+struct AboutExternalLinkRow: View {
     let title: String
     let destination: URL
 
