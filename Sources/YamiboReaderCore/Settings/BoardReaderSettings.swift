@@ -47,16 +47,18 @@ public struct BoardReaderSettings: Codable, Hashable, Sendable {
     /// fid -> entry. No entry = plain thread reader.
     public var entries: [String: Entry]
 
-    /// Factory default carried over from the previous hardcoded taxonomy:
-    /// 49/55 novel, 30 manga with smart on (board name built in), 46/37
-    /// manga with smart off (no verified name snapshot — UI shows the
-    /// placeholder until the user visits those boards).
+    /// Factory default carried over from the previous hardcoded taxonomy,
+    /// with board names resolved via the authoritative section list in
+    /// yamibo-api's `YamiboConstant.kt`: 49/55/60 novel (文學區, 轻小说/译文
+    /// 区, TXT小说区), 30 manga with smart on (中文百合漫画区), 46/37 manga
+    /// with smart off (原创图作区, 百合漫画图源区).
     public static let factoryDefault = BoardReaderSettings(entries: [
-        "49": Entry(mode: .novel),
-        "55": Entry(mode: .novel),
-        "30": Entry(mode: .manga(smartEnabled: true), boardName: "中文百合漫画区"),
-        "46": Entry(mode: .manga(smartEnabled: false)),
-        "37": Entry(mode: .manga(smartEnabled: false))
+        "49": Entry(mode: .novel, boardName: L10n.string("settings.board_reader.board_name.literature")),
+        "55": Entry(mode: .novel, boardName: L10n.string("settings.board_reader.board_name.translated_light_novel")),
+        "60": Entry(mode: .novel, boardName: L10n.string("settings.board_reader.board_name.txt_novel")),
+        "30": Entry(mode: .manga(smartEnabled: true), boardName: L10n.string("settings.board_reader.board_name.translated_yuri_manga")),
+        "46": Entry(mode: .manga(smartEnabled: false), boardName: L10n.string("settings.board_reader.board_name.original_work")),
+        "37": Entry(mode: .manga(smartEnabled: false), boardName: L10n.string("settings.board_reader.board_name.yuri_manga_source"))
     ])
 
     /// The default init IS the factory default (non-empty map), so decode

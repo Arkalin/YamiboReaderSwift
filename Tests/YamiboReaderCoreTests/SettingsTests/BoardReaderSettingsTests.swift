@@ -3,7 +3,7 @@ import Testing
 @testable import YamiboReaderCore
 
 // Pluggable-reader-config decisions #1/#4/#8: any board is configurable, the
-// factory default carries over the old hardcoded taxonomy (49/55 novel,
+// factory default carries over the old hardcoded taxonomy (49/55/60 novel,
 // 30/46/37 manga, smart bit on only for 30), and the smart query follows one
 // rule with no special cases.
 @Suite("SettingsTests: Board Reader Settings")
@@ -11,16 +11,21 @@ struct BoardReaderSettingsTests {
     @Test func defaultInitIsFactoryDefault() {
         let settings = BoardReaderSettings()
         #expect(settings == BoardReaderSettings.factoryDefault)
-        #expect(settings.entries.count == 5)
+        #expect(settings.entries.count == 6)
         #expect(settings.entry(forumID: "49")?.mode == .novel)
         #expect(settings.entry(forumID: "55")?.mode == .novel)
+        #expect(settings.entry(forumID: "60")?.mode == .novel)
         #expect(settings.entry(forumID: "30")?.mode == .manga(smartEnabled: true))
         #expect(settings.entry(forumID: "46")?.mode == .manga(smartEnabled: false))
         #expect(settings.entry(forumID: "37")?.mode == .manga(smartEnabled: false))
-        // fid 30 is the only board with a verified built-in name snapshot;
-        // 46/37 stay nil so the UI shows its own placeholder.
+        // Every factory-default board carries a verified name snapshot
+        // resolved from yamibo-api's `YamiboConstant.kt`.
+        #expect(settings.entry(forumID: "49")?.boardName == "文學區")
+        #expect(settings.entry(forumID: "55")?.boardName == "轻小说/译文区")
+        #expect(settings.entry(forumID: "60")?.boardName == "TXT小说区")
         #expect(settings.entry(forumID: "30")?.boardName == "中文百合漫画区")
-        #expect(settings.entry(forumID: "46")?.boardName == nil)
+        #expect(settings.entry(forumID: "46")?.boardName == "原创图作区")
+        #expect(settings.entry(forumID: "37")?.boardName == "百合漫画图源区")
     }
 
     @Test func smartQueryFollowsOneRuleWithNoSpecialCases() {
