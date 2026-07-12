@@ -3,6 +3,10 @@
 "about.check_update" = "检查更新";
 "about.version" = "版本 %@";
 "about.version_with_build" = "版本 %@ (%@)";
+"about.special_thanks" = "特别感谢";
+"special_thanks.title" = "特别感谢";
+"special_thanks.open_source_libraries" = "特别感谢以下开源库";
+"special_thanks.upstream_projects" = "特别感谢以下上游项目";
 "app_update.available_message" = "发现新版本 %@。";
 "app_update.available_title" = "有可用更新";
 "app_update.copy_source" = "复制软件源地址";
