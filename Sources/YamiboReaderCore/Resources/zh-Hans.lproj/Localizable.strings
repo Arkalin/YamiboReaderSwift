@@ -901,6 +901,12 @@
 "settings.reset_application" = "初始化应用";
 "settings.reset_application_message" = "这将清空登录态、收藏本地状态、全部缓存、漫画目录和应用设置，并移除网页持久化数据。";
 "settings.resetting_application" = "初始化应用中…";
+"settings.board_reader.board_name.literature" = "文學區";
+"settings.board_reader.board_name.original_work" = "原创图作区";
+"settings.board_reader.board_name.translated_light_novel" = "轻小说/译文区";
+"settings.board_reader.board_name.translated_yuri_manga" = "中文百合漫画区";
+"settings.board_reader.board_name.txt_novel" = "TXT小说区";
+"settings.board_reader.board_name.yuri_manga_source" = "百合漫画图源区";
 "settings.board_reader.board_placeholder" = "板块 %@";
 "settings.board_reader.confirm_restore_default" = "确认恢复默认配置";
 "settings.board_reader.footer" = "在板块页面的“更多”菜单里也可以配置阅读方式；未列出的板块将使用普通帖子阅读器打开。";
