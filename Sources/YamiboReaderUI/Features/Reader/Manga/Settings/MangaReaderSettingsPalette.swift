@@ -28,7 +28,7 @@ struct MangaReaderSettingsPalette {
         let isDark = colorScheme == .dark
         let cool = Color(red: 0.10, green: 0.64, blue: 0.68)
         let warm = Color(red: 0.93, green: 0.36, blue: 0.43)
-        let controlAccent = isDark ? Color(red: 0.78, green: 0.58, blue: 0.42) : Color.accentColor
+        let controlAccent = Color.accentColor
         let ink = Color(red: 0.08, green: 0.08, blue: 0.09)
 
         if isDark {
