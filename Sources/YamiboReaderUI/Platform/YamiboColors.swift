@@ -92,38 +92,6 @@ private struct ForumNavigationBarStyleModifier: ViewModifier {
     }
 }
 
-extension FavoriteAppearanceColor {
-    var swiftUIColor: Color {
-        switch self {
-        case .red: .red
-        case .pink: .pink
-        case .orange: .orange
-        case .yellow: .yellow
-        case .green: .green
-        case .mint: .mint
-        case .cyan: .cyan
-        case .blue: .blue
-        case .purple: .purple
-        case .gray: .gray
-        }
-    }
-
-    var uiColor: UIColor {
-        switch self {
-        case .red: .systemRed
-        case .pink: .systemPink
-        case .orange: .systemOrange
-        case .yellow: .systemYellow
-        case .green: .systemGreen
-        case .mint: .systemMint
-        case .cyan: .systemCyan
-        case .blue: .systemBlue
-        case .purple: .systemPurple
-        case .gray: .systemGray
-        }
-    }
-}
-
 extension FavoriteTagColor {
     var swiftUIColor: Color {
         switch self {

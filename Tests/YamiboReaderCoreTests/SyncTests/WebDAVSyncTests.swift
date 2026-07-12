@@ -126,9 +126,6 @@ private enum WebDAVTestError: Error {
     let fixture = try WebDAVSyncFixture(prefix: "webdav-local-first-app-settings-upload")
     try await fixture.signIn(accountUID: "123")
     let appSettings = AppSettings(
-        favorites: FavoriteLibrarySettings(
-            appearance: FavoriteAppearanceSettings(collection: .purple, novel: .red, manga: .green, other: .gray)
-        ),
         webBrowser: WebBrowserSettings(showsNavigationBar: false),
         system: SystemSettings(homePage: .favorites)
     )
@@ -174,8 +171,7 @@ private enum WebDAVTestError: Error {
     )
     let remoteSettings = WebDAVSyncedAppSettings(
         homePage: .favorites,
-        webBrowser: WebBrowserSettings(showsNavigationBar: false),
-        favoriteAppearance: FavoriteAppearanceSettings(collection: .purple, novel: .red, manga: .green, other: .gray)
+        webBrowser: WebBrowserSettings(showsNavigationBar: false)
     )
     let remotePayload = AppSettingsWebDAVPayload(
         updatedAt: Date(timeIntervalSince1970: 2_000),
@@ -205,7 +201,6 @@ private enum WebDAVTestError: Error {
     let loadedSettings = await fixture.appSettingsStore.load()
     #expect(loadedSettings.system.homePage == .favorites)
     #expect(loadedSettings.webBrowser.showsNavigationBar == false)
-    #expect(loadedSettings.favorites.appearance == remoteSettings.favoriteAppearance)
 }
 
 @Test func webDAVAutomaticLocalFirstSyncUploadsWithoutLegacyPayload() async throws {
