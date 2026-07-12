@@ -14,7 +14,7 @@ public enum AppHomePage: String, Codable, Hashable, CaseIterable, Sendable {
     public var systemImageName: String {
         switch self {
         case .favorites: "heart.text.square"
-        case .forum: "globe.asia.australia"
+        case .forum: "text.bubble"
         }
     }
 }
