@@ -5,25 +5,23 @@ struct ForumThreadTextBlockView: View {
     let block: ForumThreadTextBlock
     let onURLTap: (URL) -> Void
 
+    @State private var cache = ForumThreadTextBlockFormatterCache()
+
     @ViewBuilder
     var body: some View {
         if block.rubies.isEmpty {
             plainText
         } else {
             ForumThreadRubyTextBlockView(
-                segments: formatter.rubySegments,
+                segments: cache.rubySegments(for: block),
                 alignment: block.alignment,
                 onURLTap: onURLTap
             )
         }
     }
 
-    private var formatter: ForumThreadTextBlockFormatter {
-        ForumThreadTextBlockFormatter(block: block)
-    }
-
     private var plainText: some View {
-        Text(formatter.attributedText)
+        Text(cache.attributedText(for: block))
             .font(.body)
             .lineSpacing(4)
             .foregroundStyle(ForumColors.textDark)
