@@ -324,6 +324,25 @@ public actor FavoriteUpdateStore {
         try persist(state)
     }
 
+    /// Commits a whole check run's tracked-target and event changes in one
+    /// decode/encode pass instead of the one-`upsertTrackedTarget`/
+    /// `insertEvent`-call-per-favorite pattern a check loop would otherwise
+    /// produce — each of those is a full-blob rewrite of this actor's single
+    /// `UserDefaults` key, so batching turns an O(favorite count) number of
+    /// rewrites into one. Callers pass the complete post-run arrays (as
+    /// accumulated in memory over the run), not a diff, so this replaces
+    /// `trackedTargets`/`events` wholesale the same way `replaceTrackedTargets`
+    /// / `replaceFilters` already do.
+    public func applyCheckRunResults(
+        trackedTargets: [FavoriteUpdateTrackedTarget],
+        events: [FavoriteUpdateEvent]
+    ) async throws {
+        var state = loadStateSync()
+        state.trackedTargets = trackedTargets.sorted { $0.id < $1.id }
+        state.events = events
+        try persist(state)
+    }
+
     public func markEventRead(_ id: String, date: Date = .now) async throws {
         var state = loadStateSync()
         guard let index = state.events.firstIndex(where: { $0.id == id }) else { return }

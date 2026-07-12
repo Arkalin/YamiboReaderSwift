@@ -118,7 +118,16 @@ final class FavoriteRemoteSyncSession: ObservableObject {
         syncTask?.cancel()
         let runSnapshot = startedSnapshot
         syncTask = Task { @MainActor [weak self] in
-            await self?.run(startSnapshot: runSnapshot)
+            // If `self` is already gone by the time this body runs, `run()`
+            // never executes, so its `defer` never removes the entry
+            // inserted just below — remove it here instead, or it orphans
+            // `activeRunCancelHandlers` forever and `isRunActive` never
+            // downgrades the stale "running" snapshot to interrupted.
+            guard let self else {
+                Self.activeRunCancelHandlers[runSnapshot.runID] = nil
+                return
+            }
+            await self.run(startSnapshot: runSnapshot)
         }
         Self.activeRunCancelHandlers[startedSnapshot.runID] = { [weak self] in
             self?.syncTask?.cancel()
