@@ -548,15 +548,17 @@ struct LocalFavoritesOrganizationView: View {
         }
     }
 
-    /// Slim overflow menu: view options, organization management, selection,
-    /// and the Yamibo sync entry (a running sync opens its progress directly).
-    /// The update-check entries stay here until the dedicated updates page
-    /// (bell entry) lands.
+    /// Slim overflow menu: board favorites, organization management,
+    /// selection, and the Yamibo sync entry (a running sync opens its
+    /// progress directly). The update-check entries stay here until the
+    /// dedicated updates page (bell entry) lands.
     private var favoriteMoreMenu: some View {
         Menu {
             Section {
-                Toggle(isOn: showsCategoryCountsBinding) {
-                    Label(L10n.string("favorites.category.show_counts"), systemImage: "number.circle")
+                Button {
+                    routes.isBoardFavoritesPushed = true
+                } label: {
+                    Label(L10n.string("favorites.boards.title"), systemImage: "square.grid.2x2")
                 }
             }
             Section {
@@ -588,25 +590,11 @@ struct LocalFavoritesOrganizationView: View {
                 } label: {
                     Label(L10n.string("favorites.sync.start"), systemImage: "arrow.triangle.2.circlepath")
                 }
-                Button {
-                    routes.isBoardFavoritesPushed = true
-                } label: {
-                    Label(L10n.string("favorites.boards.title"), systemImage: "square.grid.2x2")
-                }
             }
         } label: {
             Image(systemName: "ellipsis.circle")
         }
         .accessibilityLabel(L10n.string("common.more"))
-    }
-
-    // MARK: - Preference bindings
-
-    private var showsCategoryCountsBinding: Binding<Bool> {
-        Binding(
-            get: { organizer.display.showsCategoryCounts },
-            set: { organizer.updateShowsCategoryCounts($0) }
-        )
     }
 
     // MARK: - Dialogs
