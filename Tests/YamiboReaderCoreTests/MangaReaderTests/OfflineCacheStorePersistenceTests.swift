@@ -9,7 +9,7 @@ struct MangaReaderTestsMangaOfflineCachePersistence {
     @Test func appContextDefaultsUseOfflineCacheStore() {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("app-context-offline-cache-defaults-\(UUID().uuidString)", isDirectory: true)
-        let appContext = YamiboAppContext(grdbRootDirectory: root)
+        let appContext = YamiboAppContext(grdbRootDirectory: root, cachesRootDirectory: root)
 
         #expect(appContext.offlineCacheStore is OfflineCacheStore)
     }

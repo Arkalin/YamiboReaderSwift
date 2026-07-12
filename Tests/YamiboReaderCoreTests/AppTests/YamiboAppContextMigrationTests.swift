@@ -307,6 +307,7 @@ private func makeIsolatedAppContext(
         contentCoverStore: ContentCoverStore(defaults: try YamiboTestDefaults.defaults(suiteName: suiteName), key: "content-covers"),
         databasePool: database,
         grdbRootDirectory: rootDirectory,
+        cachesRootDirectory: rootDirectory,
         uiDefaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
         clearsWebDataOnReset: false
     )
