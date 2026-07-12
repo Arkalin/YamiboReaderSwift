@@ -191,6 +191,36 @@ import Testing
     #expect(await store.likes(for: keyB).count == 1)
 }
 
+@Test func likeStoreDeleteIDsBatchDeletesOnlyTheGivenItems() async throws {
+    let store = LikeStore(databasePool: try makeLikeStoreTestDatabasePool(prefix: "like-store-batch-delete"))
+    let workKey = LikeWorkKey.mangaTitle(cleanBookName: "批量删除测试")
+    let itemA = try await store.upsertImageLike(
+        id: "batch-a",
+        workKey: workKey,
+        anchor: .mangaImage(MangaImageLikeAnchor(chapterTID: "1", pageLocalIndex: 0)),
+        sourceImageURL: nil
+    )
+    let itemB = try await store.upsertImageLike(
+        id: "batch-b",
+        workKey: workKey,
+        anchor: .mangaImage(MangaImageLikeAnchor(chapterTID: "1", pageLocalIndex: 1)),
+        sourceImageURL: nil
+    )
+    let itemC = try await store.upsertImageLike(
+        id: "batch-c",
+        workKey: workKey,
+        anchor: .mangaImage(MangaImageLikeAnchor(chapterTID: "1", pageLocalIndex: 2)),
+        sourceImageURL: nil
+    )
+
+    try await store.delete(ids: [itemA.id, itemB.id])
+
+    #expect(await store.like(id: itemA.id) == nil)
+    #expect(await store.like(id: itemB.id) == nil)
+    #expect(await store.like(id: itemC.id) != nil)
+    #expect(await store.likes(for: workKey).count == 1)
+}
+
 @Test func likeStoreDeleteSoftDeletesAndHidesFromReadsButKeepsInAllIncludingDeleted() async throws {
     let store = LikeStore(databasePool: try makeLikeStoreTestDatabasePool(prefix: "like-store-soft-delete"))
     let workKey = LikeWorkKey.mangaTitle(cleanBookName: "软删除测试")

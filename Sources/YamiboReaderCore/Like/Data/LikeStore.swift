@@ -146,6 +146,24 @@ public actor LikeStore {
         }
     }
 
+    /// Soft-deletes several items in one write transaction (multi-select
+    /// batch delete on the My Likes list screens).
+    public func delete(ids: [String], date: Date = .now) async throws {
+        guard !ids.isEmpty else { return }
+        do {
+            try await database.write { db in
+                for id in ids {
+                    try Self.softDeleteRow(id: id, date: date, in: db)
+                }
+            }
+            postChangeNotification()
+        } catch let error as YamiboError {
+            throw error
+        } catch {
+            throw YamiboError.persistenceFailed(error.localizedDescription)
+        }
+    }
+
     /// Every Like Item including soft-deleted rows, for WebDAV export.
     public func allIncludingDeleted() async -> [LikeItem] {
         (try? await database.read { db in try Self.fetchAllIncludingDeleted(in: db) }) ?? []

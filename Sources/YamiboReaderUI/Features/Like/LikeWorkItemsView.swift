@@ -22,6 +22,10 @@ struct LikeWorkItemsView: View {
     @State private var presentedTextItem: LikeItem?
     @State private var presentedImageItem: LikeItem?
 
+    @State private var isSelecting = false
+    @State private var selectedItemIDs: Set<String> = []
+    @State private var isShowingDeleteConfirmation = false
+
     var body: some View {
         List {
             ForEach(filteredItems) { item in
@@ -29,16 +33,21 @@ struct LikeWorkItemsView: View {
                     item: item,
                     chapterInfo: chapterInfoByItemID[item.id],
                     likeImageStore: like.likeImageStore,
-                    action: { open(item) }
+                    isSelecting: isSelecting,
+                    isSelected: selectedItemIDs.contains(item.id),
+                    action: { open(item) },
+                    onToggleSelection: { toggleSelection(item.id) }
                 )
                 .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
                 .listRowSeparator(.hidden)
                 .listRowBackground(Color.clear)
                 .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                    Button(role: .destructive) {
-                        delete(item)
-                    } label: {
-                        Label(L10n.string("common.delete"), systemImage: "trash")
+                    if !isSelecting {
+                        Button(role: .destructive) {
+                            delete(item)
+                        } label: {
+                            Label(L10n.string("common.delete"), systemImage: "trash")
+                        }
                     }
                 }
             }
@@ -57,15 +66,73 @@ struct LikeWorkItemsView: View {
                 ContentUnavailableView.search(text: searchText)
             }
         }
-        .navigationTitle(workTitle)
+        .navigationTitle(
+            isSelecting
+                ? L10n.string("likes.selected_count", selectedItemIDs.count)
+                : workTitle
+        )
+        .navigationBarBackButtonHidden(isSelecting)
         .searchable(text: $searchText, prompt: L10n.string("likes.search_placeholder"))
         .toolbar {
-            if let onDismiss {
+            if isSelecting {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button(L10n.string("common.close"), action: onDismiss)
+                    Button(
+                        isAllVisibleSelected
+                            ? L10n.string("common.invert_selection")
+                            : L10n.string("common.select_all")
+                    ) {
+                        toggleSelectAll()
+                    }
+                    .disabled(filteredItems.isEmpty)
+                }
+                ToolbarItem(placement: .primaryAction) {
+                    Button(L10n.string("common.done")) {
+                        setSelecting(false)
+                    }
+                    .fontWeight(.semibold)
+                }
+                if likeSelectionUsesSystemBottomToolbar {
+                    ToolbarItem(placement: .bottomBar) {
+                        LikeSelectionToolbar(selectedCount: selectedItemIDs.count) {
+                            isShowingDeleteConfirmation = true
+                        }
+                    }
+                }
+            } else {
+                if let onDismiss {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button(L10n.string("common.close"), action: onDismiss)
+                    }
+                }
+                ToolbarItem(placement: .primaryAction) {
+                    if !items.isEmpty {
+                        Button(L10n.string("common.select")) {
+                            setSelecting(true)
+                        }
+                    }
                 }
             }
         }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if isSelecting && !likeSelectionUsesSystemBottomToolbar {
+                LikeSelectionActionBar(selectedCount: selectedItemIDs.count) {
+                    isShowingDeleteConfirmation = true
+                }
+            }
+        }
+        .confirmationDialog(
+            L10n.string("likes.delete_selected_items_title"),
+            isPresented: $isShowingDeleteConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button(L10n.string("common.delete"), role: .destructive) {
+                Task { await deleteSelection() }
+            }
+            Button(L10n.string("common.cancel"), role: .cancel) {}
+        } message: {
+            Text(L10n.string("likes.delete_selected_items_message", selectedItemIDs.count))
+        }
+        .sensoryFeedback(.selection, trigger: selectedItemIDs)
         .task { await load() }
         .onReceive(NotificationCenter.default.publisher(for: LikeStore.didChangeNotification)) { notification in
             guard let changeID = notification.userInfo?[LikeStore.changeIDUserInfoKey] as? String,
@@ -168,6 +235,54 @@ struct LikeWorkItemsView: View {
         }
     }
 
+    // MARK: - Selection
+
+    private func toggleSelection(_ id: String) {
+        if selectedItemIDs.contains(id) {
+            selectedItemIDs.remove(id)
+        } else {
+            selectedItemIDs.insert(id)
+        }
+    }
+
+    private var isAllVisibleSelected: Bool {
+        let visibleIDs = Set(filteredItems.map(\.id))
+        return !visibleIDs.isEmpty && visibleIDs.isSubset(of: selectedItemIDs)
+    }
+
+    /// Not a true per-item inversion — mirrors `FavoriteLibraryOrganizer
+    /// .toggleSelectAllVisible`/`SystemSettingsViewModel
+    /// .toggleAllOfflineCacheManagementRows`: selects every currently visible
+    /// (search-filtered) item, or clears the whole selection when everything
+    /// visible is already selected.
+    private func toggleSelectAll() {
+        let visibleIDs = Set(filteredItems.map(\.id))
+        guard !visibleIDs.isEmpty else { return }
+        if visibleIDs.isSubset(of: selectedItemIDs) {
+            selectedItemIDs.subtract(visibleIDs)
+        } else {
+            selectedItemIDs.formUnion(visibleIDs)
+        }
+    }
+
+    private func setSelecting(_ selecting: Bool) {
+        isSelecting = selecting
+        if !selecting {
+            selectedItemIDs.removeAll()
+        }
+    }
+
+    private func deleteSelection() async {
+        let ids = selectedItemIDs
+        let imageIDs = items.filter { $0.kind == .image && ids.contains($0.id) }.map(\.id)
+        try? await like.likeStore.delete(ids: Array(ids))
+        for imageID in imageIDs {
+            try? await like.likeImageStore.delete(id: imageID)
+        }
+        setSelecting(false)
+        await load()
+    }
+
     private struct NovelLikeSortKey {
         var chapterIdentity: String
         var occurrence: Int
@@ -256,10 +371,19 @@ private struct LikeItemCard: View {
     let item: LikeItem
     let chapterInfo: String?
     let likeImageStore: LikeImageStore
+    let isSelecting: Bool
+    let isSelected: Bool
     let action: () -> Void
+    let onToggleSelection: () -> Void
 
     var body: some View {
-        Button(action: action) {
+        Button {
+            if isSelecting {
+                onToggleSelection()
+            } else {
+                action()
+            }
+        } label: {
             switch item.kind {
             case .text:
                 LikeTextCardContent(item: item, chapterInfo: chapterInfo)
@@ -268,6 +392,7 @@ private struct LikeItemCard: View {
             }
         }
         .buttonStyle(.plain)
+        .favoriteSelectionEmphasis(isSelectionMode: isSelecting, isSelected: isSelected, cornerRadius: 10)
     }
 }
 
