@@ -623,6 +623,13 @@
 "likes.jump_to_original" = "跳转原文";
 "likes.copy_excerpt" = "复制文本";
 "likes.excerpt_title" = "摘录";
+"likes.item_count_format" = "%d 条喜欢";
+"likes.selected_count" = "已选择 %d 项";
+"likes.delete_selected_works_title" = "删除喜欢作品";
+"likes.delete_selected_works_message" = "将删除已选 %d 个作品的全部喜欢内容，且无法恢复。";
+"likes.delete_selected_items_title" = "删除喜欢内容";
+"likes.delete_selected_items_message" = "将删除已选的 %d 条喜欢内容，且无法恢复。";
+"likes.delete_selected_format" = "删除 %d 项";
 "manga.brightness" = "亮度";
 "manga.chapter.final" = "终";
 "manga.chapter_list" = "目录";

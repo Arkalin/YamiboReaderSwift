@@ -13,6 +13,11 @@ struct LikeWorkListView: View {
     @State private var titlesByWorkKey: [LikeWorkKey: String] = [:]
     @State private var coverURLsByWorkKey: [LikeWorkKey: URL] = [:]
     @State private var searchText = ""
+    @State private var pushedWorkKey: LikeWorkKey?
+
+    @State private var isSelecting = false
+    @State private var selectedWorkKeys: Set<LikeWorkKey> = []
+    @State private var isShowingDeleteConfirmation = false
 
     private var filteredSummaries: [LikeWorkSummary] {
         let trimmed = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -22,19 +27,22 @@ struct LikeWorkListView: View {
 
     var body: some View {
         List(filteredSummaries, id: \.workKey) { summary in
-            NavigationLink {
-                LikeWorkItemsView(
-                    work: summary.workKey,
-                    workTitle: title(for: summary.workKey),
-                    like: likeDependencies,
-                    onOpenAnchor: { anchor in openAnchor(anchor, work: summary.workKey) },
-                    onDismiss: nil
-                )
+            Button {
+                if isSelecting {
+                    toggleSelection(summary.workKey)
+                } else {
+                    pushedWorkKey = summary.workKey
+                }
             } label: {
                 row(for: summary)
             }
+            .buttonStyle(.plain)
+            .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+            .listRowSeparator(.hidden)
+            .listRowBackground(Color.clear)
         }
         .listStyle(.plain)
+        .contentMargins(.top, 8, for: .scrollContent)
         // Kept permanently mounted rather than swapped for an empty-state
         // view — see the matching comment in LikeWorkItemsView.body for why
         // that swap makes `.searchable`'s search bar ghost during a push.
@@ -45,8 +53,64 @@ struct LikeWorkListView: View {
                 ContentUnavailableView.search(text: searchText)
             }
         }
-        .navigationTitle(L10n.string("likes.section_title"))
+        .navigationTitle(
+            isSelecting
+                ? L10n.string("likes.selected_count", selectedWorkKeys.count)
+                : L10n.string("likes.section_title")
+        )
+        .navigationBarBackButtonHidden(isSelecting)
         .searchable(text: $searchText, prompt: L10n.string("likes.search_placeholder"))
+        .toolbar {
+            if isSelecting {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(
+                        isAllVisibleSelected
+                            ? L10n.string("common.invert_selection")
+                            : L10n.string("common.select_all")
+                    ) {
+                        toggleSelectAll()
+                    }
+                    .disabled(filteredSummaries.isEmpty)
+                }
+                ToolbarItem(placement: .primaryAction) {
+                    Button(L10n.string("common.done")) {
+                        setSelecting(false)
+                    }
+                    .fontWeight(.semibold)
+                }
+                if likeSelectionUsesSystemBottomToolbar {
+                    ToolbarItem(placement: .bottomBar) {
+                        LikeSelectionToolbar(selectedCount: selectedWorkKeys.count) {
+                            isShowingDeleteConfirmation = true
+                        }
+                    }
+                }
+            } else {
+                ToolbarItem(placement: .primaryAction) {
+                    if !summaries.isEmpty {
+                        Button(L10n.string("common.select")) {
+                            setSelecting(true)
+                        }
+                    }
+                }
+            }
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if isSelecting && !likeSelectionUsesSystemBottomToolbar {
+                LikeSelectionActionBar(selectedCount: selectedWorkKeys.count) {
+                    isShowingDeleteConfirmation = true
+                }
+            }
+        }
+        .navigationDestination(item: $pushedWorkKey) { workKey in
+            LikeWorkItemsView(
+                work: workKey,
+                workTitle: title(for: workKey),
+                like: likeDependencies,
+                onOpenAnchor: { anchor in openAnchor(anchor, work: workKey) },
+                onDismiss: nil
+            )
+        }
         .task { await load() }
         .onReceive(NotificationCenter.default.publisher(for: LikeStore.didChangeNotification)) { notification in
             guard let changeID = notification.userInfo?[LikeStore.changeIDUserInfoKey] as? String,
@@ -55,27 +119,114 @@ struct LikeWorkListView: View {
             }
             Task { await load() }
         }
+        .confirmationDialog(
+            L10n.string("likes.delete_selected_works_title"),
+            isPresented: $isShowingDeleteConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button(L10n.string("common.delete"), role: .destructive) {
+                Task { await deleteSelection() }
+            }
+            Button(L10n.string("common.cancel"), role: .cancel) {}
+        } message: {
+            Text(L10n.string("likes.delete_selected_works_message", selectedWorkKeys.count))
+        }
+        .sensoryFeedback(.selection, trigger: selectedWorkKeys)
     }
 
     private func row(for summary: LikeWorkSummary) -> some View {
-        HStack(spacing: 12) {
+        HStack(alignment: .top, spacing: 12) {
             LocalFavoriteCoverThumbnail(url: coverURLsByWorkKey[summary.workKey], title: title(for: summary.workKey))
                 .frame(width: 92, height: 128)
-            VStack(alignment: .leading, spacing: 4) {
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 6) {
                 Text(title(for: summary.workKey))
-                    .font(.body)
+                    .font(.body.weight(.medium))
+                    .foregroundStyle(.primary)
                     .lineLimit(2)
-                Text(String(summary.itemCount))
-                    .font(.caption.monospacedDigit())
-                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.leading)
+
+                HStack(spacing: 4) {
+                    Image(systemName: "heart.fill")
+                        .font(.caption2)
+                        .foregroundStyle(.pink)
+                    Text(L10n.string("likes.item_count_format", summary.itemCount))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer(minLength: 0)
             }
+            .frame(height: 128, alignment: .topLeading)
+
             Spacer(minLength: 0)
+
+            Image(systemName: "chevron.right")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.tertiary)
+                .frame(height: 128, alignment: .center)
+                .opacity(isSelecting ? 0 : 1)
+                .accessibilityHidden(isSelecting)
         }
-        .padding(.vertical, 4)
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .favoriteSelectionEmphasis(
+            isSelectionMode: isSelecting,
+            isSelected: selectedWorkKeys.contains(summary.workKey),
+            cornerRadius: 12
+        )
     }
 
     private func title(for workKey: LikeWorkKey) -> String {
         titlesByWorkKey[workKey] ?? workKey.id
+    }
+
+    // MARK: - Selection
+
+    private func toggleSelection(_ workKey: LikeWorkKey) {
+        if selectedWorkKeys.contains(workKey) {
+            selectedWorkKeys.remove(workKey)
+        } else {
+            selectedWorkKeys.insert(workKey)
+        }
+    }
+
+    private var isAllVisibleSelected: Bool {
+        let visibleKeys = Set(filteredSummaries.map(\.workKey))
+        return !visibleKeys.isEmpty && visibleKeys.isSubset(of: selectedWorkKeys)
+    }
+
+    /// Not a true per-item inversion — mirrors `FavoriteLibraryOrganizer
+    /// .toggleSelectAllVisible`/`SystemSettingsViewModel
+    /// .toggleAllOfflineCacheManagementRows`: selects every currently visible
+    /// (search-filtered) work, or clears the whole selection when everything
+    /// visible is already selected.
+    private func toggleSelectAll() {
+        let visibleKeys = Set(filteredSummaries.map(\.workKey))
+        guard !visibleKeys.isEmpty else { return }
+        if visibleKeys.isSubset(of: selectedWorkKeys) {
+            selectedWorkKeys.subtract(visibleKeys)
+        } else {
+            selectedWorkKeys.formUnion(visibleKeys)
+        }
+    }
+
+    private func setSelecting(_ selecting: Bool) {
+        isSelecting = selecting
+        if !selecting {
+            selectedWorkKeys.removeAll()
+        }
+    }
+
+    private func deleteSelection() async {
+        let keys = selectedWorkKeys
+        for key in keys {
+            try? await likeDependencies.likeStore.deleteAll(workKey: key)
+        }
+        setSelecting(false)
+        await load()
     }
 
     private func load() async {
