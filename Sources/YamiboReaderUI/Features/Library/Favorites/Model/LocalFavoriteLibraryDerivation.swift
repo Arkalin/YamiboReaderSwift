@@ -106,18 +106,18 @@ enum LocalFavoriteLibraryDerivation {
 
     static func derive(_ inputs: Inputs) -> LocalFavoriteDerivedState {
         // Computed once per `derive(_:)` call and threaded into every one of
-        // this single derive's several internal `resolvedCards` calls (the
-        // main call below, plus `categoryEntryCounts`'s per-category call,
-        // `collectionAggregates`'s per-collection call, and
-        // `sourceFilterEntryCounts`'s call) — without this, each of those
-        // calls would independently rebuild the same grouping from
-        // `inputs.document.items`, and `LocalFavoriteLibraryProjection
-        // .cards(...)` would additionally rebuild it once per smart card on
-        // top of that. Always freshly computed here, at the top of every
-        // `derive(_:)` call, from the CURRENT `inputs.document.items` — never
-        // hoisted up into `FavoriteLibraryOrganizer` or cached across
-        // separate `derive(_:)` calls, since `document.items` can change on
-        // every commit.
+        // this single derive's several internal `resolvedCards`/
+        // `cardsAcrossAllScopes` calls (the main `cards` call below, the one
+        // `allCardsAcrossScopes` call backing both `categoryEntryCounts` and
+        // `collectionAggregates`, and `sourceFilterEntryCounts`'s call) —
+        // without this, each of those calls would independently rebuild the
+        // same grouping from `inputs.document.items`, and
+        // `LocalFavoriteLibraryProjection.cards(...)` would additionally
+        // rebuild it once per smart card on top of that. Always freshly
+        // computed here, at the top of every `derive(_:)` call, from the
+        // CURRENT `inputs.document.items` — never hoisted up into
+        // `FavoriteLibraryOrganizer` or cached across separate `derive(_:)`
+        // calls, since `document.items` can change on every commit.
         let mangaThreadItemsByEffectiveTitle = LocalFavoriteLibraryProjection.mangaThreadItemsByEffectiveTitle(
             in: inputs.document.items,
             mangaDirectoriesByTID: inputs.mangaDirectoriesByTID,
@@ -138,7 +138,33 @@ enum LocalFavoriteLibraryDerivation {
             inputs: inputs,
             mangaThreadItemsByEffectiveTitle: mangaThreadItemsByEffectiveTitle
         )
-        let aggregates = collectionAggregates(inputs, mangaThreadItemsByEffectiveTitle: mangaThreadItemsByEffectiveTitle)
+        // Every category's and every collection's entry count/aggregate
+        // needs the exact same (grouped + tag-unioned + source/tag/search-
+        // filtered) card set, differing only in which category/collection
+        // it's bucketed by — computed once here, via
+        // `LocalFavoriteLibraryProjection.cardsAcrossAllScopes`, instead of
+        // `categoryEntryCounts`/`collectionAggregates` each independently
+        // re-deriving it once per category/collection id (an O((C + K) x N)
+        // shape that scaled with both the library size AND the number of
+        // categories/collections). See `cardsAcrossAllScopes`'s own doc
+        // comment for why skipping the category/collection filter and
+        // bucketing its result afterward is exactly equivalent. Deliberately
+        // NOT run through `resolvedCards`'s cover overlay — neither a count
+        // nor `FavoriteCollectionSortSummary` reads `coverURL`/
+        // `textCoverForced`, so overlaying it here would be pure waste.
+        let allCardsAcrossScopes = LocalFavoriteLibraryProjection.cardsAcrossAllScopes(
+            in: inputs.document,
+            query: LocalFavoriteLibraryQuery(
+                selectedSourceFilters: inputs.filter.selectedSourceFilters,
+                selectedTagIDs: inputs.filter.selectedTagIDs,
+                searchText: inputs.filter.searchText
+            ),
+            readingProgress: inputs.readingProgress,
+            mangaDirectoriesByTID: inputs.mangaDirectoriesByTID,
+            boardReaderSettings: inputs.boardReaderSettings,
+            mangaThreadItemsByEffectiveTitle: mangaThreadItemsByEffectiveTitle
+        )
+        let aggregates = collectionAggregates(inputs, allCardsAcrossScopes: allCardsAcrossScopes)
         let collectionCounts = aggregates.mapValues(\.entryCount)
         let collections = visibleCollections(
             in: inputs.document,
@@ -169,7 +195,7 @@ enum LocalFavoriteLibraryDerivation {
             categoryEntryCounts: categoryEntryCounts(
                 inputs,
                 collectionEntryCounts: collectionCounts,
-                mangaThreadItemsByEffectiveTitle: mangaThreadItemsByEffectiveTitle
+                allCardsAcrossScopes: allCardsAcrossScopes
             ),
             collectionEntryCounts: collectionCounts,
             sourceFilterEntryCounts: sourceFilterEntryCounts(inputs, mangaThreadItemsByEffectiveTitle: mangaThreadItemsByEffectiveTitle),
@@ -214,31 +240,32 @@ enum LocalFavoriteLibraryDerivation {
 
     // MARK: - Counts
 
+    /// One pass over `allCardsAcrossScopes` bucketing every card's *direct*
+    /// category membership (a card living inside a collection isn't counted
+    /// here — the category root list shows it via that collection's own row
+    /// instead, exactly matching the old per-category `cards(in:query:...)`
+    /// filter this replaces) — O(N) total instead of the O(C x N) shape of
+    /// calling `cards(in:query:...)` once per category.
     private static func categoryEntryCounts(
         _ inputs: Inputs,
         collectionEntryCounts: [String: Int],
-        mangaThreadItemsByEffectiveTitle: [String: [FavoriteItem]]
+        allCardsAcrossScopes: [FavoriteCardProjection]
     ) -> [String: Int] {
-        Dictionary(uniqueKeysWithValues: inputs.document.categories.map { category in
-            let cards = resolvedCards(
-                in: inputs.document,
-                query: LocalFavoriteLibraryQuery(
-                    categoryID: category.id,
-                    selectedSourceFilters: inputs.filter.selectedSourceFilters,
-                    selectedTagIDs: inputs.filter.selectedTagIDs,
-                    sortOrder: .organization,
-                    searchText: inputs.filter.searchText
-                ),
-                inputs: inputs,
-                mangaThreadItemsByEffectiveTitle: mangaThreadItemsByEffectiveTitle
-            )
+        var directCountsByCategoryID: [String: Int] = [:]
+        for card in allCardsAcrossScopes {
+            for location in card.item.locations {
+                guard case let .category(categoryID) = location else { continue }
+                directCountsByCategoryID[categoryID, default: 0] += 1
+            }
+        }
+        return Dictionary(uniqueKeysWithValues: inputs.document.categories.map { category in
             let collections = visibleCollections(
                 in: inputs.document,
                 categoryID: category.id,
                 filter: inputs.filter,
                 collectionEntryCounts: collectionEntryCounts
             )
-            return (category.id, cards.count + collections.count)
+            return (category.id, (directCountsByCategoryID[category.id] ?? 0) + collections.count)
         })
     }
 
@@ -247,24 +274,27 @@ enum LocalFavoriteLibraryDerivation {
         var sortSummary: FavoriteCollectionSortSummary
     }
 
+    /// One pass over `allCardsAcrossScopes` bucketing every card by every
+    /// collection it belongs to — O(N) total instead of the O(K x N) shape
+    /// of calling `cards(in:query:...)` once per collection. Bucketed by the
+    /// full `(categoryID, collectionID)` pair (matching the exact
+    /// `.collection(categoryID:collectionID:)` membership check the old
+    /// per-collection query used), not `collectionID` alone, so this stays
+    /// byte-for-byte equivalent even if a location were ever inconsistent
+    /// with its collection's own current `categoryID`.
     private static func collectionAggregates(
         _ inputs: Inputs,
-        mangaThreadItemsByEffectiveTitle: [String: [FavoriteItem]]
+        allCardsAcrossScopes: [FavoriteCardProjection]
     ) -> [String: CollectionAggregate] {
-        Dictionary(uniqueKeysWithValues: inputs.document.collections.map { collection in
-            let cards = resolvedCards(
-                in: inputs.document,
-                query: LocalFavoriteLibraryQuery(
-                    categoryID: collection.categoryID,
-                    collectionID: collection.id,
-                    selectedSourceFilters: inputs.filter.selectedSourceFilters,
-                    selectedTagIDs: inputs.filter.selectedTagIDs,
-                    sortOrder: .organization,
-                    searchText: inputs.filter.searchText
-                ),
-                inputs: inputs,
-                mangaThreadItemsByEffectiveTitle: mangaThreadItemsByEffectiveTitle
-            )
+        var cardsByCollectionKey: [String: [FavoriteCardProjection]] = [:]
+        for card in allCardsAcrossScopes {
+            for location in card.item.locations {
+                guard case let .collection(categoryID, collectionID) = location else { continue }
+                cardsByCollectionKey["\(categoryID)\u{0}\(collectionID)", default: []].append(card)
+            }
+        }
+        return Dictionary(uniqueKeysWithValues: inputs.document.collections.map { collection in
+            let cards = cardsByCollectionKey["\(collection.categoryID)\u{0}\(collection.id)"] ?? []
             return (collection.id, CollectionAggregate(entryCount: cards.count, sortSummary: .summarizing(cards)))
         })
     }
