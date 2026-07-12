@@ -111,6 +111,7 @@ enum SystemSettingsConfirmation: String, Identifiable {
     case clearImageCache
     case restoreBoardReaderDefaults
     case resetApplication
+    case signOut
 
     var id: String { rawValue }
 
@@ -126,6 +127,8 @@ enum SystemSettingsConfirmation: String, Identifiable {
             L10n.string("settings.board_reader.confirm_restore_default")
         case .resetApplication:
             L10n.string("settings.confirm_reset_application")
+        case .signOut:
+            L10n.string("settings.confirm_sign_out")
         }
     }
 
@@ -141,6 +144,8 @@ enum SystemSettingsConfirmation: String, Identifiable {
             L10n.string("settings.board_reader.restore")
         case .resetApplication:
             L10n.string("settings.reset")
+        case .signOut:
+            L10n.string("mine.sign_out")
         }
     }
 
@@ -156,6 +161,8 @@ enum SystemSettingsConfirmation: String, Identifiable {
             L10n.string("settings.board_reader.restore_default_message")
         case .resetApplication:
             L10n.string("settings.reset_application_message")
+        case .signOut:
+            L10n.string("settings.sign_out_message")
         }
     }
 }

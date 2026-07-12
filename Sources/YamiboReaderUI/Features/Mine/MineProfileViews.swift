@@ -8,12 +8,12 @@ struct MineProfileSection: View {
     let avatarReloadDate: Date?
     let isRefreshing: Bool
     let isInteractionDisabled: Bool
-    let showSignOutConfirmation: () -> Void
+    let showProfile: () -> Void
 
     var body: some View {
         Section {
             if let profile {
-                Button(action: showSignOutConfirmation) {
+                Button(action: showProfile) {
                     MineProfileCard(
                         profile: profile,
                         avatarLoader: avatarLoader,
@@ -104,7 +104,7 @@ private struct MineProfileCard: View {
         .frame(minHeight: 96)
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
-        .accessibilityHint(L10n.string("mine.profile_card_sign_out_hint"))
+        .accessibilityHint(L10n.string("mine.profile_card_view_profile_hint"))
     }
 }
 

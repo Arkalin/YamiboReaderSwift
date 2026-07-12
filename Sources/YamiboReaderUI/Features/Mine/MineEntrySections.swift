@@ -63,12 +63,19 @@ struct MineCheckInSection: View {
 
 struct MineLibraryEntriesSection: View {
     let offlineCacheQueueCount: Int
+    let showMessages: () -> Void
     let showOfflineCacheQueue: () -> Void
     let showMyLikes: () -> Void
     let showHistory: () -> Void
 
     var body: some View {
         Section {
+            MineEntryButtonRow(
+                title: L10n.string("message_center.private_messages"),
+                systemImage: "envelope.fill",
+                tint: .orange,
+                action: showMessages
+            )
             MineEntryButtonRow(
                 title: L10n.string("forum.history"),
                 systemImage: "clock.arrow.circlepath",

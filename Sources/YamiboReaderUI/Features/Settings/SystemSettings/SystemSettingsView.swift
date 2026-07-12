@@ -8,6 +8,7 @@ public struct SystemSettingsView: View {
 
     private let dependencies: SettingsDependencies
     private let peripheralInput: ReaderPeripheralInputManager?
+    private let onSignOut: @MainActor () async -> String?
     private let onApplicationReset: @MainActor () async -> Void
 
     @StateObject private var viewModel: SystemSettingsViewModel
@@ -23,10 +24,12 @@ public struct SystemSettingsView: View {
     @State private var favoriteBackgroundPickerItem: PhotosPickerItem?
     @State private var favoriteBackgroundPickerPurpose = FavoriteBackgroundPickerPurpose.initial
     @State private var favoriteBackgroundEditorDraft: FavoriteBackgroundEditorDraft?
+    @State private var isSigningOut = false
 
     public init(
         dependencies: SettingsDependencies,
         peripheralInput: ReaderPeripheralInputManager? = nil,
+        onSignOut: @escaping @MainActor () async -> String?,
         onApplicationReset: @escaping @MainActor () async -> Void
     ) {
         _viewModel = StateObject(wrappedValue: SystemSettingsViewModel(dependencies: dependencies))
@@ -42,6 +45,7 @@ public struct SystemSettingsView: View {
         ))
         self.dependencies = dependencies
         self.peripheralInput = peripheralInput
+        self.onSignOut = onSignOut
         self.onApplicationReset = onApplicationReset
     }
 
@@ -256,6 +260,17 @@ public struct SystemSettingsView: View {
                     }
                     .disabled(viewModel.isBusy)
                 }
+
+                if viewModel.isLoggedIn {
+                    Section(L10n.string("settings.section.account")) {
+                        Button(role: .destructive) {
+                            pendingConfirmation = .signOut
+                        } label: {
+                            Text(L10n.string("mine.sign_out"))
+                        }
+                        .disabled(viewModel.isBusy || isSigningOut)
+                    }
+                }
             }
             .navigationTitle(L10n.string("settings.title"))
             .toolbar(content: toolbarContent)
@@ -351,13 +366,13 @@ public struct SystemSettingsView: View {
             Button(L10n.string("common.close")) {
                 dismiss()
             }
-            .disabled(viewModel.activeAction == .resettingApplication)
+            .disabled(viewModel.activeAction == .resettingApplication || isSigningOut)
         }
     }
 
     @ViewBuilder
     private func loadingOverlay() -> some View {
-        if viewModel.activeAction == .loading || viewModel.activeAction == .resettingApplication {
+        if viewModel.activeAction == .loading || viewModel.activeAction == .resettingApplication || isSigningOut {
             ProgressView(loadingOverlayTitle)
                 .padding()
                 .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12))
@@ -365,7 +380,10 @@ public struct SystemSettingsView: View {
     }
 
     private var loadingOverlayTitle: String {
-        viewModel.activeAction == .resettingApplication
+        if isSigningOut {
+            return L10n.string("mine.signing_out")
+        }
+        return viewModel.activeAction == .resettingApplication
             ? L10n.string("settings.resetting_application")
             : L10n.string("common.loading")
     }
@@ -597,6 +615,15 @@ public struct SystemSettingsView: View {
             guard didReset else { return }
             dismiss()
             await onApplicationReset()
+        case .signOut:
+            isSigningOut = true
+            let failureMessage = await onSignOut()
+            isSigningOut = false
+            if let failureMessage {
+                viewModel.errorMessage = failureMessage
+            } else {
+                dismiss()
+            }
         }
     }
 }
