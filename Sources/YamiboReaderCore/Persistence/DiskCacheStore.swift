@@ -23,6 +23,10 @@ actor DiskCacheStore {
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
 
+    /// Cache hits only need last_accessed_at accurate enough for LRU ordering,
+    /// so repeated hits within this window skip the write transaction entirely.
+    private static let touchThrottleInterval: TimeInterval = 300
+
     init(
         writer: any DatabaseWriter,
         rootDirectory: URL,
@@ -87,7 +91,9 @@ actor DiskCacheStore {
 
         do {
             let value = try decoder.decode(Value.self, from: try Data(contentsOf: fileURL))
-            try await touchLastAccessedAt(namespace: resolvedNamespace, key: resolvedKey)
+            if now().timeIntervalSince(entry.lastAccessedAt) > Self.touchThrottleInterval {
+                try await touchLastAccessedAt(namespace: resolvedNamespace, key: resolvedKey)
+            }
             return value
         } catch {
             YamiboLog.offlineCache.warning("Discarding unreadable cache entry \(resolvedNamespace)/\(resolvedKey): \(error)")
