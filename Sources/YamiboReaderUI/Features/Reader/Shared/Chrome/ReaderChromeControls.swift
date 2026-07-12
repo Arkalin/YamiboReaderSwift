@@ -288,7 +288,7 @@ func readerChromePanelTint(for colorScheme: ColorScheme) -> Color {
 }
 
 func readerChromeButtonTint(for colorScheme: ColorScheme) -> Color {
-    colorScheme == .dark ? Color(red: 0.78, green: 0.58, blue: 0.42) : .accentColor
+    .accentColor
 }
 
 /// Reader Preview Mode indicator: shown in the top chrome of both the novel
