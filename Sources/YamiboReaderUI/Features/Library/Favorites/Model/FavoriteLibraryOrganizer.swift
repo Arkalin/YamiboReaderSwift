@@ -74,6 +74,11 @@ final class FavoriteLibraryOrganizer: ObservableObject {
     /// duplicated behind itself. See `LocalFavoritesOrganizationView`.
     @Published private(set) var rootDerived = LocalFavoriteDerivedState()
     @Published private(set) var display = FavoriteLibraryDisplayState()
+    /// Backs `LocalFavoritesRootBackground` — only ever consumed by the root
+    /// favorites screen (see `LocalFavoritesOrganizationView`), never by the
+    /// pushed collection/merged-group detail pages.
+    @Published private(set) var backgroundSettings = FavoriteBackgroundSettings()
+    @Published private(set) var backgroundImageData: Data?
     @Published var errorMessage: String?
     /// Short-lived toast feedback (single-item sync results and similar).
     @Published var transientMessage: String?
@@ -86,6 +91,7 @@ final class FavoriteLibraryOrganizer: ObservableObject {
     private let settingsStore: SettingsStore
     private let contentCoverStore: ContentCoverStore
     private let mangaDirectoryStore: MangaDirectoryStore?
+    private let favoriteBackgroundImageStore: FavoriteBackgroundImageStore
     private let makeForumThreadReaderRepository: (@Sendable () async -> ForumThreadReaderRepository)?
     private let makeFavoriteRepository: @Sendable () async -> FavoriteRepository
     private let remoteDeleter: YamiboRemoteFavoriteDeleter
@@ -124,6 +130,7 @@ final class FavoriteLibraryOrganizer: ObservableObject {
         readingProgressStore: ReadingProgressStore,
         settingsStore: SettingsStore,
         contentCoverStore: ContentCoverStore,
+        favoriteBackgroundImageStore: FavoriteBackgroundImageStore,
         mangaDirectoryStore: MangaDirectoryStore? = nil,
         makeForumThreadReaderRepository: (@Sendable () async -> ForumThreadReaderRepository)? = nil,
         makeFavoriteRepository: @escaping @Sendable () async -> FavoriteRepository,
@@ -133,6 +140,7 @@ final class FavoriteLibraryOrganizer: ObservableObject {
         self.readingProgressStore = readingProgressStore
         self.settingsStore = settingsStore
         self.contentCoverStore = contentCoverStore
+        self.favoriteBackgroundImageStore = favoriteBackgroundImageStore
         self.mangaDirectoryStore = mangaDirectoryStore
         self.makeForumThreadReaderRepository = makeForumThreadReaderRepository
         self.makeFavoriteRepository = makeFavoriteRepository
@@ -188,6 +196,7 @@ final class FavoriteLibraryOrganizer: ObservableObject {
                     continue
                 }
                 await self.reloadBoardReaderSettings()
+                await self.reloadFavoriteBackground()
             }
         }
         // Without this, renaming a manga directory from the manga reader's
@@ -311,6 +320,7 @@ final class FavoriteLibraryOrganizer: ObservableObject {
             layoutMode: settings.favorites.layoutMode,
             showsCategoryCounts: settings.favorites.showsCategoryCounts
         )
+        await applyBackgroundSettings(settings.favorites.background)
         var restoredFilter = filter
         restoredFilter.sortOrder = settings.favorites.sortOrder
         restoredFilter.sortDescending = settings.favorites.sortDescending
@@ -407,6 +417,24 @@ final class FavoriteLibraryOrganizer: ObservableObject {
         )
         refreshDerivedState()
         scheduleMangaCoverBackfill(for: document.items)
+    }
+
+    /// Re-derives `backgroundSettings`/`backgroundImageData` in response to
+    /// *any* `SettingsStore.didChangeNotification`, mirroring
+    /// `reloadBoardReaderSettings()`'s diff-guarded shape — this is the only
+    /// path that keeps the root favorites background in sync with an edit
+    /// made from Settings, since the favorites tab's `FavoriteLibraryOrganizer`
+    /// is constructed once for the app's lifetime and never reloads on tab
+    /// reselect.
+    private func reloadFavoriteBackground() async {
+        let settings = await settingsStore.load()
+        guard settings.favorites.background != backgroundSettings else { return }
+        await applyBackgroundSettings(settings.favorites.background)
+    }
+
+    private func applyBackgroundSettings(_ newValue: FavoriteBackgroundSettings) async {
+        backgroundSettings = newValue
+        backgroundImageData = await favoriteBackgroundImageStore.loadData(imageID: newValue.imageID)
     }
 
     /// Re-derives the manga-directory-dependent slice of state

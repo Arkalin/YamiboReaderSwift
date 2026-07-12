@@ -70,6 +70,7 @@ struct LocalFavoriteListContent: View {
                         )
                     }
                 }
+                .listRowBackground(Color.clear)
             }
         }
         // Grid mode is a plain `ScrollView` whose LazyVStack has an explicit
@@ -79,6 +80,10 @@ struct LocalFavoriteListContent: View {
         .listStyle(.plain)
         .listSectionSpacing(12)
         .contentMargins(.top, 12, for: .scrollContent)
+        // Lets `LocalFavoritesRootBackground`'s `FavoriteBackgroundLayer`
+        // show through instead of List's opaque default row/canvas fills.
+        .scrollContentBackground(.hidden)
+        .background(Color.clear)
         .sensoryFeedback(.selection, trigger: selection.selectedFavoriteIDs)
         .sensoryFeedback(.selection, trigger: selection.selectedCollectionIDs)
     }

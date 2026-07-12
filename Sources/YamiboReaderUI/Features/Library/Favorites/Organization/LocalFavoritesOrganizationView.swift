@@ -36,104 +36,109 @@ struct LocalFavoritesOrganizationView: View {
 
     var body: some View {
         NavigationStack {
-            content(derived: organizer.rootDerived, isCollectionDetail: false)
-                .overlay { emptyStateOverlay(derived: organizer.rootDerived, isCollectionDetail: false) }
-                .navigationTitle(
-                    selection.isSelectionMode
-                        ? L10n.string("favorites.selected_count", selection.selectedEntryCount)
-                        : L10n.string("favorites.title")
-                )
-                .navigationBarTitleDisplayMode(.inline)
-                .searchable(
-                    text: $organizer.filter.searchText,
-                    prompt: L10n.string("favorites.search.placeholder")
-                )
-                .toolbar { favoriteToolbarContent }
-                .toolbar(selection.isSelectionMode ? .hidden : .automatic, for: .tabBar)
-                .safeAreaInset(edge: .bottom) {
-                    if selection.isSelectionMode {
-                        LocalFavoriteSelectionActionBar(
-                            organizer: organizer,
-                            selection: selection,
-                            routes: routes
-                        )
-                    }
-                }
-                .safeAreaInset(edge: .top) {
-                    if showsTopStatusCards {
-                        statusCards
-                    }
-                }
-                .alert(L10n.string("common.operation_failed"), isPresented: errorAlertBinding) {
-                    Button(L10n.string("common.ok")) {
-                        clearErrorMessages()
-                    }
-                } message: {
-                    Text(combinedErrorMessage ?? "")
-                }
-                .alert(
-                    dialogTitle,
-                    isPresented: dialogBinding,
-                    presenting: routes.dialog,
-                    actions: dialogActions,
-                    message: dialogMessage
-                )
-                .sheet(item: $routes.sheet) { sheet in
-                    LocalFavoritesSheetContent(
-                        sheet: sheet,
+            LocalFavoritesRootBackground(
+                settings: organizer.backgroundSettings,
+                imageData: organizer.backgroundImageData
+            ) {
+                content(derived: organizer.rootDerived, isCollectionDetail: false)
+                    .overlay { emptyStateOverlay(derived: organizer.rootDerived, isCollectionDetail: false) }
+            }
+            .navigationTitle(
+                selection.isSelectionMode
+                    ? L10n.string("favorites.selected_count", selection.selectedEntryCount)
+                    : L10n.string("favorites.title")
+            )
+            .navigationBarTitleDisplayMode(.inline)
+            .searchable(
+                text: $organizer.filter.searchText,
+                prompt: L10n.string("favorites.search.placeholder")
+            )
+            .toolbar { favoriteToolbarContent }
+            .toolbar(selection.isSelectionMode ? .hidden : .automatic, for: .tabBar)
+            .safeAreaInset(edge: .bottom) {
+                if selection.isSelectionMode {
+                    LocalFavoriteSelectionActionBar(
                         organizer: organizer,
-                        remoteSync: remoteSync,
-                        updateMonitor: updateMonitor,
+                        selection: selection,
                         routes: routes
                     )
                 }
-                .forumTransientMessage(organizer.transientMessage) {
-                    organizer.transientMessage = nil
+            }
+            .safeAreaInset(edge: .top) {
+                if showsTopStatusCards {
+                    statusCards
                 }
-                .navigationDestination(isPresented: collectionDetailBinding) {
-                    collectionDetail
+            }
+            .alert(L10n.string("common.operation_failed"), isPresented: errorAlertBinding) {
+                Button(L10n.string("common.ok")) {
+                    clearErrorMessages()
                 }
-                .navigationDestination(isPresented: mergedGroupDetailBinding) {
-                    mergedGroupDetail
-                }
-                .navigationDestination(isPresented: $routes.isUpdatesPagePushed) {
-                    FavoriteUpdatesPage(
-                        updateMonitor: updateMonitor,
-                        routes: routes,
-                        isEventVisible: isEventInFilterScope,
-                        onOpen: { event in
-                            guard let item = organizer.favoriteItems.first(where: { $0.target.id == event.target.id }) else {
-                                organizer.transientMessage = L10n.string("favorites.updates.event_target_missing")
-                                return
-                            }
-                            await onOpen(item, .resume, .boardDefault)
+            } message: {
+                Text(combinedErrorMessage ?? "")
+            }
+            .alert(
+                dialogTitle,
+                isPresented: dialogBinding,
+                presenting: routes.dialog,
+                actions: dialogActions,
+                message: dialogMessage
+            )
+            .sheet(item: $routes.sheet) { sheet in
+                LocalFavoritesSheetContent(
+                    sheet: sheet,
+                    organizer: organizer,
+                    remoteSync: remoteSync,
+                    updateMonitor: updateMonitor,
+                    routes: routes
+                )
+            }
+            .forumTransientMessage(organizer.transientMessage) {
+                organizer.transientMessage = nil
+            }
+            .navigationDestination(isPresented: collectionDetailBinding) {
+                collectionDetail
+            }
+            .navigationDestination(isPresented: mergedGroupDetailBinding) {
+                mergedGroupDetail
+            }
+            .navigationDestination(isPresented: $routes.isUpdatesPagePushed) {
+                FavoriteUpdatesPage(
+                    updateMonitor: updateMonitor,
+                    routes: routes,
+                    isEventVisible: isEventInFilterScope,
+                    onOpen: { event in
+                        guard let item = organizer.favoriteItems.first(where: { $0.target.id == event.target.id }) else {
+                            organizer.transientMessage = L10n.string("favorites.updates.event_target_missing")
+                            return
                         }
-                    )
-                    .toolbar(selection.isSelectionMode ? .hidden : .automatic, for: .tabBar)
-                }
-                .navigationDestination(isPresented: $routes.isBoardFavoritesPushed) {
-                    FavoriteBoardListView(
-                        model: FavoriteBoardListViewModel(repositoryProvider: makeFavoriteRepository),
-                        onOpenBoard: onOpenBoard
-                    )
-                    .toolbar(selection.isSelectionMode ? .hidden : .automatic, for: .tabBar)
-                }
-                .navigationDestination(isPresented: $routes.isSyncProgressPushed) {
-                    FavoriteRemoteSyncProgressSheet(
-                        snapshot: remoteSync.snapshot,
-                        onResume: {
-                            await remoteSync.resume()
-                        },
-                        onInterrupt: {
-                            await remoteSync.interrupt()
-                        },
-                        onHide: {
-                            await remoteSync.hideCard()
-                        },
-                        showsCloseButton: false
-                    )
-                    .toolbar(selection.isSelectionMode ? .hidden : .automatic, for: .tabBar)
-                }
+                        await onOpen(item, .resume, .boardDefault)
+                    }
+                )
+                .toolbar(selection.isSelectionMode ? .hidden : .automatic, for: .tabBar)
+            }
+            .navigationDestination(isPresented: $routes.isBoardFavoritesPushed) {
+                FavoriteBoardListView(
+                    model: FavoriteBoardListViewModel(repositoryProvider: makeFavoriteRepository),
+                    onOpenBoard: onOpenBoard
+                )
+                .toolbar(selection.isSelectionMode ? .hidden : .automatic, for: .tabBar)
+            }
+            .navigationDestination(isPresented: $routes.isSyncProgressPushed) {
+                FavoriteRemoteSyncProgressSheet(
+                    snapshot: remoteSync.snapshot,
+                    onResume: {
+                        await remoteSync.resume()
+                    },
+                    onInterrupt: {
+                        await remoteSync.interrupt()
+                    },
+                    onHide: {
+                        await remoteSync.hideCard()
+                    },
+                    showsCloseButton: false
+                )
+                .toolbar(selection.isSelectionMode ? .hidden : .automatic, for: .tabBar)
+            }
         }
     }
 

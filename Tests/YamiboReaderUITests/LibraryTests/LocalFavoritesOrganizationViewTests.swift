@@ -19,6 +19,10 @@ import YamiboReaderTestSupport
         baseDirectory: FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
     )
+    let favoriteBackgroundImageStore = FavoriteBackgroundImageStore(
+        baseDirectory: FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    )
     @Sendable func makeClient() async -> YamiboClient {
         let sessionState = await sessionStore.load()
         return YamiboClient(session: urlSession, cookie: sessionState.cookie, userAgent: sessionState.userAgent)
@@ -42,6 +46,7 @@ import YamiboReaderTestSupport
         readingProgressStore: readingProgressStore,
         settingsStore: settingsStore,
         contentCoverStore: contentCoverStore,
+        favoriteBackgroundImageStore: favoriteBackgroundImageStore,
         makeFavoriteRepository: { FavoriteRepository(client: await makeClient()) }
     )
     let remoteSync = FavoriteRemoteSyncSession(

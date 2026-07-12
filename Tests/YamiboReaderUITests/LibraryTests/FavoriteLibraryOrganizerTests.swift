@@ -164,6 +164,51 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
         XCTAssertEqual(mergedCard.mergedMembers?.map(\.target), [firstTarget, secondTarget])
     }
 
+    /// `FavoriteLibraryOrganizer` is constructed once for the app's lifetime
+    /// (the root `TabView` never tears down hidden tabs), so a favorites
+    /// background changed from Settings must reach an already-loaded
+    /// Favorites tab through the same live-refresh subscription proven above
+    /// for board-reader settings — with no explicit `organizer.reload()`
+    /// call in between, exactly mirroring what `SystemSettingsViewModel
+    /// .applyFavoriteBackground` actually does (save image bytes, then save
+    /// settings).
+    func testSettingsStoreChangeLiveRefreshesFavoriteBackgroundWithoutManualReload() async throws {
+        let suiteName = YamiboTestDefaults.suiteName(prefix: "local-favorites-background-live-refresh")
+        _ = try YamiboTestDefaults.make(suiteName: suiteName)
+        let settingsStore = SettingsStore(
+            defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
+            key: "settings"
+        )
+        let favoriteBackgroundImageStore = makeFavoriteBackgroundImageStore(suiteName: suiteName)
+
+        let organizer = try makeOrganizer(
+            settingsStore: settingsStore,
+            favoriteBackgroundImageStore: favoriteBackgroundImageStore
+        )
+        await organizer.load()
+
+        XCTAssertFalse(organizer.backgroundSettings.isEnabled)
+        XCTAssertNil(organizer.backgroundImageData)
+
+        let imageData = Data("test-background-bytes".utf8)
+        let imageID = UUID().uuidString
+        try await favoriteBackgroundImageStore.save(imageData, imageID: imageID)
+
+        // Exactly what the Settings UI's apply flow does: save the image
+        // bytes, then save the settings blob — no call to
+        // `organizer.reload()` in between.
+        var settings = await settingsStore.load()
+        settings.favorites.background = FavoriteBackgroundSettings(isEnabled: true, imageID: imageID, blurRadius: 12)
+        try await settingsStore.save(settings)
+
+        try await waitForOrganizerCondition {
+            organizer.backgroundSettings.isEnabled
+        }
+        XCTAssertEqual(organizer.backgroundSettings.imageID, imageID)
+        XCTAssertEqual(organizer.backgroundSettings.blurRadius, 12)
+        XCTAssertEqual(organizer.backgroundImageData, imageData)
+    }
+
     /// Pluggable-reader-config decision #1: merged-card grouping is purely
     /// configuration-driven for ANY board — an arbitrary fid ("99", no
     /// factory entry) configured `.manga(smartEnabled: true)` merges its
@@ -2999,6 +3044,7 @@ private func makeOrganizer(
     readingProgressStore: ReadingProgressStore? = nil,
     settingsStore: SettingsStore? = nil,
     contentCoverStore: ContentCoverStore? = nil,
+    favoriteBackgroundImageStore: FavoriteBackgroundImageStore? = nil,
     mangaDirectoryStore: MangaDirectoryStore? = nil,
     makeForumThreadReaderRepository: (@Sendable () async -> ForumThreadReaderRepository)? = nil,
     session: URLSession? = nil,
@@ -3013,6 +3059,7 @@ private func makeOrganizer(
         readingProgressStore: readingProgressStore ?? ReadingProgressStore(defaults: defaults, key: "reading-progress"),
         settingsStore: settingsStore ?? SettingsStore(defaults: defaults, key: "settings"),
         contentCoverStore: contentCoverStore ?? ContentCoverStore(defaults: defaults, key: "content-covers"),
+        favoriteBackgroundImageStore: favoriteBackgroundImageStore ?? makeFavoriteBackgroundImageStore(suiteName: suiteName),
         mangaDirectoryStore: mangaDirectoryStore,
         makeForumThreadReaderRepository: makeForumThreadReaderRepository,
         makeFavoriteRepository: {
@@ -3038,6 +3085,17 @@ private func makeMangaDirectoryStore(suiteName: String) throws -> MangaDirectory
         .appendingPathComponent(suiteName, isDirectory: true)
     let database = try YamiboDatabase.openPool(rootDirectory: root)
     return MangaDirectoryStore(databasePool: database)
+}
+
+/// Temp-directory-scoped `FavoriteBackgroundImageStore` for a test — never
+/// the type's own default `baseDirectory`, which resolves to the shared
+/// Application Support directory and would collide across parallel test runs.
+private func makeFavoriteBackgroundImageStore(suiteName: String) -> FavoriteBackgroundImageStore {
+    let root = FileManager.default.temporaryDirectory
+        .appendingPathComponent("favorite-library-organizer-tests", isDirectory: true)
+        .appendingPathComponent(suiteName, isDirectory: true)
+        .appendingPathComponent("favorite-background", isDirectory: true)
+    return FavoriteBackgroundImageStore(baseDirectory: root)
 }
 
 /// Polls a `@MainActor` condition until it's true or the timeout elapses —

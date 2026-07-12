@@ -105,49 +105,34 @@ struct FavoriteBackgroundEditorView: View {
     @State private var isApplying = false
 
     var body: some View {
-        GeometryReader { proxy in
-            let topInset = max(proxy.safeAreaInsets.top, windowSafeAreaInsets.top)
+        NavigationStack {
+            GeometryReader { geometry in
+                ZStack {
+                    editorBackground
 
-            ZStack {
-                GeometryReader { geometry in
-                    ZStack {
-                        editorBackground
-
-                        if let imageData = draft.imageData {
-                            editableImage(data: imageData, containerSize: geometry.size)
-                        }
-
-                        bottomControls
+                    if let imageData = draft.imageData {
+                        editableImage(data: imageData, containerSize: geometry.size)
                     }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(editorBackground)
-                }
-                .ignoresSafeArea()
-            }
-            .safeAreaInset(edge: .top, spacing: 0) {
-                FavoriteBackgroundEditorTopBar(
-                    draft: $draft,
-                    isApplying: isApplying,
-                    onCancel: onCancel,
-                    onApply: applyCurrentDraft
-                )
-                .padding(.horizontal, 16)
-                .padding(.top, max(topInset + 8, 20))
-                .padding(.bottom, 8)
-            }
-        }
-    }
 
-    private var windowSafeAreaInsets: EdgeInsets {
-        guard let insets = UIApplication.shared.connectedScenes
-            .compactMap({ $0 as? UIWindowScene })
-            .flatMap(\.windows)
-            .first(where: \.isKeyWindow)?
-            .safeAreaInsets
-        else {
-            return EdgeInsets()
+                    bottomControls
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+            .ignoresSafeArea()
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(L10n.string("common.cancel"), action: onCancel)
+                        .disabled(isApplying)
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(action: applyCurrentDraft) {
+                        ApplyButtonLabel(isApplying: isApplying)
+                    }
+                    .disabled(isApplying)
+                }
+            }
         }
-        return EdgeInsets(top: insets.top, leading: insets.left, bottom: insets.bottom, trailing: insets.right)
     }
 
     private var editorBackground: some View {
@@ -180,10 +165,7 @@ struct FavoriteBackgroundEditorView: View {
             Spacer()
 
             FavoriteBackgroundEditorBottomControls(
-                blurRadius: Binding(
-                    get: { draft.settings.blurRadius },
-                    set: { draft.settings.blurRadius = FavoriteBackgroundSettings.clampBlurRadius($0.rounded()) }
-                ),
+                draft: $draft,
                 isApplying: isApplying,
                 onChangeImage: onChangeImage
             )
@@ -304,105 +286,42 @@ private struct FavoriteBackgroundImage: View {
     }
 }
 
-private struct FavoriteBackgroundEditorTopBar: View {
-    @Binding var draft: FavoriteBackgroundEditorDraft
-
-    let isApplying: Bool
-    let onCancel: () -> Void
-    let onApply: () -> Void
-
-    var body: some View {
-        if #available(iOS 26.0, *) {
-            GlassEffectContainer(spacing: 12) {
-                glassContent
-            }
-        } else {
-            fallbackContent
-        }
-    }
-
-    @ViewBuilder
-    @available(iOS 26.0, *)
-    private var glassContent: some View {
-        #if os(iOS)
-        HStack(spacing: 10) {
-            HStack(spacing: 8) {
-                Button(L10n.string("common.cancel"), action: onCancel)
-                    .font(.subheadline.weight(.semibold))
-                    .buttonStyle(.glass)
-                    .disabled(isApplying)
-
-                Button(role: .destructive, action: restoreDefault) {
-                    Text(L10n.string("favorite_background.restore_default"))
-                }
-                .font(.subheadline.weight(.semibold))
-                .buttonStyle(.glass)
-                .tint(.red)
-                .disabled(isApplying)
-            }
-
-            Spacer(minLength: 12)
-
-            Button(action: onApply) {
-                ApplyButtonLabel(isApplying: isApplying)
-            }
-            .font(.subheadline.weight(.semibold))
-            .buttonStyle(.glassProminent)
-            .disabled(isApplying)
-        }
-        #endif
-    }
-
-    private var fallbackContent: some View {
-        HStack(spacing: 10) {
-            HStack(spacing: 8) {
-                Button(L10n.string("common.cancel"), action: onCancel)
-                    .font(.subheadline.weight(.semibold))
-                    .buttonStyle(.bordered)
-                    .disabled(isApplying)
-
-                Button(role: .destructive, action: restoreDefault) {
-                    Text(L10n.string("favorite_background.restore_default"))
-                }
-                .font(.subheadline.weight(.semibold))
-                .buttonStyle(.bordered)
-                .tint(.red)
-                .disabled(isApplying)
-            }
-
-            Spacer(minLength: 12)
-
-            Button(action: onApply) {
-                ApplyButtonLabel(isApplying: isApplying)
-            }
-            .font(.subheadline.weight(.semibold))
-            .buttonStyle(.borderedProminent)
-            .disabled(isApplying)
-        }
-    }
-
-    private func restoreDefault() {
-        withAnimation(.spring(response: 0.24, dampingFraction: 0.9)) {
-            draft.restoreDefault()
-        }
-    }
-}
-
 private struct FavoriteBackgroundEditorBottomControls: View {
-    @Binding var blurRadius: Double
+    @Binding var draft: FavoriteBackgroundEditorDraft
 
     let isApplying: Bool
     let onChangeImage: () -> Void
 
     var body: some View {
         VStack(spacing: 14) {
-            FavoriteBackgroundBlurControl(blurRadius: $blurRadius)
+            FavoriteBackgroundBlurControl(blurRadius: blurRadiusBinding)
                 .disabled(isApplying)
 
-            FavoriteBackgroundChangeImageButton(
-                isApplying: isApplying,
-                action: onChangeImage
-            )
+            ReaderGlassContainer(spacing: 12) {
+                HStack(spacing: 12) {
+                    FavoriteBackgroundRestoreDefaultButton(
+                        isApplying: isApplying,
+                        action: restoreDefault
+                    )
+                    FavoriteBackgroundChangeImageButton(
+                        isApplying: isApplying,
+                        action: onChangeImage
+                    )
+                }
+            }
+        }
+    }
+
+    private var blurRadiusBinding: Binding<Double> {
+        Binding(
+            get: { draft.settings.blurRadius },
+            set: { draft.settings.blurRadius = FavoriteBackgroundSettings.clampBlurRadius($0.rounded()) }
+        )
+    }
+
+    private func restoreDefault() {
+        withAnimation(.spring(response: 0.24, dampingFraction: 0.9)) {
+            draft.restoreDefault()
         }
     }
 }
@@ -414,7 +333,7 @@ private struct FavoriteBackgroundBlurControl: View {
         blurContent
             .padding(16)
             .frame(maxWidth: 360)
-            .surface
+            .readerChromePanel(cornerRadius: 18)
     }
 
     private var blurContent: some View {
@@ -447,26 +366,29 @@ private struct FavoriteBackgroundChangeImageButton: View {
     let action: () -> Void
 
     var body: some View {
-        if #available(iOS 26.0, *) {
-            Button(action: action, label: label)
-                .font(.subheadline.weight(.semibold))
-                .buttonStyle(.glassProminent)
-                .disabled(isApplying)
-        } else {
-            fallbackButton
-        }
-    }
-
-    private var fallbackButton: some View {
         Button(action: action, label: label)
             .font(.subheadline.weight(.semibold))
-            .buttonStyle(.borderedProminent)
+            .readerChromeButtonStyle(prominent: true, tint: .accentColor)
             .disabled(isApplying)
     }
 
     private func label() -> some View {
         Label(L10n.string("favorite_background.change_image"), systemImage: "photo.on.rectangle.angled")
             .frame(maxWidth: 260)
+    }
+}
+
+private struct FavoriteBackgroundRestoreDefaultButton: View {
+    let isApplying: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(role: .destructive, action: action) {
+            Label(L10n.string("favorite_background.restore_default"), systemImage: "arrow.counterclockwise")
+        }
+        .font(.subheadline.weight(.semibold))
+        .readerChromeButtonStyle(tint: .red)
+        .disabled(isApplying)
     }
 }
 
@@ -481,25 +403,6 @@ private struct ApplyButtonLabel: View {
             Text(L10n.string("common.apply"))
                 .fontWeight(.semibold)
         }
-    }
-}
-
-private extension View {
-    @ViewBuilder
-    var surface: some View {
-        if #available(iOS 26.0, *) {
-            glassEffect(.regular, in: .rect(cornerRadius: 18))
-        } else {
-            materialSurface
-        }
-    }
-
-    private var materialSurface: some View {
-        background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
-            }
     }
 }
 
