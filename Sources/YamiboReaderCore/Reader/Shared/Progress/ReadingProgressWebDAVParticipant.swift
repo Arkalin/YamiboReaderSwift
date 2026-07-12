@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 
 /// WebDAV sync participant for reading progress. Owns the payload format and
@@ -5,6 +6,7 @@ import Foundation
 struct ReadingProgressWebDAVParticipant: WebDAVSyncParticipant {
     let datasetID = "readingProgress"
     let remoteFileName = "yamibo-reading-progress-v1.json"
+    let uploadsOnlyWhenMarkedDirty = true
 
     private let store: ReadingProgressStore
     private let encoder = JSONEncoder()
@@ -33,6 +35,29 @@ struct ReadingProgressWebDAVParticipant: WebDAVSyncParticipant {
     func applyRemote(_ data: Data) async throws {
         let payload = try decoder.decode(ReadingProgressWebDAVPayload.self, from: data)
         try await store.replaceAll(payload.records)
+    }
+
+    // Hashed rather than base64-of-full-JSON (unlike AppSettingsWebDAVParticipant):
+    // this dataset can hold thousands of records, and the fingerprint is persisted
+    // inside the (already UserDefaults-backed) WebDAVSyncSettings blob.
+    func localFingerprint() async -> String? {
+        let records: [ReadingProgressWebDAVRecord]
+        do {
+            records = try await store.loadAll().map { try ReadingProgressWebDAVRecord(record: $0) }
+        } catch {
+            YamiboLog.sync.warning("Failed to build reading progress fingerprint for WebDAV sync: \(error)")
+            return nil
+        }
+        let fingerprintEncoder = JSONEncoder()
+        fingerprintEncoder.outputFormatting = [.sortedKeys]
+        let data: Data
+        do {
+            data = try fingerprintEncoder.encode(records)
+        } catch {
+            YamiboLog.sync.warning("Failed to encode reading progress fingerprint for WebDAV sync: \(error)")
+            return nil
+        }
+        return SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
     }
 }
 

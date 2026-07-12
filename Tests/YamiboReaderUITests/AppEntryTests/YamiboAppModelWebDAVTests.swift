@@ -18,10 +18,15 @@ final class YamiboAppModelWebDAVTests: XCTestCase {
 
         appModel.scheduleWebDAVUploadForReadingProgressChange()
 
-        let localUpdatedAt = try await Self.waitForLocalUpdatedAt(in: webDAVSettingsStore)
+        // markLocalDataChanged now runs after the 2s debounce sleep (not before
+        // it), so this needs a longer poll window than the pre-fix 1s default.
+        let localUpdatedAt = try await Self.waitForLocalUpdatedAt(in: webDAVSettingsStore, timeout: 3.5)
         XCTAssertNotNil(localUpdatedAt)
+        // Every fingerprint-tracked participant gets fingerprinted unconditionally
+        // now (not just when touchesAppSettings is set), and this is the first
+        // call ever, so all of them lack a prior baseline and come up dirty.
         let dirtyDatasetIDs = await webDAVSettingsStore.load().dirtyDatasetIDs
-        XCTAssertTrue(dirtyDatasetIDs.isEmpty)
+        XCTAssertFalse(dirtyDatasetIDs.isEmpty)
     }
 
     @MainActor
@@ -52,10 +57,15 @@ final class YamiboAppModelWebDAVTests: XCTestCase {
 
         try await readingProgressStore.saveNovel(NovelReadingPosition(threadID: "2701", view: 2))
 
-        let localUpdatedAt = try await Self.waitForLocalUpdatedAt(in: webDAVSettingsStore)
+        // markLocalDataChanged now runs after the 2s debounce sleep (not before
+        // it), so this needs a longer poll window than the pre-fix 1s default.
+        let localUpdatedAt = try await Self.waitForLocalUpdatedAt(in: webDAVSettingsStore, timeout: 3.5)
         XCTAssertNotNil(localUpdatedAt)
+        // Every fingerprint-tracked participant gets fingerprinted unconditionally
+        // now (not just when touchesAppSettings is set), and this is the first
+        // call ever, so all of them lack a prior baseline and come up dirty.
         let dirtyDatasetIDs = await webDAVSettingsStore.load().dirtyDatasetIDs
-        XCTAssertTrue(dirtyDatasetIDs.isEmpty)
+        XCTAssertFalse(dirtyDatasetIDs.isEmpty)
     }
 
     private static func waitForLocalUpdatedAt(

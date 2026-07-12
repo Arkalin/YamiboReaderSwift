@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 
 /// WebDAV sync participant for the Like Library. Like Items are effectively
@@ -12,6 +13,7 @@ import Foundation
 struct LikeLibraryWebDAVParticipant: WebDAVSyncParticipant {
     let datasetID = "likeLibrary"
     let remoteFileName = "yamibo-like-library-v1.json"
+    let uploadsOnlyWhenMarkedDirty = true
 
     private let store: LikeStore
     private let encoder = JSONEncoder()
@@ -40,6 +42,24 @@ struct LikeLibraryWebDAVParticipant: WebDAVSyncParticipant {
         // revival, so bare tombstones (no known item data) don't need to be
         // materialized as placeholder rows here.
         try await store.replaceAll(payload.items)
+    }
+
+    // Hashed rather than base64-of-full-JSON (unlike AppSettingsWebDAVParticipant):
+    // this dataset can grow large, and the fingerprint is persisted inside the
+    // (already UserDefaults-backed) WebDAVSyncSettings blob. Includes deleted rows
+    // (matching mergeAndExport's synced subset) so a delete alone still marks dirty.
+    func localFingerprint() async -> String? {
+        let snapshot = await store.allIncludingDeleted()
+        let fingerprintEncoder = JSONEncoder()
+        fingerprintEncoder.outputFormatting = [.sortedKeys]
+        let data: Data
+        do {
+            data = try fingerprintEncoder.encode(snapshot)
+        } catch {
+            YamiboLog.sync.warning("Failed to encode like library fingerprint for WebDAV sync: \(error)")
+            return nil
+        }
+        return SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
     }
 }
 
