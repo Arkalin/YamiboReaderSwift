@@ -422,7 +422,7 @@ public enum LocalFavoriteLibraryProjection {
                 query.selectedTagIDs.isEmpty || query.selectedTagIDs.isSubset(of: Set(entry.representativeItem.tagIDs))
             }
             .map { entry -> FavoriteCardProjection in
-                let resolvedProgress = progress(for: entry, progressByKey: progressByKey)
+                let resolvedProgress = progress(for: entry, progressByKey: progressByKey, boardReaderSettings: boardReaderSettings)
                 // Entries built for the member-scoped "查看归档收藏" archive
                 // page are deliberately shown as ordinary (non-smart) cards —
                 // same treatment as the `mangaDirectory`/`members: nil`
@@ -787,13 +787,46 @@ public enum LocalFavoriteLibraryProjection {
     /// backfill but never actually opened locally).
     private static func progress(
         for entry: GroupedFavoriteEntry,
-        progressByKey: [String: ReadingProgressRecord]
+        progressByKey: [String: ReadingProgressRecord],
+        boardReaderSettings: BoardReaderSettings
     ) -> ReadingProgressRecord? {
         if let directory = entry.mangaDirectory,
            let directoryProgress = progressByKey[directoryProgressKey(for: directory)] {
             return directoryProgress
         }
-        return progressByKey[progressKey(for: entry.representativeItem)]
+        // Progress keys are kind-prefixed, and the reader a favorite opens
+        // with follows the board's current configuration (R11) — so a
+        // stored-normal favorite on a 小说-configured board records its reads
+        // under the `.novelThread` key. Prefer the effective kind's record,
+        // falling back to the stored identity's own (reads from before the
+        // configuration change keep showing).
+        let item = entry.representativeItem
+        if let effectiveKey = effectiveProgressKey(for: item, boardReaderSettings: boardReaderSettings),
+           let effectiveProgress = progressByKey[effectiveKey] {
+            return effectiveProgress
+        }
+        return progressByKey[progressKey(for: item)]
+    }
+
+    /// The progress key the item's *effective* open kind records under —
+    /// `nil` when the item's board has no configuration entry (stored kind
+    /// is the only identity then) or the item has no thread id.
+    private static func effectiveProgressKey(
+        for item: FavoriteItem,
+        boardReaderSettings: BoardReaderSettings
+    ) -> String? {
+        guard let threadID = item.target.threadID,
+              let mode = boardReaderSettings.entry(forumID: item.forumID)?.mode else {
+            return nil
+        }
+        switch mode {
+        case .normal:
+            return FavoriteContentTarget.normalThread(threadID: threadID).id
+        case .novel:
+            return FavoriteContentTarget.novelThread(threadID: threadID).id
+        case .manga:
+            return FavoriteContentTarget.mangaThread(threadID: threadID).id
+        }
     }
 
     private static func directoryProgressKey(for directory: MangaDirectory) -> String {

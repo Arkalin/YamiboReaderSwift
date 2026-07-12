@@ -295,15 +295,14 @@ final class BrowsingHistoryViewModel {
 
     /// History rows already know their content's form — no fid-based
     /// re-classification (a manga row's board may not even be recorded).
+    /// The heart stamps the row's *effective* category (the same one the row
+    /// displays under and opens with, R13) — hearting a pre-configuration
+    /// normal row on a now-小说 board must produce the same `.novelThread`
+    /// favorite that starring the thread on the board page would. Rows whose
+    /// board has no entry keep their recorded identity, exactly like the
+    /// display/open dispatch.
     private func favoriteTargetKind(for entry: BrowsingHistoryEntry) -> FavoriteItemTargetKind {
-        switch entry.target.kind {
-        case .normalThread:
-            .normalThread
-        case .novelThread:
-            .novelThread
-        case .mangaTitle, .mangaThread:
-            .mangaThread
-        }
+        effectiveCategory(for: entry).favoriteTargetKind
     }
 
     private func storedFavoriteItem(threadID: String) async -> FavoriteItem? {
@@ -352,6 +351,22 @@ final class BrowsingHistoryViewModel {
             try await settingsStore.save(settings)
         } catch {
             YamiboLog.library.error("Failed to save remembered remove-remote choice from history page: \(error)")
+        }
+    }
+}
+
+extension BrowsingHistoryCategory {
+    /// Favorite target kind a row of this (effective) category stamps when
+    /// hearted — the display/open category and the favorited identity must
+    /// never disagree.
+    var favoriteTargetKind: FavoriteItemTargetKind {
+        switch self {
+        case .normal:
+            .normalThread
+        case .novel:
+            .novelThread
+        case .manga:
+            .mangaThread
         }
     }
 }

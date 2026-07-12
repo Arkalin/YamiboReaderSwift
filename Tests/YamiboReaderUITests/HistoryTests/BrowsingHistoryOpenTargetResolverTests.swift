@@ -127,6 +127,15 @@ final class BrowsingHistoryOpenTargetResolverTests: XCTestCase {
         XCTAssertEqual(context.threadID, "6006")
     }
 
+    // The heart stamps the row's effective category (R13): the mapping from
+    // effective category to favorite target kind is what keeps "what the row
+    // shows/opens as" and "what gets favorited" in lockstep.
+    func testEffectiveCategoryMapsToFavoriteTargetKind() {
+        XCTAssertEqual(BrowsingHistoryCategory.normal.favoriteTargetKind, .normalThread)
+        XCTAssertEqual(BrowsingHistoryCategory.novel.favoriteTargetKind, .novelThread)
+        XCTAssertEqual(BrowsingHistoryCategory.manga.favoriteTargetKind, .mangaThread)
+    }
+
     // MARK: - Fixture
 
     private struct Fixture {

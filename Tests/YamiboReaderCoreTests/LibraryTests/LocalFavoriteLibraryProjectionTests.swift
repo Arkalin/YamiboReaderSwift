@@ -148,6 +148,71 @@ import Testing
     #expect(firstCard.resolvedTitle == firstRawTitle)
 }
 
+// Progress keys are kind-prefixed while the reader a favorite opens with
+// follows the board's current configuration (R11) — the card's progress
+// display must look up the effective kind's record first (a stored-normal
+// favorite read via the novel reader records under `thread:novel:<tid>`),
+// falling back to the stored identity's own record for reads that predate
+// the configuration change.
+@Test func localFavoriteProjectionResolvesProgressByEffectiveKindWithStoredFallback() throws {
+    var document = FavoriteLibraryDocument()
+    let categoryID = document.defaultCategory.id
+    let item = try FavoriteItem(
+        target: FavoriteItemTarget(kind: .normalThread, threadID: "801"),
+        title: "配置前收藏的小说",
+        sourceGroup: .forumBoard(id: "40", label: "小说板块"),
+        forumID: "40",
+        locations: [.category(categoryID)]
+    )
+    document.addItem(item)
+
+    var boardReader = BoardReaderSettings(entries: [:])
+    boardReader.setEntry(.init(mode: .novel), forumID: "40")
+
+    let novelProgress = ReadingProgressRecord(
+        contentTarget: .novelThread(threadID: "801"),
+        threadID: "801",
+        kind: .novel,
+        updatedAt: Date(timeIntervalSince1970: 100),
+        lastReadAt: Date(timeIntervalSince1970: 200),
+        novel: NovelReadingProgressRecord(novelDocumentSurfaceProgressPercent: 40)
+    )
+    let effectiveCards = LocalFavoriteLibraryProjection.cards(
+        in: document,
+        readingProgress: [novelProgress],
+        boardReaderSettings: boardReader
+    )
+    let effectiveCard = try #require(effectiveCards.first { $0.id == item.id })
+    #expect(effectiveCard.recentReadingAt == Date(timeIntervalSince1970: 200))
+    #expect(effectiveCard.progressPercent == 40)
+
+    // Only a pre-change record under the stored identity: still shown.
+    let storedProgress = ReadingProgressRecord(
+        contentTarget: .normalThread(threadID: "801"),
+        threadID: "801",
+        kind: .novel,
+        updatedAt: Date(timeIntervalSince1970: 50),
+        lastReadAt: Date(timeIntervalSince1970: 60),
+        novel: NovelReadingProgressRecord(novelDocumentSurfaceProgressPercent: 10)
+    )
+    let fallbackCards = LocalFavoriteLibraryProjection.cards(
+        in: document,
+        readingProgress: [storedProgress],
+        boardReaderSettings: boardReader
+    )
+    let fallbackCard = try #require(fallbackCards.first { $0.id == item.id })
+    #expect(fallbackCard.recentReadingAt == Date(timeIntervalSince1970: 60))
+
+    // Both present: the effective kind's record wins.
+    let bothCards = LocalFavoriteLibraryProjection.cards(
+        in: document,
+        readingProgress: [storedProgress, novelProgress],
+        boardReaderSettings: boardReader
+    )
+    let bothCard = try #require(bothCards.first { $0.id == item.id })
+    #expect(bothCard.recentReadingAt == Date(timeIntervalSince1970: 200))
+}
+
 @Test func localFavoriteProjectionSearchesAllowedFieldsOnly() throws {
     let (document, items) = try makeProjectionDocument()
 
