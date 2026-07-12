@@ -248,10 +248,12 @@ final class ForumBoardViewModelTests: XCTestCase {
     }
 
     /// The reader-settings sheet's "普通" selection maps to
-    /// `setBoardReaderMode(nil)`: the persisted entry is removed (no entry =
-    /// plain thread reader, PRD decision #3) and the sheet's optimistic
-    /// `boardReaderEntry` state clears immediately.
-    func testSetBoardReaderModeNilRemovesPersistedEntry() async throws {
+    /// `setBoardReaderMode(.normal)`: the entry is overwritten with an
+    /// explicit `.normal` mode — NOT removed (pluggable-reader-config R12) —
+    /// keeping the stored board-name snapshot, so the favorites open
+    /// dispatch can distinguish "switched back to 普通" from
+    /// "never configured".
+    func testSetBoardReaderModeNormalPersistsExplicitEntry() async throws {
         let settingsStore = try makeBoardSettingsStore(prefix: "forum-board-reader-mode-plain")
         var settings = await settingsStore.load()
         settings.boardReader.setEntry(.init(mode: .novel, boardName: "動漫區"), forumID: "5")
@@ -262,11 +264,12 @@ final class ForumBoardViewModelTests: XCTestCase {
         await model.refreshBoardReaderEntry()
         XCTAssertEqual(model.boardReaderEntry, BoardReaderSettings.Entry(mode: .novel, boardName: "動漫區"))
 
-        model.setBoardReaderMode(nil)
+        model.setBoardReaderMode(.normal)
 
-        XCTAssertNil(model.boardReaderEntry)
+        let expected = BoardReaderSettings.Entry(mode: .normal, boardName: "動漫區")
+        XCTAssertEqual(model.boardReaderEntry, expected)
         try await waitForBoardCondition {
-            await settingsStore.load().boardReader.entry(forumID: "5") == nil
+            await settingsStore.load().boardReader.entry(forumID: "5") == expected
         }
         XCTAssertNil(model.boardReaderErrorMessage)
     }

@@ -679,6 +679,56 @@ final class LocalFavoriteOpenTargetResolverTests: XCTestCase {
         XCTAssertEqual(context.threadID, "5004")
     }
 
+    // The counterpart to the unconfigured-fallback test above: a board
+    // switched BACK to 普通 writes an explicit `.normal` entry (R12), and
+    // that entry — unlike the absence of one — forces the plain thread
+    // reader even for a favorite whose stored kind is novel.
+    func testExplicitNormalEntryOpensStoredNovelThreadFavoriteAsNativeThread() async throws {
+        let suiteName = YamiboTestDefaults.suiteName(prefix: "local-favorites-open-target-explicit-normal")
+        _ = try YamiboTestDefaults.make(suiteName: suiteName)
+        let localFavoriteLibraryStore = FavoriteLibraryStore(
+            defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
+            key: "local-favorites"
+        )
+        let readingProgressStore = ReadingProgressStore(
+            defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
+            key: "reading-progress"
+        )
+        let settingsStore = SettingsStore(
+            defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
+            key: "settings"
+        )
+        var boardReader = BoardReaderSettings(entries: [:])
+        boardReader.setEntry(.init(mode: .normal, boardName: "改回普通的板块"), forumID: "88")
+        try await settingsStore.save(AppSettings(boardReader: boardReader))
+
+        var document = FavoriteLibraryDocument()
+        let item = try FavoriteItem(
+            target: FavoriteItemTarget(kind: .novelThread, threadID: "5005"),
+            title: "改回普通板块的小说收藏",
+            sourceGroup: .forumBoard(id: "88", label: "改回普通的板块"),
+            forumID: "88",
+            forumName: "改回普通的板块",
+            locations: [.category(document.defaultCategory.id)]
+        )
+        document.addItem(item)
+        try await localFavoriteLibraryStore.save(document)
+
+        let resolver = LocalFavoriteOpenTargetResolver(
+            libraryStore: localFavoriteLibraryStore,
+            readingProgressStore: readingProgressStore,
+            mangaDirectoryStore: try makeMangaDirectoryStore(suiteName: suiteName),
+            settingsStore: settingsStore
+        )
+        let opened = try await resolver.openTarget(for: item)
+
+        guard case let .nativeThread(openedURL, title)? = opened else {
+            return XCTFail("Expected a native thread open target")
+        }
+        XCTAssertEqual(openedURL, YamiboRoute.threadByID(tid: "5005", page: 1, authorID: nil, reverse: false).url)
+        XCTAssertEqual(title, "改回普通板块的小说收藏")
+    }
+
     private func makeMangaDirectoryStore(suiteName: String) throws -> MangaDirectoryStore {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("local-favorite-open-target-resolver-tests", isDirectory: true)

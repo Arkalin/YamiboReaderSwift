@@ -213,9 +213,10 @@ struct LocalFavoriteOpenTargetResolver {
     /// 阅读方式 configuration, not the kind stamped into the item at add
     /// time (pluggable-reader-config R11): a board entry configured 小说
     /// opens the novel reader, 漫画 opens the manga path (smart bit queried
-    /// live as before), regardless of what the board was set to when the
-    /// favorite was created. Only when the item's board has NO entry —
-    /// 普通 boards, never-configured boards, and items with no `forumID`
+    /// live as before), and an explicit 普通 entry forces the plain thread
+    /// reader (R12 — switching a board back to 普通 writes a `.normal` entry
+    /// precisely so this dispatch can honor it). Only when the item's board
+    /// has NO entry — never-configured boards and items with no `forumID`
     /// (older/unresolved metadata) — does the stored kind decide, preserving
     /// content-type-derived kinds (a novel-TYPE favorite stays a novel even
     /// on an unconfigured board) and the decided mode-off `.mangaThread`
@@ -230,6 +231,8 @@ struct LocalFavoriteOpenTargetResolver {
             return item.target.kind
         }
         switch entry.mode {
+        case .normal:
+            return .normalThread
         case .novel:
             return .novelThread
         case .manga:

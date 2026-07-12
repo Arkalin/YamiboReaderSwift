@@ -264,9 +264,10 @@ final class SystemSettingsViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.boardReader.entry(forumID: "30")?.mode, .novel)
     }
 
-    /// Removing an entry = back to the plain thread reader; the other
-    /// configured boards are untouched.
-    func testRemoveBoardEntryPersistsRemoval() async throws {
+    /// The row menu's 普通 option overwrites the entry with an explicit
+    /// `.normal` mode (pluggable-reader-config R12) — the entry stays listed
+    /// with its name snapshot, and the other configured boards are untouched.
+    func testSetBoardReaderModeNormalPersistsExplicitEntry() async throws {
         let fixture = try makeFixture()
         try await fixture.settingsStore.save(AppSettings())
 
@@ -274,13 +275,14 @@ final class SystemSettingsViewModelTests: XCTestCase {
         await viewModel.load()
         XCTAssertNotNil(viewModel.boardReader.entry(forumID: "49"))
 
-        viewModel.removeBoardEntry(forumID: "49")
+        viewModel.setBoardReaderMode(.normal, forumID: "49", boardName: "小说板块")
 
+        let expected = BoardReaderSettings.Entry(mode: .normal, boardName: "小说板块")
         try await waitFor {
             let loaded = await fixture.settingsStore.load()
-            return loaded.boardReader.entry(forumID: "49") == nil
+            return loaded.boardReader.entry(forumID: "49") == expected
         }
-        XCTAssertNil(viewModel.boardReader.entry(forumID: "49"))
+        XCTAssertEqual(viewModel.boardReader.entry(forumID: "49"), expected)
         let loaded = await fixture.settingsStore.load()
         XCTAssertEqual(loaded.boardReader.entry(forumID: "55")?.mode, .novel)
         XCTAssertTrue(loaded.boardReader.isSmartComicModeEnabled(forumID: "30"))

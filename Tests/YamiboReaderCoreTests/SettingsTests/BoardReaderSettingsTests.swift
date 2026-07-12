@@ -52,6 +52,22 @@ struct BoardReaderSettingsTests {
         #expect(settings.threadKind(forumID: "  ") == .unknown)
     }
 
+    // An explicit `.normal` entry (R12) classifies and reports smart exactly
+    // like an unconfigured board — its sole behavioral difference lives in
+    // the favorites open dispatch, which checks entry existence itself.
+    @Test func explicitNormalEntryClassifiesLikeUnconfiguredBoard() throws {
+        var settings = BoardReaderSettings()
+        settings.setEntry(.init(mode: .normal, boardName: "改回普通的板块"), forumID: "46")
+        #expect(settings.threadKind(forumID: "46") == .unknown)
+        #expect(settings.isSmartComicModeEnabled(forumID: "46") == false)
+        // The entry itself survives with its name snapshot (it is NOT a
+        // removal) and round-trips through Codable.
+        #expect(settings.entry(forumID: "46") == .init(mode: .normal, boardName: "改回普通的板块"))
+        let data = try JSONEncoder().encode(settings)
+        let decoded = try JSONDecoder().decode(BoardReaderSettings.self, from: data)
+        #expect(decoded == settings)
+    }
+
     @Test func hasAnySmartEnabledBoardIsPurelyAConfigurationCheck() {
         var settings = BoardReaderSettings()
         #expect(settings.hasAnySmartEnabledBoard == true)

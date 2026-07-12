@@ -256,15 +256,16 @@ final class ForumBoardViewModel {
         boardReaderEntry = loaded
     }
 
-    /// `nil` mode = plain thread reader = no entry (PRD decision #3). Every
+    /// Every mode — including `.normal` (an explicit 普通 choice writes an
+    /// entry rather than removing one, R12) — persists as an entry. Every
     /// save stamps the current board-name snapshot: the loaded page's real
     /// name, falling back to the entry's existing snapshot while the page is
     /// unavailable, else `nil` — never a placeholder string.
-    func setBoardReaderMode(_ mode: BoardReaderSettings.ReaderMode?) {
+    func setBoardReaderMode(_ mode: BoardReaderSettings.ReaderMode) {
         guard let settingsStore else { return }
         let previous = boardReaderEntry
         let boardName = boardNameSnapshot ?? previous?.boardName
-        let updated = mode.map { BoardReaderSettings.Entry(mode: $0, boardName: boardName) }
+        let updated = BoardReaderSettings.Entry(mode: mode, boardName: boardName)
         boardReaderEntry = updated
 
         let fid = fid
@@ -276,11 +277,7 @@ final class ForumBoardViewModel {
                 // it to freshly loaded settings inside the actor, so it can
                 // never clobber a concurrent writer's save with a stale blob.
                 try await settingsStore.update { settings in
-                    if let updated {
-                        settings.boardReader.setEntry(updated, forumID: fid)
-                    } else {
-                        settings.boardReader.removeEntry(forumID: fid)
-                    }
+                    settings.boardReader.setEntry(updated, forumID: fid)
                 }
             } catch {
                 if boardReaderEntry == updated {

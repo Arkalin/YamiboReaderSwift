@@ -3,20 +3,29 @@ import Foundation
 /// Per-board reader-mode configuration (板块阅读方式可插拔配置).
 ///
 /// A single `[fid: Entry]` map is the whole model: a board with no entry uses
-/// the plain thread reader, `.novel` opens the novel reader, and `.manga`
-/// opens the manga reader with an embedded Smart Comic Mode bit. The smart
-/// bit only exists on `.manga` — the type cannot express "novel board with
-/// smart on".
+/// the plain thread reader, `.normal` records an *explicit* plain-reader
+/// choice (see below), `.novel` opens the novel reader, and `.manga` opens
+/// the manga reader with an embedded Smart Comic Mode bit. The smart bit only
+/// exists on `.manga` — the type cannot express "novel board with smart on".
+///
+/// `.normal` vs no entry (pluggable-reader-config R12): both classify and
+/// route exactly like a plain board. The one behavioral difference is the
+/// favorites open dispatch (R11) — an explicit `.normal` entry forces the
+/// plain thread reader even for favorites whose stored kind is novel/manga,
+/// whereas a board with no entry falls back to each favorite's stored kind.
+/// Switching a previously-configured board "back to 普通" therefore writes a
+/// `.normal` entry instead of removing the entry.
 ///
 /// One rule, no special cases (pluggable-reader-config decision #4): a board
 /// is smart-enabled iff it is currently configured as `.manga(smartEnabled:
-/// true)`. Unconfigured boards, `.novel` boards, and a missing/blank fid all
-/// report `false` — they behave exactly like plain threads. Callers must
-/// query this configuration (or a launch-context snapshot stamped from it)
-/// explicitly; never infer mode from proxy signals such as a resolved
-/// directory or a non-nil clean book name.
+/// true)`. Unconfigured boards, `.normal`/`.novel` boards, and a
+/// missing/blank fid all report `false` — they behave exactly like plain
+/// threads. Callers must query this configuration (or a launch-context
+/// snapshot stamped from it) explicitly; never infer mode from proxy signals
+/// such as a resolved directory or a non-nil clean book name.
 public struct BoardReaderSettings: Codable, Hashable, Sendable {
     public enum ReaderMode: Codable, Hashable, Sendable {
+        case normal
         case novel
         case manga(smartEnabled: Bool)
     }
@@ -71,14 +80,17 @@ public struct BoardReaderSettings: Codable, Hashable, Sendable {
     }
 
     /// Configuration-driven classification: `.novel`/`.manga` from the
-    /// configured entry, `.unknown` for unconfigured boards and missing fids.
+    /// configured entry, `.unknown` for unconfigured boards, missing fids,
+    /// AND explicit `.normal` entries — an explicit 普通 choice classifies
+    /// and routes exactly like an unconfigured board (its only behavioral
+    /// difference lives in the favorites open dispatch, R11/R12).
     public func threadKind(forumID: String?) -> YamiboThreadKind {
         switch entry(forumID: forumID)?.mode {
         case .novel:
             return .novel
         case .manga:
             return .manga
-        case nil:
+        case .normal, nil:
             return .unknown
         }
     }

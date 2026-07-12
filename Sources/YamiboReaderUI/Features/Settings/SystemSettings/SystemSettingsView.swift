@@ -180,9 +180,6 @@ public struct SystemSettingsView: View {
                             isBusy: viewModel.isBusy,
                             onSelectMode: { mode in
                                 viewModel.setBoardReaderMode(mode, forumID: row.forumID, boardName: row.entry.boardName)
-                            },
-                            onRemove: {
-                                viewModel.removeBoardEntry(forumID: row.forumID)
                             }
                         )
                     }
@@ -625,6 +622,8 @@ private struct SystemSettingsBoardReaderRow: Identifiable {
 
     var modeLabel: String {
         switch entry.mode {
+        case .normal:
+            L10n.string("settings.board_reader.mode.normal")
         case .novel:
             L10n.string("settings.board_reader.mode.novel")
         case .manga(smartEnabled: true):
@@ -636,11 +635,14 @@ private struct SystemSettingsBoardReaderRow: Identifiable {
 }
 
 private enum SystemSettingsBoardReaderModeOption: Hashable, CaseIterable {
+    case normal
     case novel
     case manga
 
     var title: String {
         switch self {
+        case .normal:
+            L10n.string("settings.board_reader.mode.normal")
         case .novel:
             L10n.string("settings.board_reader.mode.novel")
         case .manga:
@@ -653,10 +655,12 @@ private struct SystemSettingsBoardReaderRowMenu: View {
     let row: SystemSettingsBoardReaderRow
     let isBusy: Bool
     let onSelectMode: (BoardReaderSettings.ReaderMode) -> Void
-    let onRemove: () -> Void
 
     var body: some View {
         Menu {
+            // 普通 is a first-class mode option here (an explicit `.normal`
+            // entry, R12), not a destructive "remove" action — so no
+            // destructive button and no menu divider.
             Picker(L10n.string("settings.board_reader.mode"), selection: modeBinding) {
                 ForEach(SystemSettingsBoardReaderModeOption.allCases, id: \.self) { option in
                     Text(option.title)
@@ -673,10 +677,6 @@ private struct SystemSettingsBoardReaderRowMenu: View {
                     )
                 )
             }
-
-            Button(role: .destructive, action: onRemove) {
-                Text(L10n.string("settings.board_reader.remove"))
-            }
         } label: {
             SystemSettingsRow(
                 title: row.displayName,
@@ -690,13 +690,20 @@ private struct SystemSettingsBoardReaderRowMenu: View {
     private var modeBinding: Binding<SystemSettingsBoardReaderModeOption> {
         Binding(
             get: {
-                if case .novel = row.entry.mode {
-                    return .novel
+                switch row.entry.mode {
+                case .normal:
+                    .normal
+                case .novel:
+                    .novel
+                case .manga:
+                    .manga
                 }
-                return .manga
             },
             set: { option in
                 switch option {
+                case .normal:
+                    guard row.entry.mode != .normal else { return }
+                    onSelectMode(.normal)
                 case .novel:
                     guard row.entry.mode != .novel else { return }
                     onSelectMode(.novel)

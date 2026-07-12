@@ -368,15 +368,6 @@ final class SystemSettingsViewModel: ObservableObject {
         }
     }
 
-    /// Removing the entry = back to the plain thread reader (PRD decision #3).
-    func removeBoardEntry(forumID: String) {
-        var optimistic = boardReader
-        optimistic.removeEntry(forumID: forumID)
-        updateBoardReader(optimistic: optimistic) { settings in
-            settings.boardReader.removeEntry(forumID: forumID)
-        }
-    }
-
     func resetBoardReader() {
         updateBoardReader(optimistic: .factoryDefault) { settings in
             settings.boardReader = .factoryDefault

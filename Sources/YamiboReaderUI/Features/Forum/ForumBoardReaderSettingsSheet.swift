@@ -85,7 +85,7 @@ struct ForumBoardReaderSettingsSheet: View {
             .novel
         case .manga:
             .manga
-        case nil:
+        case .normal, nil:
             .plain
         }
     }
@@ -94,10 +94,15 @@ struct ForumBoardReaderSettingsSheet: View {
         Binding(
             get: { currentSelection },
             set: { selection in
+                // The change guard doubles as entry hygiene: a never-
+                // configured board re-selecting 普通 is a no-op (no `.normal`
+                // entry gets created), while switching AWAY from novel/manga
+                // records the explicit `.normal` entry that forces plain
+                // opening in the favorites dispatch (R12).
                 guard selection != currentSelection else { return }
                 switch selection {
                 case .plain:
-                    model.setBoardReaderMode(nil)
+                    model.setBoardReaderMode(.normal)
                 case .novel:
                     model.setBoardReaderMode(.novel)
                 case .manga:

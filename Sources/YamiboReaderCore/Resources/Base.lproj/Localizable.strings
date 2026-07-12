@@ -893,9 +893,9 @@
 "settings.board_reader.footer" = "在板块页面的“更多”菜单里也可以配置阅读方式；未列出的板块将使用普通帖子阅读器打开。";
 "settings.board_reader.mode" = "阅读方式";
 "settings.board_reader.mode.manga" = "漫画";
+"settings.board_reader.mode.normal" = "普通";
 "settings.board_reader.mode.novel" = "小说";
 "settings.board_reader.mode.smart_manga" = "漫画 · 智能";
-"settings.board_reader.remove" = "改回普通帖子";
 "settings.board_reader.restore" = "恢复";
 "settings.board_reader.restore_default" = "恢复默认配置";
 "settings.board_reader.restore_default_message" = "这将移除所有自定义的板块阅读方式，恢复为默认配置。";
