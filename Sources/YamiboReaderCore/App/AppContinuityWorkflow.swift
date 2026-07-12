@@ -80,15 +80,26 @@ public final class AppContinuityWorkflow: Sendable {
         )
     }
 
-    public func localDataChanged(touchesAppSettings: Bool = false) {
+    // `touchesAppSettings` no longer changes behavior (markLocalDataChanged now
+    // fingerprints every dirty-tracked participant unconditionally — see its
+    // doc comment) but the parameter stays for source compatibility with
+    // existing call sites.
+    public func localDataChanged(touchesAppSettings _: Bool = false) {
         guard state.withLock({ !$0.isWebDAVSyncInProgress }) else { return }
         replaceDebouncedUploadTask(
             with: Task { [weak self] in
                 guard let self else { return }
                 do {
-                    let service = appContext.makeWebDAVSyncService()
-                    try await service.markLocalDataChanged(touchesAppSettings: touchesAppSettings)
+                    // Marking + fingerprinting is deferred past the debounce sleep so a
+                    // burst of local changes (e.g. rapid page turns) costs one
+                    // UserDefaults rewrite + fingerprint pass per quiet window instead
+                    // of one per change; `willEnterBackground` marks synchronously
+                    // before its own flush so backgrounding mid-debounce still syncs
+                    // fresh state.
                     try await Task.sleep(for: .seconds(2))
+
+                    let service = appContext.makeWebDAVSyncService()
+                    try await service.markLocalDataChanged()
 
                     guard beginWebDAVSync() else { return }
                     defer { endWebDAVSync() }
@@ -180,7 +191,9 @@ public final class AppContinuityWorkflow: Sendable {
         defer { endWebDAVSync() }
 
         do {
-            return try await appContext.makeWebDAVSyncService().synchronizeAutomatically()
+            // Foreground activation is an infrequent, natural checkpoint, so it
+            // always syncs regardless of the minimum automatic-sync interval.
+            return try await appContext.makeWebDAVSyncService().synchronizeAutomatically(bypassingMinimumInterval: true)
         } catch {
             // Automatic sync should never block the app shell.
             YamiboLog.sync.warning("Automatic WebDAV sync failed: \(error)")
@@ -193,7 +206,13 @@ public final class AppContinuityWorkflow: Sendable {
         defer { endWebDAVSync() }
 
         do {
-            try await appContext.makeWebDAVSyncService().synchronizeAutomatically()
+            // Marks dirty state synchronously here (rather than relying on the
+            // debounced task, which this call site's caller already cancelled) so
+            // edits made just before backgrounding aren't left unmarked until some
+            // unrelated later change happens to trigger markLocalDataChanged again.
+            let service = appContext.makeWebDAVSyncService()
+            try await service.markLocalDataChanged()
+            try await service.synchronizeAutomatically(bypassingMinimumInterval: true)
         } catch {
             // Background flush is best effort.
             YamiboLog.sync.warning("Background WebDAV sync flush failed: \(error)")

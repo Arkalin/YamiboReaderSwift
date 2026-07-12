@@ -243,7 +243,11 @@ private enum WebDAVTestError: Error {
     }
     defer { WebDAVTestURLProtocol.removeHandler(for: fixture.host) }
 
-    let result = try await fixture.makeService().synchronizeAutomatically()
+    let service = fixture.makeService()
+    // Favorite library upload is gated on dirty tracking now; mark it dirty the
+    // way the real debounced-local-change path does before syncing.
+    try await service.markLocalDataChanged()
+    let result = try await service.synchronizeAutomatically()
 
     #expect(result == .uploaded)
     #expect(!putPaths.contains { $0.hasSuffix("yamibo-sync-v1.json") })
@@ -251,6 +255,58 @@ private enum WebDAVTestError: Error {
     let updatedSettings = await fixture.settingsStore.load()
     #expect(updatedSettings.lastSyncedAt != nil)
     #expect(updatedSettings.lastRemoteUpdatedAt != nil)
+}
+
+@Test func webDAVAutomaticSyncSkipsNetworkRoundWithinMinimumInterval() async throws {
+    let fixture = try WebDAVSyncFixture(prefix: "webdav-min-interval-skip")
+    try await fixture.settingsStore.save(WebDAVSyncSettings(
+        baseURLString: "https://\(fixture.host)",
+        username: "admin",
+        password: "secret",
+        isAutoSyncEnabled: true,
+        lastSyncedAt: .now,
+        lastRemoteUpdatedAt: Date(timeIntervalSince1970: 1_000),
+        localUpdatedAt: .now
+    ))
+    try await fixture.signIn(accountUID: "123")
+
+    var requestCount = 0
+    WebDAVTestURLProtocol.setHandler(for: fixture.host) { request in
+        requestCount += 1
+        return (Data(), HTTPURLResponse(url: request.url!, statusCode: 404, httpVersion: nil, headerFields: nil)!)
+    }
+    defer { WebDAVTestURLProtocol.removeHandler(for: fixture.host) }
+
+    let result = try await fixture.makeService().synchronizeAutomatically()
+
+    #expect(result == .skipped)
+    #expect(requestCount == 0)
+}
+
+@Test func webDAVAutomaticSyncBypassesMinimumIntervalForForegroundAndBackgroundCheckpoints() async throws {
+    let fixture = try WebDAVSyncFixture(prefix: "webdav-min-interval-bypass")
+    try await fixture.settingsStore.save(WebDAVSyncSettings(
+        baseURLString: "https://\(fixture.host)",
+        username: "admin",
+        password: "secret",
+        isAutoSyncEnabled: true,
+        lastSyncedAt: .now,
+        lastRemoteUpdatedAt: .now,
+        localUpdatedAt: .now
+    ))
+    try await fixture.signIn(accountUID: "123")
+
+    var requestCount = 0
+    WebDAVTestURLProtocol.setHandler(for: fixture.host) { request in
+        requestCount += 1
+        return (Data(), HTTPURLResponse(url: request.url!, statusCode: 404, httpVersion: nil, headerFields: nil)!)
+    }
+    defer { WebDAVTestURLProtocol.removeHandler(for: fixture.host) }
+
+    let result = try await fixture.makeService().synchronizeAutomatically(bypassingMinimumInterval: true)
+
+    #expect(result != .skipped)
+    #expect(requestCount > 0)
 }
 
 @Test func webDAVLocalFirstManualSyncRequiresConfirmationForAccountMismatch() async throws {

@@ -169,9 +169,15 @@ struct WebDAVClient: Sendable {
         return data
     }
 
+    /// Ensures the remote sync directory exists. Callers batch this to once
+    /// per sync round rather than once per uploaded dataset.
+    func ensureDirectoryExists(settings: WebDAVSyncSettings) async throws {
+        let config = try configuration(from: settings, fileName: "")
+        try await createDirectoryIfNeeded(configuration: config)
+    }
+
     func uploadPayloadData(_ data: Data, settings: WebDAVSyncSettings, fileName: String) async throws {
         let config = try configuration(from: settings, fileName: fileName)
-        try await createDirectoryIfNeeded(configuration: config)
 
         var request = YamiboNetworkConfiguration.makeRequest(url: config.fileURL)
         request.httpMethod = "PUT"
@@ -237,6 +243,13 @@ struct WebDAVClient: Sendable {
 }
 
 public actor WebDAVSyncService {
+    /// Floor between unattended automatic sync rounds triggered by ongoing
+    /// local edits (e.g. reading progress ticking every page turn). Chosen to
+    /// cut chatter during an active reading session by roughly two orders of
+    /// magnitude versus the previous ~2.4s cadence, while foreground/background
+    /// transitions (see `bypassingMinimumInterval`) still sync promptly.
+    private static let minimumAutomaticSyncInterval: TimeInterval = 5 * 60
+
     private let settingsStore: WebDAVSyncSettingsStore
     private let sessionStore: SessionStore
     private let participants: [any WebDAVSyncParticipant]
@@ -308,11 +321,21 @@ public actor WebDAVSyncService {
         return updatedAt
     }
 
+    /// - Parameter bypassingMinimumInterval: Foreground activation and the
+    ///   background flush are natural, infrequent checkpoints and always pass
+    ///   `true` here. The debounced local-change path (many rounds during an
+    ///   active reading session) leaves this `false` so most of those rounds
+    ///   are skipped, only touching `localUpdatedAt`/dirty state, not the network.
     @discardableResult
-    public func synchronizeAutomatically() async throws -> WebDAVAutomaticSyncResult {
+    public func synchronizeAutomatically(bypassingMinimumInterval: Bool = false) async throws -> WebDAVAutomaticSyncResult {
         let settings = await settingsStore.load()
         let sessionState = await sessionStore.load()
         guard policyModule.canSynchronizeAutomatically(settings: settings, session: sessionState) else { return .skipped }
+        if !bypassingMinimumInterval,
+           let lastSyncedAt = settings.lastSyncedAt,
+           Date.now.timeIntervalSince(lastSyncedAt) < Self.minimumAutomaticSyncInterval {
+            return .skipped
+        }
         guard let accountUID = try? currentAccountUID(from: sessionState) else { return .skipped }
 
         let remotePayloads = try await fetchRemotePayloads(settings: settings)
@@ -353,20 +376,23 @@ public actor WebDAVSyncService {
         return .skipped
     }
 
-    /// Records that locally synchronized data changed. When `touchesAppSettings`
-    /// is true, fingerprint-tracked participants are re-fingerprinted and marked
-    /// dirty if their synchronized subset actually changed.
-    public func markLocalDataChanged(at date: Date = .now, touchesAppSettings: Bool = false) async throws {
+    /// Records that locally synchronized data changed and re-fingerprints
+    /// every fingerprint-tracked participant, marking it dirty if its
+    /// synchronized subset actually changed. Runs unconditionally regardless
+    /// of which dataset's notification triggered the call: callers don't say
+    /// which participant changed, and fingerprinting is cheap, so checking
+    /// all of them is simpler and cannot under-mark a dataset dirty (unlike an
+    /// earlier version gated on a per-caller flag, which left non-flagged
+    /// participants' dirty state uncomputed forever).
+    public func markLocalDataChanged(at date: Date = .now) async throws {
         var settings = await settingsStore.load()
         guard settings.isAutoSyncEnabled else { return }
         settings.localUpdatedAt = date
-        if touchesAppSettings {
-            for participant in participants where participant.uploadsOnlyWhenMarkedDirty {
-                guard let fingerprint = await participant.localFingerprint() else { continue }
-                if settings.lastSyncedFingerprintByDatasetID[participant.datasetID] != fingerprint {
-                    settings.dirtyDatasetIDs.insert(participant.datasetID)
-                    settings.lastSyncedFingerprintByDatasetID[participant.datasetID] = fingerprint
-                }
+        for participant in participants where participant.uploadsOnlyWhenMarkedDirty {
+            guard let fingerprint = await participant.localFingerprint() else { continue }
+            if settings.lastSyncedFingerprintByDatasetID[participant.datasetID] != fingerprint {
+                settings.dirtyDatasetIDs.insert(participant.datasetID)
+                settings.lastSyncedFingerprintByDatasetID[participant.datasetID] = fingerprint
             }
         }
         try await settingsStore.save(settings)
@@ -433,6 +459,8 @@ public actor WebDAVSyncService {
         accountUID: String,
         updatedAt: Date
     ) async throws {
+        guard !included.isEmpty else { return }
+        try await client.ensureDirectoryExists(settings: settings)
         for participant in included {
             let payloadData = try await participant.mergeAndExport(
                 remoteData: remotePayloads[participant.datasetID]?.data,
