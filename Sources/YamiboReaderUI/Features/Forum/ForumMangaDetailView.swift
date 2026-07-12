@@ -42,6 +42,9 @@ struct ForumMangaDetailView: View {
             onUpdateDirectoryTap: {
                 Task { await model.updateDirectoryFromDetail() }
             },
+            onFavoriteTap: {
+                Task { await model.toggleFavorite() }
+            },
             onCorrectionTap: presentCorrectionSheet,
             onCopyText: copyText,
             onViewThread: onViewThread
@@ -62,6 +65,33 @@ struct ForumMangaDetailView: View {
             .presentationDetents([.height(MangaDirectoryCorrectionSheet.preferredHeight)])
         }
         .alert(
+            L10n.string("forum.thread.favorite_failed"),
+            isPresented: Binding(
+                get: { model.favoriteErrorMessage != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        model.clearFavoriteError()
+                    }
+                }
+            )
+        ) {
+            Button(L10n.string("common.ok")) {
+                model.clearFavoriteError()
+            }
+        } message: {
+            Text(model.favoriteErrorMessage ?? "")
+        }
+        .favoriteQuickActionDialogs(
+            addPromptPresented: Bindable(model).favoriteAddPromptPresented,
+            removePrompt: Bindable(model).favoriteRemovePrompt,
+            onConfirmAdd: { syncToRemote, remember in
+                Task { await model.confirmFavoriteAdd(syncToRemote: syncToRemote, remember: remember) }
+            },
+            onConfirmRemoval: { favorite, removeRemote, remember in
+                Task { await model.confirmFavoriteRemoval(favorite, removeRemote: removeRemote, remember: remember) }
+            }
+        )
+        .alert(
             L10n.string("forum.thread_route.copied"),
             isPresented: Binding(
                 get: { copiedTextMessage != nil },
@@ -77,6 +107,9 @@ struct ForumMangaDetailView: View {
             }
         } message: {
             Text(copiedTextMessage ?? "")
+        }
+        .forumTransientMessage(model.transientMessage) {
+            model.clearTransientMessage()
         }
     }
 
@@ -106,6 +139,7 @@ private struct ForumMangaDetailBodyView: View {
     let onContinueTap: () -> Void
     let onChapterTap: (MangaChapter) -> Void
     let onUpdateDirectoryTap: () -> Void
+    let onFavoriteTap: () -> Void
     let onCorrectionTap: () -> Void
     let onCopyText: ((String) -> Void)?
     let onViewThread: () -> Void
@@ -127,8 +161,10 @@ private struct ForumMangaDetailBodyView: View {
                             isSearchMode: model.isSearchMode,
                             isForcedSearchShortcutActive: model.forcedSearchShortcutRemaining != nil,
                             isCorrectionEnabled: !model.isDirectoryActionRunning,
+                            isFavorited: model.isFavorited,
                             onContinueTap: onContinueTap,
                             onUpdateDirectoryTap: onUpdateDirectoryTap,
+                            onFavoriteTap: onFavoriteTap,
                             onCorrectionTap: onCorrectionTap,
                             onCopyText: onCopyText,
                             onViewThread: onViewThread
@@ -198,8 +234,10 @@ private struct ForumMangaDetailHeader: View {
     let isSearchMode: Bool
     let isForcedSearchShortcutActive: Bool
     let isCorrectionEnabled: Bool
+    let isFavorited: Bool
     let onContinueTap: () -> Void
     let onUpdateDirectoryTap: () -> Void
+    let onFavoriteTap: () -> Void
     let onCorrectionTap: () -> Void
     let onCopyText: ((String) -> Void)?
     let onViewThread: () -> Void
@@ -250,8 +288,10 @@ private struct ForumMangaDetailHeader: View {
                 isUpdateButtonEnabled: isUpdateButtonEnabled,
                 isSearchMode: isSearchMode,
                 isForcedSearchShortcutActive: isForcedSearchShortcutActive,
+                isFavorited: isFavorited,
                 onContinueTap: onContinueTap,
                 onUpdateDirectoryTap: onUpdateDirectoryTap,
+                onFavoriteTap: onFavoriteTap,
                 onViewThread: onViewThread
             )
         }
@@ -379,19 +419,23 @@ private struct ForumMangaHeaderActions: View {
     let isUpdateButtonEnabled: Bool
     let isSearchMode: Bool
     let isForcedSearchShortcutActive: Bool
+    let isFavorited: Bool
     let onContinueTap: () -> Void
     let onUpdateDirectoryTap: () -> Void
+    let onFavoriteTap: () -> Void
     let onViewThread: () -> Void
 
     var body: some View {
         ViewThatFits(in: .horizontal) {
             HStack(spacing: 8) {
                 readButton
+                favoriteButton
                 updateButton
                 discussionButton(showsTitle: true)
             }
             HStack(spacing: 8) {
                 readButton
+                favoriteButton
                 updateButton
                 discussionButton(showsTitle: false)
             }
@@ -412,6 +456,18 @@ private struct ForumMangaHeaderActions: View {
             .background(ForumColors.brownDeep, in: Capsule())
         }
         .buttonStyle(.plain)
+    }
+
+    private var favoriteButton: some View {
+        Button(action: onFavoriteTap) {
+            Image(systemName: isFavorited ? "star.fill" : "star")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(ForumColors.brownEmphasis)
+                .frame(width: 42, height: 38)
+                .background(ForumColors.brownPrimary.opacity(0.16), in: Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(isFavorited ? L10n.string("forum.thread.favorited") : L10n.string("forum.thread.favorite"))
     }
 
     /// The reader directory sheet's update/search button, relocated onto the
