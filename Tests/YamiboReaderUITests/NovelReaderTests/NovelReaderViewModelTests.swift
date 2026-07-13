@@ -3070,20 +3070,53 @@ final class NovelReaderViewModelTests: XCTestCase {
     }
 
     func testStartCachingEnqueuesSelectedViewsInSharedDownloadQueue() async throws {
+        defer { NovelReaderTestURLProtocol.handler = nil }
+
+        // `startCaching` is backed by `NovelOfflineStoreReaderCacheOperationAdapter`,
+        // which only *enqueues* views 2 and 3 into the shared offline-cache
+        // download queue (a fast, network-independent GRDB write) and then
+        // fires-and-forgets `OfflineCacheQueueExecutor.continueQueue()` to kick
+        // off the actual background download. The assertions below target that
+        // enqueue step, so the mocked network response only needs to resolve
+        // fast rather than succeed: without a mock, `URLSession.shared` tries
+        // the real (unreachable, in this sandbox) forum server and the
+        // background download hangs for a very long time before giving up,
+        // which doesn't block `operation.status` but does hold the queued
+        // work open long past this test's lifetime. A fast-failing mock lets
+        // the background attempt fail immediately instead, which is also the
+        // behavior the original assertions assume (`cachedViews == []`,
+        // `queueEntryCount == 2`, i.e. still-queued/not-yet-downloaded), and
+        // matches what the real server would actually return for this thread
+        // ID, which doesn't exist.
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [NovelReaderTestURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        NovelReaderTestURLProtocol.handler = { request in
+            (
+                Data("server error".utf8),
+                HTTPURLResponse(url: request.url!, statusCode: 500, httpVersion: nil, headerFields: ["Content-Type": "text/html; charset=utf-8"])!
+            )
+        }
+
         let threadID = "7001"
 
         let model = try await makeModel(
             documents: [
                 makeDocument(threadID: threadID, view: 1, maxView: 3, chapterTitles: ["当前页"]),
-            ]
+            ],
+            session: session
         )
 
         await MainActor.run {
             model.cache.startCaching(views: [2, 3])
         }
 
+        // `cachingViews` can be set early by a separate, notification-driven
+        // refresh path (NovelReaderCacheCoordinator.startObservingOfflineCacheUpdates)
+        // before the batch operation's own `finalize()` runs, so wait on the
+        // terminal `operation.status` the assertions below actually depend on.
         try await waitFor {
-            await MainActor.run { model.cache.state.views.cachingViews == [2, 3] }
+            await MainActor.run { model.cache.state.operation.status == .completed }
         }
 
         await MainActor.run {
