@@ -149,6 +149,43 @@ final class MangaReaderDirectoryPanelTests: XCTestCase {
         XCTAssertNil(loaded.directoryPanel.errorMessage)
     }
 
+    /// Reset must discard the stored "999" chapter (standing in for a stale
+    /// or manually-corrected row) and rebuild the directory from a fresh
+    /// network seed, while keeping the panel's title stable.
+    func testResetDirectoryReseedsFromNetworkDiscardingStaleChapters() async throws {
+        let directory = MangaDirectory(
+            cleanBookName: "本地目录",
+            strategy: .searched,
+            sourceKey: "旧来源",
+            chapters: [
+                makeChapter(tid: "700", title: "第1话"),
+                makeChapter(tid: "999", title: "手动新增的章节")
+            ]
+        )
+        let fixture = try await makeDirectoryPanelFixture(
+            directoryName: "本地目录",
+            seed: MangaDirectorySeed(
+                currentChapter: makeChapter(tid: "700", title: "第1话"),
+                tagIDs: ["31"],
+                cleanBookName: "本地目录"
+            ),
+            storedDirectories: [directory],
+            tagChapters: [makeChapter(tid: "701", title: "第2话")]
+        )
+
+        await fixture.model.prepare()
+        await fixture.model.resetDirectory()
+
+        guard case let .loaded(loaded) = fixture.model.presentation.state else {
+            XCTFail("Expected loaded presentation")
+            return
+        }
+        XCTAssertEqual(loaded.directoryPanel.displayChapters.map(\.tid), ["700", "701"])
+        XCTAssertFalse(loaded.directoryPanel.displayChapters.contains(where: { $0.tid == "999" }))
+        XCTAssertEqual(loaded.directoryPanel.directoryTitle, "本地目录")
+        XCTAssertNil(loaded.directoryPanel.errorMessage)
+    }
+
     func testDirectoryChapterJumpUsesDirectViewportPlacement() async throws {
         let document700 = try makeDocument(tid: "700", pageCount: 1)
         let document701 = try makeDocument(tid: "701", pageCount: 1)

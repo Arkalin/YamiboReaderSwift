@@ -787,6 +787,19 @@ public final class MangaReaderViewModel: ObservableObject {
         await enqueueDirectoryUpdate(isForcedSearch: isForcedSearch, isAutomatic: false)
     }
 
+    public func resetDirectory() async {
+        automaticDirectoryUpdateTask?.cancel()
+        automaticDirectoryUpdateTask = nil
+        directoryMutationTask?.cancel()
+        invalidateReaderContent()
+        directoryMutationGeneration += 1
+        let generation = directoryMutationGeneration
+        directoryMutationTask = Task { @MainActor [weak self] in
+            await self?.performDirectoryReset(mutationGeneration: generation)
+        }
+        await directoryMutationTask?.value
+    }
+
     public func renameDirectory(cleanBookName: String, searchKeyword: String) async {
         automaticDirectoryUpdateTask?.cancel()
         automaticDirectoryUpdateTask = nil
@@ -941,6 +954,51 @@ public final class MangaReaderViewModel: ObservableObject {
         } catch {
             guard !Task.isCancelled, directoryMutationGeneration == mutationGeneration else { return }
             YamiboLog.reader.error("Manga directory update failed: \(error.localizedDescription)")
+            if case let YamiboError.searchCooldown(seconds) = error {
+                directoryCooldownExpiresAt = dependencies.directoryWorkflowConfiguration.now()
+                    .addingTimeInterval(TimeInterval(seconds))
+                forcedSearchShortcutExpiresAt = nil
+            } else if let cooldown = await workflow.currentDirectorySearchCooldownExpiresAt() {
+                directoryCooldownExpiresAt = cooldown
+                forcedSearchShortcutExpiresAt = nil
+            }
+            refreshDirectoryPanelTiming(errorMessage: error.localizedDescription)
+        }
+    }
+
+    private func performDirectoryReset(mutationGeneration: Int) async {
+        guard let workflow else { return }
+        let previousProgressSnapshot = progressSnapshot(from: presentation)
+
+        defer {
+            if directoryMutationGeneration == mutationGeneration {
+                directoryMutationTask = nil
+            }
+        }
+
+        setDirectoryPanelCommandState(isUpdating: true, errorMessage: nil)
+        do {
+            let result = try await workflow.resetDirectory()
+            guard !Task.isCancelled, directoryMutationGeneration == mutationGeneration else { return }
+            publishPresentation(workflow.presentation, previousProgressSnapshot: previousProgressSnapshot)
+            if let cooldownExpiresAt = result.cooldownExpiresAt {
+                directoryCooldownExpiresAt = cooldownExpiresAt
+                forcedSearchShortcutExpiresAt = nil
+            } else if result.shouldOfferForcedSearch {
+                directoryCooldownExpiresAt = nil
+                forcedSearchShortcutExpiresAt = dependencies.directoryWorkflowConfiguration.now()
+                    .addingTimeInterval(dependencies.directoryWorkflowConfiguration.forcedSearchShortcutDuration)
+            } else {
+                directoryCooldownExpiresAt = nil
+                forcedSearchShortcutExpiresAt = nil
+            }
+            refreshDirectoryPanelTiming(errorMessage: nil)
+        } catch is CancellationError {
+            guard directoryMutationGeneration == mutationGeneration else { return }
+            refreshDirectoryPanelTiming(errorMessage: currentDirectoryPanelErrorMessage)
+        } catch {
+            guard !Task.isCancelled, directoryMutationGeneration == mutationGeneration else { return }
+            YamiboLog.reader.error("Manga directory reset failed: \(error.localizedDescription)")
             if case let YamiboError.searchCooldown(seconds) = error {
                 directoryCooldownExpiresAt = dependencies.directoryWorkflowConfiguration.now()
                     .addingTimeInterval(TimeInterval(seconds))

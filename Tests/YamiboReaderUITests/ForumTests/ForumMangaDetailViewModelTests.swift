@@ -291,6 +291,66 @@ import YamiboReaderTestSupport
     #expect(model.directoryCooldownRemaining > 0)
 }
 
+/// Reset must discard the stored "998" chapter (standing in for a stale or
+/// manually-corrected row) and rebuild the directory from a fresh network
+/// seed, while keeping the directory's `cleanBookName` identity.
+@MainActor
+@Test func forumMangaDetailResetDirectoryReseedsFromNetworkDiscardingStaleChapters() async throws {
+    let suiteName = YamiboTestDefaults.suiteName(prefix: "manga-detail-reset")
+    _ = try YamiboTestDefaults.make(suiteName: suiteName)
+    let mangaDirectoryStore = try makeForumMangaDetailTestDirectoryStore(suiteName: suiteName)
+    let readingProgressStore = ReadingProgressStore(
+        defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
+        key: "reading-progress"
+    )
+
+    let directory = MangaDirectory(
+        cleanBookName: "测试漫画四",
+        strategy: .searched,
+        sourceKey: "旧来源",
+        chapters: [
+            MangaChapter(tid: "950", rawTitle: "第1话", chapterNumber: 1, view: 1),
+            MangaChapter(tid: "998", rawTitle: "手动新增的章节", chapterNumber: 98, view: 1),
+        ],
+        lastUpdatedAt: Date()
+    )
+    try await mangaDirectoryStore.saveDirectory(directory)
+
+    let repository = ConfigurableMangaDirectoryRepository(
+        seed: MangaDirectorySeed(
+            currentChapter: MangaChapter(tid: "950", rawTitle: "第1话", chapterNumber: 1, view: 1),
+            tagIDs: ["77"],
+            cleanBookName: "测试漫画四"
+        ),
+        tagDirectoryResults: [
+            MangaChapter(tid: "951", rawTitle: "测试漫画四 第2话", chapterNumber: 2, view: 1)
+        ]
+    )
+    let dependencies = try makeForumMangaDetailDependencies(
+        readingProgressStore: readingProgressStore,
+        mangaDirectoryStore: mangaDirectoryStore,
+        projectionLoader: FakeMangaReaderProjectionLoader(projectionsByTID: [
+            "950": makeTestMangaReaderProjection(tid: "950", chapterTitle: "第1话")
+        ]),
+        directoryRepository: repository
+    )
+    let model = makeForumMangaDetailViewModel(
+        dependencies: dependencies,
+        threadTID: "950"
+    )
+
+    await model.reload()
+    #expect(model.directory?.chapters.map(\.tid) == ["950", "998"])
+
+    await model.resetDirectoryFromDetail()
+
+    #expect(model.directoryActionErrorMessage == nil)
+    #expect(model.directory?.cleanBookName == "测试漫画四")
+    #expect(model.directory?.chapters.map(\.tid) == ["950", "951"])
+    #expect(repository.tagDirectoryCallCount == 1)
+    #expect(repository.seedCallCount == 1)
+}
+
 /// Tag-directory update path: a successful tag refresh that performed no
 /// search offers the 5-second forced-search shortcut, and tapping the button
 /// inside that window escalates to a real global search.
@@ -804,12 +864,15 @@ private struct FixedPageThreadCoverPageRepository: ThreadCoverPageResolving {
 /// call counts so tests can assert which update path ran.
 private final class ConfigurableMangaDirectoryRepository: MangaDirectoryRepository, @unchecked Sendable {
     private let lock = NSLock()
+    private let seed: MangaDirectorySeed?
     private let tagDirectoryResults: [MangaChapter]
     private let searchResults: [MangaChapter]
     private var _tagDirectoryCallCount = 0
     private var _searchCallCount = 0
+    private var _seedCallCount = 0
 
-    init(tagDirectoryResults: [MangaChapter] = [], searchResults: [MangaChapter] = []) {
+    init(seed: MangaDirectorySeed? = nil, tagDirectoryResults: [MangaChapter] = [], searchResults: [MangaChapter] = []) {
+        self.seed = seed
         self.tagDirectoryResults = tagDirectoryResults
         self.searchResults = searchResults
     }
@@ -822,8 +885,16 @@ private final class ConfigurableMangaDirectoryRepository: MangaDirectoryReposito
         lock.withLock { _searchCallCount }
     }
 
+    var seedCallCount: Int {
+        lock.withLock { _seedCallCount }
+    }
+
     func loadDirectorySeed(for threadID: String) async throws -> MangaDirectorySeed {
-        fatalError("loadDirectorySeed is not exercised by ForumMangaDetailViewModelTests")
+        guard let seed else {
+            fatalError("loadDirectorySeed is not exercised by ForumMangaDetailViewModelTests")
+        }
+        lock.withLock { _seedCallCount += 1 }
+        return seed
     }
 
     func loadTagDirectory(tagIDs: [String], allowedForumID: String) async throws -> [MangaChapter] {

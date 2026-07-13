@@ -8,6 +8,7 @@ struct MangaDirectorySheet: View {
     let panel: MangaDirectoryPanelPresentation
     let onSortOrderChange: (MangaDirectorySortOrder) -> Void
     let onUpdateDirectory: () -> Void
+    let onResetDirectory: () -> Void
     let onSaveCorrection: (MangaDirectoryEditDraft) -> Void
     let onDeleteChapters: (Set<String>) -> Void
     let onSelectChapter: (MangaChapter) -> Void
@@ -24,6 +25,7 @@ struct MangaDirectorySheet: View {
     @State private var selectedChapterTIDs: Set<String> = []
     @State private var isCurrentChapterDeleteAlertPresented = false
     @State private var isBatchDeleteConfirmationPresented = false
+    @State private var isResetConfirmationPresented = false
 
     var body: some View {
         NavigationStack {
@@ -110,6 +112,18 @@ struct MangaDirectorySheet: View {
                     .accessibilityLabel(L10n.string("common.close"))
                 }
 
+                if !isSelecting {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button {
+                            isResetConfirmationPresented = true
+                        } label: {
+                            Image(systemName: "arrow.counterclockwise")
+                        }
+                        .disabled(panel.isUpdating)
+                        .accessibilityLabel(L10n.string("manga.directory.reset"))
+                    }
+                }
+
                 if isSelecting && usesSystemSelectionBottomToolbar {
                     ToolbarItem(placement: .bottomBar) {
                         SelectionBottomToolbar(actions: selectionActions)
@@ -138,6 +152,17 @@ struct MangaDirectorySheet: View {
                 Button(L10n.string("common.delete"), role: .destructive) {
                     performDeleteSelectedChapters()
                 }
+            }
+            .alert(
+                L10n.string("manga.directory.reset_confirm_title"),
+                isPresented: $isResetConfirmationPresented
+            ) {
+                Button(L10n.string("common.cancel"), role: .cancel) {}
+                Button(L10n.string("manga.directory.reset"), role: .destructive) {
+                    onResetDirectory()
+                }
+            } message: {
+                Text(L10n.string("manga.directory.reset_confirm_message"))
             }
             .sheet(isPresented: $isCorrectionPresented) {
                 MangaDirectoryCorrectionSheet(
