@@ -55,6 +55,14 @@ public actor YamiboCheckInStore {
         return defaults.string(forKey: key)
     }
 
+    public func clearAll() async {
+        let prefix = "\(keyPrefix)."
+        for key in defaults.dictionaryRepresentation().keys where key.hasPrefix(prefix) {
+            defaults.removeObject(forKey: key)
+        }
+        postChangeNotification()
+    }
+
     public func exportSnapshot() async -> YamiboCheckInSnapshot {
         let prefix = "\(keyPrefix)."
         let values = defaults.dictionaryRepresentation().reduce(into: [String: String]()) { partial, item in

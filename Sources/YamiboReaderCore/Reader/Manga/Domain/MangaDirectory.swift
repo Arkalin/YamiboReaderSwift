@@ -44,3 +44,26 @@ public struct MangaDirectory: Codable, Hashable, Sendable, Identifiable {
         self.searchKeyword = searchKeyword
     }
 }
+
+/// Lightweight per-directory listing used by the settings storage-management
+/// screen — chapter count instead of every chapter's full metadata.
+public struct MangaDirectorySummary: Identifiable, Hashable, Sendable {
+    public var cleanBookName: String
+    public var strategy: MangaDirectoryStrategy
+    public var chapterCount: Int
+    public var lastUpdatedAt: Date?
+
+    public var id: String { cleanBookName }
+
+    public init(
+        cleanBookName: String,
+        strategy: MangaDirectoryStrategy,
+        chapterCount: Int,
+        lastUpdatedAt: Date? = nil
+    ) {
+        self.cleanBookName = cleanBookName
+        self.strategy = strategy
+        self.chapterCount = chapterCount
+        self.lastUpdatedAt = lastUpdatedAt
+    }
+}

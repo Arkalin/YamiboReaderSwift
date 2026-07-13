@@ -24,13 +24,18 @@ final class SystemSettingsViewModel: ObservableObject {
     @Published var keyboard = KeyboardSettings()
     @Published var boardReader = BoardReaderSettings()
     @Published private(set) var isLoggedIn = false
-    @Published private(set) var novelCacheBytes = 0
-    @Published private(set) var mangaIndexCacheBytes = 0
+    @Published private(set) var webReaderCacheBytes = 0
+    @Published private(set) var contentCoverCacheBytes = 0
+    @Published private(set) var mangaDirectoryCacheBytes = 0
     @Published private(set) var offlineCacheBytes = 0
     @Published private(set) var offlineCacheManagementRows: [OfflineCacheManagementRow] = []
     @Published private(set) var selectedOfflineCacheGroupIDs: Set<OfflineCacheGroupID> = []
     @Published var isOfflineCacheManagementSelectionMode = false
     @Published private(set) var pendingOfflineCacheManagementConfirmation: OfflineCacheManagementConfirmation?
+    @Published private(set) var mangaDirectoryManagementRows: [MangaDirectoryManagementRow] = []
+    @Published private(set) var selectedMangaDirectoryIDs: Set<String> = []
+    @Published var isMangaDirectoryManagementSelectionMode = false
+    @Published private(set) var pendingMangaDirectoryManagementConfirmation: MangaDirectoryManagementConfirmation?
     @Published private(set) var activeAction: SystemSettingsAction?
     @Published var errorMessage: String?
 
@@ -44,12 +49,16 @@ final class SystemSettingsViewModel: ObservableObject {
         activeAction != nil
     }
 
-    var novelCacheLabel: String {
-        cacheLabel(for: novelCacheBytes)
+    var webReaderCacheLabel: String {
+        cacheLabel(for: webReaderCacheBytes)
     }
 
-    var mangaIndexCacheLabel: String {
-        cacheLabel(for: mangaIndexCacheBytes)
+    var contentCoverCacheLabel: String {
+        cacheLabel(for: contentCoverCacheBytes)
+    }
+
+    var mangaDirectoryCacheLabel: String {
+        cacheLabel(for: mangaDirectoryCacheBytes)
     }
 
     var offlineCacheLabel: String {
@@ -70,6 +79,18 @@ final class SystemSettingsViewModel: ObservableObject {
             canDelete: !selectedOfflineCacheGroupIDs.isEmpty
                 && activeAction != .clearingOfflineCache
         )
+    }
+
+    var mangaDirectoryManagementIsEmpty: Bool {
+        mangaDirectoryManagementRows.isEmpty
+    }
+
+    var selectedMangaDirectoryCount: Int {
+        selectedMangaDirectoryIDs.count
+    }
+
+    var mangaDirectoryManagementCanDeleteSelected: Bool {
+        !selectedMangaDirectoryIDs.isEmpty && activeAction != .clearingMangaDirectory
     }
 
     func load() async {
@@ -432,12 +453,18 @@ final class SystemSettingsViewModel: ObservableObject {
         }
     }
 
-    func clearNovelCache() async -> Bool {
-        activeAction = .clearingNovelCache
+    /// Clears every `DiskCacheStore`-backed render/HTML cache: novel and manga
+    /// reader page projections plus the forum home/board/thread-page cache.
+    /// These three share the same underlying engine and are all equally
+    /// re-fetchable, so a single button covers all of them.
+    func clearWebReaderCache() async -> Bool {
+        activeAction = .clearingWebReaderCache
         defer { activeAction = nil }
 
         do {
             try await dependencies.novelReaderCacheStore.clearAll()
+            try await dependencies.mangaReaderProjectionStore.clearAll()
+            try await dependencies.forumCacheStore.clearAll()
             await refreshStorageUsage()
             return true
         } catch {
@@ -446,13 +473,12 @@ final class SystemSettingsViewModel: ObservableObject {
         }
     }
 
-    func clearMangaIndexCache() async -> Bool {
-        activeAction = .clearingMangaIndexCache
+    func clearContentCoverCache() async -> Bool {
+        activeAction = .clearingContentCoverCache
         defer { activeAction = nil }
 
         do {
-            try await dependencies.mangaDirectoryStore.clearAll()
-            try await dependencies.mangaReaderProjectionStore.clearAll()
+            try await dependencies.contentCoverStore.clearAll()
             await refreshStorageUsage()
             return true
         } catch {
@@ -470,6 +496,25 @@ final class SystemSettingsViewModel: ObservableObject {
         return true
     }
 
+    /// Clears the system HTTP cache plus two small stores with no other
+    /// bulk-clear entry point: the per-account check-in date cache and the
+    /// favorites-update tracking state (tracked targets, detected events, run
+    /// history, fid/category filters).
+    func clearOtherCaches() async -> Bool {
+        activeAction = .clearingOtherCaches
+        defer { activeAction = nil }
+
+        URLCache.shared.removeAllCachedResponses()
+        await dependencies.checkInStore.clearAll()
+        do {
+            try await dependencies.favoriteUpdateStore.clearAll()
+            return true
+        } catch {
+            errorMessage = error.localizedDescription
+            return false
+        }
+    }
+
     func resetApplication() async -> Bool {
         activeAction = .resettingApplication
         defer { activeAction = nil }
@@ -483,13 +528,18 @@ final class SystemSettingsViewModel: ObservableObject {
             gamepad = .init()
             keyboard = .init()
             boardReader = .init()
-            novelCacheBytes = 0
-            mangaIndexCacheBytes = 0
+            webReaderCacheBytes = 0
+            contentCoverCacheBytes = 0
+            mangaDirectoryCacheBytes = 0
             offlineCacheBytes = 0
             offlineCacheManagementRows = []
             selectedOfflineCacheGroupIDs = []
             isOfflineCacheManagementSelectionMode = false
             pendingOfflineCacheManagementConfirmation = nil
+            mangaDirectoryManagementRows = []
+            selectedMangaDirectoryIDs = []
+            isMangaDirectoryManagementSelectionMode = false
+            pendingMangaDirectoryManagementConfirmation = nil
             return true
         } catch {
             errorMessage = error.localizedDescription
@@ -498,10 +548,12 @@ final class SystemSettingsViewModel: ObservableObject {
     }
 
     func refreshStorageUsage() async {
-        novelCacheBytes = await dependencies.novelReaderCacheStore.totalDiskUsageBytes()
-        let directoryBytes = await dependencies.mangaDirectoryStore.totalDiskUsageBytes()
-        let projectionBytes = await dependencies.mangaReaderProjectionStore.totalDiskUsageBytes()
-        mangaIndexCacheBytes = directoryBytes + projectionBytes
+        let novelBytes = await dependencies.novelReaderCacheStore.totalDiskUsageBytes()
+        let mangaProjectionBytes = await dependencies.mangaReaderProjectionStore.totalDiskUsageBytes()
+        let forumBytes = await dependencies.forumCacheStore.totalDiskUsageBytes()
+        webReaderCacheBytes = novelBytes + mangaProjectionBytes + forumBytes
+        contentCoverCacheBytes = await dependencies.contentCoverStore.totalDiskUsageBytes()
+        mangaDirectoryCacheBytes = await dependencies.mangaDirectoryStore.totalDiskUsageBytes()
         offlineCacheBytes = await dependencies.offlineCacheStore.totalDiskUsageBytes()
     }
 
@@ -666,6 +718,139 @@ final class SystemSettingsViewModel: ObservableObject {
                 }
                 return lhs.entryKey.localizedStandardCompare(rhs.entryKey) == .orderedAscending
             }
+    }
+
+    func refreshMangaDirectoryManagement() async {
+        activeAction = .loading
+        defer { activeAction = nil }
+
+        await refreshMangaDirectoryManagementRows()
+    }
+
+    func requestMangaDirectoryDeletion(id: String) {
+        prepareMangaDirectoryManagementConfirmation(ids: [id])
+    }
+
+    func requestSelectedMangaDirectoryDeletion() {
+        prepareMangaDirectoryManagementConfirmation(ids: Array(selectedMangaDirectoryIDs))
+    }
+
+    func cancelMangaDirectoryManagementConfirmation() {
+        pendingMangaDirectoryManagementConfirmation = nil
+    }
+
+    func confirmPendingMangaDirectoryManagementDeletion() async -> Bool {
+        guard let confirmation = pendingMangaDirectoryManagementConfirmation else { return false }
+        return await confirmMangaDirectoryManagementDeletion(confirmation)
+    }
+
+    func confirmMangaDirectoryManagementDeletion(_ confirmation: MangaDirectoryManagementConfirmation) async -> Bool {
+        await clearMangaDirectories(ids: confirmation.directoryIDs)
+    }
+
+    func setMangaDirectoryManagementSelectionMode(_ isSelecting: Bool) {
+        isMangaDirectoryManagementSelectionMode = isSelecting
+        if !isSelecting {
+            selectedMangaDirectoryIDs.removeAll()
+        }
+    }
+
+    func toggleMangaDirectoryManagementSelection(id: String) {
+        let visibleIDs = Set(mangaDirectoryManagementRows.map(\.id))
+        guard visibleIDs.contains(id) else { return }
+        if selectedMangaDirectoryIDs.contains(id) {
+            selectedMangaDirectoryIDs.remove(id)
+        } else {
+            selectedMangaDirectoryIDs.insert(id)
+        }
+    }
+
+    var isMangaDirectoryManagementSelectionComplete: Bool {
+        let visibleIDs = Set(mangaDirectoryManagementRows.map(\.id))
+        return !visibleIDs.isEmpty && visibleIDs.isSubset(of: selectedMangaDirectoryIDs)
+    }
+
+    /// Selecting every visible row and deleting the selection is how this
+    /// screen supports "clear all" — the same select-all-then-delete flow the
+    /// offline cache management screen already uses, rather than a second,
+    /// separate destructive action.
+    func toggleAllMangaDirectoryManagementRows() {
+        let visibleIDs = Set(mangaDirectoryManagementRows.map(\.id))
+        guard !visibleIDs.isEmpty else { return }
+
+        if visibleIDs.isSubset(of: selectedMangaDirectoryIDs) {
+            selectedMangaDirectoryIDs.subtract(visibleIDs)
+        } else {
+            selectedMangaDirectoryIDs.formUnion(visibleIDs)
+        }
+    }
+
+    /// Refreshes rows/selection/confirmation unconditionally, even when a
+    /// directory partway through the batch fails to delete — the refresh's
+    /// own `formIntersection` against the store's real current directories
+    /// (in `refreshMangaDirectoryManagementRows`) is what reconciles
+    /// `selectedMangaDirectoryIDs` to reality, rather than assuming the whole
+    /// batch either fully succeeded or fully no-opped.
+    private func clearMangaDirectories(ids: [String]) async -> Bool {
+        let normalizedIDs = normalizedMangaDirectoryIDs(ids)
+        guard !normalizedIDs.isEmpty else { return false }
+
+        activeAction = .clearingMangaDirectory
+        defer { activeAction = nil }
+
+        var deletionError: Error?
+        for id in normalizedIDs {
+            do {
+                try await dependencies.mangaDirectoryStore.deleteDirectory(named: id)
+            } catch {
+                deletionError = error
+                break
+            }
+        }
+
+        pendingMangaDirectoryManagementConfirmation = nil
+        await refreshStorageUsage()
+        await refreshMangaDirectoryManagementRows()
+        if selectedMangaDirectoryIDs.isEmpty {
+            isMangaDirectoryManagementSelectionMode = false
+        }
+
+        if let deletionError {
+            errorMessage = deletionError.localizedDescription
+            return false
+        }
+        return true
+    }
+
+    private func refreshMangaDirectoryManagementRows() async {
+        let summaries = await dependencies.mangaDirectoryStore.allDirectorySummaries()
+        mangaDirectoryManagementRows = summaries
+            .map(MangaDirectoryManagementRow.init(summary:))
+            .sorted { $0.title.localizedStandardCompare($1.title) == .orderedAscending }
+
+        let visibleIDs = Set(mangaDirectoryManagementRows.map(\.id))
+        selectedMangaDirectoryIDs.formIntersection(visibleIDs)
+        if selectedMangaDirectoryIDs.isEmpty && mangaDirectoryManagementRows.isEmpty {
+            isMangaDirectoryManagementSelectionMode = false
+        }
+    }
+
+    private func prepareMangaDirectoryManagementConfirmation(ids: [String]) {
+        let normalizedIDs = normalizedMangaDirectoryIDs(ids)
+        guard !normalizedIDs.isEmpty else { return }
+        let rowsByID = Dictionary(uniqueKeysWithValues: mangaDirectoryManagementRows.map { ($0.id, $0) })
+        pendingMangaDirectoryManagementConfirmation = MangaDirectoryManagementConfirmation(
+            directoryIDs: normalizedIDs,
+            titles: normalizedIDs.map { rowsByID[$0]?.title ?? $0 }
+        )
+    }
+
+    private func normalizedMangaDirectoryIDs(_ ids: [String]) -> [String] {
+        let visibleIDs = Set(mangaDirectoryManagementRows.map(\.id))
+        var seen: Set<String> = []
+        return ids
+            .filter { visibleIDs.contains($0) && seen.insert($0).inserted }
+            .sorted { $0.localizedStandardCompare($1) == .orderedAscending }
     }
 
     private func cacheLabel(for bytes: Int) -> String {
