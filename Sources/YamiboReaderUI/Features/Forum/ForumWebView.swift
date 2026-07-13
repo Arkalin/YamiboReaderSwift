@@ -24,11 +24,11 @@ public struct IOSForumWebView: UIViewRepresentable {
         let configuration = WKWebViewConfiguration()
         configuration.defaultWebpagePreferences.allowsContentJavaScript = true
         configuration.websiteDataStore = .default()
-        configuration.userContentController.addUserScript(.yamiboHideChromeScript)
+        configuration.userContentController.addUserScript(.yamiboHideChromeScript(for: context.environment.colorScheme))
 
         let webView = WKWebView(frame: .zero, configuration: configuration)
         webView.isOpaque = false
-        context.coordinator.applyAppearance(to: webView)
+        context.coordinator.applyAppearance(to: webView, colorScheme: context.environment.colorScheme)
         webView.scrollView.contentInsetAdjustmentBehavior = .never
         webView.navigationDelegate = context.coordinator
         webView.uiDelegate = context.coordinator
@@ -38,7 +38,7 @@ public struct IOSForumWebView: UIViewRepresentable {
 
     public func updateUIView(_ view: WKWebView, context: Context) {
         context.coordinator.attach(view)
-        context.coordinator.applyAppearance(to: view)
+        context.coordinator.applyAppearance(to: view, colorScheme: context.environment.colorScheme)
         if isSelected {
             context.coordinator.synchronizeCurrentSession(reloadIfNeeded: true)
         }
@@ -49,7 +49,7 @@ public struct IOSForumWebView: UIViewRepresentable {
         private let sessionStore: SessionStore
         private weak var webView: WKWebView?
         private var didPrepareInitialLoad = false
-        private var didApplyAppearance = false
+        private var appliedColorScheme: ColorScheme?
         private var sessionObservationTask: Task<Void, Never>?
         private var sessionSyncState = ForumWebSessionSyncState()
 
@@ -80,17 +80,22 @@ public struct IOSForumWebView: UIViewRepresentable {
             }
         }
 
-        func applyAppearance(to webView: WKWebView) {
-            let backgroundColor = YamiboColors.Site.creamBackgroundUIColor
-            webView.overrideUserInterfaceStyle = .light
+        func applyAppearance(to webView: WKWebView, colorScheme: ColorScheme) {
+            let isDark = colorScheme == .dark
+            let backgroundColor = isDark
+                ? YamiboColors.Site.creamBackgroundDarkUIColor
+                : YamiboColors.Site.creamBackgroundUIColor
+            webView.overrideUserInterfaceStyle = isDark ? .dark : .light
             webView.backgroundColor = backgroundColor
             webView.scrollView.backgroundColor = backgroundColor
 
-            guard !didApplyAppearance else { return }
-            didApplyAppearance = true
+            guard appliedColorScheme != colorScheme else { return }
+            appliedColorScheme = colorScheme
+
+            let script = WKUserScript.yamiboHideChromeScript(for: colorScheme)
             webView.configuration.userContentController.removeAllUserScripts()
-            webView.configuration.userContentController.addUserScript(.yamiboHideChromeScript)
-            webView.applyForumAppearance()
+            webView.configuration.userContentController.addUserScript(script)
+            webView.evaluateJavaScript(script.source)
         }
 
         func synchronizeCurrentSession(reloadIfNeeded: Bool) {
@@ -285,39 +290,69 @@ public struct IOSForumWebView: UIViewRepresentable {
     }
 }
 
-private extension WKWebView {
-    func applyForumAppearance() {
-        evaluateJavaScript(WKUserScript.yamiboHideChromeSource)
-    }
-}
-
 private extension WKUserScript {
-    static let yamiboHideChromeScript = WKUserScript(
-        source: yamiboHideChromeSource,
-        injectionTime: .atDocumentEnd,
-        forMainFrameOnly: false
-    )
+    static func yamiboHideChromeScript(for colorScheme: ColorScheme) -> WKUserScript {
+        WKUserScript(
+            source: yamiboHideChromeSource(for: colorScheme),
+            injectionTime: .atDocumentEnd,
+            forMainFrameOnly: false
+        )
+    }
 
-    static let yamiboHideChromeSource = """
-        (function() {
-            var style = document.getElementById('yamibo-hide-style');
-            if (!style) {
-                style = document.createElement('style');
-                style.id = 'yamibo-hide-style';
-                (document.head || document.documentElement).appendChild(style);
-            }
-            style.innerHTML = [
+    /// Rules that recolor the forum page to match the app's cream/brown theme.
+    ///
+    /// Light mode blankets known structural containers (wrap/bm/tl/threadlist)
+    /// because the site's own light skin is visually inconsistent across them.
+    /// Dark mode intentionally stays conservative: only `html,body` get a
+    /// background + default text color override. The site has no dark theme
+    /// of its own, so we can't know which nested elements set their own
+    /// explicit background/text colors (forum posts routinely do, e.g.
+    /// per-author BBCode colors) — blanket-overriding those in dark mode
+    /// risks illegible text (dark text forced onto a dark box, or vice
+    /// versa). Leaving them unset lets explicit site/post colors keep
+    /// showing through, same as how per-post author colors are left alone
+    /// elsewhere in this app.
+    static func yamiboHideChromeSource(for colorScheme: ColorScheme) -> String {
+        let themeRules: [String]
+        switch colorScheme {
+        case .dark:
+            themeRules = [
+                "html,body{background:#17110D !important;color:#F0D8BC !important;}"
+            ]
+        default:
+            themeRules = [
                 "html,body{background:#FFF3D6 !important;color:#6E2B19 !important;}",
                 "#wrap,.wrap,.wp,.ct2,.mn,.bm,.bm_c,.threadlist,.tl{background:#FFF3D6 !important;color:#6E2B19 !important;}",
                 ".bm,.bm_c,.tl th,.tl td{border-color:rgba(109,58,43,0.18) !important;}",
                 ".bm_h,.bm_h h2,.bm_h h3{background:#FFF7E0 !important;color:#6E2B19 !important;}",
-                "a{color:#6E2B19 !important;}",
-                ".foot.flex-box:not(.foot_reply){display:none !important;}",
-                ".foot_height{display:none !important;}",
-                ".my,.mz{visibility:hidden !important;pointer-events:none !important;}"
-            ].join(" ");
-        })();
-        """
+                "a{color:#6E2B19 !important;}"
+            ]
+        }
+
+        let chromeRules = [
+            ".foot.flex-box:not(.foot_reply){display:none !important;}",
+            ".foot_height{display:none !important;}",
+            ".my,.mz{visibility:hidden !important;pointer-events:none !important;}"
+        ]
+
+        let rulesJSArray = (themeRules + chromeRules)
+            .map { "\"\($0)\"" }
+            .joined(separator: ",\n                ")
+
+        return """
+            (function() {
+                var style = document.getElementById('yamibo-hide-style');
+                if (!style) {
+                    style = document.createElement('style');
+                    style.id = 'yamibo-hide-style';
+                    (document.head || document.documentElement).appendChild(style);
+                }
+                style.innerHTML = [
+                    \(rulesJSArray)
+                ].join(" ");
+            })();
+            """
+    }
 }
 
 private extension WKHTTPCookieStore {

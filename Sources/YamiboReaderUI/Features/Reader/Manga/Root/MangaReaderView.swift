@@ -175,6 +175,7 @@ public struct MangaReaderView: View {
         }
         .background(Color.black.ignoresSafeArea())
         .statusBarHidden(!isChromeVisible)
+        .persistentSystemOverlays(isChromeVisible ? .automatic : .hidden)
         .sheet(isPresented: $isDirectoryPresented) {
             if case let .loaded(loaded) = model.presentation.state {
                 MangaDirectorySheet(

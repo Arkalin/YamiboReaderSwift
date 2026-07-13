@@ -109,17 +109,27 @@ public struct WebDAVSyncSettingsView: View {
                         title: L10n.string("webdav.url"),
                         text: $viewModel.baseURLString
                     )
+                    .textContentType(.URL)
+                    #if os(iOS)
+                    .keyboardType(.URL)
+                    .textInputAutocapitalization(.never)
+                    #endif
 
                     labeledTextField(
                         title: L10n.string("webdav.username"),
                         text: $viewModel.username
                     )
+                    .textContentType(.username)
+                    #if os(iOS)
+                    .textInputAutocapitalization(.never)
+                    #endif
 
                     VStack(alignment: .leading, spacing: 8) {
                         Text(L10n.string("webdav.password"))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                         SecureField("", text: $viewModel.password)
+                            .textContentType(.password)
                             .disabled(viewModel.isBusy)
                     }
                     .padding(.vertical, 4)

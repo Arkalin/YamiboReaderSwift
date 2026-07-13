@@ -288,6 +288,7 @@ public struct NovelReaderView: View {
             forumThreadOverlayItem: $forumThreadOverlayItem,
             imageBrowserItem: $imageBrowserItem,
             isStatusBarHidden: chromeState.mode == .immersiveHidden,
+            isChromeVisible: chromeState.showsChrome,
             onUpdateChromeForContentState: {
                 updateChromeForContentState()
             },
@@ -1619,12 +1620,14 @@ private struct NovelReaderStateObserverModifier: ViewModifier {
     @Binding var imageBrowserItem: ImageBrowserItem?
 
     let isStatusBarHidden: Bool
+    let isChromeVisible: Bool
     let onUpdateChromeForContentState: () -> Void
     let onRestoreVerticalPositionIfNeeded: () -> Void
 
     func body(content: Content) -> some View {
         content
             .statusBarHidden(isStatusBarHidden)
+            .persistentSystemOverlays(isChromeVisible ? .automatic : .hidden)
             .onChange(of: model.isLoading) { _, _ in
                 onUpdateChromeForContentState()
             }

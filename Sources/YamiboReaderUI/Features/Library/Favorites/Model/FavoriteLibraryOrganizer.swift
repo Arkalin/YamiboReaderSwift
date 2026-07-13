@@ -622,6 +622,12 @@ final class FavoriteLibraryOrganizer: ObservableObject {
         }
     }
 
+    func reorderCategories(_ orderedIDs: [String]) async {
+        await commit { document in
+            document.reorderCategories(orderedIDs: orderedIDs)
+        }
+    }
+
     // MARK: - Collections
 
     func openCollection(id: String) {

@@ -61,7 +61,7 @@ struct NovelReaderFontScaleRow: View {
                     ),
                     in: 0.8 ... 2.3
                 )
-                .tint(Color(red: 0.71, green: 0.51, blue: 0.35))
+                .tint(YamiboColors.Site.orangeAccent)
 
                 circleButton(systemName: "plus") {
                     onChange(min(2.3, value + 0.1))

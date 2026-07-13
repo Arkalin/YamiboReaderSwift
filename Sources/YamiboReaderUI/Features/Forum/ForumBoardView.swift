@@ -153,11 +153,6 @@ struct ForumBoardView: View {
     }
 }
 
-private enum ForumBoardOptionMenu: Equatable {
-    case order
-    case filter
-}
-
 private struct ForumBoardOptionItem: Identifiable, Equatable {
     let id: String
     let optionID: String?
@@ -247,49 +242,41 @@ private struct ForumBoardContentView: View {
     let onThreadTap: (ForumThreadSummary) -> Void
     let onAuthorTap: (String, String?) -> Void
 
-    @State private var activeOptionMenu: ForumBoardOptionMenu?
-
     var body: some View {
         ScrollView {
-            ZStack(alignment: .top) {
-                LazyVStack(alignment: .leading, spacing: 12) {
-                    headerOptionsView
-                        .zIndex(1)
+            LazyVStack(alignment: .leading, spacing: 12) {
+                headerOptionsView
 
-                    if !subBoards.isEmpty {
-                        ForumSubBoardSectionView(boards: subBoards, onTap: onSubBoardTap)
-                    }
+                if !subBoards.isEmpty {
+                    ForumSubBoardSectionView(boards: subBoards, onTap: onSubBoardTap)
+                }
 
-                    if !pinnedItems.isEmpty {
-                        ForumPinnedSectionView(items: pinnedItems, onTap: onPinnedTap)
-                    }
+                if !pinnedItems.isEmpty {
+                    ForumPinnedSectionView(items: pinnedItems, onTap: onPinnedTap)
+                }
 
-                    if threads.isEmpty {
-                        ForumBoardNoThreadsView()
-                    } else {
-                        ForEach(threads) { thread in
-                            ForumThreadSummaryRowView(
-                                thread: thread,
-                                onThreadTap: {
-                                    onThreadTap(thread)
-                                },
-                                onAuthorTap: onAuthorTap
-                            )
-                        }
-                    }
-
-                    if let pageNavigation {
-                        ForumPageNavigationView(
-                            navigation: pageNavigation,
-                            goToPage: goToPage,
-                            restorePreviousPage: restorePreviousPage
+                if threads.isEmpty {
+                    ForumBoardNoThreadsView()
+                } else {
+                    ForEach(threads) { thread in
+                        ForumThreadSummaryRowView(
+                            thread: thread,
+                            onThreadTap: {
+                                onThreadTap(thread)
+                            },
+                            onAuthorTap: onAuthorTap
                         )
                     }
                 }
 
-                floatingOptionMenu
+                if let pageNavigation {
+                    ForumPageNavigationView(
+                        navigation: pageNavigation,
+                        goToPage: goToPage,
+                        restorePreviousPage: restorePreviousPage
+                    )
+                }
             }
-            .animation(.snappy(duration: 0.16), value: activeOptionMenu)
             .padding(.horizontal, 16)
             .padding(.vertical, 14)
         }
@@ -307,7 +294,7 @@ private struct ForumBoardContentView: View {
     }
 
     private var headerOptionsView: some View {
-        ForumBoardHeaderOptionsView(
+        ForumBoardStatsView(
             todayCount: board.todayCount,
             threadCount: board.threadCount,
             rank: board.rank,
@@ -315,56 +302,11 @@ private struct ForumBoardContentView: View {
             showsOrder: showsOrder,
             selectedFilterTitle: selectedFilterTitle,
             selectedOrderTitle: selectedOrderTitle,
-            activeOptionMenu: $activeOptionMenu
+            filterItems: filterItems,
+            orderItems: orderItems,
+            selectFilter: selectFilter,
+            selectOrder: selectOrder
         )
-    }
-
-    @ViewBuilder
-    private var floatingOptionMenu: some View {
-        if let menu = activeOptionMenu {
-            VStack(alignment: .leading, spacing: 8) {
-                headerOptionsView
-                    .hidden()
-                    .accessibilityHidden(true)
-                    .allowsHitTesting(false)
-
-                ForumBoardOptionMenuView(
-                    title: title(for: menu),
-                    items: items(for: menu),
-                    select: { optionID in
-                        withAnimation(.snappy(duration: 0.16)) {
-                            activeOptionMenu = nil
-                        }
-                        switch menu {
-                        case .filter:
-                            selectFilter(optionID)
-                        case .order:
-                            selectOrder(optionID)
-                        }
-                    }
-                )
-            }
-            .zIndex(2)
-            .transition(.opacity)
-        }
-    }
-
-    private func title(for menu: ForumBoardOptionMenu) -> String {
-        switch menu {
-        case .filter:
-            L10n.string("forum.board.filter")
-        case .order:
-            L10n.string("forum.board.order")
-        }
-    }
-
-    private func items(for menu: ForumBoardOptionMenu) -> [ForumBoardOptionItem] {
-        switch menu {
-        case .filter:
-            filterItems
-        case .order:
-            orderItems
-        }
     }
 
     private var filterItems: [ForumBoardOptionItem] {
@@ -400,40 +342,6 @@ private struct ForumBoardContentView: View {
     }
 }
 
-private struct ForumBoardHeaderOptionsView: View {
-    let todayCount: Int?
-    let threadCount: Int?
-    let rank: Int?
-    let showsFilter: Bool
-    let showsOrder: Bool
-    let selectedFilterTitle: String
-    let selectedOrderTitle: String
-    @Binding var activeOptionMenu: ForumBoardOptionMenu?
-
-    var body: some View {
-        ForumBoardStatsView(
-            todayCount: todayCount,
-            threadCount: threadCount,
-            rank: rank,
-            showsFilter: showsFilter,
-            showsOrder: showsOrder,
-            selectedFilterTitle: selectedFilterTitle,
-            selectedOrderTitle: selectedOrderTitle,
-            isFilterActive: activeOptionMenu == .filter,
-            isOrderActive: activeOptionMenu == .order,
-            toggleFilters: { toggle(.filter) },
-            toggleOrders: { toggle(.order) }
-        )
-        .animation(.snappy(duration: 0.16), value: activeOptionMenu)
-    }
-
-    private func toggle(_ menu: ForumBoardOptionMenu) {
-        withAnimation(.snappy(duration: 0.16)) {
-            activeOptionMenu = activeOptionMenu == menu ? nil : menu
-        }
-    }
-}
-
 private struct ForumBoardStatsView: View {
     let todayCount: Int?
     let threadCount: Int?
@@ -442,10 +350,10 @@ private struct ForumBoardStatsView: View {
     let showsOrder: Bool
     let selectedFilterTitle: String
     let selectedOrderTitle: String
-    let isFilterActive: Bool
-    let isOrderActive: Bool
-    let toggleFilters: () -> Void
-    let toggleOrders: () -> Void
+    let filterItems: [ForumBoardOptionItem]
+    let orderItems: [ForumBoardOptionItem]
+    let selectFilter: (String?) -> Void
+    let selectOrder: (String?) -> Void
 
     var body: some View {
         ViewThatFits {
@@ -492,34 +400,51 @@ private struct ForumBoardStatsView: View {
     private var optionButtons: some View {
         HStack(spacing: 8) {
             if showsOrder {
-                ForumBoardOptionButton(
+                ForumBoardOptionMenuButton(
                     title: selectedOrderTitle,
                     systemImage: "arrow.up.arrow.down",
-                    isActive: isOrderActive,
-                    action: toggleOrders
+                    menuTitle: L10n.string("forum.board.order"),
+                    items: orderItems,
+                    select: selectOrder
                 )
             }
 
             if showsFilter {
-                ForumBoardOptionButton(
+                ForumBoardOptionMenuButton(
                     title: selectedFilterTitle,
                     systemImage: "line.3.horizontal.decrease.circle",
-                    isActive: isFilterActive,
-                    action: toggleFilters
+                    menuTitle: L10n.string("forum.board.filter"),
+                    items: filterItems,
+                    select: selectFilter
                 )
             }
         }
     }
 }
 
-private struct ForumBoardOptionButton: View {
+private struct ForumBoardOptionMenuButton: View {
     let title: String
     let systemImage: String
-    let isActive: Bool
-    let action: () -> Void
+    let menuTitle: String
+    let items: [ForumBoardOptionItem]
+    let select: (String?) -> Void
+
+    private var selection: Binding<String?> {
+        Binding(
+            get: { items.first(where: \.isSelected)?.optionID },
+            set: select
+        )
+    }
 
     var body: some View {
-        Button(action: action) {
+        Menu {
+            Picker(menuTitle, selection: selection) {
+                ForEach(items) { item in
+                    Text(item.title).tag(item.optionID)
+                }
+            }
+            .pickerStyle(.inline)
+        } label: {
             HStack(spacing: 5) {
                 Image(systemName: systemImage)
                     .imageScale(.small)
@@ -532,78 +457,13 @@ private struct ForumBoardOptionButton: View {
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
             .frame(minHeight: 28)
-            .background(buttonFill, in: Capsule())
+            .background(.white.opacity(0.18), in: Capsule())
             .overlay {
                 Capsule()
-                    .stroke(.white.opacity(isActive ? 0.55 : 0.26), lineWidth: 1)
+                    .stroke(.white.opacity(0.26), lineWidth: 1)
             }
         }
         .buttonStyle(.plain)
-        .accessibilityAddTraits(isActive ? .isSelected : [])
-    }
-
-    private var buttonFill: Color {
-        isActive ? ForumColors.orangeAccent.opacity(0.88) : .white.opacity(0.18)
-    }
-}
-
-private struct ForumBoardOptionMenuView: View {
-    let title: String
-    let items: [ForumBoardOptionItem]
-    let select: (String?) -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(title)
-                .font(.caption.weight(.bold))
-                .foregroundStyle(ForumColors.brownPrimary)
-                .padding(.horizontal, 12)
-                .padding(.top, 10)
-
-            ScrollView {
-                LazyVStack(spacing: 4) {
-                    ForEach(items) { item in
-                        Button {
-                            select(item.optionID)
-                        } label: {
-                            HStack(spacing: 10) {
-                                Text(item.title)
-                                    .font(.subheadline.weight(.medium))
-                                    .foregroundStyle(ForumColors.textDark)
-                                    .lineLimit(1)
-                                    .minimumScaleFactor(0.82)
-
-                                Spacer(minLength: 8)
-
-                                Image(systemName: item.isSelected ? "checkmark.circle.fill" : "circle")
-                                    .imageScale(.small)
-                                    .foregroundStyle(item.isSelected ? ForumColors.orangeAccent : ForumColors.border)
-                            }
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 9)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .background(
-                                item.isSelected ? ForumColors.accentFill : Color.clear,
-                                in: RoundedRectangle(cornerRadius: 7, style: .continuous)
-                            )
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-                .padding(.horizontal, 8)
-                .padding(.bottom, 8)
-            }
-            .frame(maxHeight: 260)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-        .background(ForumColors.creamSurface, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(ForumColors.border, lineWidth: 1)
-        }
-        .shadow(color: ForumColors.brownDeep.opacity(0.14), radius: 10, x: 0, y: 4)
     }
 }
 

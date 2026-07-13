@@ -10,6 +10,11 @@ final class NovelTextSelectionController {
         case vertical
     }
 
+    enum HandleKind {
+        case start
+        case end
+    }
+
     private let registeredViews = NSHashTable<NovelTextViewportReferenceUIView>.weakObjects()
     private var selectionRangeValue: NovelTextSelectionRange?
     private var baseAnchor: NovelTextSelectionAnchor?
@@ -93,6 +98,19 @@ final class NovelTextSelectionController {
         refreshSelectionDisplay()
     }
 
+    /// Seeds `baseAnchor` at the endpoint opposite the dragged handle, then
+    /// dragging reuses `updateSelection(in:at:)` unchanged: it always builds
+    /// the range between `baseAnchor` and the current touch point, and
+    /// `selectionRange(from:to:)` normalizes the pair regardless of order.
+    func beginHandleDrag(_ kind: HandleKind, generation: UInt64) -> Bool {
+        guard let selectionRangeValue, selectionRangeValue.generation == generation else {
+            return false
+        }
+        let fixedOffset = kind == .start ? selectionRangeValue.upperBound : selectionRangeValue.lowerBound
+        baseAnchor = NovelTextSelectionAnchor(generation: generation, documentOffset: fixedOffset)
+        return true
+    }
+
     func clearSelection() {
         guard selectionRangeValue != nil || baseAnchor != nil else { return }
         selectionRangeValue = nil
@@ -125,13 +143,18 @@ final class NovelTextSelectionController {
         }
     }
 
-    func copySelection() {
+    func selectedText() -> String? {
         guard let selectionRangeValue,
               let displayReference = firstCurrentDisplayReference(),
               let text = displayReference.selectedText(for: selectionRangeValue),
               !text.isEmpty else {
-            return
+            return nil
         }
+        return text
+    }
+
+    func copySelection() {
+        guard let text = selectedText() else { return }
         UIPasteboard.general.string = text
     }
 
