@@ -670,7 +670,10 @@ import YamiboXTestSupport
         for: .smartManga(cleanBookName: "新名漫画二")
     )
 
-    for _ in 0..<50 where model.directory?.cleanBookName != "新名漫画二" {
+    // The handler updates `directory` first and resolves the cover in a
+    // second await — wait on both, or a loaded machine can observe the
+    // renamed directory while the cover fetch is still in flight.
+    for _ in 0..<50 where model.directory?.cleanBookName != "新名漫画二" || model.coverURL != newCoverURL {
         try await Task.sleep(nanoseconds: 10_000_000)
     }
 
