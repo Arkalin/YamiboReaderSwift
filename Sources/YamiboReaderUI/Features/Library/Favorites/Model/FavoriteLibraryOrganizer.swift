@@ -145,6 +145,12 @@ final class FavoriteLibraryOrganizer: ObservableObject {
     /// load/reload as `mangaDirectoriesByTID`, so the two are always
     /// consistent with each other for a given derivation.
     private var boardReaderSettings = BoardReaderSettings()
+    /// Snapshot of `settings.favorites.smartMangaBulkDeleteEnabled`, kept
+    /// live alongside `boardReaderSettings` (see `settingsUpdatesTask`) so
+    /// `hasDeletableSelection` and `LocalFavoriteCardActions.standard(...)`
+    /// — both synchronous reads — see a change made from Settings without
+    /// waiting for an unrelated reload.
+    private(set) var smartMangaBulkDeleteEnabled = true
     private var libraryUpdatesTask: Task<Void, Never>?
     private var progressUpdatesTask: Task<Void, Never>?
     private var coverUpdatesTask: Task<Void, Never>?
@@ -225,6 +231,7 @@ final class FavoriteLibraryOrganizer: ObservableObject {
                 }
                 await self.reloadBoardReaderSettings()
                 await self.reloadFavoriteBackground()
+                await self.reloadSmartMangaBulkDeleteSetting()
             }
         }
         // Without this, renaming a manga directory from the manga reader's
@@ -340,6 +347,7 @@ final class FavoriteLibraryOrganizer: ObservableObject {
         let threadCovers = await loadContentCovers(for: loadedDocument.items)
         let settings = await settingsStore.load()
         boardReaderSettings = settings.boardReader
+        smartMangaBulkDeleteEnabled = settings.favorites.smartMangaBulkDeleteEnabled
         mangaDirectoriesByTID = await resolveMangaDirectories(for: loadedDocument.items, boardReaderSettings: boardReaderSettings)
         coverLookup = threadCovers.merging(
             await smartMangaCoverLookup(for: Array(Set(mangaDirectoriesByTID.values)))
@@ -458,6 +466,18 @@ final class FavoriteLibraryOrganizer: ObservableObject {
         let settings = await settingsStore.load()
         guard settings.favorites.background != backgroundSettings else { return }
         await applyBackgroundSettings(settings.favorites.background)
+    }
+
+    /// Re-derives `smartMangaBulkDeleteEnabled` in response to *any*
+    /// `SettingsStore.didChangeNotification`, mirroring
+    /// `reloadFavoriteBackground()`'s diff-guarded shape — kept in sync live
+    /// so toggling the Settings switch while Favorites is already open
+    /// immediately updates `hasDeletableSelection`/the long-press menu
+    /// without waiting for an unrelated reload.
+    private func reloadSmartMangaBulkDeleteSetting() async {
+        let settings = await settingsStore.load()
+        guard settings.favorites.smartMangaBulkDeleteEnabled != smartMangaBulkDeleteEnabled else { return }
+        smartMangaBulkDeleteEnabled = settings.favorites.smartMangaBulkDeleteEnabled
     }
 
     private func applyBackgroundSettings(_ newValue: FavoriteBackgroundSettings) async {
@@ -750,15 +770,17 @@ final class FavoriteLibraryOrganizer: ObservableObject {
     /// Whether the current selection has anything `deleteSelection` would
     /// actually remove: at least one selected collection (dissolving a
     /// collection is unaffected by smart-card concerns entirely), or at
-    /// least one selected favorite that ISN'T a smart card
-    /// (`deleteSelection` skips every smart-card id, deleting nothing for
-    /// them). Backs `LocalFavoriteSelectionActionBar`'s delete-button
-    /// visibility — per that view's own doc comment ("hidden, not merely
-    /// disabled, when the current selection can't use it"), a selection
-    /// made up entirely of smart cards must not show an active delete
-    /// button that silently does nothing when tapped.
+    /// least one selected favorite. When `smartMangaBulkDeleteEnabled` is
+    /// off, a smart-card id alone doesn't count — `deleteSelection` skips
+    /// every smart-card id in that mode, deleting nothing for them. Backs
+    /// `LocalFavoriteSelectionActionBar`'s delete-button visibility — per
+    /// that view's own doc comment ("hidden, not merely disabled, when the
+    /// current selection can't use it"), a selection made up entirely of
+    /// smart cards must not show an active delete button that silently does
+    /// nothing when tapped.
     var hasDeletableSelection: Bool {
         selection.selectedCollectionCount > 0
+            || (smartMangaBulkDeleteEnabled && !selection.selectedFavoriteIDs.isEmpty)
             || selection.selectedFavoriteIDs.contains { !isSmartCardFavoriteID($0) }
     }
 
@@ -768,9 +790,10 @@ final class FavoriteLibraryOrganizer: ObservableObject {
     /// tag-union display use
     /// (`LocalFavoriteLibraryProjection.archivedItems(matching:...)`). A
     /// non-smart-card id passes through unchanged. Used by every
-    /// selection-consuming operation EXCEPT `deleteSelection`, which
-    /// intentionally keeps requiring the dedicated archive page for
-    /// per-item-visible deletion (see its own doc comment).
+    /// selection-consuming operation, including `deleteSelection` when
+    /// `smartMangaBulkDeleteEnabled` is on (see its own doc comment for the
+    /// off case, which intentionally keeps requiring the dedicated archive
+    /// page for per-item-visible deletion instead).
     private func expandedSelectionFavoriteIDs(_ favoriteIDs: Set<String>) -> Set<String> {
         guard selectedMergedGroupCleanBookName == nil else { return favoriteIDs }
         // Built once for every id in this one call, instead of calling
@@ -999,7 +1022,15 @@ final class FavoriteLibraryOrganizer: ObservableObject {
         case .currentLocation:
             await deleteSelection(scope: .currentLocation, removeRemote: false)
         case .everywhere:
-            let deletableIDs = selection.selectedFavoriteIDs.filter { !isSmartCardFavoriteID($0) }
+            // Must expand smart-card ids the SAME way `deleteSelection` is
+            // about to when the setting is on, or the remote-delete
+            // candidate set would silently exclude every archived member
+            // but the representative — resolving "prompt vs. silent" (and,
+            // if silent, whether to delete remote) from an undercounted
+            // set, then deleting the full expanded set anyway.
+            let deletableIDs = smartMangaBulkDeleteEnabled
+                ? expandedSelectionFavoriteIDs(selection.selectedFavoriteIDs)
+                : selection.selectedFavoriteIDs.filter { !isSmartCardFavoriteID($0) }
             let candidates = document.items.filter { deletableIDs.contains($0.id) }
             switch await resolveRemoveRemoteDecision(candidates: candidates) {
             case .prompt:
@@ -1051,27 +1082,36 @@ final class FavoriteLibraryOrganizer: ObservableObject {
         return FavoriteRemoveRemoteDecision.resolve(settings: settings, canRemoveRemote: canRemoveRemote)
     }
 
-    /// Deliberately NOT routed through `expandedSelectionFavoriteIDs` —
-    /// unlike every other selection-consuming operation, delete must keep
-    /// requiring the dedicated "查看归档收藏" archive page for a smart card.
-    /// A smart card can now enter `selection.selectedFavoriteIDs` (Part D),
-    /// so any such id is partitioned out and skipped entirely here: deleting
-    /// only the representative item while leaving every other archived
-    /// member favorited would orphan them from their now-partially-deleted
-    /// group, with no corresponding cleanup — the exact bug that originally
+    /// Routed through `expandedSelectionFavoriteIDs` when
+    /// `smartMangaBulkDeleteEnabled` is on — unlike the off case, a smart
+    /// card selected there is deleted along with every favorite currently
+    /// archived under it, the same expansion every other selection-consuming
+    /// operation already uses. When the setting is off, delete instead keeps
+    /// requiring the dedicated "查看归档收藏" archive page for a smart card:
+    /// a smart card can enter `selection.selectedFavoriteIDs` (Part D), so
+    /// any such id is partitioned out and skipped entirely — deleting only
+    /// the representative item while leaving every other archived member
+    /// favorited would orphan them from their now-partially-deleted group,
+    /// with no corresponding cleanup — the exact bug that originally
     /// justified excluding smart cards from selection altogether.
     func deleteSelection(scope: LocalFavoriteDeleteScope, removeRemote: Bool) async {
         guard selection.selectedEntryCount > 0 else { return }
         let allSelectedFavoriteIDs = selection.selectedFavoriteIDs
-        // `isSmartCardFavoriteID` deliberately does NOT look the id up in
-        // `derived.cards` — see its own doc comment — precisely so a smart
-        // card scrolled out of the current search/tag/source filter while
-        // still selected still gets skipped here instead of silently
-        // falling through to a lone, sibling-orphaning delete below.
-        let skippedSmartCardFavoriteIDs = allSelectedFavoriteIDs.filter(isSmartCardFavoriteID)
-        let favoriteIDs = allSelectedFavoriteIDs.subtracting(skippedSmartCardFavoriteIDs)
-        if !skippedSmartCardFavoriteIDs.isEmpty {
-            transientMessage = L10n.string("favorites.bulk_delete_skipped_smart_manga_message")
+        let favoriteIDs: Set<String>
+        if smartMangaBulkDeleteEnabled {
+            favoriteIDs = expandedSelectionFavoriteIDs(allSelectedFavoriteIDs)
+        } else {
+            // `isSmartCardFavoriteID` deliberately does NOT look the id up
+            // in `derived.cards` — see its own doc comment — precisely so a
+            // smart card scrolled out of the current search/tag/source
+            // filter while still selected still gets skipped here instead
+            // of silently falling through to a lone, sibling-orphaning
+            // delete below.
+            let skippedSmartCardFavoriteIDs = allSelectedFavoriteIDs.filter(isSmartCardFavoriteID)
+            favoriteIDs = allSelectedFavoriteIDs.subtracting(skippedSmartCardFavoriteIDs)
+            if !skippedSmartCardFavoriteIDs.isEmpty {
+                transientMessage = L10n.string("favorites.bulk_delete_skipped_smart_manga_message")
+            }
         }
         let collectionIDs = selection.selectedCollectionIDs
         guard !favoriteIDs.isEmpty || !collectionIDs.isEmpty else {

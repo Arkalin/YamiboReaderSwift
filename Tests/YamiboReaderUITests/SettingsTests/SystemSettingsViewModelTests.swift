@@ -86,6 +86,26 @@ final class SystemSettingsViewModelTests: XCTestCase {
         XCTAssertTrue(viewModel.favoriteShowsCategoryCounts)
     }
 
+    func testFavoriteSmartMangaBulkDeleteSettingLoadsAndPersists() async throws {
+        let fixture = try makeFixture()
+        try await fixture.settingsStore.save(AppSettings(favorites: FavoriteLibrarySettings(
+            smartMangaBulkDeleteEnabled: false
+        )))
+
+        let viewModel = SystemSettingsViewModel(dependencies: fixture.appContext.settingsDependencies)
+        await viewModel.load()
+
+        XCTAssertFalse(viewModel.favoriteSmartMangaBulkDeleteEnabled)
+
+        viewModel.updateFavoriteSmartMangaBulkDeleteEnabled(true)
+
+        try await waitFor {
+            let loaded = await fixture.settingsStore.load()
+            return loaded.favorites.smartMangaBulkDeleteEnabled
+        }
+        XCTAssertTrue(viewModel.favoriteSmartMangaBulkDeleteEnabled)
+    }
+
     func testApplyFavoriteBackgroundPersistsImageAndSettings() async throws {
         let fixture = try makeFixture()
         let viewModel = SystemSettingsViewModel(dependencies: fixture.appContext.settingsDependencies)

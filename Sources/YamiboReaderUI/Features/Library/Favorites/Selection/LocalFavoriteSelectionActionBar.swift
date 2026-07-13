@@ -102,11 +102,14 @@ struct LocalFavoriteSelectionActionBar: View {
         selection.selectedCollectionCount > 0 && selection.selectedFavoriteCount == 0
     }
 
-    /// A smart card can be selected but contributes nothing to delete
+    /// When `FavoriteLibrarySettings.smartMangaBulkDeleteEnabled` is off, a
+    /// smart card can be selected but contributes nothing to delete
     /// (`FavoriteLibraryOrganizer.deleteSelection` skips every smart-card
-    /// id) — `hasDeletableSelection` accounts for that, so a selection made
-    /// up entirely of smart cards hides this button instead of showing one
-    /// that silently does nothing when tapped.
+    /// id in that mode) — `hasDeletableSelection` accounts for that, so a
+    /// selection made up entirely of smart cards hides this button instead
+    /// of showing one that silently does nothing when tapped. When the
+    /// setting is on, a smart-card-only selection is fully deletable (its
+    /// whole archive), so the button shows.
     private var canDelete: Bool {
         organizer.hasDeletableSelection
     }

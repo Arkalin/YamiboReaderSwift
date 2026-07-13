@@ -17,6 +17,7 @@ final class SystemSettingsViewModel: ObservableObject {
     @Published var favoriteAddSyncDefault = true
     @Published var favoriteRemoveRemotePromptEnabled = true
     @Published var favoriteRemoveRemoteDefault = false
+    @Published var favoriteSmartMangaBulkDeleteEnabled = true
     @Published var novelOfflineCache = NovelOfflineCacheSettings()
     @Published var applePencilPageTurn = ApplePencilPageTurnSettings()
     @Published var gamepad = GamepadSettings()
@@ -86,6 +87,7 @@ final class SystemSettingsViewModel: ObservableObject {
         favoriteAddSyncDefault = settings.favorites.addSyncDefault
         favoriteRemoveRemotePromptEnabled = settings.favorites.removeRemotePromptEnabled
         favoriteRemoveRemoteDefault = settings.favorites.removeRemoteDefault
+        favoriteSmartMangaBulkDeleteEnabled = settings.favorites.smartMangaBulkDeleteEnabled
         novelOfflineCache = settings.novelOfflineCache
         applePencilPageTurn = settings.system.applePencilPageTurn
         gamepad = settings.system.gamepad
@@ -370,6 +372,16 @@ final class SystemSettingsViewModel: ObservableObject {
             settings.favorites.removeRemoteDefault = value
         } revert: { [weak self] in
             self?.favoriteRemoveRemoteDefault = previous
+        }
+    }
+
+    func updateFavoriteSmartMangaBulkDeleteEnabled(_ value: Bool) {
+        let previous = favoriteSmartMangaBulkDeleteEnabled
+        favoriteSmartMangaBulkDeleteEnabled = value
+        persistFavoriteSyncBehavior { settings in
+            settings.favorites.smartMangaBulkDeleteEnabled = value
+        } revert: { [weak self] in
+            self?.favoriteSmartMangaBulkDeleteEnabled = previous
         }
     }
 
