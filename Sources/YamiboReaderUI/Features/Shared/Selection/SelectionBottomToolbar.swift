@@ -33,7 +33,7 @@ struct SelectionBottomToolbar: View {
     let actions: [SelectionToolbarAction]
 
     var body: some View {
-        HStack(spacing: 0) {
+        SelectionToolbarEqualWidthLayout {
             ForEach(actions) { action in
                 Button(role: action.role, action: action.action) {
                     VStack(spacing: 4) {
@@ -41,8 +41,11 @@ struct SelectionBottomToolbar: View {
                             .font(.title3)
                         Text(action.title)
                             .font(.caption2)
+                            .lineLimit(1)
                     }
-                    .frame(maxWidth: .infinity)
+                    .padding(.horizontal, 12)
+                    .frame(minWidth: 64, maxWidth: .infinity, minHeight: 44)
+                    .contentShape(Rectangle())
                     .foregroundStyle(action.role == .destructive ? Color.red : Color.primary)
                     .opacity(action.isEnabled ? 1 : 0.35)
                 }
@@ -56,6 +59,45 @@ struct SelectionBottomToolbar: View {
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 10)
+    }
+}
+
+/// Lays the action buttons out in equal-width cells sized to the widest
+/// button, so the bar's *ideal* width already has room for every caption.
+/// The iOS 26 system bottom bar sizes its floating Liquid Glass capsule to
+/// that ideal — a plain `HStack` of `maxWidth: .infinity` buttons collapses
+/// there to the sum of the buttons' tight sizes and then splits it evenly,
+/// cramming the icons together and truncating the longest caption. Proposed
+/// more than its ideal (the pre-iOS-26 full-width mounting), it spreads the
+/// extra evenly across the cells, reproducing the classic full-width bar.
+private struct SelectionToolbarEqualWidthLayout: Layout {
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        guard !subviews.isEmpty else { return .zero }
+        let cell = widestIdealCell(of: subviews)
+        if let proposed = proposal.width, proposed.isFinite {
+            return CGSize(width: proposed, height: cell.height)
+        }
+        return CGSize(width: cell.width * CGFloat(subviews.count), height: cell.height)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        guard !subviews.isEmpty else { return }
+        let cellWidth = bounds.width / CGFloat(subviews.count)
+        let cellProposal = ProposedViewSize(width: cellWidth, height: bounds.height)
+        for (index, subview) in subviews.enumerated() {
+            subview.place(
+                at: CGPoint(x: bounds.minX + cellWidth * (CGFloat(index) + 0.5), y: bounds.midY),
+                anchor: .center,
+                proposal: cellProposal
+            )
+        }
+    }
+
+    private func widestIdealCell(of subviews: Subviews) -> CGSize {
+        subviews.reduce(.zero) { cell, subview in
+            let ideal = subview.sizeThatFits(.unspecified)
+            return CGSize(width: max(cell.width, ideal.width), height: max(cell.height, ideal.height))
+        }
     }
 }
 
