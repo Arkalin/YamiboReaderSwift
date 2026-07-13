@@ -551,6 +551,73 @@ import YamiboReaderTestSupport
     #expect(model.coverURL == manualURL)
 }
 
+/// Live-update regression test: renaming this manga's directory from
+/// elsewhere (e.g. the manga reader's own directory sheet, reachable while
+/// this detail page stays open underneath it) must refresh both `directory`
+/// and its derived `.smartManga` cover here too — not just on the Favorites
+/// tab (`FavoriteLibraryOrganizer`'s own `MangaDirectoryStore
+/// .didChangeNotification` listener). Before this listener existed, the
+/// stale `cleanBookName` left `loadContentCover()` querying a cover key the
+/// rename had already moved away from, so the cover (and everything else
+/// derived from `directory`) never updated until some unrelated action
+/// forced a full `reload()`.
+@MainActor
+@Test func forumMangaDetailLiveUpdatesDirectoryAndCoverWhenMangaDirectoryStoreChangesExternally() async throws {
+    let suiteName = YamiboTestDefaults.suiteName(prefix: "manga-detail-external-directory-change")
+    _ = try YamiboTestDefaults.make(suiteName: suiteName)
+    let mangaDirectoryStore = try makeForumMangaDetailTestDirectoryStore(suiteName: suiteName)
+    let readingProgressStore = ReadingProgressStore(
+        defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
+        key: "reading-progress"
+    )
+
+    // `lastUpdatedAt` keeps `reload()` from scheduling the fresh-tag
+    // automatic update, isolating this test to the external-rename path.
+    let directory = MangaDirectory(
+        cleanBookName: "旧名漫画二",
+        strategy: .tag,
+        sourceKey: "旧名漫画二",
+        chapters: [
+            MangaChapter(tid: "990", rawTitle: "第一话", chapterNumber: 1, view: 1)
+        ],
+        lastUpdatedAt: Date()
+    )
+    try await mangaDirectoryStore.saveDirectory(directory)
+
+    let dependencies = try makeForumMangaDetailDependencies(
+        readingProgressStore: readingProgressStore,
+        mangaDirectoryStore: mangaDirectoryStore,
+        projectionLoader: FakeMangaReaderProjectionLoader(projectionsByTID: [
+            "990": makeTestMangaReaderProjection(tid: "990", chapterTitle: "第一话")
+        ])
+    )
+    let model = makeForumMangaDetailViewModel(dependencies: dependencies, threadTID: "990")
+
+    await model.reload()
+    #expect(model.directory?.cleanBookName == "旧名漫画二")
+    #expect(model.coverURL == nil)
+
+    // Simulate the rename happening on a completely separate surface (the
+    // reader's own directory correction sheet, or a second detail-page
+    // instance), never routing through this view model's own
+    // `saveCorrection`.
+    var renamed = directory
+    renamed.cleanBookName = "新名漫画二"
+    try await mangaDirectoryStore.renameDirectory(from: directory.cleanBookName, to: renamed)
+    let newCoverURL = try #require(URL(string: "https://img.example.com/renamed-cover.jpg"))
+    _ = try await dependencies.contentCoverStore.setAutomaticCover(
+        newCoverURL,
+        for: .smartManga(cleanBookName: "新名漫画二")
+    )
+
+    for _ in 0..<50 where model.directory?.cleanBookName != "新名漫画二" {
+        try await Task.sleep(nanoseconds: 10_000_000)
+    }
+
+    #expect(model.directory?.cleanBookName == "新名漫画二")
+    #expect(model.coverURL == newCoverURL)
+}
+
 /// Long-press "choose favorite location" feature: not-yet-favorited creates
 /// with exactly the picked locations (not the default category), and the
 /// add-sync prompt still applies afterward — this test disables it so the
