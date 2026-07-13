@@ -256,14 +256,15 @@ final class FavoriteUpdateMonitor: ObservableObject {
     /// Delivers a local notification for a freshly inserted event. Sharing
     /// the event's target-keyed identifier means an accumulated re-detection
     /// replaces the favorite's previous notification instead of stacking.
-    /// `unreadCount` comes from the caller's in-memory run-in-progress event
-    /// list, not a fresh store read — this run's own just-detected event
-    /// (and any earlier one from the same run) isn't committed to
-    /// `updateStore` yet, so reading the store here would undercount the
-    /// badge by exactly those events.
-    private func deliverNotificationIfEnabled(for event: FavoriteUpdateEvent, unreadCount: Int) async {
+    /// The badge is the unread count of the caller's in-memory run-in-progress
+    /// event list merged over the current store state — neither side alone is
+    /// right mid-run: the store is missing this run's not-yet-committed
+    /// detections, and the in-memory list is missing read/dismiss marks the
+    /// user applied since the run snapshotted it.
+    private func deliverNotificationIfEnabled(for event: FavoriteUpdateEvent, runEvents: [FavoriteUpdateEvent]) async {
         guard let notifier, await notificationsEnabled() else { return }
         guard await notifier.authorization() == .granted else { return }
+        let unreadCount = await updateStore.unreadEventCount(mergingRunEvents: runEvents)
         await notifier.deliver(FavoriteUpdateNotification(event: event, badgeCount: unreadCount))
     }
 
@@ -471,10 +472,12 @@ final class FavoriteUpdateMonitor: ObservableObject {
     }
 
     /// Applies this run's accumulated tracked-target/event changes to the
-    /// store in one write. A no-op before `trackedTargets` is ever seeded
-    /// (an early throw from `libraryStore.load()`/`refreshFilters`/
-    /// `replaceTrackedTargetsIfNeeded`) so it never wipes existing state with
-    /// an empty replacement.
+    /// store in one write — a merge on the store side, so read/dismiss marks
+    /// the user applied while this run was in flight survive the commit
+    /// instead of being rolled back by the run's stale start-of-run snapshot.
+    /// A no-op before `trackedTargets` is ever seeded (an early throw from
+    /// `libraryStore.load()`/`refreshFilters`/`replaceTrackedTargetsIfNeeded`)
+    /// so it never writes an empty first-run result over existing state.
     private func commitCheckResults(
         trackedTargets: [String: FavoriteUpdateTrackedTarget],
         events: [FavoriteUpdateEvent]
@@ -686,8 +689,7 @@ final class FavoriteUpdateMonitor: ObservableObject {
         events.removeAll { $0.target == event.target && $0.dismissedAt == nil }
         events.append(event)
         trackedTargets[item.target.id] = target
-        let unreadCount = events.filter { $0.dismissedAt == nil && $0.readAt == nil }.count
-        await deliverNotificationIfEnabled(for: event, unreadCount: unreadCount)
+        await deliverNotificationIfEnabled(for: event, runEvents: events)
         return .checked(detected: 1)
     }
 

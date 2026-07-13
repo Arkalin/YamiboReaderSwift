@@ -329,18 +329,85 @@ public actor FavoriteUpdateStore {
     /// `insertEvent`-call-per-favorite pattern a check loop would otherwise
     /// produce — each of those is a full-blob rewrite of this actor's single
     /// `UserDefaults` key, so batching turns an O(favorite count) number of
-    /// rewrites into one. Callers pass the complete post-run arrays (as
-    /// accumulated in memory over the run), not a diff, so this replaces
-    /// `trackedTargets`/`events` wholesale the same way `replaceTrackedTargets`
-    /// / `replaceFilters` already do.
+    /// rewrites into one. Callers pass the complete post-run arrays as
+    /// accumulated in memory over the run — but a run takes minutes, and the
+    /// caller's arrays were seeded from a store snapshot taken at run start,
+    /// so anything written to the store since (the user marking events
+    /// read/dismissed from the updates page, another writer inserting) must
+    /// not be clobbered by that stale snapshot. This therefore MERGES rather
+    /// than replaces: the run is authoritative for its detection products,
+    /// the current store state for user-facing markers and rows the run
+    /// never saw. See `mergingRunEvents(_:intoStored:)`.
     public func applyCheckRunResults(
         trackedTargets: [FavoriteUpdateTrackedTarget],
         events: [FavoriteUpdateEvent]
     ) async throws {
         var state = loadStateSync()
-        state.trackedTargets = trackedTargets.sorted { $0.id < $1.id }
-        state.events = events
+        var mergedTargets = Dictionary(uniqueKeysWithValues: state.trackedTargets.map { ($0.id, $0) })
+        for target in trackedTargets {
+            mergedTargets[target.id] = target
+        }
+        state.trackedTargets = Array(mergedTargets.values).sorted { $0.id < $1.id }
+        state.events = Self.mergingRunEvents(events, intoStored: state.events)
         try persist(state)
+    }
+
+    /// Unread undismissed event count as it will stand once the given run's
+    /// in-memory events are committed via `applyCheckRunResults` — the number
+    /// a mid-run notification badge should show. Counting either side alone
+    /// is wrong mid-run: the store is missing this run's not-yet-committed
+    /// detections, while the run's snapshot is missing read/dismiss marks the
+    /// user applied since the run started.
+    public func unreadEventCount(mergingRunEvents runEvents: [FavoriteUpdateEvent]) async -> Int {
+        Self.mergingRunEvents(runEvents, intoStored: loadStateSync().events)
+            .filter { $0.readAt == nil && $0.dismissedAt == nil }
+            .count
+    }
+
+    /// Three-way merge of a check run's in-memory event list over the current
+    /// store contents, by event id:
+    /// - present on both sides: the run never edits an existing event in
+    ///   place (it supersedes with a new id), so the copies differ only by
+    ///   markers the user may have set since the run's snapshot — a non-nil
+    ///   store-side `readAt`/`dismissedAt` wins.
+    /// - run-only: a new detection (or a snapshot row another writer has
+    ///   since superseded) — kept.
+    /// - store-only: either inserted by another writer during the run (kept),
+    ///   or the undismissed row this run superseded with an accumulated
+    ///   replacement under a new id (dropped, its delta already folded in).
+    /// The two are told apart by the final pass, which restores the "at most
+    /// one undismissed event per target" invariant both writers maintain
+    /// individually: dismissed events all survive, and an undismissed one only
+    /// if it is the target's newest detection overall — measured against
+    /// dismissed events too, so a stale undismissed copy can never outrank
+    /// (and thereby resurrect) newer same-target content the user dismissed.
+    private static func mergingRunEvents(
+        _ runEvents: [FavoriteUpdateEvent],
+        intoStored storedEvents: [FavoriteUpdateEvent]
+    ) -> [FavoriteUpdateEvent] {
+        let storedByID = Dictionary(uniqueKeysWithValues: storedEvents.map { ($0.id, $0) })
+        let runEventIDs = Set(runEvents.map(\.id))
+        var merged = runEvents.map { event in
+            var event = event
+            if let stored = storedByID[event.id] {
+                event.readAt = stored.readAt ?? event.readAt
+                event.dismissedAt = stored.dismissedAt ?? event.dismissedAt
+            }
+            return event
+        }
+        merged.append(contentsOf: storedEvents.filter { !runEventIDs.contains($0.id) })
+
+        var newestByTarget: [FavoriteItemTarget: FavoriteUpdateEvent] = [:]
+        for event in merged {
+            if let current = newestByTarget[event.target],
+               (current.detectedAt, current.id) >= (event.detectedAt, event.id) {
+                continue
+            }
+            newestByTarget[event.target] = event
+        }
+        return merged.filter { event in
+            event.dismissedAt != nil || newestByTarget[event.target]?.id == event.id
+        }
     }
 
     public func markEventRead(_ id: String, date: Date = .now) async throws {
