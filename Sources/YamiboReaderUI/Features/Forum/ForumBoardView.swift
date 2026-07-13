@@ -140,15 +140,15 @@ struct ForumBoardView: View {
         }
     }
 
-    private func selectFilter(id: String?) {
-        Task {
-            await model.selectFilter(id: id)
+    private var selectFilter: @Sendable (String?) -> Void {
+        { [model] id in
+            Task { await model.selectFilter(id: id) }
         }
     }
 
-    private func selectOrder(id: String?) {
-        Task {
-            await model.selectOrder(id: id)
+    private var selectOrder: @Sendable (String?) -> Void {
+        { [model] id in
+            Task { await model.selectOrder(id: id) }
         }
     }
 }
@@ -177,8 +177,8 @@ private struct ForumBoardBodyView: View {
     let refresh: () async -> Void
     let goToPage: (Int) -> Void
     let restorePreviousPage: (() -> Void)?
-    let selectFilter: (String?) -> Void
-    let selectOrder: (String?) -> Void
+    let selectFilter: @Sendable (String?) -> Void
+    let selectOrder: @Sendable (String?) -> Void
     let onSubBoardTap: (ForumBoardSummary) -> Void
     let onPinnedTap: (ForumPinnedItem) -> Void
     let onThreadTap: (ForumThreadSummary) -> Void
@@ -235,8 +235,8 @@ private struct ForumBoardContentView: View {
     let restorePreviousPage: (() -> Void)?
     let filters: [ForumFilterOption]
     let orders: [ForumOrderOption]
-    let selectFilter: (String?) -> Void
-    let selectOrder: (String?) -> Void
+    let selectFilter: @Sendable (String?) -> Void
+    let selectOrder: @Sendable (String?) -> Void
     let onSubBoardTap: (ForumBoardSummary) -> Void
     let onPinnedTap: (ForumPinnedItem) -> Void
     let onThreadTap: (ForumThreadSummary) -> Void
@@ -352,8 +352,8 @@ private struct ForumBoardStatsView: View {
     let selectedOrderTitle: String
     let filterItems: [ForumBoardOptionItem]
     let orderItems: [ForumBoardOptionItem]
-    let selectFilter: (String?) -> Void
-    let selectOrder: (String?) -> Void
+    let selectFilter: @Sendable (String?) -> Void
+    let selectOrder: @Sendable (String?) -> Void
 
     var body: some View {
         ViewThatFits {
@@ -427,7 +427,7 @@ private struct ForumBoardOptionMenuButton: View {
     let systemImage: String
     let menuTitle: String
     let items: [ForumBoardOptionItem]
-    let select: (String?) -> Void
+    let select: @Sendable (String?) -> Void
 
     private var selection: Binding<String?> {
         Binding(

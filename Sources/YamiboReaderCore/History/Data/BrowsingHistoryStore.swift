@@ -148,9 +148,10 @@ public actor BrowsingHistoryStore {
             sql += " WHERE " + conditions.joined(separator: " AND ")
         }
         sql += " ORDER BY last_visit_time DESC, id ASC"
+        let statementArguments: StatementArguments = StatementArguments(arguments)
         do {
-            return try await database.read { [sql, arguments] db in
-                try Row.fetchAll(db, sql: sql, arguments: StatementArguments(arguments))
+            return try await database.read { [sql, statementArguments] db in
+                try Row.fetchAll(db, sql: sql, arguments: statementArguments)
                     .compactMap(Self.entry(from:))
             }
         } catch {

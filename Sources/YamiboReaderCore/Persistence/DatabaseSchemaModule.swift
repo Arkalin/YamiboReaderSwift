@@ -5,7 +5,7 @@ import Foundation
 ///
 /// `YamiboDatabase` owns the pool; each module owns its tables: it registers its own
 /// migrations and knows how to erase its own rows (restoring required seed data).
-protocol DatabaseSchemaModule {
+protocol DatabaseSchemaModule: Sendable {
     /// Registers the migrations that create and evolve this module's tables.
     static func registerMigrations(in migrator: inout DatabaseMigrator)
 

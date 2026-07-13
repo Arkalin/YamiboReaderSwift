@@ -562,7 +562,6 @@ final class FavoriteLibraryOrganizer: ObservableObject {
 
     // MARK: - Categories
 
-    @discardableResult
     /// Pushes one favorite item to Yamibo (card context menu action).
     func pushItemToYamibo(_ item: FavoriteItem) async {
         do {
@@ -586,6 +585,7 @@ final class FavoriteLibraryOrganizer: ObservableObject {
         }
     }
 
+    @discardableResult
     func createCategory(name: String) async -> FavoriteCategory? {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }

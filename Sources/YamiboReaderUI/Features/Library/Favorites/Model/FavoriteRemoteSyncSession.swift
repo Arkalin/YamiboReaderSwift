@@ -407,7 +407,7 @@ final class FavoriteRemoteSyncSession: ObservableObject {
                 sourceMetadataFetchFailed: metadata.fetchFailed
             )
         case let .webFallback(url):
-            let canonicalURL = YamiboThreadURLCanonicalizer.canonicalThreadURL(from: url) ?? url
+            let canonicalURL = YamiboThreadURLCanonicalizer.canonicalThreadURL(from: url)
             guard let threadID = YamiboThreadURLCanonicalizer.threadID(from: canonicalURL) else {
                 throw YamiboError.missingFavoriteThreadID
             }
