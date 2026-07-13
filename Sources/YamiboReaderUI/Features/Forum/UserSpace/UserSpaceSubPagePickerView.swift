@@ -16,11 +16,13 @@ struct UserSpaceSubPagePickerView: View {
                         Text(title(for: subPage))
                             .font(.footnote.weight(subPage == selectedSubPage ? .semibold : .regular))
                             .padding(.horizontal, 12)
-                            .frame(height: 30)
+                            .frame(minHeight: 30)
                             .foregroundStyle(subPage == selectedSubPage ? ForumColors.textDark : ForumColors.secondaryText)
                             .background(Capsule().fill(subPage == selectedSubPage ? ForumColors.accentFill : ForumColors.mutedFill))
+                            .expandedHitTarget(width: 0)
                     }
                     .buttonStyle(.plain)
+                    .accessibilityAddTraits(subPage == selectedSubPage ? .isSelected : [])
                 }
             }
         }

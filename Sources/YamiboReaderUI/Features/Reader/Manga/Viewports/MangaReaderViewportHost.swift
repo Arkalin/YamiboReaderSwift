@@ -86,6 +86,17 @@ private struct MangaReaderLoadedContent: View {
     let onPageLongPress: (MangaReaderPageProjection) -> Void
     let onTap: () -> Void
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// Reduce Motion downgrades the 3D page-curl transition to the already
+    /// available quick-fade style; direct-manipulation slide stays as is.
+    private var effectiveSettings: MangaReaderSettings {
+        guard reduceMotion, settings.pagedTurnStyle == .pageCurl else { return settings }
+        var adjusted = settings
+        adjusted.pagedTurnStyle = .quickFade
+        return adjusted
+    }
+
     var body: some View {
         if loaded.pages.isEmpty {
             MangaReaderEmptyContent()
@@ -120,11 +131,11 @@ private struct MangaReaderLoadedContent: View {
                         pageTurnDirection: settings.pageTurnDirection,
                         usesTwoPageSpread: usesTwoPageSpread
                     )
-                    if settings.pagedTurnStyle == .pageCurl {
+                    if effectiveSettings.pagedTurnStyle == .pageCurl {
                         MangaPagedPageCurlReaderViewport(
                             plan: plan,
                             viewportPlacement: loaded.viewportPlacement,
-                            settings: settings,
+                            settings: effectiveSettings,
                             imageLoader: imageLoader,
                             isChromeVisible: isChromeVisible,
                             zoomEnabled: settings.zoomEnabled,
@@ -146,7 +157,7 @@ private struct MangaReaderLoadedContent: View {
                         MangaPagedReaderViewport(
                             plan: plan,
                             viewportPlacement: loaded.viewportPlacement,
-                            settings: settings,
+                            settings: effectiveSettings,
                             imageLoader: imageLoader,
                             isChromeVisible: isChromeVisible,
                             zoomEnabled: settings.zoomEnabled,

@@ -10,6 +10,7 @@ struct NovelReaderCachePanel: View {
     @State private var isSelecting = false
     @State private var selectedViews: Set<Int> = []
     @State private var isQueuePresented = false
+    @State private var isDeleteConfirmationPresented = false
     @State private var queueViewModel: MineHomeViewModel
 
     init(cache: NovelReaderCacheCoordinator) {
@@ -69,6 +70,18 @@ struct NovelReaderCachePanel: View {
             }
             .sheet(isPresented: $isQueuePresented) {
                 MineOfflineCacheQueueSheet(viewModel: queueViewModel)
+            }
+            .confirmationDialog(
+                L10n.string(
+                    "reader.cache.delete_selected_confirm_title",
+                    selectionState.cachedSelectedViews.count
+                ),
+                isPresented: $isDeleteConfirmationPresented,
+                titleVisibility: .visible
+            ) {
+                Button(L10n.string("common.delete"), role: .destructive) {
+                    performDeleteSelection()
+                }
             }
             .task {
                 await cache.refresh()
@@ -139,7 +152,13 @@ struct NovelReaderCachePanel: View {
         exitSelectionMode()
     }
 
+    /// Batch removal is destructive (re-downloading has real cost offline),
+    /// so it goes through a confirmation before executing.
     private func deleteSelection() {
+        isDeleteConfirmationPresented = true
+    }
+
+    private func performDeleteSelection() {
         let targets = selectionState.cachedSelectedViews
         Task { @MainActor in
             await cache.deleteCachedViews(targets)
@@ -239,8 +258,11 @@ private struct NovelReaderCacheSelectionHeader: View {
     var body: some View {
         HStack {
             if isSelecting {
-                Button(isAllSelected ? L10n.string("common.invert_selection") : L10n.string("common.select_all")) {
+                Button {
                     onToggleAll()
+                } label: {
+                    Text(isAllSelected ? L10n.string("common.invert_selection") : L10n.string("common.select_all"))
+                        .expandedHitTarget(width: 0)
                 }
                 .font(.subheadline.weight(.semibold))
                 .disabled(isEmpty)
@@ -252,8 +274,11 @@ private struct NovelReaderCacheSelectionHeader: View {
 
             Spacer(minLength: 0)
 
-            Button(isSelecting ? L10n.string("common.done") : L10n.string("common.select")) {
+            Button {
                 onToggleSelectionMode()
+            } label: {
+                Text(isSelecting ? L10n.string("common.done") : L10n.string("common.select"))
+                    .expandedHitTarget(width: 0)
             }
             .font(.subheadline.weight(.semibold))
             .buttonStyle(.plain)

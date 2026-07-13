@@ -5,7 +5,10 @@ import YamiboReaderCore
 /// search keywords). Presented from both the reader's directory sheet and the
 /// forum manga detail page.
 struct MangaDirectoryCorrectionSheet: View {
-    static let preferredHeight: CGFloat = 360
+    /// Preferred detents for presenters: medium fits the form at standard
+    /// type sizes; large keeps every field reachable (the form scrolls) when
+    /// accessibility text sizes need more room than a fixed height allows.
+    static let presentationDetents: Set<PresentationDetent> = [.medium, .large]
 
     @Binding var draft: MangaDirectoryEditDraft
     let onSaveCorrection: (MangaDirectoryEditDraft) -> Void
@@ -19,7 +22,6 @@ struct MangaDirectoryCorrectionSheet: View {
                     draft: $draft
                 )
             }
-            .scrollDisabled(true)
             .navigationTitle(L10n.string("manga.correction_title"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

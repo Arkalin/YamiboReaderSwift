@@ -39,8 +39,10 @@ struct SystemSettingsPeripheralPageTurnView: View {
                             Image(systemName: "questionmark.circle")
                                 .font(.headline.weight(.semibold))
                                 .foregroundStyle(Color.accentColor)
+                                .expandedHitTarget()
                         }
                         .buttonStyle(.plain)
+                        .accessibilityLabel(L10n.string("apple_pencil.help_toggle"))
                         Spacer(minLength: 8)
                         Toggle("", isOn: Binding(
                             get: { viewModel.applePencilPageTurn.isEnabled },

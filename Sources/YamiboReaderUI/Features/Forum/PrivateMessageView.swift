@@ -48,22 +48,8 @@ struct PrivateMessageView: View {
         .task {
             await model.load()
         }
-        .alert(
-            L10n.string("private_message.title"),
-            isPresented: Binding(
-                get: { model.sendResultMessage != nil },
-                set: { isPresented in
-                    if !isPresented {
-                        model.clearSendResult()
-                    }
-                }
-            )
-        ) {
-            Button(L10n.string("common.ok")) {
-                model.clearSendResult()
-            }
-        } message: {
-            Text(model.sendResultMessage ?? "")
+        .forumTransientMessage(model.sendResultMessage) {
+            model.clearSendResult()
         }
     }
 

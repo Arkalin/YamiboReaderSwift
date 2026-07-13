@@ -6,6 +6,14 @@ struct SystemSettingsHomePageSelector: View {
     let isBusy: Bool
     let onSelect: (AppHomePage) -> Void
 
+    @Environment(\.colorScheme) private var colorScheme
+
+    /// White on the dark AccentColor variant (#C7946B) is only ~2.7:1, so
+    /// the selected capsule's foreground flips to black in dark mode.
+    private var selectedForeground: Color {
+        colorScheme == .dark ? .black : .white
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(L10n.string("settings.home_page"))
@@ -22,16 +30,18 @@ struct SystemSettingsHomePageSelector: View {
                             Text(option.title)
                                 .font(.subheadline.weight(.semibold))
                         }
-                        .foregroundStyle(homePage == option ? .white : .primary)
+                        .foregroundStyle(homePage == option ? selectedForeground : .primary)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 10)
                         .background(
                             Capsule(style: .continuous)
                                 .fill(homePage == option ? Color.accentColor : Color.secondary.opacity(0.12))
                         )
+                        .expandedHitTarget()
                     }
                     .buttonStyle(.plain)
                     .disabled(isBusy)
+                    .accessibilityAddTraits(homePage == option ? .isSelected : [])
                 }
             }
         }

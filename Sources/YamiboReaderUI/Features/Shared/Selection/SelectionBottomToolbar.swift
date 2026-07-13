@@ -38,7 +38,7 @@ struct SelectionBottomToolbar: View {
                 Button(role: action.role, action: action.action) {
                     VStack(spacing: 4) {
                         Image(systemName: action.systemImage)
-                            .font(.system(size: 20))
+                            .font(.title3)
                         Text(action.title)
                             .font(.caption2)
                     }

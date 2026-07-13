@@ -22,8 +22,11 @@ struct ForumThreadPostHeader: View {
 
             VStack(alignment: .leading, spacing: 3) {
                 if let uid = post.author.uid {
-                    Button(post.author.name) {
+                    Button {
                         onUserTap(uid, post.author.name)
+                    } label: {
+                        Text(post.author.name)
+                            .expandedHitTarget(width: 0)
                     }
                     .buttonStyle(.plain)
                     .font(.subheadline.weight(.semibold))
@@ -74,6 +77,7 @@ private struct ForumThreadManageActionsView: View {
                 Text(singleAction.title)
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(ForumColors.orangeAccent)
+                    .expandedHitTarget()
             }
             .buttonStyle(.plain)
             .accessibilityLabel(L10n.string("forum.thread.manage_action"))
@@ -89,6 +93,7 @@ private struct ForumThreadManageActionsView: View {
                     .font(.body.weight(.semibold))
                     .foregroundStyle(ForumColors.orangeAccent)
                     .frame(width: 32, height: 32)
+                    .expandedHitTarget()
             }
             .accessibilityLabel(L10n.string("forum.thread.manage_action"))
         }

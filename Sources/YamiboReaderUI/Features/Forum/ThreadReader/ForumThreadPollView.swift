@@ -159,9 +159,11 @@ private struct ForumThreadPollOptionView: View {
                             .foregroundStyle(ForumColors.secondaryText)
                     }
                 }
+                .expandedHitTarget(width: 0)
             }
             .buttonStyle(.plain)
             .disabled(pollStatus != .notVoted)
+            .accessibilityAddTraits(isVisuallySelected ? .isSelected : [])
 
             if showProgress {
                 ProgressView(value: min(max((option.percentage ?? 0) / 100, 0), 1))

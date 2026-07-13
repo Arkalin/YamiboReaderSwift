@@ -31,23 +31,15 @@ struct ForumSearchView: View {
             errorMessage: model.errorMessage,
             submit: submit,
             goToPage: goToPage,
+            restorePreviousPage: model.canRestorePreviousPage
+                ? { _ = model.restorePreviousPage() }
+                : nil,
             onThreadTap: onThreadTap,
             onAuthorTap: onAuthorTap
         )
         .forumPageBackground()
         .tint(ForumColors.brownDeep)
         .navigationTitle(L10n.string("forum.search.title"))
-        .toolbar {
-            if model.canRestorePreviousPage {
-                ToolbarItem {
-                    Button {
-                        _ = model.restorePreviousPage()
-                    } label: {
-                        Label(L10n.string("common.back"), systemImage: "chevron.left")
-                    }
-                }
-            }
-        }
     }
 
     private func submit() {
@@ -81,6 +73,7 @@ private struct ForumSearchBodyView: View {
     let errorMessage: String?
     let submit: () -> Void
     let goToPage: (Int) -> Void
+    let restorePreviousPage: (() -> Void)?
     let onThreadTap: (ForumThreadSummary) -> Void
     let onAuthorTap: (String, String?) -> Void
 
@@ -116,7 +109,8 @@ private struct ForumSearchBodyView: View {
                         ForumSearchPageNavigationView(
                             navigation: pageNavigation,
                             currentPage: currentPage,
-                            goToPage: goToPage
+                            goToPage: goToPage,
+                            restorePreviousPage: restorePreviousPage
                         )
                     }
                 }
@@ -168,9 +162,17 @@ private struct ForumSearchPageNavigationView: View {
     let navigation: ForumPageNavigation
     let currentPage: Int
     let goToPage: (Int) -> Void
+    var restorePreviousPage: (() -> Void)? = nil
 
     var body: some View {
         HStack(spacing: 12) {
+            if let restorePreviousPage {
+                Button(action: restorePreviousPage) {
+                    Image(systemName: "arrow.uturn.backward")
+                }
+                .accessibilityLabel(L10n.string("forum.page_navigation.undo_jump"))
+            }
+
             Button {
                 goToPage(currentPage - 1)
             } label: {

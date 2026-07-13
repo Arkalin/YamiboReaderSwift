@@ -251,7 +251,7 @@ struct ReaderVerticalProgressCapsule<PreviewContent: View>: View {
                         commitScrub()
                     }
             )
-            .accessibilityLabel("目录 · 进度")
+            .accessibilityLabel(L10n.string("reader.progress_capsule.directory_progress"))
         }
         .frame(width: totalWidth)
         .frame(height: layout.verticalScrubberHeight)
@@ -412,12 +412,12 @@ struct ReaderVerticalProgressPreviewCapsule: View {
         let chapterTitle = preview.chapterTitle?.trimmingCharacters(in: .whitespacesAndNewlines)
 
         VStack(spacing: 2) {
-            Text(chapterTitle?.isEmpty == false ? chapterTitle! : "目录")
+            Text(chapterTitle?.isEmpty == false ? chapterTitle! : L10n.string("reader.chapters"))
                 .font(.callout.weight(.semibold))
                 .lineLimit(1)
                 .minimumScaleFactor(0.82)
 
-            Text("第\(preview.pageNumber)页")
+            Text(L10n.string("reader.page_number_compact", preview.pageNumber))
                 .font(.caption2.weight(.semibold))
                 .foregroundStyle(.secondary)
                 .lineLimit(1)

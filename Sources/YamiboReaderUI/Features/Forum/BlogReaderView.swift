@@ -42,22 +42,8 @@ struct BlogReaderView: View {
         .task {
             await model.load()
         }
-        .alert(
-            L10n.string("blog_reader.comment_result"),
-            isPresented: Binding(
-                get: { model.commentResultMessage != nil },
-                set: { isPresented in
-                    if !isPresented {
-                        model.clearCommentResult()
-                    }
-                }
-            )
-        ) {
-            Button(L10n.string("common.ok")) {
-                model.clearCommentResult()
-            }
-        } message: {
-            Text(model.commentResultMessage ?? "")
+        .forumTransientMessage(model.commentResultMessage) {
+            model.clearCommentResult()
         }
         .alert(
             L10n.string("blog_reader.comment_failed_title"),
@@ -431,8 +417,11 @@ private struct BlogReaderCommentRow: View {
                 }
                 Spacer()
                 if let replyURL = comment.replyURL {
-                    Button(L10n.string("blog_reader.reply")) {
+                    Button {
                         onWebTap(replyURL)
+                    } label: {
+                        Text(L10n.string("blog_reader.reply"))
+                            .expandedHitTarget()
                     }
                     .buttonStyle(.plain)
                     .font(.caption.weight(.semibold))

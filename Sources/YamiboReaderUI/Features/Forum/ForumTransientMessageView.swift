@@ -21,6 +21,8 @@ private struct ForumTransientMessageOverlayModifier: ViewModifier {
     let bottomPadding: CGFloat
     let clear: @MainActor () -> Void
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     func body(content: Content) -> some View {
         content
             .overlay(alignment: .bottom) {
@@ -28,13 +30,18 @@ private struct ForumTransientMessageOverlayModifier: ViewModifier {
                     ForumTransientMessageView(message: message)
                         .padding(.horizontal, 24)
                         .padding(.bottom, bottomPadding)
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                        .transition(
+                            reduceMotion
+                                ? .opacity.animation(.snappy(duration: 0.2))
+                                : .move(edge: .bottom).combined(with: .opacity)
+                        )
                 }
             }
             .animation(.snappy(duration: 0.2), value: message)
             .task(id: message) {
-                guard message != nil else { return }
-                try? await Task.sleep(for: .seconds(3))
+                guard let message else { return }
+                announceForAccessibility(message)
+                try? await Task.sleep(for: displayDuration(for: message))
                 guard !Task.isCancelled else { return }
                 await MainActor.run {
                     withAnimation(.snappy(duration: 0.2)) {
@@ -42,6 +49,21 @@ private struct ForumTransientMessageOverlayModifier: ViewModifier {
                     }
                 }
             }
+    }
+
+    /// Scale on-screen time with message length so longer copy (error
+    /// details) is not cut off at a fixed 3 seconds.
+    private func displayDuration(for message: String) -> Duration {
+        let seconds = min(max(3, Double(message.count) * 0.12), 8)
+        return .seconds(seconds)
+    }
+
+    private func announceForAccessibility(_ message: String) {
+#if os(iOS)
+        var announcement = AttributedString(message)
+        announcement.accessibilitySpeechAnnouncementPriority = .high
+        AccessibilityNotification.Announcement(announcement).post()
+#endif
     }
 }
 

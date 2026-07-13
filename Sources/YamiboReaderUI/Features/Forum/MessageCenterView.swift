@@ -142,11 +142,13 @@ private struct MessageCenterTabPickerView: View {
                     Text(MessageCenterViewModel.title(for: tab))
                         .font(.footnote.weight(tab == selectedTab ? .semibold : .regular))
                         .padding(.horizontal, 12)
-                        .frame(height: 30)
+                        .frame(minHeight: 30)
                         .foregroundStyle(tab == selectedTab ? ForumColors.textDark : ForumColors.secondaryText)
                         .background(Capsule().fill(tab == selectedTab ? ForumColors.accentFill : ForumColors.mutedFill))
+                        .expandedHitTarget(width: 0)
                 }
                 .buttonStyle(.plain)
+                .accessibilityAddTraits(tab == selectedTab ? .isSelected : [])
             }
         }
     }

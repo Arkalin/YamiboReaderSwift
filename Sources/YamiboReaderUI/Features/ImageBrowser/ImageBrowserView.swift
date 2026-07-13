@@ -1,4 +1,6 @@
+import CoreTransferable
 import SwiftUI
+import UniformTypeIdentifiers
 import YamiboReaderCore
 
 #if os(iOS)
@@ -49,7 +51,7 @@ struct ImageBrowserView: View {
     @State private var swipeDismissProgress: CGFloat = 0
     @State private var isSwipeDismissCommitted = false
     @State private var feedback: ImageBrowserFeedback?
-    @State private var shareItem: ImageBrowserShareItem?
+    @State private var transientMessage: String?
     @State private var isPreparingAction = false
     @State private var coverActions: [ImageBrowserCoverAction] = []
 
@@ -97,11 +99,7 @@ struct ImageBrowserView: View {
                         await copyImage()
                     }
                 },
-                prepareShare: {
-                    Task {
-                        await prepareShare()
-                    }
-                },
+                shareable: currentShareable,
                 saveImage: {
                     Task {
                         await saveImage()
@@ -121,28 +119,52 @@ struct ImageBrowserView: View {
         .task {
             await reloadCoverActions()
         }
-        .alert(item: $feedback) { feedback in
-            Alert(
-                title: Text(feedback.title),
-                message: Text(feedback.message),
-                dismissButton: .default(Text(L10n.string("common.done")))
-            )
-        }
-        .sheet(item: $shareItem) { item in
-            ImageBrowserActivityView(activityItems: [item.fileURL]) {
-                do {
-                    try FileManager.default.removeItem(at: item.fileURL)
-                } catch {
-                    YamiboLog.reader.warning("Failed to clean up temporary share file: \(error)")
+        .alert(
+            feedback?.title ?? "",
+            isPresented: isFeedbackPresented,
+            presenting: feedback
+        ) { feedback in
+            if feedback.offersOpenSettings {
+                Button(L10n.string("favorites.updates.notifications_open_settings")) {
+                    if let url = URL(string: UIApplication.openSettingsURLString) {
+                        UIApplication.shared.open(url)
+                    }
                 }
-                shareItem = nil
+                Button(L10n.string("common.cancel"), role: .cancel) {}
+            } else {
+                Button(L10n.string("common.done"), role: .cancel) {}
             }
+        } message: { feedback in
+            Text(feedback.message)
+        }
+        .forumTransientMessage(transientMessage) {
+            transientMessage = nil
         }
         .accessibilityIdentifier("reader-image-browser")
     }
 
     private var currentItem: ImageBrowserItem? {
         items.first { $0.id == selectedItemID } ?? items.first
+    }
+
+    private var currentShareable: ImageBrowserShareableImage? {
+        guard let currentItem else { return nil }
+        return ImageBrowserShareableImage(
+            source: currentItem.source,
+            fileExtension: preferredImageExtension(for: currentItem),
+            title: currentItem.title
+        )
+    }
+
+    private var isFeedbackPresented: Binding<Bool> {
+        Binding(
+            get: { feedback != nil },
+            set: { isPresented in
+                if !isPresented {
+                    feedback = nil
+                }
+            }
+        )
     }
 
     private static func initialSelection(in items: [ImageBrowserItem], initialItemID: String?) -> String {
@@ -160,24 +182,7 @@ struct ImageBrowserView: View {
                 throw ImageBrowserActionError.invalidImageData
             }
             UIPasteboard.general.image = image
-            feedback = .success(
-                title: L10n.string("image.copy_success_title"),
-                message: L10n.string("image.copy_success_message")
-            )
-        }
-    }
-
-    private func prepareShare() async {
-        await performImageAction { item in
-            let data = try await imageData(for: item)
-            guard UIImage(data: data) != nil else {
-                throw ImageBrowserActionError.invalidImageData
-            }
-            let fileURL = FileManager.default.temporaryDirectory
-                .appendingPathComponent(UUID().uuidString)
-                .appendingPathExtension(preferredImageExtension(for: item))
-            try data.write(to: fileURL, options: .atomic)
-            shareItem = ImageBrowserShareItem(fileURL: fileURL)
+            transientMessage = L10n.string("image.copy_success_message")
         }
     }
 
@@ -186,10 +191,7 @@ struct ImageBrowserView: View {
             let data = try await imageData(for: item)
             let saver = MangaImagePhotoSaver()
             try await saver.saveImageData(data)
-            feedback = .success(
-                title: L10n.string("image.save_success_title"),
-                message: L10n.string("image.save_success_message")
-            )
+            transientMessage = L10n.string("image.save_success_message")
         }
     }
 
@@ -203,10 +205,7 @@ struct ImageBrowserView: View {
             guard let message = try await coverAction.perform(item.source) else {
                 throw ImageBrowserActionError.invalidImageData
             }
-            feedback = .success(
-                title: L10n.string("cover.action_success_title"),
-                message: message
-            )
+            transientMessage = message
         }
         await reloadCoverActions()
     }
@@ -220,7 +219,7 @@ struct ImageBrowserView: View {
         do {
             try await action(currentItem)
         } catch MangaImagePhotoSaveError.authorizationDenied {
-            feedback = .failure(message: L10n.string("image.save_photo_permission_denied"))
+            feedback = .photoPermissionDenied()
         } catch {
             YamiboLog.reader.error("Image browser action failed for item \(currentItem.id): \(error)")
             feedback = .failure(message: L10n.string("image.action_failed"))
@@ -363,7 +362,7 @@ private struct ImageBrowserToolbar: View {
     let swipeDismissProgress: CGFloat
     let isSwipeDismissCommitted: Bool
     let copyImage: () -> Void
-    let prepareShare: () -> Void
+    let shareable: ImageBrowserShareableImage?
     let saveImage: () -> Void
     let coverActions: [ImageBrowserCoverAction]
     let performCoverAction: (ImageBrowserCoverAction) -> Void
@@ -386,8 +385,10 @@ private struct ImageBrowserToolbar: View {
                         Label(L10n.string("image.copy"), systemImage: "doc.on.doc")
                     }
 
-                    Button(action: prepareShare) {
-                        Label(L10n.string("common.share"), systemImage: "square.and.arrow.up")
+                    if let shareable {
+                        ShareLink(item: shareable, preview: SharePreview(shareable.title)) {
+                            Label(L10n.string("common.share"), systemImage: "square.and.arrow.up")
+                        }
                     }
 
                     Button(action: saveImage) {
@@ -457,36 +458,40 @@ private struct ImageBrowserFeedback: Identifiable {
     let id = UUID()
     let title: String
     let message: String
-
-    static func success(title: String, message: String) -> ImageBrowserFeedback {
-        ImageBrowserFeedback(title: title, message: message)
-    }
+    var offersOpenSettings = false
 
     static func failure(message: String) -> ImageBrowserFeedback {
         ImageBrowserFeedback(title: L10n.string("common.operation_failed"), message: message)
     }
-}
 
-private struct ImageBrowserShareItem: Identifiable {
-    let id = UUID()
-    let fileURL: URL
-}
-
-private struct ImageBrowserActivityView: UIViewControllerRepresentable {
-    let activityItems: [Any]
-    let onComplete: () -> Void
-
-    func makeUIViewController(context _: Context) -> UIActivityViewController {
-        let controller = UIActivityViewController(activityItems: activityItems, applicationActivities: nil)
-        controller.completionWithItemsHandler = { _, _, _, _ in
-            DispatchQueue.main.async {
-                onComplete()
-            }
-        }
-        return controller
+    static func photoPermissionDenied() -> ImageBrowserFeedback {
+        ImageBrowserFeedback(
+            title: L10n.string("image.save_photo_permission_denied_title"),
+            message: L10n.string("image.save_photo_permission_denied"),
+            offersOpenSettings: true
+        )
     }
+}
 
-    func updateUIViewController(_: UIActivityViewController, context _: Context) {}
+/// Lazily materializes the shared image when the user commits to sharing:
+/// ShareLink drives the export, so no temp file or spinner state is needed
+/// up front. The exported file lands in the system temporary directory and
+/// is reclaimed by the OS.
+private struct ImageBrowserShareableImage: Transferable {
+    let source: YamiboImageSource
+    let fileExtension: String
+    let title: String
+
+    static var transferRepresentation: some TransferRepresentation {
+        FileRepresentation(exportedContentType: .image) { shareable in
+            let data = try await YamiboImagePipeline.shared.data(for: shareable.source)
+            let fileURL = FileManager.default.temporaryDirectory
+                .appendingPathComponent(UUID().uuidString)
+                .appendingPathExtension(shareable.fileExtension)
+            try data.write(to: fileURL, options: .atomic)
+            return SentTransferredFile(fileURL)
+        }
+    }
 }
 
 private struct ImageBrowserZoomableImageView: View {

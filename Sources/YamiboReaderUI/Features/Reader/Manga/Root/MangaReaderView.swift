@@ -19,6 +19,8 @@ public struct MangaReaderView: View {
     @State private var isLikesPresented = false
     @State private var likedItemForActionTarget: LikeItem?
     @State private var imageSavePresentation = MangaImageSavePresentationState()
+    @State private var isPhotoPermissionAlertPresented = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var canRestoreMangaCover = false
     @State private var isSavingImage = false
     @State private var controlHandlerToken: UUID?
@@ -172,7 +174,7 @@ public struct MangaReaderView: View {
             }
         }
         .background(Color.black.ignoresSafeArea())
-        .statusBar(hidden: !isChromeVisible)
+        .statusBarHidden(!isChromeVisible)
         .sheet(isPresented: $isDirectoryPresented) {
             if case let .loaded(loaded) = model.presentation.state {
                 MangaDirectorySheet(
@@ -312,17 +314,53 @@ public struct MangaReaderView: View {
                 MangaImageSaveFeedbackToast(feedback: feedback)
                     .padding(.horizontal, 20)
                     .padding(.bottom, 28)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .transition(
+                        reduceMotion
+                            ? .opacity
+                            : .move(edge: .bottom).combined(with: .opacity)
+                    )
             }
         }
         .animation(.easeInOut(duration: 0.18), value: imageSavePresentation.feedback?.id)
+        .sensoryFeedback(trigger: imageSavePresentation.feedback?.id) { _, _ in
+            switch imageSavePresentation.feedback?.kind {
+            case .success, .custom:
+                .success
+            case .failure:
+                .error
+            case nil:
+                nil
+            }
+        }
         .task(id: imageSavePresentation.feedback?.id) {
             guard let feedback = imageSavePresentation.feedback else { return }
-            try? await Task.sleep(nanoseconds: 1_800_000_000)
+            announceFeedbackForAccessibility(feedback)
+            let text = "\(feedback.title)\(feedback.message)"
+            let seconds = min(max(1.8, Double(text.count) * 0.12), 8)
+            try? await Task.sleep(for: .seconds(seconds))
             await MainActor.run {
                 imageSavePresentation.clearFeedback(id: feedback.id)
             }
         }
+        .alert(
+            L10n.string("image.save_photo_permission_denied_title"),
+            isPresented: $isPhotoPermissionAlertPresented
+        ) {
+            Button(L10n.string("favorites.updates.notifications_open_settings")) {
+                if let url = URL(string: UIApplication.openSettingsURLString) {
+                    UIApplication.shared.open(url)
+                }
+            }
+            Button(L10n.string("common.cancel"), role: .cancel) {}
+        } message: {
+            Text(L10n.string("image.save_photo_permission_denied"))
+        }
+    }
+
+    private func announceFeedbackForAccessibility(_ feedback: MangaImageSaveFeedback) {
+        var announcement = AttributedString("\(feedback.title)，\(feedback.message)")
+        announcement.accessibilitySpeechAnnouncementPriority = .high
+        AccessibilityNotification.Announcement(announcement).post()
     }
 
     private func toggleChrome() {
@@ -472,7 +510,7 @@ public struct MangaReaderView: View {
             imageSavePresentation.finishSave(with: .success)
         } catch MangaImagePhotoSaveError.authorizationDenied {
             YamiboLog.reader.warning("Manga page image save denied: Photos authorization was not granted")
-            imageSavePresentation.finishSave(with: .failure(message: L10n.string("image.save_photo_permission_denied")))
+            isPhotoPermissionAlertPresented = true
         } catch {
             YamiboLog.reader.error("Failed to save manga page image: \(error.localizedDescription)")
             imageSavePresentation.finishSave(with: .failure(message: L10n.string("image.save_failed")))

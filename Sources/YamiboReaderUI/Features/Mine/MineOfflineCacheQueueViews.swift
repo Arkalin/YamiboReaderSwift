@@ -1,13 +1,27 @@
 import SwiftUI
 import YamiboReaderCore
 
+/// Sheet shell for contexts without a navigation stack of their own (the
+/// full-screen readers' cache sheets). The Mine tab pushes
+/// `MineOfflineCacheQueueScreen` directly instead.
 struct MineOfflineCacheQueueSheet: View {
     let viewModel: MineHomeViewModel
+
+    var body: some View {
+        NavigationStack {
+            MineOfflineCacheQueueScreen(viewModel: viewModel, showsCloseButton: true)
+        }
+    }
+}
+
+struct MineOfflineCacheQueueScreen: View {
+    let viewModel: MineHomeViewModel
+    var showsCloseButton = false
+
     @Environment(\.dismiss) private var dismiss
     @State private var selectedGroupID: OfflineCacheGroupID?
 
     var body: some View {
-        NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
                     if viewModel.offlineCacheQueueIsEmpty {
@@ -54,19 +68,17 @@ struct MineOfflineCacheQueueSheet: View {
             .refreshable {
                 await viewModel.refreshOfflineCacheQueue()
             }
-            .sheet(isPresented: selectedOwnerIsPresented) {
-                if let selectedGroupID {
-                    MineOfflineCacheQueueOwnerSheet(
-                        viewModel: viewModel,
-                        groupID: selectedGroupID
-                    )
-                }
+            .navigationDestination(item: $selectedGroupID) { groupID in
+                MineOfflineCacheQueueOwnerScreen(
+                    viewModel: viewModel,
+                    groupID: groupID
+                )
             }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     if viewModel.isOfflineCacheQueueSelectionMode {
                         MineOfflineCacheQueueSelectAllButton(viewModel: viewModel)
-                    } else {
+                    } else if showsCloseButton {
                         Button(L10n.string("common.close")) {
                             dismiss()
                         }
@@ -104,19 +116,6 @@ struct MineOfflineCacheQueueSheet: View {
                 }
             }
             .sensoryFeedback(.selection, trigger: viewModel.selectedOfflineCacheWorkIDs)
-        }
-    }
-
-    private var selectedOwnerIsPresented: Binding<Bool> {
-        Binding(
-            get: { selectedGroupID != nil },
-            set: { isPresented in
-                if !isPresented {
-                    selectedGroupID = nil
-                    viewModel.setOfflineCacheQueueSelectionMode(false)
-                }
-            }
-        )
     }
 }
 
@@ -316,7 +315,10 @@ private struct MineOfflineCacheQueueOwnerRow: View {
     }
 }
 
-private struct MineOfflineCacheQueueOwnerSheet: View {
+/// Drill-down detail for one owner's queued chapters, pushed onto the
+/// enclosing navigation stack (system back replaces the old sheet-on-sheet
+/// close button).
+private struct MineOfflineCacheQueueOwnerScreen: View {
     let viewModel: MineHomeViewModel
     let groupID: OfflineCacheGroupID
     @Environment(\.dismiss) private var dismiss
@@ -326,7 +328,6 @@ private struct MineOfflineCacheQueueOwnerSheet: View {
     }
 
     var body: some View {
-        NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
                     if let group {
@@ -380,16 +381,12 @@ private struct MineOfflineCacheQueueOwnerSheet: View {
                 viewModel.setOfflineCacheQueueSelectionMode(false)
             }
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    if viewModel.isOfflineCacheQueueSelectionMode {
+                if viewModel.isOfflineCacheQueueSelectionMode {
+                    ToolbarItem(placement: .cancellationAction) {
                         MineOfflineCacheQueueSelectAllButton(
                             viewModel: viewModel,
                             groupID: groupID
                         )
-                    } else {
-                        Button(L10n.string("common.close")) {
-                            dismiss()
-                        }
                     }
                 }
 
@@ -424,7 +421,6 @@ private struct MineOfflineCacheQueueOwnerSheet: View {
                 }
             }
             .sensoryFeedback(.selection, trigger: viewModel.selectedOfflineCacheWorkIDs)
-        }
     }
 
     private func dismissIfGroupIsEmpty() {

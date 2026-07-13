@@ -13,6 +13,8 @@ struct LocalFavoriteCategoryTabBar: View {
     @ObservedObject var organizer: FavoriteLibraryOrganizer
     let routes: LocalFavoritesRoutes
 
+    @Environment(\.colorScheme) private var colorScheme
+
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
@@ -35,9 +37,17 @@ struct LocalFavoriteCategoryTabBar: View {
                 .padding(8)
                 .background(Color.secondary.opacity(0.12), in: Circle())
                 .foregroundStyle(.primary)
+                .expandedHitTarget()
         }
         .buttonStyle(.plain)
         .accessibilityLabel(L10n.string("favorites.category.create"))
+    }
+
+    /// The dark AccentColor variant (#C7946B) is light enough that white
+    /// text on it lands around 2.7:1 — below even the large-text contrast
+    /// floor — so the selected pill's foreground flips to black in dark mode.
+    private var selectedPillForeground: Color {
+        colorScheme == .dark ? .black : .white
     }
 
     private func pill(for category: FavoriteCategory) -> some View {
@@ -51,7 +61,7 @@ struct LocalFavoriteCategoryTabBar: View {
                 if organizer.showsCategoryBadges {
                     Text("\(organizer.derived.categoryEntryCounts[category.id] ?? 0)")
                         .font(.caption2.weight(.semibold))
-                        .foregroundStyle(isSelected ? .white.opacity(0.78) : .secondary)
+                        .foregroundStyle(isSelected ? selectedPillForeground.opacity(0.78) : Color.secondary)
                 }
             }
             .font(.subheadline.weight(.semibold))
@@ -61,8 +71,10 @@ struct LocalFavoriteCategoryTabBar: View {
                 isSelected ? Color.accentColor : Color.secondary.opacity(0.12),
                 in: Capsule()
             )
-            .foregroundStyle(isSelected ? .white : .primary)
+            .foregroundStyle(isSelected ? selectedPillForeground : .primary)
+            .expandedHitTarget()
         }
         .buttonStyle(.plain)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }

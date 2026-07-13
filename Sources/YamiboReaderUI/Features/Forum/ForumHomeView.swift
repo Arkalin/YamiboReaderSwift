@@ -94,6 +94,7 @@ private struct ForumHomeCarouselView: View {
     let onTap: (ForumHomeCarouselItem) -> Void
 
     @State private var selection = 0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         VStack(spacing: 8) {
@@ -107,8 +108,10 @@ private struct ForumHomeCarouselView: View {
             .frame(maxWidth: .infinity)
             .aspectRatio(2.63, contentMode: .fit)
         }
-        .task(id: items.map(\.id)) {
-            guard items.count > 1 else { return }
+        // Reduce Motion disables auto-advance entirely; the banners stay
+        // swipeable by hand.
+        .task(id: "\(items.map(\.id))-\(reduceMotion)") {
+            guard items.count > 1, !reduceMotion else { return }
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(3))
                 guard !Task.isCancelled else { return }
@@ -227,17 +230,22 @@ private struct ForumBoardRowView: View {
     let iconURL: URL?
     let onTap: () -> Void
 
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     var body: some View {
         Button(action: onTap) {
             HStack(spacing: 12) {
                 ForumBoardIconView(iconURL: iconURL, name: name)
 
                 VStack(alignment: .leading, spacing: 4) {
-                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    // At accessibility type sizes the inline badge would
+                    // squeeze the board name down to a couple of characters,
+                    // so name and badge stack vertically instead.
+                    titleLayout {
                         Text(name)
                             .font(.body.weight(.semibold))
                             .foregroundStyle(ForumColors.textDark)
-                            .lineLimit(1)
+                            .lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : 1)
 
                         if let todayCount {
                             Text(L10n.string("forum.home.today_count", todayCount))
@@ -267,6 +275,19 @@ private struct ForumBoardRowView: View {
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("forum-board-row-\(fid)")
+    }
+
+    @ViewBuilder
+    private func titleLayout(@ViewBuilder content: () -> some View) -> some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            VStack(alignment: .leading, spacing: 4) {
+                content()
+            }
+        } else {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                content()
+            }
+        }
     }
 }
 

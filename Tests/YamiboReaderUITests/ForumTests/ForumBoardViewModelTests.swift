@@ -142,7 +142,8 @@ final class ForumBoardViewModelTests: XCTestCase {
         await model.load()
         await model.addFavorite()
 
-        XCTAssertEqual(model.favoriteMessage, "收藏成功")
+        XCTAssertEqual(model.transientMessage, "收藏成功")
+        XCTAssertNil(model.favoriteMessage)
         let favorites = await repository.favoriteRequests()
         XCTAssertEqual(favorites, [.init(fid: "5", formHash: "f47bb54f")])
     }

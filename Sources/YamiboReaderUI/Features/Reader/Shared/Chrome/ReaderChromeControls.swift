@@ -193,7 +193,7 @@ struct ReaderChromeHistoryButton: View {
         Image(systemName: systemName)
             .symbolRenderingMode(.palette)
             .foregroundStyle(symbolColor, fillColor)
-            .font(.system(size: 17, weight: .semibold))
+            .font(.headline)
             .frame(width: iconSize, height: iconSize)
     }
 

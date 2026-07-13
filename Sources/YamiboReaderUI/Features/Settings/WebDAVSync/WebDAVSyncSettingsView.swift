@@ -99,9 +99,11 @@ public struct WebDAVSyncSettingsView: View {
         _viewModel = StateObject(wrappedValue: WebDAVSyncSettingsViewModel(dependencies: dependencies))
     }
 
+    /// Hierarchy detail of the storage settings page: pushed onto the
+    /// settings navigation stack rather than presented as a sheet, so back
+    /// navigation matches its sibling rows (e.g. offline cache management).
     public var body: some View {
-        NavigationStack {
-            Form {
+        Form {
                 Section {
                     labeledTextField(
                         title: L10n.string("webdav.url"),
@@ -129,13 +131,12 @@ public struct WebDAVSyncSettingsView: View {
                     }
                     .disabled(viewModel.isBusy)
 
-                    HStack(spacing: 20) {
-                        Text(L10n.string("webdav.operation"))
-                            .foregroundStyle(.secondary)
-                        directionButton(.upload)
-                        directionButton(.download)
-                        Spacer(minLength: 0)
+                    Picker(L10n.string("webdav.operation"), selection: $viewModel.direction) {
+                        Text(title(for: .upload)).tag(WebDAVSyncDirection.upload)
+                        Text(title(for: .download)).tag(WebDAVSyncDirection.download)
                     }
+                    .pickerStyle(.segmented)
+                    .disabled(viewModel.isBusy)
                     .padding(.vertical, 4)
                 }
 
@@ -182,14 +183,6 @@ public struct WebDAVSyncSettingsView: View {
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             #endif
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button(L10n.string("common.close")) {
-                        dismiss()
-                    }
-                    .disabled(viewModel.isBusy)
-                }
-            }
             .overlay {
                 if viewModel.activeAction == .loading {
                     ProgressView(L10n.string("common.loading"))
@@ -220,7 +213,6 @@ public struct WebDAVSyncSettingsView: View {
             }, message: {
                 Text(L10n.string("webdav.account_mismatch_message"))
             })
-        }
     }
 
     private func labeledTextField(
@@ -236,21 +228,6 @@ public struct WebDAVSyncSettingsView: View {
                 .disabled(viewModel.isBusy)
         }
         .padding(.vertical, 4)
-    }
-
-    private func directionButton(_ direction: WebDAVSyncDirection) -> some View {
-        Button {
-            viewModel.direction = direction
-        } label: {
-            HStack(spacing: 8) {
-                Image(systemName: viewModel.direction == direction ? "largecircle.fill.circle" : "circle")
-                    .font(.title3)
-                Text(title(for: direction))
-            }
-        }
-        .buttonStyle(.plain)
-        .foregroundStyle(.primary)
-        .disabled(viewModel.isBusy)
     }
 
     private func title(for direction: WebDAVSyncDirection) -> String {

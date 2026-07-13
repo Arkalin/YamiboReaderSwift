@@ -47,13 +47,11 @@ struct OfflineCacheManagementView: View {
         .refreshable {
             await viewModel.refreshOfflineCacheManagement()
         }
-        .sheet(isPresented: selectedGroupIsPresented) {
-            if let selectedGroupID {
-                OfflineCacheManagementGroupSheet(
-                    viewModel: viewModel,
-                    groupID: selectedGroupID
-                )
-            }
+        .navigationDestination(item: $selectedGroupID) { groupID in
+            OfflineCacheManagementGroupScreen(
+                viewModel: viewModel,
+                groupID: groupID
+            )
         }
         .toolbar {
             if viewModel.isOfflineCacheManagementSelectionMode {
@@ -114,17 +112,5 @@ struct OfflineCacheManagementView: View {
         }
         .sensoryFeedback(.selection, trigger: viewModel.selectedOfflineCacheGroupIDs)
         .offlineCacheManagementAlert(viewModel: viewModel)
-    }
-
-    private var selectedGroupIsPresented: Binding<Bool> {
-        Binding(
-            get: { selectedGroupID != nil },
-            set: { isPresented in
-                if !isPresented {
-                    selectedGroupID = nil
-                    viewModel.setOfflineCacheManagementSelectionMode(false)
-                }
-            }
-        )
     }
 }

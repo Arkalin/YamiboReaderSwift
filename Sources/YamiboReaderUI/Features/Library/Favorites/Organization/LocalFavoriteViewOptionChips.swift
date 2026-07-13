@@ -83,6 +83,7 @@ struct LocalFavoriteViewOptionChips: View {
             .frame(width: 32, height: 32)
             .background(Color.secondary.opacity(0.12), in: Circle())
             .foregroundStyle(tint ?? .primary)
+            .expandedHitTarget()
     }
 
     private var sortOrderBinding: Binding<LocalFavoriteLibrarySortOrder> {

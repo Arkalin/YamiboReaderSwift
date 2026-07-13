@@ -5,8 +5,10 @@ import YamiboReaderCore
 import UIKit
 #endif
 
+/// Hierarchy detail of the settings screen: pushed onto its navigation
+/// stack (drill-down content, not a self-contained modal task), so it owns
+/// no `NavigationStack` or close button of its own.
 public struct AboutView: View {
-    @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
     @StateObject private var updateViewModel: AboutUpdateViewModel
 
@@ -15,53 +17,44 @@ public struct AboutView: View {
     }
 
     public var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(spacing: 40) {
-                    AboutHeaderView()
-                        .padding(.top, 32)
+        ScrollView {
+            VStack(spacing: 40) {
+                AboutHeaderView()
+                    .padding(.top, 32)
 
-                    AboutLinksSection(
-                        isCheckingForUpdates: updateViewModel.isCheckingForUpdates,
-                        checkForUpdates: {
-                            Task {
-                                await updateViewModel.checkForUpdates()
-                            }
+                AboutLinksSection(
+                    isCheckingForUpdates: updateViewModel.isCheckingForUpdates,
+                    checkForUpdates: {
+                        Task {
+                            await updateViewModel.checkForUpdates()
                         }
-                    )
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.horizontal, 24)
-                .padding(.bottom, 24)
-            }
-            .navigationTitle(L10n.string("about.title"))
-            #if os(iOS)
-            .navigationBarTitleDisplayMode(.inline)
-            #endif
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button(L10n.string("common.close")) {
-                        dismiss()
                     }
+                )
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, 24)
+            .padding(.bottom, 24)
+        }
+        .navigationTitle(L10n.string("about.title"))
+        #if os(iOS)
+        .navigationBarTitleDisplayMode(.inline)
+        #endif
+        .alert(
+            updateViewModel.alert?.title ?? "",
+            isPresented: updateAlertIsPresented,
+            presenting: updateViewModel.alert
+        ) { alert in
+            if let downloadURL = alert.downloadURL {
+                Button(L10n.string("app_update.open_download")) {
+                    openURL(downloadURL)
+                }
+                Button(L10n.string("app_update.copy_source")) {
+                    copyToPasteboard(AppUpdateChecker.defaultSourceURL.absoluteString)
                 }
             }
-            .alert(
-                updateViewModel.alert?.title ?? "",
-                isPresented: updateAlertIsPresented,
-                presenting: updateViewModel.alert
-            ) { alert in
-                if let downloadURL = alert.downloadURL {
-                    Button(L10n.string("app_update.open_download")) {
-                        openURL(downloadURL)
-                    }
-                    Button(L10n.string("app_update.copy_source")) {
-                        copyToPasteboard(AppUpdateChecker.defaultSourceURL.absoluteString)
-                    }
-                }
-                Button(L10n.string("common.ok"), role: .cancel) {}
-            } message: { alert in
-                Text(alert.message)
-            }
+            Button(L10n.string("common.ok"), role: .cancel) {}
+        } message: { alert in
+            Text(alert.message)
         }
     }
 

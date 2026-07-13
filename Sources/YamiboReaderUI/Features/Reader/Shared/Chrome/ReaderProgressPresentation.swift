@@ -62,7 +62,7 @@ public struct ReaderProgressScrubPreview: Equatable, Sendable {
     }
 
     public var displayText: String {
-        let pageText = "第\(pageNumber)页"
+        let pageText = L10n.string("reader.page_number_compact", pageNumber)
         guard let chapterTitle,
               !chapterTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             return pageText
@@ -157,7 +157,7 @@ public struct ReaderProgressChromePresentation: Equatable, Sendable {
     }
 
     public func horizontalCapsuleText(percentText: String) -> String {
-        "目录 · \(percentText)"
+        L10n.string("reader.progress_capsule.directory_percent", percentText)
     }
 }
 

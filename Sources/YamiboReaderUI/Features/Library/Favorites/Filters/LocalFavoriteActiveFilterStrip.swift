@@ -56,6 +56,7 @@ private struct LocalFavoriteFilterChip: View {
             .padding(.horizontal, 9)
             .padding(.vertical, 6)
             .background(tint.opacity(0.14), in: Capsule())
+            .expandedHitTarget(width: 0)
         }
         .buttonStyle(.plain)
     }
