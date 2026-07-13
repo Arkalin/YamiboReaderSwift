@@ -16,6 +16,7 @@ struct PrivateMessageView: View {
                 currentPage: model.currentPage,
                 isLoading: model.isLoading,
                 errorMessage: model.errorMessage,
+                refresh: refresh,
                 retry: retry,
                 goToPage: goToPage
             )
@@ -53,6 +54,10 @@ struct PrivateMessageView: View {
         }
     }
 
+    private func refresh() async {
+        await model.refresh()
+    }
+
     private func retry() {
         Task {
             await model.refresh()
@@ -78,6 +83,7 @@ private struct PrivateMessageContentView: View {
     let currentPage: Int
     let isLoading: Bool
     let errorMessage: String?
+    let refresh: () async -> Void
     let retry: () -> Void
     let goToPage: (Int) -> Void
 
@@ -101,6 +107,9 @@ private struct PrivateMessageContentView: View {
                     }
                     .padding(.horizontal, 14)
                     .padding(.vertical, 16)
+                }
+                .refreshable {
+                    await refresh()
                 }
                 .overlay(alignment: .top) {
                     if isLoading {

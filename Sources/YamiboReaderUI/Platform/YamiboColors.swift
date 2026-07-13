@@ -18,6 +18,13 @@ enum YamiboColors {
         /// 4.5:1 in every current usage (badge text, header stat text, and
         /// as a fill under white text). The dark variant already passes.
         static let redAccent = Color(light: 0xA61B29, dark: 0xFF7A70)
+        /// Chapter-comment source badge accents (ratingReason/reply). Light
+        /// values match the badge's original fixed RGB, which read fine
+        /// against a light background; the dark variants are lightened from
+        /// that same fixed RGB, which measured ~2.8:1 as badge text against
+        /// secondarySystemGroupedBackground in dark mode. These clear 4.5:1.
+        static let ratingReasonAccent = Color(light: 0x26705C, dark: 0x5FC9A8)
+        static let replyAccent = Color(light: 0x475CAD, dark: 0x8FA0E0)
         static let pinnedBackground = Color(light: 0xFFF0C8, dark: 0x302416)
         static let announcementBackground = Color(light: 0xFFE8B0, dark: 0x382711)
         static let navBarBackground = Color(light: 0xFFE6B7, dark: 0x21150F)
@@ -30,6 +37,7 @@ enum YamiboColors {
         static let accentFill = orangeAccent.opacity(0.15)
 
         static let creamBackgroundUIColor = UIColor(hex: 0xFFF3D6)
+        static let creamBackgroundDarkUIColor = UIColor(hex: 0x17110D)
 
         static func navigationBarBackground(for colorScheme: ColorScheme) -> Color {
             switch colorScheme {

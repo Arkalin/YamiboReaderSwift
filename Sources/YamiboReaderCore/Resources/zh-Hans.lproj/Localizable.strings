@@ -749,6 +749,7 @@
 "reader.comments" = "评论";
 "reader.comments_empty" = "暂无评论";
 "reader.copy" = "复制";
+"reader.look_up" = "查询";
 "reader.cache_action.cache" = "缓存";
 "reader.cache_action.update" = "更新";
 "reader.cache_detail.completed" = "已完成 %d / %d 页";

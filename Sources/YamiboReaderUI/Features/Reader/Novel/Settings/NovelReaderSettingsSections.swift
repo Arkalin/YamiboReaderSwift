@@ -53,7 +53,7 @@ struct NovelReaderLayoutSection: View {
                 range: 1.2 ... 2.2,
                 step: 0.05,
                 icon: .system("text.line.first.and.arrowtriangle.forward"),
-                tint: Color(red: 0.08, green: 0.73, blue: 0.82),
+                tint: YamiboColors.Site.orangeAccent,
                 palette: palette,
                 onChange: onLineHeightChange
             )
@@ -65,7 +65,7 @@ struct NovelReaderLayoutSection: View {
                 range: 0 ... 0.12,
                 step: 0.01,
                 icon: .characterSpacing,
-                tint: Color(red: 0.13, green: 0.13, blue: 0.16),
+                tint: YamiboColors.Site.orangeAccent,
                 palette: palette,
                 onChange: onCharacterSpacingChange
             )
@@ -77,7 +77,7 @@ struct NovelReaderLayoutSection: View {
                 range: 8 ... 36,
                 step: 2,
                 icon: .system("rectangle.inset.filled"),
-                tint: Color(red: 0.43, green: 0.32, blue: 0.96),
+                tint: YamiboColors.Site.orangeAccent,
                 palette: palette,
                 onChange: onHorizontalPaddingChange
             )

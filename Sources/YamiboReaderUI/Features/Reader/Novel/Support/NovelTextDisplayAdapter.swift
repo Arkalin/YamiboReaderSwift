@@ -76,6 +76,9 @@ final class NovelTextViewportReferenceUIView: UIView, @preconcurrency UIEditMenu
         target: self,
         action: #selector(handleLikeHighlightTap(_:))
     )
+    private var startHandleView: NovelSelectionHandleUIView?
+    private var endHandleView: NovelSelectionHandleUIView?
+    private static let selectionHandleKnobDiameter: CGFloat = 14
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -95,6 +98,7 @@ final class NovelTextViewportReferenceUIView: UIView, @preconcurrency UIEditMenu
             return
         }
         context.clear(self.bounds)
+        hideSelectionHandles()
         guard let displayReference = self.displayReference else {
             return
         }
@@ -135,16 +139,16 @@ final class NovelTextViewportReferenceUIView: UIView, @preconcurrency UIEditMenu
         suggestedActions: [UIMenuElement]
     ) -> UIMenu? {
         guard selectionController?.hasSelection == true else { return nil }
-        let likeAction = makeLikeAction()
+        let extraActions = [makeLikeAction(), makeShareAction(), makeLookUpAction()].compactMap { $0 }
         if !suggestedActions.isEmpty {
-            return UIMenu(children: likeAction.map { suggestedActions + [$0] } ?? suggestedActions)
+            return UIMenu(children: suggestedActions + extraActions)
         }
         let copyAction = UIAction(
             title: L10n.string("reader.copy")
         ) { [weak self] _ in
             self?.selectionController?.copySelection()
         }
-        return UIMenu(children: [copyAction] + (likeAction.map { [$0] } ?? []))
+        return UIMenu(children: [copyAction] + extraActions)
     }
 
     // A3: the edit menu simply omits "add to likes" when the selection can't
@@ -154,6 +158,41 @@ final class NovelTextViewportReferenceUIView: UIView, @preconcurrency UIEditMenu
         return UIAction(title: L10n.string("likes.add_to_likes")) { [weak self] _ in
             self?.selectionController?.likeSelection()
         }
+    }
+
+    private func makeShareAction() -> UIAction? {
+        guard selectionController?.selectedText() != nil else { return nil }
+        return UIAction(title: L10n.string("common.share")) { [weak self] _ in
+            self?.presentShareSheet()
+        }
+    }
+
+    private func presentShareSheet() {
+        guard let text = selectionController?.selectedText(),
+              let presenter = nearestViewController else {
+            return
+        }
+        let activityViewController = UIActivityViewController(activityItems: [text], applicationActivities: nil)
+        if let popover = activityViewController.popoverPresentationController {
+            popover.sourceView = self
+            popover.sourceRect = selectionController?.menuTargetRect(in: self) ?? bounds
+        }
+        presenter.present(activityViewController, animated: true)
+    }
+
+    private func makeLookUpAction() -> UIAction? {
+        guard let text = selectionController?.selectedText(),
+              UIReferenceLibraryViewController.dictionaryHasDefinition(forTerm: text) else {
+            return nil
+        }
+        return UIAction(title: L10n.string("reader.look_up")) { [weak self] _ in
+            self?.presentLookUp(for: text)
+        }
+    }
+
+    private func presentLookUp(for term: String) {
+        guard let presenter = nearestViewController else { return }
+        presenter.present(UIReferenceLibraryViewController(term: term), animated: true)
     }
 
     func editMenuInteraction(
@@ -238,6 +277,10 @@ final class NovelTextViewportReferenceUIView: UIView, @preconcurrency UIEditMenu
         sequence(first: next) { $0?.next }.compactMap { $0 as? UIViewController }.first
     }
 
+    private var nearestScrollView: UIScrollView? {
+        sequence(first: superview) { $0?.superview }.compactMap { $0 as? UIScrollView }.first
+    }
+
     private func drawLikeHighlights(
         displayReference: NovelTextViewportDisplayReference,
         in context: CGContext
@@ -275,6 +318,29 @@ final class NovelTextViewportReferenceUIView: UIView, @preconcurrency UIEditMenu
         }
     }
 
+    @objc private func handleSelectionHandlePan(_ recognizer: UIPanGestureRecognizer) {
+        guard let handle = recognizer.view as? NovelSelectionHandleUIView,
+              let selectionController,
+              let displayReference else {
+            return
+        }
+        let point = recognizer.location(in: self)
+        switch recognizer.state {
+        case .began:
+            guard selectionController.beginHandleDrag(handle.kind, generation: displayReference.generation) else { return }
+            dismissCopyMenu()
+        case .changed:
+            selectionController.updateSelection(in: self, at: point)
+        case .ended:
+            selectionController.updateSelection(in: self, at: point)
+            showCopyMenu()
+        case .cancelled, .failed:
+            selectionController.refreshSelectionDisplay()
+        default:
+            break
+        }
+    }
+
     private func showCopyMenu() {
         guard selectionController?.hasSelection == true else { return }
         let targetRect = selectionController?.menuTargetRect(in: self) ?? bounds
@@ -283,6 +349,87 @@ final class NovelTextViewportReferenceUIView: UIView, @preconcurrency UIEditMenu
                 identifier: nil,
                 sourcePoint: CGPoint(x: targetRect.midX, y: targetRect.minY)
             )
+        )
+    }
+
+    private func hideSelectionHandles() {
+        startHandleView?.isHidden = true
+        endHandleView?.isHidden = true
+    }
+
+    private func handleView(for kind: NovelTextSelectionController.HandleKind) -> NovelSelectionHandleUIView {
+        switch kind {
+        case .start:
+            if let startHandleView { return startHandleView }
+            let handle = makeSelectionHandleView(kind: .start)
+            startHandleView = handle
+            return handle
+        case .end:
+            if let endHandleView { return endHandleView }
+            let handle = makeSelectionHandleView(kind: .end)
+            endHandleView = handle
+            return handle
+        }
+    }
+
+    private func makeSelectionHandleView(kind: NovelTextSelectionController.HandleKind) -> NovelSelectionHandleUIView {
+        let handle = NovelSelectionHandleUIView(kind: kind)
+        handle.isHidden = true
+        let panRecognizer = UIPanGestureRecognizer(target: self, action: #selector(handleSelectionHandlePan(_:)))
+        handle.addGestureRecognizer(panRecognizer)
+        addSubview(handle)
+        nearestScrollView?.panGestureRecognizer.require(toFail: panRecognizer)
+        return handle
+    }
+
+    private func positionSelectionHandle(kind: NovelTextSelectionController.HandleKind, endpointRect: CGRect?) {
+        guard let endpointRect else { return }
+        let handle = handleView(for: kind)
+        let diameter = Self.selectionHandleKnobDiameter
+        let centerX = kind == .start ? endpointRect.minX : endpointRect.maxX
+        handle.frame = CGRect(
+            x: centerX - diameter / 2,
+            y: endpointRect.maxY - diameter / 2,
+            width: diameter,
+            height: diameter
+        )
+        handle.isHidden = false
+    }
+
+    /// Finds this specific character's on-screen rect the same way
+    /// `selectionRects(for:)` finds every character's rect for the highlight
+    /// fill above — a synthetic one-character range through the same
+    /// windowed, per-surface query. Returns nil when the true global
+    /// endpoint isn't hosted by this surface (e.g. an adjacent, still-
+    /// registered page in vertical mode), so a handle never appears at a
+    /// merely-local edge of a selection that spans multiple surfaces.
+    private func selectionEndpointRect(
+        displayReference: NovelTextViewportDisplayReference,
+        range: NovelTextSelectionRange,
+        isStart: Bool
+    ) -> CGRect? {
+        let lowerBound = isStart ? range.lowerBound : max(range.lowerBound, range.upperBound - 1)
+        guard let characterRange = NovelTextSelectionRange(
+            generation: range.generation,
+            lowerBound: lowerBound,
+            upperBound: lowerBound + 1
+        ) else {
+            return nil
+        }
+        return displayReference.selectionRects(for: characterRange).first
+    }
+
+    private func updateSelectionHandles(
+        displayReference: NovelTextViewportDisplayReference,
+        range: NovelTextSelectionRange
+    ) {
+        positionSelectionHandle(
+            kind: .start,
+            endpointRect: selectionEndpointRect(displayReference: displayReference, range: range, isStart: true)
+        )
+        positionSelectionHandle(
+            kind: .end,
+            endpointRect: selectionEndpointRect(displayReference: displayReference, range: range, isStart: false)
         )
     }
 
@@ -297,11 +444,11 @@ final class NovelTextViewportReferenceUIView: UIView, @preconcurrency UIEditMenu
         let rects = displayReference.selectionRects(for: range)
         guard !rects.isEmpty else { return }
         context.saveGState()
-        context.setFillColor(UIColor.systemBlue.withAlphaComponent(0.22).cgColor)
+        context.setFillColor(tintColor.withAlphaComponent(0.22).cgColor)
         for rect in rects {
             context.fill(rect.insetBy(dx: -1, dy: -1))
         }
-        context.setFillColor(UIColor.systemBlue.withAlphaComponent(0.85).cgColor)
+        context.setFillColor(tintColor.withAlphaComponent(0.85).cgColor)
         if let first = rects.first {
             context.fill(
                 CGRect(
@@ -323,6 +470,39 @@ final class NovelTextViewportReferenceUIView: UIView, @preconcurrency UIEditMenu
             )
         }
         context.restoreGState()
+        updateSelectionHandles(displayReference: displayReference, range: range)
+    }
+}
+
+@MainActor
+final class NovelSelectionHandleUIView: UIView {
+    let kind: NovelTextSelectionController.HandleKind
+    private let touchTargetPadding: CGFloat = -15
+
+    init(kind: NovelTextSelectionController.HandleKind) {
+        self.kind = kind
+        super.init(frame: .zero)
+        backgroundColor = .clear
+        isOpaque = false
+        isUserInteractionEnabled = true
+        contentMode = .redraw
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
+        bounds.insetBy(dx: touchTargetPadding, dy: touchTargetPadding).contains(point)
+    }
+
+    override func draw(_ rect: CGRect) {
+        guard let context = UIGraphicsGetCurrentContext() else { return }
+        context.setFillColor(tintColor.cgColor)
+        context.fillEllipse(in: bounds)
+        context.setStrokeColor(UIColor.white.withAlphaComponent(0.9).cgColor)
+        context.setLineWidth(1)
+        context.strokeEllipse(in: bounds.insetBy(dx: 0.5, dy: 0.5))
     }
 }
 
