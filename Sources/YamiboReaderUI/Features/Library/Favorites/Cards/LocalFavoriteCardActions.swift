@@ -36,6 +36,17 @@ struct LocalFavoriteCardActions {
     /// delete/move/tag management actually happens through the existing
     /// single-item card UI.
     let viewArchivedFavorites: (FavoriteCardProjection) -> Void
+    /// A smart card's delete entry, gated by `FavoriteLibrarySettings
+    /// .smartMangaBulkDeleteEnabled` — nil (and hidden at every call site)
+    /// when the setting is off. Mirrors `move`'s "select this card alone,
+    /// then open the shared bulk dialog" pattern instead of reusing
+    /// `delete`'s own contract (`delete` is documented as never invoked for
+    /// a smart card): selects just this card and opens the SAME
+    /// `.deleteSelection` dialog the multi-select toolbar's delete button
+    /// already drives, which in turn expands to every archived member via
+    /// `FavoriteLibraryOrganizer.expandedSelectionFavoriteIDs` — so deleting
+    /// an archive here and via multi-select share one implementation.
+    let deleteArchivedFavorites: ((FavoriteItem) -> Void)?
 
     /// Standard wiring shared by the list and grid containers.
     @MainActor
@@ -45,7 +56,13 @@ struct LocalFavoriteCardActions {
         routes: LocalFavoritesRoutes,
         onOpen: @escaping (FavoriteItem, FavoriteLaunchMode, FavoriteMangaReadingScope) async -> Void
     ) -> LocalFavoriteCardActions {
-        LocalFavoriteCardActions(
+        let deleteArchivedFavorites: ((FavoriteItem) -> Void)? = organizer.smartMangaBulkDeleteEnabled
+            ? { item in
+                selection.toggleFavoriteSelection(id: item.id)
+                routes.dialog = .deleteSelection
+            }
+            : nil
+        return LocalFavoriteCardActions(
             open: { card, mode in
                 // A card opens with the scope its rendering promises: the
                 // smart-card treatment (merged title, sparkles badge) follows
@@ -85,7 +102,8 @@ struct LocalFavoriteCardActions {
                 // groups by (see `FavoriteCardProjection.resolvedTitle`'s
                 // doc comment), so no `mangaDirectory` fallback is needed.
                 organizer.openMergedGroup(cleanBookName: card.resolvedTitle)
-            }
+            },
+            deleteArchivedFavorites: deleteArchivedFavorites
         )
     }
 }
@@ -114,10 +132,10 @@ struct LocalFavoriteCardContextMenu: View {
         // `FavoriteLibraryOrganizer.expandedSelectionFavoriteIDs` — neither
         // `actions.select`/`actions.move`'s own closures need to know or
         // care that `card.item` might be a smart card's representative
-        // member. Delete stays the one exception: it deliberately excludes
-        // any smart-card id from `deleteSelection`'s own scope instead, so
-        // "查看归档收藏" remains the only supported way to delete an
-        // individual archived member.
+        // member. Delete is offered below too when
+        // `actions.deleteArchivedFavorites` is non-nil (the setting is on);
+        // otherwise "查看归档收藏" remains the only supported way to delete
+        // an individual archived member.
         Button {
             actions.select(card.item)
         } label: {
@@ -155,6 +173,13 @@ struct LocalFavoriteCardContextMenu: View {
                 actions.viewArchivedFavorites(card)
             } label: {
                 Label(L10n.string("favorites.view_archived_favorites"), systemImage: "archivebox")
+            }
+            if let deleteArchivedFavorites = actions.deleteArchivedFavorites {
+                Button(role: .destructive) {
+                    deleteArchivedFavorites(card.item)
+                } label: {
+                    Label(L10n.string("common.delete"), systemImage: "trash")
+                }
             }
         } else {
             Button(role: .destructive) {

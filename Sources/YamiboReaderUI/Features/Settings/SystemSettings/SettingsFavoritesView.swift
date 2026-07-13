@@ -140,6 +140,18 @@ struct SettingsFavoritesView: View {
                 Text(L10n.string("settings.favorite_sync_behavior.footer"))
             }
 
+            Section {
+                Toggle(
+                    L10n.string("settings.favorite_smart_manga_bulk_delete"),
+                    isOn: favoriteSmartMangaBulkDeleteBinding
+                )
+                .disabled(viewModel.isBusy)
+            } header: {
+                Text(L10n.string("settings.section.favorite_smart_manga_management"))
+            } footer: {
+                Text(L10n.string("settings.favorite_smart_manga_bulk_delete.footer"))
+            }
+
             FavoriteUpdateSettingsSection(updateMonitor: updateMonitor)
         }
         .navigationTitle(L10n.string("settings.section.favorites"))
@@ -294,6 +306,13 @@ struct SettingsFavoritesView: View {
         Binding(
             get: { viewModel.favoriteRemoveRemoteDefault },
             set: { viewModel.updateFavoriteRemoveRemoteDefault($0) }
+        )
+    }
+
+    private var favoriteSmartMangaBulkDeleteBinding: Binding<Bool> {
+        Binding(
+            get: { viewModel.favoriteSmartMangaBulkDeleteEnabled },
+            set: { viewModel.updateFavoriteSmartMangaBulkDeleteEnabled($0) }
         )
     }
 

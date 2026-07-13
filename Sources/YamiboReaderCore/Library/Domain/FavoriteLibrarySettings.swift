@@ -359,6 +359,13 @@ public struct FavoriteLibrarySettings: Codable, Hashable, Sendable {
     /// already taken — so a conservative-but-nonzero default doesn't spring
     /// unexpected network activity on anyone who hasn't touched smart manga.
     public var smartMangaUpdateCheckInterval: SmartMangaUpdateCheckInterval
+    /// Whether a smart-comic card's long-press menu and the multi-select
+    /// toolbar are allowed to delete it — deleting a smart card means
+    /// deleting every favorite currently archived under it, not just its
+    /// representative member. On by default; turning it off restores the
+    /// original behavior where only the dedicated "查看归档收藏" archive page
+    /// can delete an individual archived member.
+    public var smartMangaBulkDeleteEnabled: Bool
 
     public init(
         background: FavoriteBackgroundSettings = .init(),
@@ -375,7 +382,8 @@ public struct FavoriteLibrarySettings: Codable, Hashable, Sendable {
         removeRemoteDefault: Bool = false,
         updateCheckInterval: FavoriteUpdateCheckInterval = .off,
         updateNotificationsEnabled: Bool = false,
-        smartMangaUpdateCheckInterval: SmartMangaUpdateCheckInterval = .threeDays
+        smartMangaUpdateCheckInterval: SmartMangaUpdateCheckInterval = .threeDays,
+        smartMangaBulkDeleteEnabled: Bool = true
     ) {
         self.background = background
         self.layoutMode = layoutMode
@@ -392,6 +400,7 @@ public struct FavoriteLibrarySettings: Codable, Hashable, Sendable {
         self.updateCheckInterval = updateCheckInterval
         self.updateNotificationsEnabled = updateNotificationsEnabled
         self.smartMangaUpdateCheckInterval = smartMangaUpdateCheckInterval
+        self.smartMangaBulkDeleteEnabled = smartMangaBulkDeleteEnabled
     }
 
     public init(from decoder: any Decoder) throws {
@@ -411,7 +420,8 @@ public struct FavoriteLibrarySettings: Codable, Hashable, Sendable {
             removeRemoteDefault: try container.decodeIfPresent(Bool.self, forKey: .removeRemoteDefault) ?? false,
             updateCheckInterval: try container.decodeIfPresent(FavoriteUpdateCheckInterval.self, forKey: .updateCheckInterval) ?? .off,
             updateNotificationsEnabled: try container.decodeIfPresent(Bool.self, forKey: .updateNotificationsEnabled) ?? false,
-            smartMangaUpdateCheckInterval: try container.decodeIfPresent(SmartMangaUpdateCheckInterval.self, forKey: .smartMangaUpdateCheckInterval) ?? .threeDays
+            smartMangaUpdateCheckInterval: try container.decodeIfPresent(SmartMangaUpdateCheckInterval.self, forKey: .smartMangaUpdateCheckInterval) ?? .threeDays,
+            smartMangaBulkDeleteEnabled: try container.decodeIfPresent(Bool.self, forKey: .smartMangaBulkDeleteEnabled) ?? true
         )
     }
 

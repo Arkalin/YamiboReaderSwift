@@ -871,6 +871,8 @@
 "settings.favorite_remove_sync_default" = "移除收藏默认动作";
 "settings.favorite_remove_sync_prompt" = "移除收藏时询问是否同步删除";
 "settings.favorite_sync_behavior.footer" = "适用于所有收藏入口，包括详情页、阅读页、浏览历史，以及收藏页的“彻底删除”。关闭询问后将按默认动作静默执行；在任意询问弹窗中选择“不再询问”也会更新这里的开关。";
+"settings.favorite_smart_manga_bulk_delete" = "允许批量删除智能漫画收藏";
+"settings.favorite_smart_manga_bulk_delete.footer" = "开启后，智能漫画收藏卡片的长按菜单会新增删除按钮，多选工具栏在选中智能漫画收藏时也会显示删除；删除会移除该卡片归档下的全部收藏项，而不仅是代表项。关闭后仅能通过“查看归档收藏”页面逐项删除。";
 "settings.home_page" = "App 主页";
 "settings.gamepad" = "手柄";
 "settings.gamepad.capture_prompt" = "请按下手柄按键…";
@@ -933,6 +935,7 @@
 "settings.about_app_with_version" = "关于Yamibo Reader(%@)";
 "settings.section.appearance" = "外观";
 "settings.section.favorite_sync_behavior" = "收藏同步偏好";
+"settings.section.favorite_smart_manga_management" = "智能漫画收藏管理";
 "settings.section.general" = "通用";
 "settings.section.novel_offline_cache" = "小说离线缓存";
 "settings.section.board_reader" = "板块阅读方式";

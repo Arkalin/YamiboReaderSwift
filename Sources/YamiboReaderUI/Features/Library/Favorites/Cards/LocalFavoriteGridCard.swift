@@ -47,9 +47,11 @@ struct LocalFavoriteGridCard: View {
                 // A smart card toggles into `selection.selectedFavoriteIDs`
                 // just like any other card — bulk operations expand it to
                 // every archived member at execution time (see the
-                // selection-emphasis comment above). `deleteSelection`
-                // deliberately excludes it there instead of here, so it
-                // still requires the dedicated "查看归档收藏" archive page.
+                // selection-emphasis comment above), including
+                // `deleteSelection` when `smartMangaBulkDeleteEnabled` is on;
+                // when it's off, `deleteSelection` excludes it there
+                // instead of here, so it still requires the dedicated
+                // "查看归档收藏" archive page.
                 selection.toggleFavoriteSelection(id: card.id)
             } else {
                 actions.open(card, .resume)

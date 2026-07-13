@@ -18,9 +18,11 @@ struct LocalFavoriteItemRow: View {
                 // A smart card is selectable just like any other card —
                 // bulk operations expand it to every archived member at
                 // execution time (`FavoriteLibraryOrganizer
-                // .expandedSelectionFavoriteIDs`). `deleteSelection`
-                // deliberately excludes it there instead of here, so it
-                // still requires the dedicated "查看归档收藏" archive page.
+                // .expandedSelectionFavoriteIDs`), including
+                // `deleteSelection` when `smartMangaBulkDeleteEnabled` is on;
+                // when it's off, `deleteSelection` excludes it there
+                // instead of here, so it still requires the dedicated
+                // "查看归档收藏" archive page.
                 onToggleSelection()
             } else {
                 actions.open(card, .resume)
@@ -43,6 +45,13 @@ struct LocalFavoriteItemRow: View {
                         Label(L10n.string("favorites.view_archived_favorites"), systemImage: "archivebox")
                     }
                     .tint(.orange)
+                    if let deleteArchivedFavorites = actions.deleteArchivedFavorites {
+                        Button(role: .destructive) {
+                            deleteArchivedFavorites(card.item)
+                        } label: {
+                            Label(L10n.string("common.delete"), systemImage: "trash")
+                        }
+                    }
                 } else {
                     Button(role: .destructive) {
                         actions.delete(card)

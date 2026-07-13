@@ -1074,6 +1074,91 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
         XCTAssertTrue(favorites.removeRemotePromptEnabled)
     }
 
+    /// Regression guard for the correctness fix `smartMangaBulkDeleteEnabled`
+    /// required: `requestDeleteSelection`'s "also delete from Yamibo?"
+    /// decision must resolve from the SAME expanded candidate set
+    /// `deleteSelection` is about to delete, not just the smart card's
+    /// representative id. Here the representative item itself carries no
+    /// remote mapping while its one archived sibling does — if the decision
+    /// were resolved from the unexpanded selection, `canRemoveRemote` would
+    /// wrongly read `false` (nothing plausible to ask about), the prompt
+    /// would never appear, and the sibling's live Yamibo favorite would be
+    /// deleted locally without ever being removed from the website.
+    func testRequestDeleteSelectionEverywhereWithSmartCardExpandsRemoteDeleteCandidates() async throws {
+        let suiteName = YamiboTestDefaults.suiteName(prefix: "local-favorites-smart-card-remote-candidate-expansion")
+        _ = try YamiboTestDefaults.make(suiteName: suiteName)
+        let localFavoriteLibraryStore = FavoriteLibraryStore(
+            defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
+            key: "local-favorites"
+        )
+        let mangaDirectoryStore = try makeMangaDirectoryStore(suiteName: suiteName)
+        let directory = MangaDirectory(
+            cleanBookName: "远端候选展开测试漫画",
+            strategy: .links,
+            sourceKey: "chapter:5001",
+            chapters: [
+                MangaChapter(tid: "5001", rawTitle: "第一话", chapterNumber: 1),
+                MangaChapter(tid: "5002", rawTitle: "第二话", chapterNumber: 2),
+            ]
+        )
+        try await mangaDirectoryStore.saveDirectory(directory)
+
+        let firstTarget = FavoriteItemTarget(kind: .mangaThread, threadID: "5001")
+        let secondTarget = FavoriteItemTarget(kind: .mangaThread, threadID: "5002")
+        var document = try await localFavoriteLibraryStore.load()
+        document.upsertItem(try FavoriteItem(
+            target: firstTarget, title: "第一话", forumID: "30", forumName: "中文百合漫画区",
+            locations: [.category(document.defaultCategory.id)]
+        ))
+        document.upsertItem(try FavoriteItem(
+            target: secondTarget, title: "第二话", forumID: "30", forumName: "中文百合漫画区",
+            locations: [.category(document.defaultCategory.id)]
+        ))
+        try await localFavoriteLibraryStore.save(document)
+
+        let recorder = FavoriteDeleteTestRecorder()
+        let organizer = try makeOrganizer(
+            libraryStore: localFavoriteLibraryStore,
+            mangaDirectoryStore: mangaDirectoryStore,
+            remoteFavoriteDeleteHandler: { items in
+                try await recorder.record(items)
+            }
+        )
+        await organizer.load()
+        XCTAssertTrue(organizer.smartMangaBulkDeleteEnabled)
+        let mergedCard = try XCTUnwrap(organizer.derived.cards.first { $0.isMergedGroup })
+
+        // Whichever of the two members ended up as the card's representative
+        // id stays without a remote mapping; the OTHER (archived, not
+        // separately selected) member gets one — the scenario that only an
+        // expanded candidate set can see.
+        let representativeTarget = mergedCard.id == firstTarget.id ? firstTarget : secondTarget
+        let siblingTarget = representativeTarget == firstTarget ? secondTarget : firstTarget
+        var updatedDocument = try await localFavoriteLibraryStore.load()
+        let siblingItem = try XCTUnwrap(updatedDocument.items.first { $0.target == siblingTarget })
+        var siblingWithRemoteMapping = siblingItem
+        siblingWithRemoteMapping.remoteMapping = FavoriteRemoteMapping(yamiboFavoriteID: "remote-\(siblingTarget.threadID ?? "")")
+        updatedDocument.upsertItem(siblingWithRemoteMapping)
+        try await localFavoriteLibraryStore.save(updatedDocument)
+        await organizer.reload()
+
+        organizer.selection.toggleFavoriteSelection(id: mergedCard.id)
+        await organizer.requestDeleteSelection(scope: .everywhere)
+
+        // The prompt must appear: the expanded candidate set includes the
+        // sibling's remote mapping, so there IS something plausible to ask
+        // about, even though the representative alone has none.
+        XCTAssertNotNil(organizer.removeRemotePrompt)
+
+        await organizer.confirmRemoveRemotePrompt(removeRemote: true, remember: false)
+
+        let loadedDocument = try await localFavoriteLibraryStore.load()
+        let recordedTargetIDs = await recorder.recordedTargetIDs()
+        XCTAssertNil(loadedDocument.items.first { $0.target == firstTarget })
+        XCTAssertNil(loadedDocument.items.first { $0.target == secondTarget })
+        XCTAssertTrue(recordedTargetIDs.contains(siblingTarget.id))
+    }
+
     /// Phase E gap (smart-comic-mode design doc, Phase E's "两个不构成缺陷、
     /// 但记录供参考的观察" note ①): every other test in this file builds its
     /// organizer via `makeOrganizer` with `mangaDirectoryStore: nil`, so
@@ -2293,10 +2378,11 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
         XCTAssertEqual(secondStored.tagIDs, [tag.id])
     }
 
-    /// `deleteSelection` with a mix of a smart card id and a normal item id:
-    /// the normal item is deleted, every one of the smart card's archived
-    /// members is left untouched/still favorited, and `transientMessage` is
-    /// set to explain the skip.
+    /// `deleteSelection` with a mix of a smart card id and a normal item id,
+    /// with `smartMangaBulkDeleteEnabled` explicitly off (the setting's
+    /// disabled path): the normal item is deleted, every one of the smart
+    /// card's archived members is left untouched/still favorited, and
+    /// `transientMessage` is set to explain the skip.
     func testDeleteSelectionSkipsSmartCardDeletesNormalItemAndSetsTransientMessage() async throws {
         let suiteName = YamiboTestDefaults.suiteName(prefix: "local-favorites-smart-card-delete-mixed")
         _ = try YamiboTestDefaults.make(suiteName: suiteName)
@@ -2304,6 +2390,13 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
             defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
             key: "local-favorites"
         )
+        let settingsStore = SettingsStore(
+            defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
+            key: "settings"
+        )
+        _ = try await settingsStore.update { settings in
+            settings.favorites.smartMangaBulkDeleteEnabled = false
+        }
         let mangaDirectoryStore = try makeMangaDirectoryStore(suiteName: suiteName)
         let directory = MangaDirectory(
             cleanBookName: "混合删除测试漫画",
@@ -2334,7 +2427,11 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
         ))
         try await localFavoriteLibraryStore.save(document)
 
-        let organizer = try makeOrganizer(libraryStore: localFavoriteLibraryStore, mangaDirectoryStore: mangaDirectoryStore)
+        let organizer = try makeOrganizer(
+            libraryStore: localFavoriteLibraryStore,
+            settingsStore: settingsStore,
+            mangaDirectoryStore: mangaDirectoryStore
+        )
         await organizer.load()
         let mergedCard = try XCTUnwrap(organizer.derived.cards.first { $0.isMergedGroup })
 
@@ -2354,10 +2451,12 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
     }
 
     /// Backs `LocalFavoriteSelectionActionBar`'s delete-button visibility —
-    /// per that view's own "hidden, not merely disabled" principle, a
-    /// selection made up entirely of smart cards (which `deleteSelection`
-    /// always skips) must report nothing deletable, while a mixed selection
-    /// still does since the normal item within it is actually deletable.
+    /// per that view's own "hidden, not merely disabled" principle, with
+    /// `smartMangaBulkDeleteEnabled` explicitly off (the setting's disabled
+    /// path) a selection made up entirely of smart cards (which
+    /// `deleteSelection` skips in that mode) must report nothing deletable,
+    /// while a mixed selection still does since the normal item within it is
+    /// actually deletable.
     func testHasDeletableSelectionExcludesSmartCardOnlySelectionButIncludesMixedSelection() async throws {
         let suiteName = YamiboTestDefaults.suiteName(prefix: "local-favorites-has-deletable-selection")
         _ = try YamiboTestDefaults.make(suiteName: suiteName)
@@ -2365,6 +2464,13 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
             defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
             key: "local-favorites"
         )
+        let settingsStore = SettingsStore(
+            defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
+            key: "settings"
+        )
+        _ = try await settingsStore.update { settings in
+            settings.favorites.smartMangaBulkDeleteEnabled = false
+        }
         let mangaDirectoryStore = try makeMangaDirectoryStore(suiteName: suiteName)
         let directory = MangaDirectory(
             cleanBookName: "可删除性判断测试漫画",
@@ -2387,7 +2493,11 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
         ))
         try await localFavoriteLibraryStore.save(document)
 
-        let organizer = try makeOrganizer(libraryStore: localFavoriteLibraryStore, mangaDirectoryStore: mangaDirectoryStore)
+        let organizer = try makeOrganizer(
+            libraryStore: localFavoriteLibraryStore,
+            settingsStore: settingsStore,
+            mangaDirectoryStore: mangaDirectoryStore
+        )
         await organizer.load()
         let smartCard = try XCTUnwrap(organizer.derived.cards.first { $0.isModeOnMangaThread })
 
@@ -2396,6 +2506,44 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
 
         organizer.selection.toggleFavoriteSelection(id: normalTarget.id)
         XCTAssertTrue(organizer.hasDeletableSelection)
+
+        organizer.selection.toggleFavoriteSelection(id: smartCard.id)
+        XCTAssertTrue(organizer.hasDeletableSelection)
+    }
+
+    /// Enabled-path counterpart: with `smartMangaBulkDeleteEnabled` at its
+    /// default (on), a selection made up entirely of smart cards IS fully
+    /// deletable (every one of them expands to its whole archive), so the
+    /// selection toolbar's delete button must show for it too instead of
+    /// hiding as it does in the disabled path.
+    func testHasDeletableSelectionIncludesSmartCardOnlySelectionWhenBulkDeleteEnabled() async throws {
+        let suiteName = YamiboTestDefaults.suiteName(prefix: "local-favorites-has-deletable-selection-enabled")
+        _ = try YamiboTestDefaults.make(suiteName: suiteName)
+        let localFavoriteLibraryStore = FavoriteLibraryStore(
+            defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
+            key: "local-favorites"
+        )
+        let mangaDirectoryStore = try makeMangaDirectoryStore(suiteName: suiteName)
+        let directory = MangaDirectory(
+            cleanBookName: "可删除性判断启用测试漫画",
+            strategy: .links,
+            sourceKey: "chapter:4651",
+            chapters: [MangaChapter(tid: "4651", rawTitle: "第一话", chapterNumber: 1)]
+        )
+        try await mangaDirectoryStore.saveDirectory(directory)
+
+        let smartTarget = FavoriteItemTarget(kind: .mangaThread, threadID: "4651")
+        var document = try await localFavoriteLibraryStore.load()
+        document.upsertItem(try FavoriteItem(
+            target: smartTarget, title: "第一话", forumID: "30", forumName: "中文百合漫画区",
+            locations: [.category(document.defaultCategory.id)]
+        ))
+        try await localFavoriteLibraryStore.save(document)
+
+        let organizer = try makeOrganizer(libraryStore: localFavoriteLibraryStore, mangaDirectoryStore: mangaDirectoryStore)
+        await organizer.load()
+        XCTAssertTrue(organizer.smartMangaBulkDeleteEnabled)
+        let smartCard = try XCTUnwrap(organizer.derived.cards.first { $0.isModeOnMangaThread })
 
         organizer.selection.toggleFavoriteSelection(id: smartCard.id)
         XCTAssertTrue(organizer.hasDeletableSelection)
@@ -2411,7 +2559,11 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
     /// `deleteSelection`'s skip check must still catch it in that state (it
     /// used to rely on `derived.cards.first(where:)`, which this search
     /// change defeats), or it would fall through to a lone,
-    /// sibling-orphaning delete of just the representative item.
+    /// sibling-orphaning delete of just the representative item. Runs with
+    /// `smartMangaBulkDeleteEnabled` explicitly off (the setting's disabled
+    /// path) — see
+    /// `testDeleteSelectionWithBulkDeleteEnabledExpandsAndDeletesEveryArchivedMemberEvenAfterSearchFiltersItOut`
+    /// for the enabled-path counterpart.
     func testDeleteSelectionSkipsSmartCardEvenAfterSearchFiltersItOutOfDerivedCards() async throws {
         let suiteName = YamiboTestDefaults.suiteName(prefix: "local-favorites-smart-card-delete-filtered-out")
         _ = try YamiboTestDefaults.make(suiteName: suiteName)
@@ -2419,6 +2571,13 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
             defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
             key: "local-favorites"
         )
+        let settingsStore = SettingsStore(
+            defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
+            key: "settings"
+        )
+        _ = try await settingsStore.update { settings in
+            settings.favorites.smartMangaBulkDeleteEnabled = false
+        }
         let mangaDirectoryStore = try makeMangaDirectoryStore(suiteName: suiteName)
         let directory = MangaDirectory(
             cleanBookName: "搜索过滤删除测试漫画",
@@ -2444,7 +2603,11 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
         ))
         try await localFavoriteLibraryStore.save(document)
 
-        let organizer = try makeOrganizer(libraryStore: localFavoriteLibraryStore, mangaDirectoryStore: mangaDirectoryStore)
+        let organizer = try makeOrganizer(
+            libraryStore: localFavoriteLibraryStore,
+            settingsStore: settingsStore,
+            mangaDirectoryStore: mangaDirectoryStore
+        )
         await organizer.load()
         let mergedCard = try XCTUnwrap(organizer.derived.cards.first { $0.isMergedGroup })
 
@@ -2466,6 +2629,63 @@ final class FavoriteLibraryOrganizerTests: XCTestCase {
         XCTAssertNotNil(loadedDocument.items.first { $0.target == firstTarget })
         XCTAssertNotNil(loadedDocument.items.first { $0.target == secondTarget })
         XCTAssertNotNil(organizer.transientMessage)
+        XCTAssertFalse(organizer.selection.isSelectionMode)
+    }
+
+    /// Enabled-path counterpart to
+    /// `testDeleteSelectionSkipsSmartCardEvenAfterSearchFiltersItOutOfDerivedCards`:
+    /// with `smartMangaBulkDeleteEnabled` at its default (on), the same
+    /// scrolled-out-of-`derived.cards` smart card must still expand to every
+    /// archived member and delete all of them — `deleteSelection`'s
+    /// expansion path must use the same `derived.cards`-independent lookup
+    /// as the skip path, not a `derived.cards.first(where:)` shortcut that a
+    /// live search filter would defeat.
+    func testDeleteSelectionWithBulkDeleteEnabledExpandsAndDeletesEveryArchivedMemberEvenAfterSearchFiltersItOut() async throws {
+        let suiteName = YamiboTestDefaults.suiteName(prefix: "local-favorites-smart-card-bulk-delete-filtered-out")
+        _ = try YamiboTestDefaults.make(suiteName: suiteName)
+        let localFavoriteLibraryStore = FavoriteLibraryStore(
+            defaults: try YamiboTestDefaults.defaults(suiteName: suiteName),
+            key: "local-favorites"
+        )
+        let mangaDirectoryStore = try makeMangaDirectoryStore(suiteName: suiteName)
+        let directory = MangaDirectory(
+            cleanBookName: "批量删除搜索过滤测试漫画",
+            strategy: .links,
+            sourceKey: "chapter:4903",
+            chapters: [
+                MangaChapter(tid: "4903", rawTitle: "第一话", chapterNumber: 1),
+                MangaChapter(tid: "4904", rawTitle: "第二话", chapterNumber: 2),
+            ]
+        )
+        try await mangaDirectoryStore.saveDirectory(directory)
+
+        let firstTarget = FavoriteItemTarget(kind: .mangaThread, threadID: "4903")
+        let secondTarget = FavoriteItemTarget(kind: .mangaThread, threadID: "4904")
+        var document = try await localFavoriteLibraryStore.load()
+        document.upsertItem(try FavoriteItem(
+            target: firstTarget, title: "第一话", forumID: "30", forumName: "中文百合漫画区",
+            locations: [.category(document.defaultCategory.id)]
+        ))
+        document.upsertItem(try FavoriteItem(
+            target: secondTarget, title: "第二话", forumID: "30", forumName: "中文百合漫画区",
+            locations: [.category(document.defaultCategory.id)]
+        ))
+        try await localFavoriteLibraryStore.save(document)
+
+        let organizer = try makeOrganizer(libraryStore: localFavoriteLibraryStore, mangaDirectoryStore: mangaDirectoryStore)
+        await organizer.load()
+        XCTAssertTrue(organizer.smartMangaBulkDeleteEnabled)
+        let mergedCard = try XCTUnwrap(organizer.derived.cards.first { $0.isMergedGroup })
+
+        organizer.selection.toggleFavoriteSelection(id: mergedCard.id)
+        organizer.filter.searchText = "这个搜索词不会匹配任何收藏"
+        XCTAssertTrue(organizer.derived.cards.isEmpty)
+
+        await organizer.deleteSelection(scope: .everywhere, removeRemote: false)
+
+        let loadedDocument = try await localFavoriteLibraryStore.load()
+        XCTAssertNil(loadedDocument.items.first { $0.target == firstTarget })
+        XCTAssertNil(loadedDocument.items.first { $0.target == secondTarget })
         XCTAssertFalse(organizer.selection.isSelectionMode)
     }
 
