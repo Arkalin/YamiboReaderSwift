@@ -135,6 +135,21 @@ final class FavoriteLibraryOrganizer: ObservableObject {
     /// here once let a smart card's text-cover toggle write a `.thread` row
     /// its own display never read).
     private var coverLookup = ContentCoverLookup()
+    /// Bumped by every `coverLookup` write, including `toggleTextCover`'s
+    /// optimistic update. `reload()`/`reloadContentCovers()`/
+    /// `reloadBoardReaderSettings()`/`reloadMangaDirectories()` each capture
+    /// this before their `await`-heavy cover-store round trips and re-check
+    /// it before applying the result: those round trips read one key at a
+    /// time, so a slow one can straddle a later write and still resolve
+    /// after it. If the revision moved on while it was reading, a fresher
+    /// write already landed and applying this now-stale snapshot would
+    /// silently revert it — e.g. toggling a smart card's text cover and
+    /// then, in the same instant, toggling the underlying thread's own
+    /// cover from an expanded archive view could otherwise have the first
+    /// toggle's late-arriving notification-driven reload clobber the second
+    /// toggle's just-applied state back to "not forced". Skipping a stale
+    /// refresh is harmless — the next change notification settles it.
+    private var coverLookupRevision = 0
     /// tid → resolved `MangaDirectory`, for virtual favorites grouping
     /// (smart-comic-mode decision #3/#5). Populated only at `load()`/
     /// `reload()` via one batched `MangaDirectoryStore.directories
@@ -344,6 +359,7 @@ final class FavoriteLibraryOrganizer: ObservableObject {
         coverLookup = threadCovers.merging(
             await smartMangaCoverLookup(for: Array(Set(mangaDirectoriesByTID.values)))
         )
+        coverLookupRevision += 1
         display = FavoriteLibraryDisplayState(
             layoutMode: settings.favorites.layoutMode,
             showsCategoryCounts: settings.favorites.showsCategoryCounts
@@ -380,6 +396,7 @@ final class FavoriteLibraryOrganizer: ObservableObject {
             // let the next change notification retry.
             return
         }
+        let expectedCoverRevision = coverLookupRevision
         let threadCovers = await loadContentCovers(for: loadedDocument.items)
         // Only the Smart Comic Mode snapshot is refreshed here — unlike
         // `load()`, `reload()` deliberately never re-applies
@@ -390,9 +407,16 @@ final class FavoriteLibraryOrganizer: ObservableObject {
         let settings = await settingsStore.load()
         boardReaderSettings = settings.boardReader
         mangaDirectoriesByTID = await resolveMangaDirectories(for: loadedDocument.items, boardReaderSettings: boardReaderSettings)
-        coverLookup = threadCovers.merging(
-            await smartMangaCoverLookup(for: Array(Set(mangaDirectoriesByTID.values)))
-        )
+        let smartCovers = await smartMangaCoverLookup(for: Array(Set(mangaDirectoriesByTID.values)))
+        // Same staleness guard as `reloadContentCovers()`: this read-then-
+        // apply spans several awaits, so a faster, more recent `coverLookup`
+        // write (an optimistic `toggleTextCover`, or another reload) can
+        // land while this one is still in flight. Applying this snapshot
+        // then would revert that fresher write.
+        if coverLookupRevision == expectedCoverRevision {
+            coverLookup = threadCovers.merging(smartCovers)
+            coverLookupRevision += 1
+        }
         document = loadedDocument
         if !loadedDocument.categories.contains(where: { $0.id == selectedCategoryID }) {
             selectedCategoryID = loadedDocument.defaultCategory.id
@@ -415,11 +439,22 @@ final class FavoriteLibraryOrganizer: ObservableObject {
         refreshDerivedState()
     }
 
+    /// Re-derives `coverLookup` in response to *any*
+    /// `ContentCoverStore.didChangeNotification` — including ones this same
+    /// organizer's own `toggleTextCover` just caused, since that call posts
+    /// through the store like any other writer. `loadContentCovers`/
+    /// `smartMangaCoverLookup` read one key at a time, each its own `await`,
+    /// so this can start before and finish after a later, faster write (e.g.
+    /// `toggleTextCover`'s own optimistic update). Guarded on
+    /// `coverLookupRevision` so that a stale snapshot never wins a race
+    /// against a fresher one — see the property's doc comment.
     private func reloadContentCovers() async {
+        let expectedRevision = coverLookupRevision
         let threadCovers = await loadContentCovers(for: document.items)
-        coverLookup = threadCovers.merging(
-            await smartMangaCoverLookup(for: Array(Set(mangaDirectoriesByTID.values)))
-        )
+        let smartCovers = await smartMangaCoverLookup(for: Array(Set(mangaDirectoriesByTID.values)))
+        guard coverLookupRevision == expectedRevision else { return }
+        coverLookup = threadCovers.merging(smartCovers)
+        coverLookupRevision += 1
         refreshDerivedState()
     }
 
@@ -440,9 +475,15 @@ final class FavoriteLibraryOrganizer: ObservableObject {
         guard settings.boardReader != boardReaderSettings else { return }
         boardReaderSettings = settings.boardReader
         mangaDirectoriesByTID = await resolveMangaDirectories(for: document.items, boardReaderSettings: boardReaderSettings)
-        coverLookup.replaceSmartMangaSlice(
-            with: await smartMangaCoverLookup(for: Array(Set(mangaDirectoriesByTID.values)))
-        )
+        let expectedRevision = coverLookupRevision
+        let smartCovers = await smartMangaCoverLookup(for: Array(Set(mangaDirectoriesByTID.values)))
+        // See `coverLookupRevision`'s doc comment: skip applying this slice
+        // if a fresher `coverLookup` write landed while it was being read,
+        // rather than clobbering that write with this now-stale one.
+        if coverLookupRevision == expectedRevision {
+            coverLookup.replaceSmartMangaSlice(with: smartCovers)
+            coverLookupRevision += 1
+        }
         refreshDerivedState()
         scheduleMangaCoverBackfill(for: document.items)
     }
@@ -486,9 +527,15 @@ final class FavoriteLibraryOrganizer: ObservableObject {
     /// rename, until some other reload happened to refresh it.
     private func reloadMangaDirectories() async {
         mangaDirectoriesByTID = await resolveMangaDirectories(for: document.items, boardReaderSettings: boardReaderSettings)
-        coverLookup.replaceSmartMangaSlice(
-            with: await smartMangaCoverLookup(for: Array(Set(mangaDirectoriesByTID.values)))
-        )
+        let expectedRevision = coverLookupRevision
+        let smartCovers = await smartMangaCoverLookup(for: Array(Set(mangaDirectoriesByTID.values)))
+        // See `coverLookupRevision`'s doc comment: skip applying this slice
+        // if a fresher `coverLookup` write landed while it was being read,
+        // rather than clobbering that write with this now-stale one.
+        if coverLookupRevision == expectedRevision {
+            coverLookup.replaceSmartMangaSlice(with: smartCovers)
+            coverLookupRevision += 1
+        }
         readingProgress = await readingProgressStore.loadAll()
         refreshDerivedState()
     }
@@ -1416,6 +1463,10 @@ final class FavoriteLibraryOrganizer: ObservableObject {
             coverLookup.forcedKeys.remove(key)
         }
         coverLookup.urlsByKey[key] = cover?.resolvedURL
+        // Bumped so any in-flight reload racing this write (see
+        // `coverLookupRevision`'s doc comment) detects it's now stale and
+        // skips instead of clobbering this optimistic update.
+        coverLookupRevision += 1
         refreshDerivedState()
         // Un-forcing a smart card whose `.smartManga` cover never resolved
         // leaves it imageless again — give the backfill a chance right away
