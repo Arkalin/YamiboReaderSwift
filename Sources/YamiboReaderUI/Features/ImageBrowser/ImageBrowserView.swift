@@ -43,11 +43,13 @@ enum ImageBrowserMode: Equatable {
 struct ImageBrowserView: View {
     let items: [ImageBrowserItem]
     let mode: ImageBrowserMode
+    let presentation: ImageBrowserPresentationStyle
     let coverActionsProvider: ImageBrowserCoverActionsProvider?
     let onJumpToOriginal: (() -> Void)?
     let onDismiss: () -> Void
 
     @State private var selectedItemID: String
+    @State private var isChromeVisible = true
     @State private var swipeDismissProgress: CGFloat = 0
     @State private var isSwipeDismissCommitted = false
     @State private var feedback: ImageBrowserFeedback?
@@ -59,12 +61,14 @@ struct ImageBrowserView: View {
         items: [ImageBrowserItem],
         initialItemID: String?,
         mode: ImageBrowserMode,
+        presentation: ImageBrowserPresentationStyle = .fade,
         coverActionsProvider: ImageBrowserCoverActionsProvider? = nil,
         onJumpToOriginal: (() -> Void)? = nil,
         onDismiss: @escaping () -> Void
     ) {
         self.items = items
         self.mode = mode
+        self.presentation = presentation
         self.coverActionsProvider = coverActionsProvider
         self.onJumpToOriginal = onJumpToOriginal
         self.onDismiss = onDismiss
@@ -72,14 +76,26 @@ struct ImageBrowserView: View {
     }
 
     var body: some View {
+        switch presentation {
+        case .fade:
+            core.modalTransitionStyle(.crossDissolve)
+        case let .zoom(namespace):
+            core.navigationTransition(.zoom(sourceID: selectedItemID, in: namespace))
+        }
+    }
+
+    private var core: some View {
         ZStack {
             Color.black
+                .opacity(backgroundOpacity)
                 .ignoresSafeArea()
 
             ImageBrowserContentView(
                 items: items,
                 mode: mode,
+                dismissesViaSystemZoomTransition: dismissesViaSystemZoomTransition,
                 selectedItemID: $selectedItemID,
+                onSingleTap: toggleChrome,
                 onSwipeDownProgressChange: { progress in
                     swipeDismissProgress = progress
                 },
@@ -90,6 +106,8 @@ struct ImageBrowserView: View {
 
             ImageBrowserToolbar(
                 title: currentItem?.title ?? "",
+                pagePosition: pagePosition,
+                isChromeVisible: isChromeVisible,
                 canPerformImageAction: currentItem != nil && !isPreparingAction,
                 isPreparingAction: isPreparingAction,
                 swipeDismissProgress: swipeDismissProgress,
@@ -115,7 +133,12 @@ struct ImageBrowserView: View {
                 onDismiss: onDismiss
             )
         }
-        .modalTransitionStyle(.crossDissolve)
+        .statusBarHidden(!isChromeVisible)
+        .persistentSystemOverlays(isChromeVisible ? .automatic : .hidden)
+        .presentationBackground(.clear)
+        .accessibilityAction(.escape) {
+            onDismiss()
+        }
         .task {
             await reloadCoverActions()
         }
@@ -147,6 +170,26 @@ struct ImageBrowserView: View {
         items.first { $0.id == selectedItemID } ?? items.first
     }
 
+    private var pagePosition: (index: Int, count: Int)? {
+        guard mode == .multiple, items.count > 1,
+              let index = items.firstIndex(where: { $0.id == selectedItemID }) else {
+            return nil
+        }
+        return (index + 1, items.count)
+    }
+
+    private var dismissesViaSystemZoomTransition: Bool {
+        if case .zoom = presentation { return true }
+        return false
+    }
+
+    /// Keeps a faint dim until the swipe commits so the underlying screen
+    /// shows through progressively during the drag, Photos-style.
+    private var backgroundOpacity: Double {
+        guard !isSwipeDismissCommitted else { return 0 }
+        return 1 - Double(min(max(swipeDismissProgress, 0), 1)) * 0.9
+    }
+
     private var currentShareable: ImageBrowserShareableImage? {
         guard let currentItem else { return nil }
         return ImageBrowserShareableImage(
@@ -173,6 +216,12 @@ struct ImageBrowserView: View {
             return initialItemID
         }
         return items.first?.id ?? ""
+    }
+
+    private func toggleChrome() {
+        withAnimation(.easeInOut(duration: 0.2)) {
+            isChromeVisible.toggle()
+        }
     }
 
     private func copyImage() async {
@@ -238,8 +287,10 @@ struct ImageBrowserView: View {
 
     private func beginSwipeDownDismissCommit() {
         guard !isSwipeDismissCommitted else { return }
-        isSwipeDismissCommitted = true
-        swipeDismissProgress = 1
+        withAnimation(.easeIn(duration: 0.18)) {
+            isSwipeDismissCommitted = true
+            swipeDismissProgress = 1
+        }
     }
 
     private func commitSwipeDownDismiss() {
@@ -251,40 +302,47 @@ struct ImageBrowserView: View {
 private struct ImageBrowserContentView: View {
     let items: [ImageBrowserItem]
     let mode: ImageBrowserMode
+    let dismissesViaSystemZoomTransition: Bool
     @Binding var selectedItemID: String
+    let onSingleTap: () -> Void
     let onSwipeDownProgressChange: (CGFloat) -> Void
     let onSwipeDownCommit: () -> Void
     let onSwipeDownDismiss: () -> Void
 
     var body: some View {
         if mode == .multiple, items.count > 1 {
+            // Page position lives in the toolbar ("N / M"): with dozens of
+            // forum images the page-dot indicator would overflow the screen.
             TabView(selection: $selectedItemID) {
                 ForEach(items) { item in
-                    ImageBrowserPageView(
-                        item: item,
-                        onSwipeDownProgressChange: onSwipeDownProgressChange,
-                        onSwipeDownCommit: onSwipeDownCommit,
-                        onSwipeDownDismiss: onSwipeDownDismiss
-                    )
-                    .tag(item.id)
+                    pageView(for: item)
+                        .tag(item.id)
                 }
             }
-            .tabViewStyle(.page(indexDisplayMode: .automatic))
+            .tabViewStyle(.page(indexDisplayMode: .never))
         } else if let item = items.first {
-            ImageBrowserPageView(
-                item: item,
-                onSwipeDownProgressChange: onSwipeDownProgressChange,
-                onSwipeDownCommit: onSwipeDownCommit,
-                onSwipeDownDismiss: onSwipeDownDismiss
-            )
+            pageView(for: item)
         } else {
             ImageBrowserFailureView(retry: nil)
         }
+    }
+
+    private func pageView(for item: ImageBrowserItem) -> some View {
+        ImageBrowserPageView(
+            item: item,
+            dismissesViaSystemZoomTransition: dismissesViaSystemZoomTransition,
+            onSingleTap: onSingleTap,
+            onSwipeDownProgressChange: onSwipeDownProgressChange,
+            onSwipeDownCommit: onSwipeDownCommit,
+            onSwipeDownDismiss: onSwipeDownDismiss
+        )
     }
 }
 
 private struct ImageBrowserPageView: View {
     let item: ImageBrowserItem
+    let dismissesViaSystemZoomTransition: Bool
+    let onSingleTap: () -> Void
     let onSwipeDownProgressChange: (CGFloat) -> Void
     let onSwipeDownCommit: () -> Void
     let onSwipeDownDismiss: () -> Void
@@ -296,8 +354,11 @@ private struct ImageBrowserPageView: View {
     var body: some View {
         Group {
             if let image {
-                ImageBrowserZoomableImageView(
+                ImageBrowserZoomableImagePage(
                     image: image,
+                    title: item.title,
+                    dismissesViaSystemZoomTransition: dismissesViaSystemZoomTransition,
+                    onSingleTap: onSingleTap,
                     onSwipeDownProgressChange: onSwipeDownProgressChange,
                     onSwipeDownCommit: onSwipeDownCommit,
                     onSwipeDownDismiss: onSwipeDownDismiss
@@ -307,10 +368,16 @@ private struct ImageBrowserPageView: View {
                     didFail = false
                     attempt += 1
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .contentShape(Rectangle())
+                .onTapGesture(perform: onSingleTap)
             } else {
                 ProgressView(L10n.string("image.loading"))
                     .tint(.white)
                     .foregroundStyle(.white.opacity(0.8))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .contentShape(Rectangle())
+                    .onTapGesture(perform: onSingleTap)
             }
         }
         .task(id: "\(item.source.cacheKey)#\(attempt)") {
@@ -331,6 +398,143 @@ private struct ImageBrowserPageView: View {
         } catch {
             YamiboLog.reader.warning("Failed to load image for browser item \(item.id): \(error)")
             didFail = true
+        }
+    }
+}
+
+/// One zoomable page: the `UIScrollView` container handles zooming and
+/// panning, while the swipe-down-to-dismiss drag stays a SwiftUI gesture on
+/// top, active only at minimum zoom (see `swipeDismissGestureMask`).
+private struct ImageBrowserZoomableImagePage: View {
+    let image: UIImage
+    let title: String
+    let dismissesViaSystemZoomTransition: Bool
+    let onSingleTap: () -> Void
+    let onSwipeDownProgressChange: (CGFloat) -> Void
+    let onSwipeDownCommit: () -> Void
+    let onSwipeDownDismiss: () -> Void
+
+    @State private var zoomProxy = ImageBrowserZoomProxy()
+    @State private var zoomFactor: CGFloat = 1
+    @State private var isSwipeDismissCommitted = false
+    @State private var committedTranslation: CGFloat = 0
+    @State private var exitOffset: CGFloat = 0
+    @State private var imageOpacity: CGFloat = 1
+    /// `@GestureState` (rather than `@State`) so a system-cancelled drag —
+    /// incoming call, notification-center grab — springs back automatically
+    /// instead of wedging the image at a stale offset.
+    @GestureState(resetTransaction: Transaction(animation: .spring(response: 0.22, dampingFraction: 0.86)))
+    private var dragTranslation: CGFloat = 0
+
+    var body: some View {
+        GeometryReader { geometry in
+            ImageBrowserZoomableScrollView(
+                image: image,
+                proxy: zoomProxy,
+                onSingleTap: onSingleTap,
+                onZoomFactorChange: { zoomFactor = $0 }
+            )
+            .scaleEffect(ImageBrowserSwipeDismissGesture.imageScale(for: swipeProgress))
+            .offset(y: swipeTranslation)
+            .opacity(imageOpacity)
+            .simultaneousGesture(
+                swipeDismissGesture(containerSize: geometry.size),
+                including: swipeDismissGestureMask
+            )
+        }
+        .onChange(of: swipeProgress) { _, newValue in
+            onSwipeDownProgressChange(newValue)
+        }
+        .onDisappear {
+            zoomProxy.resetZoom(animated: false)
+        }
+        .accessibilityElement()
+        .accessibilityLabel(title)
+        .accessibilityAddTraits(.isImage)
+        .accessibilityAction {
+            onSingleTap()
+        }
+        .accessibilityZoomAction { action in
+            zoomProxy.stepZoom(zoomIn: action.direction == .zoomIn)
+        }
+    }
+
+    private var isZoomedIn: Bool {
+        zoomFactor > 1.01
+    }
+
+    private var swipeTranslation: CGFloat {
+        isSwipeDismissCommitted ? committedTranslation + exitOffset : dragTranslation
+    }
+
+    private var swipeProgress: CGFloat {
+        isSwipeDismissCommitted ? 1 : ImageBrowserSwipeDismissGesture.progress(for: dragTranslation)
+    }
+
+    /// Detaches the dismiss drag entirely while zoomed in, so it never
+    /// competes with the scroll view's own pan for the same touch; at minimum
+    /// zoom the scroll view has nothing to scroll and the drag takes over.
+    private var swipeDismissGestureMask: GestureMask {
+        isZoomedIn || isSwipeDismissCommitted ? .subviews : .all
+    }
+
+    private func swipeDismissGesture(containerSize: CGSize) -> some Gesture {
+        DragGesture(minimumDistance: ImageBrowserSwipeDismissGesture.minimumRecognitionDistance)
+            .updating($dragTranslation) { value, state, _ in
+                guard !isSwipeDismissCommitted, !isZoomedIn else { return }
+                let translation = CGPoint(x: value.translation.width, y: value.translation.height)
+                guard ImageBrowserSwipeDismissGesture.canBegin(
+                    translation: translation,
+                    zoomScale: zoomFactor,
+                    minimumZoomScale: 1
+                ) else {
+                    state = 0
+                    return
+                }
+                state = max(value.translation.height, 0)
+            }
+            .onEnded { value in
+                guard !isSwipeDismissCommitted, !isZoomedIn else { return }
+                let translation = CGPoint(x: value.translation.width, y: value.translation.height)
+                let velocity = CGPoint(x: value.velocity.width, y: value.velocity.height)
+                guard ImageBrowserSwipeDismissGesture.shouldDismiss(
+                    translation: translation,
+                    velocity: velocity,
+                    zoomScale: zoomFactor,
+                    minimumZoomScale: 1
+                ) else {
+                    return
+                }
+                commitSwipeDismiss(translationY: translation.y, containerSize: containerSize)
+            }
+    }
+
+    private func commitSwipeDismiss(translationY: CGFloat, containerSize: CGSize) {
+        isSwipeDismissCommitted = true
+        committedTranslation = max(translationY, 0)
+        onSwipeDownCommit()
+
+        // Under the system zoom transition the dismiss animation itself flies
+        // the page back into its thumbnail; animating our own exit first
+        // would play two animations back to back.
+        guard !dismissesViaSystemZoomTransition else {
+            onSwipeDownDismiss()
+            return
+        }
+
+        let imageHeight = ImageContentGeometry.aspectFitFrame(
+            imageSize: image.size,
+            containerSize: containerSize
+        ).height
+        let exitDistance = max(
+            containerSize.height - committedTranslation + imageHeight * 0.35,
+            containerSize.height * 0.45
+        )
+        withAnimation(.easeIn(duration: 0.18), completionCriteria: .logicallyComplete) {
+            exitOffset = exitDistance
+            imageOpacity = 0
+        } completion: {
+            onSwipeDownDismiss()
         }
     }
 }
@@ -357,6 +561,8 @@ private struct ImageBrowserFailureView: View {
 
 private struct ImageBrowserToolbar: View {
     let title: String
+    let pagePosition: (index: Int, count: Int)?
+    let isChromeVisible: Bool
     let canPerformImageAction: Bool
     let isPreparingAction: Bool
     let swipeDismissProgress: CGFloat
@@ -371,12 +577,23 @@ private struct ImageBrowserToolbar: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 12) {
-                Text(title)
-                    .font(.headline)
-                    .foregroundStyle(.white)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
+            HStack(alignment: .center, spacing: 12) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.headline)
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+
+                    if let pagePosition {
+                        Text(verbatim: "\(pagePosition.index) / \(pagePosition.count)")
+                            .font(.footnote.weight(.medium).monospacedDigit())
+                            .foregroundStyle(.white.opacity(0.8))
+                            .accessibilityLabel(
+                                L10n.string("image.position_accessibility", pagePosition.index, pagePosition.count)
+                            )
+                    }
+                }
 
                 Spacer(minLength: 12)
 
@@ -413,23 +630,30 @@ private struct ImageBrowserToolbar: View {
                         }
                     }
                 } label: {
-                    Image(systemName: isPreparingAction ? "hourglass" : "ellipsis")
-                        .font(.title3.weight(.semibold))
-                        .foregroundStyle(.white)
-                        .frame(width: 44, height: 44)
-                        .background(.black.opacity(0.58), in: Circle())
+                    Group {
+                        if isPreparingAction {
+                            ProgressView()
+                                .tint(.white)
+                        } else {
+                            Image(systemName: "ellipsis")
+                                .font(.title3.weight(.semibold))
+                                .foregroundStyle(.white)
+                        }
+                    }
+                    .frame(width: 44, height: 44)
+                    .background(.black.opacity(0.58), in: Circle())
                 }
                 .disabled(!canPerformImageAction)
                 .accessibilityLabel(L10n.string("common.more"))
 
                 Button(action: onDismiss) {
-                    Image(systemName: "checkmark")
+                    Image(systemName: "xmark")
                         .font(.title3.weight(.semibold))
                         .foregroundStyle(.white)
                         .frame(width: 44, height: 44)
                         .background(.black.opacity(0.58), in: Circle())
                 }
-                .accessibilityLabel(L10n.string("common.done"))
+                .accessibilityLabel(L10n.string("common.close"))
             }
             .padding(.horizontal, 18)
             .padding(.top, 12)
@@ -445,8 +669,14 @@ private struct ImageBrowserToolbar: View {
 
             Spacer(minLength: 0)
         }
-        .opacity(1 - min(swipeDismissProgress * 1.4, 1))
-        .allowsHitTesting(!isSwipeDismissCommitted)
+        .opacity(effectiveOpacity)
+        .allowsHitTesting(isChromeVisible && !isSwipeDismissCommitted)
+        .accessibilityHidden(!isChromeVisible)
+    }
+
+    private var effectiveOpacity: Double {
+        guard isChromeVisible else { return 0 }
+        return 1 - min(swipeDismissProgress * 1.4, 1)
     }
 }
 
@@ -491,335 +721,6 @@ private struct ImageBrowserShareableImage: Transferable {
             try data.write(to: fileURL, options: .atomic)
             return SentTransferredFile(fileURL)
         }
-    }
-}
-
-private struct ImageBrowserZoomableImageView: View {
-    let image: UIImage
-    let onSwipeDownProgressChange: (CGFloat) -> Void
-    let onSwipeDownCommit: () -> Void
-    let onSwipeDownDismiss: () -> Void
-
-    private let doubleTapZoomScale: CGFloat = 2.6
-    private let maximumZoomScale: CGFloat = 5
-
-    @State private var steadyScale: CGFloat = 1
-    @State private var gestureScale: CGFloat = 1
-    @State private var steadyOffset: CGSize = .zero
-    @State private var gestureOffset: CGSize = .zero
-    @State private var swipeDismissTranslation: CGFloat = 0
-    @State private var swipeDismissExitOffset: CGFloat = 0
-    @State private var imageOpacity: CGFloat = 1
-    @State private var isSwipeDismissCommitted = false
-
-    var body: some View {
-        GeometryReader { geometry in
-            let containerSize = geometry.size
-
-            Image(uiImage: image)
-                .resizable()
-                .scaledToFit()
-                .frame(width: containerSize.width, height: containerSize.height)
-                .scaleEffect(displayScale)
-                .offset(
-                    x: steadyOffset.width + gestureOffset.width,
-                    y: steadyOffset.height + gestureOffset.height + swipeDismissTranslation + swipeDismissExitOffset
-                )
-                .opacity(imageOpacity)
-                .contentShape(Rectangle())
-                .simultaneousGesture(doubleTapGesture(containerSize: containerSize))
-                .simultaneousGesture(magnifyGesture(containerSize: containerSize))
-                .simultaneousGesture(
-                    zoomPanGesture(containerSize: containerSize),
-                    including: zoomPanGestureMask
-                )
-                .simultaneousGesture(
-                    swipeDismissDragGesture(containerSize: containerSize),
-                    including: swipeDismissGestureMask
-                )
-                .onChange(of: containerSize) { _, newValue in
-                    clampSteadyOffset(containerSize: newValue)
-                }
-        }
-    }
-
-    private var zoomScale: CGFloat {
-        clampedScale(steadyScale * gestureScale)
-    }
-
-    /// Whether the image is zoomed enough that a one-finger drag should pan the zoomed
-    /// content instead of paging between images or swiping down to dismiss.
-    private var isZoomPanActive: Bool {
-        zoomScale > 1.01
-    }
-
-    /// Detaches the pan gesture entirely (rather than letting it no-op) while unzoomed so it
-    /// never competes with `TabView(.page)`'s own horizontal swipe for the same touch.
-    private var zoomPanGestureMask: GestureMask {
-        isZoomPanActive ? .gesture : .subviews
-    }
-
-    /// Detaches the swipe-to-dismiss gesture entirely while zoomed, since panning takes over
-    /// at that point; see `zoomPanGestureMask` for the complementary case.
-    private var swipeDismissGestureMask: GestureMask {
-        isZoomPanActive ? .subviews : .gesture
-    }
-
-    private var displayScale: CGFloat {
-        zoomScale * ImageBrowserSwipeDismissGesture.imageScale(for: swipeDismissProgress)
-    }
-
-    private var swipeDismissProgress: CGFloat {
-        ImageBrowserSwipeDismissGesture.progress(for: swipeDismissTranslation)
-    }
-
-    private func doubleTapGesture(containerSize: CGSize) -> some Gesture {
-        SpatialTapGesture(count: 2, coordinateSpace: .local)
-            .onEnded { value in
-                guard !isSwipeDismissCommitted else { return }
-                if steadyScale > 1.05 {
-                    resetZoom(containerSize: containerSize, animated: true)
-                } else {
-                    zoomIn(to: value.location, containerSize: containerSize)
-                }
-            }
-    }
-
-    private func magnifyGesture(containerSize: CGSize) -> some Gesture {
-        MagnifyGesture()
-            .onChanged { value in
-                guard !isSwipeDismissCommitted else { return }
-                let nextScale = clampedScale(steadyScale * value.magnification)
-                gestureScale = nextScale / max(steadyScale, 0.001)
-                steadyOffset = clampedOffset(
-                    steadyOffset,
-                    scale: nextScale,
-                    containerSize: containerSize
-                )
-            }
-            .onEnded { value in
-                guard !isSwipeDismissCommitted else { return }
-                let nextScale = clampedScale(steadyScale * value.magnification)
-                steadyScale = nextScale
-                gestureScale = 1
-                if nextScale <= 1.01 {
-                    resetZoom(containerSize: containerSize, animated: true)
-                } else {
-                    steadyOffset = clampedOffset(
-                        steadyOffset,
-                        scale: nextScale,
-                        containerSize: containerSize
-                    )
-                }
-            }
-    }
-
-    private func zoomPanGesture(containerSize: CGSize) -> some Gesture {
-        DragGesture()
-            .onChanged { value in
-                guard !isSwipeDismissCommitted, isZoomPanActive else { return }
-                updateZoomDrag(value.translation, containerSize: containerSize)
-            }
-            .onEnded { value in
-                guard !isSwipeDismissCommitted, isZoomPanActive else { return }
-                endZoomDrag(value.translation, containerSize: containerSize)
-            }
-    }
-
-    private func swipeDismissDragGesture(containerSize: CGSize) -> some Gesture {
-        DragGesture(minimumDistance: ImageBrowserSwipeDismissGesture.minimumRecognitionDistance)
-            .onChanged { value in
-                guard !isSwipeDismissCommitted, !isZoomPanActive else { return }
-                updateSwipeDismissDrag(value.translation)
-            }
-            .onEnded { value in
-                guard !isSwipeDismissCommitted, !isZoomPanActive else { return }
-                endSwipeDismissDrag(value, containerSize: containerSize)
-            }
-    }
-
-    private func updateZoomDrag(_ translation: CGSize, containerSize: CGSize) {
-        let proposed = CGSize(
-            width: steadyOffset.width + translation.width,
-            height: steadyOffset.height + translation.height
-        )
-        let clamped = clampedOffset(
-            proposed,
-            scale: zoomScale,
-            containerSize: containerSize
-        )
-        gestureOffset = CGSize(
-            width: clamped.width - steadyOffset.width,
-            height: clamped.height - steadyOffset.height
-        )
-    }
-
-    private func endZoomDrag(_ translation: CGSize, containerSize: CGSize) {
-        let proposed = CGSize(
-            width: steadyOffset.width + translation.width,
-            height: steadyOffset.height + translation.height
-        )
-        steadyOffset = clampedOffset(
-            proposed,
-            scale: steadyScale,
-            containerSize: containerSize
-        )
-        gestureOffset = .zero
-    }
-
-    private func updateSwipeDismissDrag(_ translation: CGSize) {
-        let dismissTranslation = CGPoint(x: translation.width, y: translation.height)
-        guard ImageBrowserSwipeDismissGesture.canBegin(
-            translation: dismissTranslation,
-            zoomScale: zoomScale,
-            minimumZoomScale: 1
-        ) else {
-            resetSwipeDismissTracking(animated: true)
-            return
-        }
-        swipeDismissTranslation = max(translation.height, 0)
-        onSwipeDownProgressChange(swipeDismissProgress)
-    }
-
-    private func endSwipeDismissDrag(_ value: DragGesture.Value, containerSize: CGSize) {
-        let translation = CGPoint(
-            x: value.translation.width,
-            y: value.translation.height
-        )
-        let velocity = CGPoint(
-            x: value.velocity.width,
-            y: value.velocity.height
-        )
-
-        if ImageBrowserSwipeDismissGesture.shouldDismiss(
-            translation: translation,
-            velocity: velocity,
-            zoomScale: zoomScale,
-            minimumZoomScale: 1
-        ) {
-            commitSwipeDismiss(translationY: translation.y, containerSize: containerSize)
-        } else {
-            resetSwipeDismissTracking(animated: true)
-        }
-    }
-
-    private func zoomIn(to location: CGPoint, containerSize: CGSize) {
-        let targetScale = min(maximumZoomScale, doubleTapZoomScale)
-        let imageFrame = imageFrame(containerSize: containerSize)
-        let targetLocation = imageFrame.contains(location)
-            ? location
-            : CGPoint(x: containerSize.width / 2, y: containerSize.height / 2)
-        let center = CGPoint(x: containerSize.width / 2, y: containerSize.height / 2)
-        let proposedOffset = CGSize(
-            width: -(targetLocation.x - center.x) * targetScale,
-            height: -(targetLocation.y - center.y) * targetScale
-        )
-
-        withAnimation(.easeOut(duration: 0.2)) {
-            steadyScale = targetScale
-            gestureScale = 1
-            steadyOffset = clampedOffset(
-                proposedOffset,
-                scale: targetScale,
-                containerSize: containerSize
-            )
-            gestureOffset = .zero
-        }
-    }
-
-    private func resetZoom(containerSize: CGSize, animated: Bool) {
-        let updates = {
-            steadyScale = 1
-            gestureScale = 1
-            steadyOffset = .zero
-            gestureOffset = .zero
-        }
-        if animated {
-            withAnimation(.easeOut(duration: 0.2), updates)
-        } else {
-            updates()
-        }
-        clampSteadyOffset(containerSize: containerSize)
-    }
-
-    private func resetSwipeDismissTracking(animated: Bool) {
-        guard swipeDismissTranslation != 0 else {
-            onSwipeDownProgressChange(0)
-            return
-        }
-
-        let updates = {
-            swipeDismissTranslation = 0
-        }
-        if animated {
-            withAnimation(.spring(response: 0.22, dampingFraction: 0.86), updates)
-        } else {
-            updates()
-        }
-        onSwipeDownProgressChange(0)
-    }
-
-    private func commitSwipeDismiss(translationY: CGFloat, containerSize: CGSize) {
-        guard !isSwipeDismissCommitted else { return }
-        isSwipeDismissCommitted = true
-        onSwipeDownCommit()
-        onSwipeDownProgressChange(1)
-
-        let imageHeight = imageFrame(containerSize: containerSize).height
-        let exitDistance = max(
-            containerSize.height - max(translationY, 0) + imageHeight * 0.35,
-            containerSize.height * 0.45
-        )
-        withAnimation(.easeIn(duration: 0.18)) {
-            swipeDismissTranslation = max(translationY, 0)
-            swipeDismissExitOffset = exitDistance
-            imageOpacity = 0
-        }
-
-        Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 180_000_000)
-            onSwipeDownDismiss()
-        }
-    }
-
-    private func clampSteadyOffset(containerSize: CGSize) {
-        steadyOffset = clampedOffset(
-            steadyOffset,
-            scale: steadyScale,
-            containerSize: containerSize
-        )
-        gestureOffset = .zero
-    }
-
-    private func clampedScale(_ scale: CGFloat) -> CGFloat {
-        min(maximumZoomScale, max(1, scale))
-    }
-
-    private func clampedOffset(
-        _ proposed: CGSize,
-        scale: CGFloat,
-        containerSize: CGSize
-    ) -> CGSize {
-        let bounds = dragBounds(scale: scale, containerSize: containerSize)
-        return CGSize(
-            width: min(bounds.width, max(-bounds.width, proposed.width)),
-            height: min(bounds.height, max(-bounds.height, proposed.height))
-        )
-    }
-
-    private func dragBounds(scale: CGFloat, containerSize: CGSize) -> CGSize {
-        let imageSize = imageFrame(containerSize: containerSize).size
-        return CGSize(
-            width: max(0, (imageSize.width * scale - containerSize.width) / 2),
-            height: max(0, (imageSize.height * scale - containerSize.height) / 2)
-        )
-    }
-
-    private func imageFrame(containerSize: CGSize) -> CGRect {
-        ImageContentGeometry.aspectFitFrame(
-            imageSize: image.size,
-            containerSize: containerSize
-        )
     }
 }
 #endif

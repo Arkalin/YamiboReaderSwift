@@ -26,6 +26,8 @@ struct LikeWorkItemsView: View {
     @State private var selectedItemIDs: Set<String> = []
     @State private var isShowingDeleteConfirmation = false
 
+    @Namespace private var imageBrowserZoomNamespace
+
     var body: some View {
         List {
             ForEach(filteredItems) { item in
@@ -53,6 +55,7 @@ struct LikeWorkItemsView: View {
             }
         }
         .listStyle(.plain)
+        .environment(\.imageBrowserZoomNamespace, imageBrowserZoomNamespace)
         .contentMargins(.top, 8, for: .scrollContent)
         // The List stays permanently mounted (rather than being swapped for
         // an empty-state view via if/else) so `.searchable` below always has
@@ -163,13 +166,13 @@ struct LikeWorkItemsView: View {
                     items: [browserItem],
                     initialItemID: item.id,
                     mode: .single,
+                    presentation: .zoom(imageBrowserZoomNamespace),
                     onJumpToOriginal: {
                         presentedImageItem = nil
                         onOpenAnchor(item.anchor)
                     },
                     onDismiss: { presentedImageItem = nil }
                 )
-                .presentationBackground(.clear)
             }
         }
     }
@@ -382,6 +385,8 @@ private struct LikeItemCard: View {
     let action: () -> Void
     let onToggleSelection: () -> Void
 
+    @Environment(\.imageBrowserZoomNamespace) private var imageBrowserZoomNamespace
+
     var body: some View {
         Button {
             if isSelecting {
@@ -398,6 +403,7 @@ private struct LikeItemCard: View {
             }
         }
         .buttonStyle(.plain)
+        .imageBrowserZoomSource(id: item.id, in: item.kind == .image ? imageBrowserZoomNamespace : nil)
         .favoriteSelectionEmphasis(isSelectionMode: isSelecting, isSelected: isSelected, cornerRadius: 10)
     }
 }

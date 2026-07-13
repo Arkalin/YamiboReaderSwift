@@ -8,6 +8,8 @@ struct ForumThreadImageBlockView: View {
     let onImageTap: (String, URL, String?, URL) -> Void
     let onURLTap: (URL) -> Void
 
+    @Environment(\.imageBrowserZoomNamespace) private var imageBrowserZoomNamespace
+
     var body: some View {
         if block.isEmoticon {
             image
@@ -29,6 +31,7 @@ struct ForumThreadImageBlockView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 8))
             }
             .buttonStyle(.plain)
+            .imageBrowserZoomSource(id: blockID, in: block.linkURL == nil ? imageBrowserZoomNamespace : nil)
             .accessibilityLabel(block.altText ?? L10n.string("forum.thread.image"))
         }
     }
