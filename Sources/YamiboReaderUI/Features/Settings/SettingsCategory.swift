@@ -28,7 +28,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
     var systemImageName: String {
         switch self {
         case .general: "gearshape"
-        case .favorites: "heart.fill"
+        case .favorites: "star"
         case .reading: "book"
         case .peripherals: "gamecontroller"
         case .storage: "externaldrive"
