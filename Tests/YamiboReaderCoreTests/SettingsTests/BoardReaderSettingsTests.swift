@@ -114,4 +114,8 @@ struct BoardReaderSettingsTests {
         appSettings.boardReader.setEntry(.init(mode: .manga(smartEnabled: true)), forumID: "46")
         #expect(appSettings.isSmartComicModeEnabled(forumID: "46") == true)
     }
+
+    @Test func placeholderKeyLocalizesWithForumIDSubstitution() {
+        #expect(L10n.string("settings.board_reader.board_placeholder", "999") == "板块 999")
+    }
 }
