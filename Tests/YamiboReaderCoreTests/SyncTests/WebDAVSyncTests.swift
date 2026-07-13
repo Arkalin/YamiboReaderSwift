@@ -305,8 +305,264 @@ private enum WebDAVTestError: Error {
 
     let result = try await fixture.makeService().synchronizeAutomatically(bypassingMinimumInterval: true)
 
-    #expect(result != .skipped)
+    // The bypassed round still reaches the network (unlike the interval-gated
+    // round in the companion test); with nothing dirty and no remote payloads
+    // it reports .skipped instead of stamping a phantom upload.
+    #expect(result == .skipped)
     #expect(requestCount > 0)
+}
+
+@Test func webDAVAutomaticSyncAppliesNewerRemoteDataForCleanDatasetsWhenLocalTimestampIsAhead() async throws {
+    let fixture = try WebDAVSyncFixture(prefix: "webdav-clean-dataset-convergence")
+    try await fixture.settingsStore.save(WebDAVSyncSettings(
+        baseURLString: "https://\(fixture.host)",
+        username: "admin",
+        password: "secret",
+        isAutoSyncEnabled: true
+    ))
+    try await fixture.signIn(accountUID: "123")
+
+    var localDocument = FavoriteLibraryDocument()
+    let localTarget = FavoriteItemTarget(kind: .novelThread, threadID: "111")
+    try localDocument.upsertItem(FavoriteItem(
+        target: localTarget,
+        title: "本地收藏",
+        locations: [.category(localDocument.defaultCategory.id)]
+    ))
+    try await fixture.localFavoriteLibraryStore.save(localDocument)
+
+    // Round 1 seeds fingerprints and per-dataset applied stamps through a
+    // normal upload round against an empty remote.
+    WebDAVTestURLProtocol.setHandler(for: fixture.host) { request in
+        switch request.httpMethod {
+        case "GET":
+            return (Data(), HTTPURLResponse(url: request.url!, statusCode: 404, httpVersion: nil, headerFields: nil)!)
+        case "MKCOL", "PUT":
+            return (Data(), HTTPURLResponse(url: request.url!, statusCode: 201, httpVersion: nil, headerFields: nil)!)
+        default:
+            Issue.record("Unexpected method \(request.httpMethod ?? "nil")")
+            return (Data(), HTTPURLResponse(url: request.url!, statusCode: 500, httpVersion: nil, headerFields: nil)!)
+        }
+    }
+    defer { WebDAVTestURLProtocol.removeHandler(for: fixture.host) }
+
+    let service = fixture.makeService()
+    try await service.markLocalDataChanged()
+    let seededResult = try await service.synchronizeAutomatically()
+    #expect(seededResult == .uploaded)
+    let seededSettings = await fixture.settingsStore.load()
+    let firstUploadUpdatedAt = try #require(seededSettings.localUpdatedAt)
+
+    // Device B uploads a newer favorite library, and this device's
+    // localUpdatedAt sits past it without any local change (the old
+    // backgrounding-bump regression state).
+    let remoteUpdatedAt = firstUploadUpdatedAt.addingTimeInterval(60)
+    var bumpedSettings = seededSettings
+    bumpedSettings.localUpdatedAt = remoteUpdatedAt.addingTimeInterval(60)
+    try await fixture.settingsStore.save(bumpedSettings)
+
+    var remoteDocument = FavoriteLibraryDocument()
+    try remoteDocument.upsertItem(FavoriteItem(
+        target: localTarget,
+        title: "本地收藏",
+        locations: [.category(remoteDocument.defaultCategory.id)]
+    ))
+    try remoteDocument.upsertItem(FavoriteItem(
+        target: FavoriteItemTarget(kind: .normalThread, threadID: "222"),
+        title: "B设备新收藏",
+        locations: [.category(remoteDocument.defaultCategory.id)]
+    ))
+    let remoteFavoritePayload = try JSONEncoder().encode(FavoriteLibraryWebDAVPayload(
+        updatedAt: remoteUpdatedAt,
+        accountUID: "123",
+        library: remoteDocument
+    ))
+    // App settings payload carrying the exact stamp this device already
+    // absorbed in round 1: despite differing content it must not be applied.
+    let staleRemoteAppSettingsPayload = try JSONEncoder().encode(AppSettingsWebDAVPayload(
+        updatedAt: firstUploadUpdatedAt,
+        accountUID: "123",
+        appSettings: WebDAVSyncedAppSettings(
+            homePage: .favorites,
+            webBrowser: WebBrowserSettings(showsNavigationBar: false)
+        )
+    ))
+    var putPathsAfterSeeding: [String] = []
+    WebDAVTestURLProtocol.setHandler(for: fixture.host) { request in
+        switch request.httpMethod {
+        case "GET":
+            if request.url?.path.hasSuffix("yamibo-favorite-library-v1.json") == true {
+                return (remoteFavoritePayload, HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
+            }
+            if request.url?.path.hasSuffix("yamibo-app-settings-v1.json") == true {
+                return (staleRemoteAppSettingsPayload, HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
+            }
+            return (Data(), HTTPURLResponse(url: request.url!, statusCode: 404, httpVersion: nil, headerFields: nil)!)
+        case "MKCOL", "PUT":
+            putPathsAfterSeeding.append(request.url?.path ?? "")
+            return (Data(), HTTPURLResponse(url: request.url!, statusCode: 201, httpVersion: nil, headerFields: nil)!)
+        default:
+            Issue.record("Unexpected method \(request.httpMethod ?? "nil")")
+            return (Data(), HTTPURLResponse(url: request.url!, statusCode: 500, httpVersion: nil, headerFields: nil)!)
+        }
+    }
+
+    let localAppSettingsBeforeSync = await fixture.appSettingsStore.load()
+    let result = try await service.synchronizeAutomatically(bypassingMinimumInterval: true)
+
+    #expect(result == .downloaded)
+    #expect(putPathsAfterSeeding.isEmpty)
+    let favorites = try await fixture.localFavoriteLibraryStore.load()
+    #expect(favorites.items.contains { $0.target.threadID == "222" })
+    let localAppSettingsAfterSync = await fixture.appSettingsStore.load()
+    #expect(localAppSettingsAfterSync == localAppSettingsBeforeSync)
+    let convergedSettings = await fixture.settingsStore.load()
+    #expect(convergedSettings.localUpdatedAt == remoteUpdatedAt)
+    #expect(convergedSettings.lastAppliedRemoteUpdatedAtByDatasetID["favoriteLibrary"] == remoteUpdatedAt)
+    #expect(convergedSettings.dirtyDatasetIDs.isEmpty)
+
+    // The applied content was fingerprinted right after applyRemote, so it is
+    // not spuriously re-marked dirty (which would echo it back upward).
+    try await service.markLocalDataChanged()
+    let remarkedSettings = await fixture.settingsStore.load()
+    #expect(remarkedSettings.dirtyDatasetIDs.isEmpty)
+    #expect(remarkedSettings.localUpdatedAt == remoteUpdatedAt)
+}
+
+@Test func webDAVMarkLocalDataChangedDoesNotAdvanceLocalTimestampWhenNothingIsDirty() async throws {
+    let fixture = try WebDAVSyncFixture(prefix: "webdav-mark-clean-no-bump")
+    try await fixture.settingsStore.save(WebDAVSyncSettings(isAutoSyncEnabled: true))
+    let service = fixture.makeService()
+
+    let seedDate = Date(timeIntervalSince1970: 1_000)
+    try await service.markLocalDataChanged(at: seedDate)
+    var seeded = await fixture.settingsStore.load()
+    #expect(seeded.localUpdatedAt == seedDate)
+    #expect(!seeded.dirtyDatasetIDs.isEmpty)
+
+    // Simulate a completed sync round: dirty flags cleared, fingerprint
+    // baselines kept.
+    seeded.dirtyDatasetIDs = []
+    try await fixture.settingsStore.save(seeded)
+
+    try await service.markLocalDataChanged(at: Date(timeIntervalSince1970: 2_000))
+    let unchanged = await fixture.settingsStore.load()
+    #expect(unchanged.localUpdatedAt == seedDate)
+    #expect(unchanged.dirtyDatasetIDs.isEmpty)
+
+    var document = FavoriteLibraryDocument()
+    try document.upsertItem(FavoriteItem(
+        target: FavoriteItemTarget(kind: .novelThread, threadID: "333"),
+        title: "新收藏",
+        locations: [.category(document.defaultCategory.id)]
+    ))
+    try await fixture.localFavoriteLibraryStore.save(document)
+
+    let changeDate = Date(timeIntervalSince1970: 3_000)
+    try await service.markLocalDataChanged(at: changeDate)
+    let marked = await fixture.settingsStore.load()
+    #expect(marked.localUpdatedAt == changeDate)
+    #expect(marked.dirtyDatasetIDs.contains("favoriteLibrary"))
+}
+
+@Test func webDAVSyncKeepsMidUploadLocalChangesDirtyByFingerprintingAtExportTime() async throws {
+    let fixture = try WebDAVSyncFixture(prefix: "webdav-export-time-fingerprint")
+    try await fixture.settingsStore.save(WebDAVSyncSettings(
+        baseURLString: "https://\(fixture.host)",
+        username: "admin",
+        password: "secret",
+        isAutoSyncEnabled: true
+    ))
+    try await fixture.signIn(accountUID: "123")
+    let participant = MutableContentWebDAVParticipant(content: "exported-content")
+    let service = WebDAVSyncService(
+        settingsStore: fixture.settingsStore,
+        sessionStore: fixture.sessionStore,
+        participants: [participant],
+        client: WebDAVClient(session: makeWebDAVTestSession())
+    )
+
+    WebDAVTestURLProtocol.setHandler(for: fixture.host) { request in
+        switch request.httpMethod {
+        case "GET":
+            return (Data(), HTTPURLResponse(url: request.url!, statusCode: 404, httpVersion: nil, headerFields: nil)!)
+        case "MKCOL":
+            return (Data(), HTTPURLResponse(url: request.url!, statusCode: 201, httpVersion: nil, headerFields: nil)!)
+        case "PUT":
+            // A local edit lands while the PUT is in flight, after the export
+            // snapshot was taken.
+            participant.setContent("changed-mid-upload")
+            return (Data(), HTTPURLResponse(url: request.url!, statusCode: 201, httpVersion: nil, headerFields: nil)!)
+        default:
+            Issue.record("Unexpected method \(request.httpMethod ?? "nil")")
+            return (Data(), HTTPURLResponse(url: request.url!, statusCode: 500, httpVersion: nil, headerFields: nil)!)
+        }
+    }
+    defer { WebDAVTestURLProtocol.removeHandler(for: fixture.host) }
+
+    try await service.markLocalDataChanged()
+    let result = try await service.synchronizeAutomatically()
+    #expect(result == .uploaded)
+
+    let syncedSettings = await fixture.settingsStore.load()
+    #expect(syncedSettings.lastSyncedFingerprintByDatasetID["mutableContent"] == "exported-content")
+
+    // The mid-upload change must surface as dirty on the next mark pass
+    // instead of being absorbed by an end-of-round fingerprint recompute.
+    try await service.markLocalDataChanged()
+    let remarked = await fixture.settingsStore.load()
+    #expect(remarked.dirtyDatasetIDs.contains("mutableContent"))
+}
+
+@Test func webDAVAutomaticSyncLeavesSettingsUntouchedWhenNothingIsDirtyAndRemoteHasNothingNew() async throws {
+    let fixture = try WebDAVSyncFixture(prefix: "webdav-noop-round")
+    try await fixture.settingsStore.save(WebDAVSyncSettings(
+        baseURLString: "https://\(fixture.host)",
+        username: "admin",
+        password: "secret",
+        isAutoSyncEnabled: true
+    ))
+    try await fixture.signIn(accountUID: "123")
+
+    // Echo server: GET returns whatever was last PUT to the same path.
+    var storedBodies: [String: Data] = [:]
+    var putCount = 0
+    WebDAVTestURLProtocol.setHandler(for: fixture.host) { request in
+        let path = request.url?.path ?? ""
+        switch request.httpMethod {
+        case "GET":
+            if let body = storedBodies[path] {
+                return (body, HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
+            }
+            return (Data(), HTTPURLResponse(url: request.url!, statusCode: 404, httpVersion: nil, headerFields: nil)!)
+        case "MKCOL":
+            return (Data(), HTTPURLResponse(url: request.url!, statusCode: 201, httpVersion: nil, headerFields: nil)!)
+        case "PUT":
+            putCount += 1
+            storedBodies[path] = request.webDAVBodyData() ?? Data()
+            return (Data(), HTTPURLResponse(url: request.url!, statusCode: 201, httpVersion: nil, headerFields: nil)!)
+        default:
+            Issue.record("Unexpected method \(request.httpMethod ?? "nil")")
+            return (Data(), HTTPURLResponse(url: request.url!, statusCode: 500, httpVersion: nil, headerFields: nil)!)
+        }
+    }
+    defer { WebDAVTestURLProtocol.removeHandler(for: fixture.host) }
+
+    let service = fixture.makeService()
+    try await service.markLocalDataChanged()
+    let uploadedResult = try await service.synchronizeAutomatically()
+    #expect(uploadedResult == .uploaded)
+    let settledSettings = await fixture.settingsStore.load()
+    let putCountAfterUpload = putCount
+
+    // Foreground checkpoint with nothing new anywhere: a phantom round must
+    // not refresh any timestamp, or it would shadow later remote uploads.
+    let result = try await service.synchronizeAutomatically(bypassingMinimumInterval: true)
+
+    #expect(result == .skipped)
+    #expect(putCount == putCountAfterUpload)
+    let after = await fixture.settingsStore.load()
+    #expect(after == settledSettings)
 }
 
 @Test func webDAVLocalFirstManualSyncRequiresConfirmationForAccountMismatch() async throws {
@@ -403,6 +659,51 @@ private struct WebDAVSyncFixture {
             ],
             client: WebDAVClient(session: makeWebDAVTestSession())
         )
+    }
+}
+
+/// Dirty-tracked participant whose content the test (or the fake server's PUT
+/// handler) can mutate mid-round, with the raw content doubling as the
+/// fingerprint.
+private final class MutableContentWebDAVParticipant: WebDAVSyncParticipant, @unchecked Sendable {
+    struct Payload: Codable {
+        var updatedAt: Date
+        var content: String
+    }
+
+    let datasetID = "mutableContent"
+    let remoteFileName = "yamibo-mutable-content-v1.json"
+    let uploadsOnlyWhenMarkedDirty = true
+
+    private let lock = NSLock()
+    private var content: String
+
+    init(content: String) {
+        self.content = content
+    }
+
+    var currentContent: String {
+        lock.withLock { content }
+    }
+
+    func setContent(_ newValue: String) {
+        lock.withLock { content = newValue }
+    }
+
+    func inspectRemote(_ data: Data) throws -> WebDAVRemotePayloadInfo {
+        WebDAVRemotePayloadInfo(updatedAt: try JSONDecoder().decode(Payload.self, from: data).updatedAt)
+    }
+
+    func mergeAndExport(remoteData _: Data?, updatedAt: Date, accountUID _: String) async throws -> Data {
+        try JSONEncoder().encode(Payload(updatedAt: updatedAt, content: currentContent))
+    }
+
+    func applyRemote(_ data: Data) async throws {
+        setContent(try JSONDecoder().decode(Payload.self, from: data).content)
+    }
+
+    func localFingerprint() async -> String? {
+        currentContent
     }
 }
 
