@@ -706,15 +706,15 @@ import YamiboXTestSupport
 
     let model = makeForumMangaDetailViewModel(dependencies: dependencies, threadTID: "920")
 
-    await model.presentFavoriteLocationPicker()
-    let context = try #require(model.favoriteLocationPickerContext)
+    await model.favoriteActions.presentLocationPicker()
+    let context = try #require(model.favoriteActions.locationPickerContext)
     #expect(context.initialSelection.isEmpty)
     #expect(context.isFavorited == false)
 
-    await model.confirmFavoriteLocationSelection([.category(category.id)])
+    await model.favoriteActions.confirmLocationSelection([.category(category.id)])
 
-    #expect(model.favoriteLocationPickerContext == nil)
-    let favorite = try #require(model.favorite)
+    #expect(model.favoriteActions.locationPickerContext == nil)
+    let favorite = try #require(model.favoriteActions.favorite)
     #expect(favorite.threadID == "920")
     let storedDocument = try await dependencies.localFavoriteLibraryStore.load()
     let storedItem = try #require(storedDocument.items.first { $0.target.threadID == "920" })
@@ -750,21 +750,21 @@ import YamiboXTestSupport
     try await dependencies.localFavoriteLibraryStore.save(document)
 
     let model = makeForumMangaDetailViewModel(dependencies: dependencies, threadTID: "921")
-    model.favorite = Favorite(title: "已收藏漫画", threadID: "921", type: .manga)
+    model.favoriteActions.favorite = Favorite(title: "已收藏漫画", threadID: "921", type: .manga)
 
-    await model.presentFavoriteLocationPicker()
-    let context = try #require(model.favoriteLocationPickerContext)
+    await model.favoriteActions.presentLocationPicker()
+    let context = try #require(model.favoriteActions.locationPickerContext)
     #expect(context.initialSelection == [.category(categoryA.id)])
     #expect(context.isFavorited == true)
 
-    await model.confirmFavoriteLocationSelection([.category(categoryB.id)])
+    await model.favoriteActions.confirmLocationSelection([.category(categoryB.id)])
 
-    #expect(model.favoriteLocationPickerContext == nil)
+    #expect(model.favoriteActions.locationPickerContext == nil)
     let storedDocument = try await dependencies.localFavoriteLibraryStore.load()
     let storedItem = try #require(storedDocument.items.first { $0.target.id == target.id })
     #expect(storedItem.locations == [.category(categoryB.id)])
-    #expect(model.transientMessage == L10n.string("favorites.quick.relocated"))
-    #expect(model.favorite != nil)
+    #expect(model.favoriteActions.transientMessage == L10n.string("favorites.quick.relocated"))
+    #expect(model.favoriteActions.favorite != nil)
 }
 
 /// Already-favorited: clearing every checkbox is a deliberate unfavorite —
@@ -799,16 +799,16 @@ import YamiboXTestSupport
     try await dependencies.localFavoriteLibraryStore.save(document)
 
     let model = makeForumMangaDetailViewModel(dependencies: dependencies, threadTID: "922")
-    model.favorite = Favorite(title: "待取消收藏的漫画", threadID: "922", type: .manga)
+    model.favoriteActions.favorite = Favorite(title: "待取消收藏的漫画", threadID: "922", type: .manga)
 
-    await model.presentFavoriteLocationPicker()
-    #expect(model.favoriteLocationPickerContext != nil)
+    await model.favoriteActions.presentLocationPicker()
+    #expect(model.favoriteActions.locationPickerContext != nil)
 
-    await model.confirmFavoriteLocationSelection([])
+    await model.favoriteActions.confirmLocationSelection([])
 
-    #expect(model.favoriteLocationPickerContext == nil)
-    #expect(model.favoriteRemovePrompt == nil)
-    #expect(model.favorite == nil)
+    #expect(model.favoriteActions.locationPickerContext == nil)
+    #expect(model.favoriteActions.removePrompt == nil)
+    #expect(model.favoriteActions.favorite == nil)
     let storedItem = try await dependencies.localFavoriteLibraryStore.load().items.first { $0.target.id == target.id }
     #expect(storedItem == nil)
 }

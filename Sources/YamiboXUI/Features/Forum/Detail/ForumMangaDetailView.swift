@@ -43,10 +43,10 @@ struct ForumMangaDetailView: View {
                 Task { await model.updateDirectoryFromDetail() }
             },
             onFavoriteTap: {
-                Task { await model.toggleFavorite() }
+                Task { await model.favoriteActions.toggleFavorite() }
             },
             onFavoriteLongPress: {
-                Task { await model.presentFavoriteLocationPicker() }
+                Task { await model.favoriteActions.presentLocationPicker() }
             },
             onCorrectionTap: presentCorrectionSheet,
             onCopyText: copyText,
@@ -89,45 +89,7 @@ struct ForumMangaDetailView: View {
             )
             .presentationDetents(MangaDirectoryCorrectionSheet.presentationDetents)
         }
-        .alert(
-            L10n.string("forum.thread.favorite_failed"),
-            isPresented: Binding(
-                get: { model.favoriteErrorMessage != nil },
-                set: { isPresented in
-                    if !isPresented {
-                        model.clearFavoriteError()
-                    }
-                }
-            )
-        ) {
-            Button(L10n.string("common.ok")) {
-                model.clearFavoriteError()
-            }
-        } message: {
-            Text(model.favoriteErrorMessage ?? "")
-        }
-        .favoriteQuickActionDialogs(
-            addPromptPresented: Bindable(model).favoriteAddPromptPresented,
-            removePrompt: Bindable(model).favoriteRemovePrompt,
-            onConfirmAdd: { syncToRemote, remember in
-                Task { await model.confirmFavoriteAdd(syncToRemote: syncToRemote, remember: remember) }
-            },
-            onConfirmRemoval: { favorite, removeRemote, remember in
-                Task { await model.confirmFavoriteRemoval(favorite, removeRemote: removeRemote, remember: remember) }
-            }
-        )
-        .sheet(item: Bindable(model).favoriteLocationPickerContext) { context in
-            FavoriteLocationPickerSheet(
-                context: context,
-                onCancel: { model.favoriteLocationPickerContext = nil },
-                onConfirm: { locations in
-                    Task { await model.confirmFavoriteLocationSelection(locations) }
-                }
-            )
-        }
-        .transientMessage(model.transientMessage) {
-            model.clearTransientMessage()
-        }
+        .favoriteActionInterface(model.favoriteActions)
     }
 
     private func retry() {
@@ -145,7 +107,7 @@ struct ForumMangaDetailView: View {
     private func copyText(_ text: String) {
         #if canImport(UIKit)
         UIPasteboard.general.string = text
-        model.transientMessage = L10n.string("forum.thread_route.copied")
+        model.favoriteActions.transientMessage = L10n.string("forum.thread_route.copied")
         #endif
     }
 }

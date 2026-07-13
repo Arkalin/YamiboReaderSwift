@@ -50,7 +50,7 @@ struct NovelReaderCachePanel: View {
                 }
 
                 ToolbarItem(placement: .topBarTrailing) {
-                    NovelReaderCacheQueueToolbarButton(
+                    ReaderCacheQueueToolbarButton(
                         entryCount: cache.state.queueEntryCount,
                         action: showQueue
                     )
@@ -389,30 +389,6 @@ private struct NovelReaderCacheStateBadge: View {
     }
 }
 
-private struct NovelReaderCacheQueueToolbarButton: View {
-    let entryCount: Int
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: 5) {
-                ReaderCacheDownloadQueueIcon(isActive: entryCount > 0)
-                Text(verbatim: "\(entryCount)")
-                    .font(.caption.monospacedDigit().weight(.semibold))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
-                    .frame(minWidth: 12, alignment: .trailing)
-            }
-            .frame(minWidth: 48, minHeight: 32, alignment: .center)
-            .foregroundStyle(entryCount > 0 ? Color.accentColor : Color.secondary)
-            .contentShape(Rectangle())
-        }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(
-            L10n.string("reader.cache_queue_button_accessibility_format", entryCount)
-        )
-    }
-}
 
 struct NovelReaderCacheProgressSheet: View {
     @ObservedObject var cache: NovelReaderCacheCoordinator

@@ -63,17 +63,16 @@ final class ForumNovelDetailViewModel {
     var chapters: [ForumNovelChapterSummary] = []
     var chapterSections: [ForumNovelChapterSection] = []
     var expandedChapterPages: Set<Int> = [1]
-    var favorite: Favorite?
     var readingProgress: ReadingProgressRecord?
     var contentCover: ContentCover?
     var isLoading = false
     var errorMessage: String?
-    var favoriteErrorMessage: String?
-    var transientMessage: String?
-    var favoriteAddPromptPresented = false
-    var favoriteRemovePrompt: FavoriteRemovePrompt?
-    var favoriteLocationPickerContext: FavoriteLocationPickerContext?
-    @ObservationIgnored private var pendingFavoriteLocations: [FavoriteLocation]?
+
+    /// Favorite-star state and actions (add/remove/relocate prompts, location
+    /// picker, transient feedback) — shared orchestration with the manga
+    /// detail page. Its change hook rebuilds the chapter directory, whose
+    /// sections render differently for favorited threads.
+    let favoriteActions: FavoriteActionController
 
     let context: NovelDetailLaunchContext
 
@@ -86,7 +85,6 @@ final class ForumNovelDetailViewModel {
     @ObservationIgnored private var totalChapterPages = 1
     @ObservationIgnored private var novelReaderSettings = NovelReaderAppearanceSettings()
     @ObservationIgnored private var documentPreloadTask: Task<Void, Never>?
-    @ObservationIgnored private var favoriteUpdatesTask: Task<Void, Never>?
     @ObservationIgnored private var readingProgressUpdatesTask: Task<Void, Never>?
     @ObservationIgnored private let novelRepositoryProvider: @Sendable () async -> any ForumNovelDocumentLoading
     @ObservationIgnored private let threadRepositoryProvider: @Sendable () async -> any ForumNovelThreadPageLoading
@@ -99,22 +97,17 @@ final class ForumNovelDetailViewModel {
     ) {
         self.context = context
         self.dependencies = dependencies
+        favoriteActions = FavoriteActionController(
+            threadID: context.thread.tid,
+            type: .novel,
+            defaultTitle: context.title,
+            dependencies: dependencies
+        )
         self.novelRepositoryProvider = novelRepositoryProvider ?? {
             await dependencies.makeNovelReaderRepository()
         }
         self.threadRepositoryProvider = threadRepositoryProvider ?? {
             await dependencies.makeForumThreadReaderRepository()
-        }
-        favoriteUpdatesTask = Task { @MainActor [weak self, localFavoriteLibraryStore = dependencies.localFavoriteLibraryStore] in
-            for await notification in NotificationCenter.default.notifications(named: FavoriteLibraryStore.didChangeNotification) {
-                guard !Task.isCancelled else { return }
-                guard let self else { return }
-                guard let changeID = notification.userInfo?[FavoriteLibraryStore.changeIDUserInfoKey] as? String,
-                      changeID == localFavoriteLibraryStore.changeID else {
-                    continue
-                }
-                await self.refreshFavorite(from: localFavoriteLibraryStore)
-            }
         }
         readingProgressUpdatesTask = Task { @MainActor [weak self, readingProgressStore = dependencies.readingProgressStore] in
             for await notification in NotificationCenter.default.notifications(named: ReadingProgressStore.didChangeNotification) {
@@ -127,11 +120,24 @@ final class ForumNovelDetailViewModel {
                 await self.refreshReadingProgress(from: readingProgressStore)
             }
         }
+        favoriteActions.makeAddMetadata = { @MainActor [weak self] in
+            guard let self else { return .init(title: context.title) }
+            return .init(
+                title: self.favoriteTitle,
+                authorID: self.resolvedAuthorID ?? self.context.authorID,
+                forumID: self.threadPage?.forumID ?? self.threadPage?.thread.fid ?? self.context.thread.fid,
+                forumName: self.threadPage?.forumName ?? self.forumName,
+                contentUpdatedAt: Self.contentUpdatedAt(from: self.threadPage),
+                formHash: self.threadPage?.formHash
+            )
+        }
+        favoriteActions.onFavoriteDidChange = { @MainActor [weak self] in
+            self?.rebuildChapterDirectory()
+        }
     }
 
     deinit {
         documentPreloadTask?.cancel()
-        favoriteUpdatesTask?.cancel()
         readingProgressUpdatesTask?.cancel()
     }
 
@@ -140,7 +146,7 @@ final class ForumNovelDetailViewModel {
     }
 
     var hasReadingProgress: Bool {
-        Self.hasReadingProgress(readingProgress, favorite: favorite)
+        Self.hasReadingProgress(readingProgress, favorite: favoriteActions.favorite)
     }
 
     var headerSummary: ForumNovelDetailHeaderSummary {
@@ -162,8 +168,8 @@ final class ForumNovelDetailViewModel {
             coverURL: resolvedHeaderCoverURL,
             chapterCount: chapters.count,
             firstFloorPreviewText: Self.firstFloorPreviewText(from: previewPost),
-            readingProgressText: Self.readingProgressText(from: readingProgress, favorite: favorite),
-            isFavorited: favorite != nil
+            readingProgressText: Self.readingProgressText(from: readingProgress, favorite: favoriteActions.favorite),
+            isFavorited: favoriteActions.favorite != nil
         )
     }
 
@@ -192,17 +198,17 @@ final class ForumNovelDetailViewModel {
     ) async {
         isLoading = true
         errorMessage = nil
-        transientMessage = nil
+        favoriteActions.transientMessage = nil
         documentPreloadTask?.cancel()
         document = nil
         defer { isLoading = false }
 
         do {
-            favorite = await localFavoriteItem()?.favorite(type: .novel)
+            await favoriteActions.refreshFavorite()
             readingProgress = await dependencies.readingProgressStore.load(threadID: context.thread.tid)
             contentCover = await loadContentCover()
             novelReaderSettings = await dependencies.settingsStore.load().novelReader
-            favoriteErrorMessage = nil
+            favoriteActions.errorMessage = nil
             let threadRepository = await threadRepositoryProvider()
             let initialPages = try await loadInitialPages(repository: threadRepository, preferCache: preferCache)
             let headerPage = initialPages.headerPage
@@ -232,7 +238,7 @@ final class ForumNovelDetailViewModel {
             if preservesCurrentContentOnFailure {
                 document = nil
                 errorMessage = nil
-                transientMessage = L10n.string("forum.novel_detail.refresh_failed", error.localizedDescription)
+                favoriteActions.transientMessage = L10n.string("forum.novel_detail.refresh_failed", error.localizedDescription)
             } else {
                 document = nil
                 threadPage = nil
@@ -277,10 +283,6 @@ final class ForumNovelDetailViewModel {
         return try await repository.fetchNovelThreadPage(context: context, page: page)
     }
 
-    func clearTransientMessage() {
-        transientMessage = nil
-    }
-
     private func preloadReaderDocument() {
         let request = NovelPageRequest(
             threadID: context.thread.tid,
@@ -317,10 +319,10 @@ final class ForumNovelDetailViewModel {
     func continueLaunchContext() -> NovelLaunchContext {
         let novelProgress = readingProgress?.novel
         let resumePoint = novelProgress?.novelResumePoint
-        let hasProgress = Self.hasReadingProgress(readingProgress, favorite: favorite)
+        let hasProgress = Self.hasReadingProgress(readingProgress, favorite: favoriteActions.favorite)
         return NovelLaunchContext(
             threadID: context.thread.tid,
-            threadTitle: favorite?.resolvedDisplayTitle ?? context.title,
+            threadTitle: favoriteActions.favorite?.resolvedDisplayTitle ?? context.title,
             source: hasProgress ? .resume : .forum,
             initialView: resumePoint?.view ?? novelProgress?.lastView ?? 1,
             authorID: resumePoint?.authorID ?? novelProgress?.authorID ?? resolvedAuthorID ?? context.authorID,
@@ -373,173 +375,6 @@ final class ForumNovelDetailViewModel {
         } catch {
             chapterPageErrors[normalizedPage] = error.localizedDescription
         }
-    }
-
-    /// Routes the favorite button through the remembered add/remove sync
-    /// choices: either performs the action silently or raises the prompt.
-    func toggleFavorite() async {
-        favoriteErrorMessage = nil
-        let settings = await dependencies.settingsStore.load().favorites
-
-        if let favorite {
-            let canRemoveRemote = favorite.remoteFavoriteID?.isEmpty == false
-            switch FavoriteRemoveRemoteDecision.resolve(settings: settings, canRemoveRemote: canRemoveRemote) {
-            case .prompt:
-                favoriteRemovePrompt = FavoriteRemovePrompt(favorite: favorite)
-            case let .silent(removeRemote):
-                await performFavoriteRemoval(favorite, removeRemote: removeRemote)
-            }
-            return
-        }
-
-        switch FavoriteAddSyncDecision.resolve(settings: settings, canSyncRemote: true) {
-        case .prompt:
-            favoriteAddPromptPresented = true
-        case let .silent(syncToRemote):
-            await performFavoriteAdd(syncToRemote: syncToRemote)
-        }
-    }
-
-    func confirmFavoriteAdd(syncToRemote: Bool, remember: Bool) async {
-        favoriteAddPromptPresented = false
-        if remember {
-            await rememberAddSyncChoice(syncToRemote)
-        }
-        await performFavoriteAdd(syncToRemote: syncToRemote)
-    }
-
-    func confirmFavoriteRemoval(_ favorite: Favorite, removeRemote: Bool, remember: Bool) async {
-        favoriteRemovePrompt = nil
-        if remember {
-            await rememberRemoveRemoteChoice(removeRemote)
-        }
-        await performFavoriteRemoval(favorite, removeRemote: removeRemote)
-    }
-
-    /// Star button long-press: opens the location picker pre-filled with
-    /// this item's current locations (empty if not yet favorited).
-    func presentFavoriteLocationPicker() async {
-        let document = (try? await dependencies.localFavoriteLibraryStore.load()) ?? FavoriteLibraryDocument()
-        let currentLocations = await localFavoriteItem()?.locations ?? []
-        favoriteLocationPickerContext = FavoriteLocationPickerContext(
-            document: document,
-            initialSelection: Set(currentLocations),
-            isFavorited: favorite != nil,
-            localFavoriteLibraryStore: dependencies.localFavoriteLibraryStore
-        )
-    }
-
-    /// Routes the picker's confirmed selection: not-yet-favorited creates
-    /// with those locations (still subject to the add-sync prompt); already
-    /// favorited with a non-empty selection re-pins locally; already
-    /// favorited with everything cleared is treated as unfavoriting, through
-    /// the normal remove-sync decision — mirroring Android.
-    func confirmFavoriteLocationSelection(_ locations: Set<FavoriteLocation>) async {
-        favoriteLocationPickerContext = nil
-        guard let favorite else {
-            guard !locations.isEmpty else { return }
-            pendingFavoriteLocations = Array(locations)
-            let settings = await dependencies.settingsStore.load().favorites
-            switch FavoriteAddSyncDecision.resolve(settings: settings, canSyncRemote: true) {
-            case .prompt:
-                favoriteAddPromptPresented = true
-            case let .silent(syncToRemote):
-                await performFavoriteAdd(syncToRemote: syncToRemote)
-            }
-            return
-        }
-        guard !locations.isEmpty else {
-            let settings = await dependencies.settingsStore.load().favorites
-            let canRemoveRemote = favorite.remoteFavoriteID?.isEmpty == false
-            switch FavoriteRemoveRemoteDecision.resolve(settings: settings, canRemoveRemote: canRemoveRemote) {
-            case .prompt:
-                favoriteRemovePrompt = FavoriteRemovePrompt(favorite: favorite)
-            case let .silent(removeRemote):
-                await performFavoriteRemoval(favorite, removeRemote: removeRemote)
-            }
-            return
-        }
-        await performFavoriteRelocate(Array(locations))
-    }
-
-    private func performFavoriteAdd(syncToRemote: Bool) async {
-        let locations = pendingFavoriteLocations
-        pendingFavoriteLocations = nil
-        do {
-            let result = try await FavoriteQuickActions.addFavorite(
-                threadID: context.thread.tid,
-                title: favoriteTitle,
-                type: .novel,
-                authorID: resolvedAuthorID ?? context.authorID,
-                forumID: threadPage?.forumID ?? threadPage?.thread.fid ?? context.thread.fid,
-                forumName: threadPage?.forumName ?? forumName,
-                contentUpdatedAt: Self.contentUpdatedAt(from: threadPage),
-                locations: locations,
-                formHash: threadPage?.formHash,
-                syncToRemote: syncToRemote,
-                boardReaderSettings: await dependencies.settingsStore.load().boardReader,
-                localFavoriteLibraryStore: dependencies.localFavoriteLibraryStore,
-                remoteRepository: await dependencies.makeFavoriteRepository()
-            )
-            favorite = result.favorite
-            transientMessage = result.remote.addFeedbackMessage
-            rebuildChapterDirectory()
-        } catch {
-            favoriteErrorMessage = error.localizedDescription
-            favorite = await localFavoriteItem()?.favorite(type: .novel)
-            rebuildChapterDirectory()
-        }
-    }
-
-    private func performFavoriteRelocate(_ locations: [FavoriteLocation]) async {
-        do {
-            try await FavoriteQuickActions.relocateFavorite(
-                threadID: context.thread.tid,
-                locations: locations,
-                localFavoriteLibraryStore: dependencies.localFavoriteLibraryStore
-            )
-            transientMessage = L10n.string("favorites.quick.relocated")
-        } catch {
-            favoriteErrorMessage = error.localizedDescription
-        }
-    }
-
-    private func performFavoriteRemoval(_ favorite: Favorite, removeRemote: Bool) async {
-        do {
-            try await FavoriteQuickActions.removeFavorite(
-                favorite,
-                removeRemote: removeRemote,
-                boardReaderSettings: await dependencies.settingsStore.load().boardReader,
-                localFavoriteLibraryStore: dependencies.localFavoriteLibraryStore,
-                remoteRepository: await dependencies.makeFavoriteRepository()
-            )
-            self.favorite = nil
-            transientMessage = removeRemote
-                ? L10n.string("favorites.quick.removed_with_remote")
-                : L10n.string("favorites.quick.removed")
-            rebuildChapterDirectory()
-        } catch {
-            favoriteErrorMessage = error.localizedDescription
-            self.favorite = await localFavoriteItem()?.favorite(type: .novel)
-            rebuildChapterDirectory()
-        }
-    }
-
-    private func rememberAddSyncChoice(_ syncToRemote: Bool) async {
-        await FavoriteQuickActions.rememberAddSyncChoice(syncToRemote, settingsStore: dependencies.settingsStore)
-    }
-
-    private func rememberRemoveRemoteChoice(_ removeRemote: Bool) async {
-        await FavoriteQuickActions.rememberRemoveRemoteChoice(removeRemote, settingsStore: dependencies.settingsStore)
-    }
-
-    func clearFavoriteError() {
-        favoriteErrorMessage = nil
-    }
-
-    private func refreshFavorite(from localFavoriteLibraryStore: FavoriteLibraryStore) async {
-        favorite = await localFavoriteItem(from: localFavoriteLibraryStore)?.favorite(type: .novel)
-        rebuildChapterDirectory()
     }
 
     private func refreshReadingProgress(from readingProgressStore: ReadingProgressStore) async {
@@ -599,7 +434,7 @@ final class ForumNovelDetailViewModel {
             loadingPages: loadingChapterPages,
             pageErrors: chapterPageErrors,
             readingProgress: readingProgress,
-            favorite: favorite,
+            favorite: favoriteActions.favorite,
             novelReaderSettings: novelReaderSettings,
             authorID: resolvedAuthorID ?? context.authorID
         )
@@ -807,16 +642,6 @@ final class ForumNovelDetailViewModel {
         return false
     }
 
-    private func localFavoriteItem() async -> FavoriteItem? {
-        await localFavoriteItem(from: dependencies.localFavoriteLibraryStore)
-    }
-
-    private func localFavoriteItem(from store: FavoriteLibraryStore) async -> FavoriteItem? {
-        let target = FavoriteItemTarget.novelThread(threadID: context.thread.tid)
-        return (try? await store.load())?.items.first { item in
-            item.target.id == target.id || item.target.threadID == target.threadID
-        }
-    }
 
     private var contentCoverKey: ContentCoverKey? {
         let tid = context.thread.tid.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -861,19 +686,3 @@ final class ForumNovelDetailViewModel {
     }
 }
 
-private extension FavoriteItem {
-    func favorite(type: FavoriteType) -> Favorite {
-        guard let threadID = target.threadID else {
-            preconditionFailure("Thread favorite conversion requires thread target")
-        }
-        return Favorite(
-            id: id,
-            title: title,
-            displayName: displayName,
-            threadID: threadID,
-            remoteFavoriteID: remoteMapping?.yamiboFavoriteID,
-            type: type,
-            tagIDs: tagIDs
-        )
-    }
-}

@@ -223,17 +223,3 @@ public final class MangaReaderCacheViewModel: ObservableObject {
 
 }
 
-private extension FavoriteItem {
-    func favorite(type: FavoriteType) -> Favorite {
-        let threadID = target.threadID ?? id
-        return Favorite(
-            id: id,
-            title: title,
-            displayName: displayName,
-            threadID: threadID,
-            remoteFavoriteID: remoteMapping?.yamiboFavoriteID,
-            type: type,
-            tagIDs: tagIDs
-        )
-    }
-}

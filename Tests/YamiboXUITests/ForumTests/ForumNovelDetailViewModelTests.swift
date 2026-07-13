@@ -28,7 +28,7 @@ import YamiboXTestSupport
         authorID: "99",
         readingModeHint: .vertical
     )
-    model.favorite = Favorite(
+    model.favoriteActions.favorite = Favorite(
         title: "收藏标题",
         threadID: model.context.thread.tid,
         type: .novel
@@ -65,7 +65,7 @@ import YamiboXTestSupport
         authorID: "77",
         readingModeHint: .vertical
     )
-    model.favorite = nil
+    model.favoriteActions.favorite = nil
     model.readingProgress = ReadingProgressRecord(
         threadID: model.context.thread.tid,
         kind: .novel,
@@ -698,7 +698,7 @@ import YamiboXTestSupport
     #expect(loader.storedPages() == [
         ForumNovelThreadPageStore(authorID: "42", page: 1, title: "小说标题")
     ])
-    #expect(model.transientMessage == nil)
+    #expect(model.favoriteActions.transientMessage == nil)
     #expect(model.expandedChapterPages == [1])
     #expect(model.chapterSections[0].chapters.map(\.title) == ["刷新第一章"])
     #expect(model.chapterSections[1].isLoaded == false)
@@ -736,7 +736,7 @@ import YamiboXTestSupport
     await model.refresh()
 
     #expect(model.errorMessage == nil)
-    #expect(model.transientMessage == L10n.string("forum.novel_detail.refresh_failed", FakeForumNovelThreadPageLoaderError.plannedFailure(page: 1).localizedDescription))
+    #expect(model.favoriteActions.transientMessage == L10n.string("forum.novel_detail.refresh_failed", FakeForumNovelThreadPageLoaderError.plannedFailure(page: 1).localizedDescription))
     #expect(model.expandedChapterPages == [1, 2])
     #expect(model.chapterSections[0].chapters.map(\.title) == ["缓存第一章"])
     #expect(model.chapterSections[1].chapters.map(\.title) == ["缓存第二章"])
@@ -761,7 +761,7 @@ import YamiboXTestSupport
 
     #expect(model.threadPage == nil)
     #expect(model.chapters.isEmpty)
-    #expect(model.transientMessage == nil)
+    #expect(model.favoriteActions.transientMessage == nil)
     #expect(model.errorMessage == FakeForumNovelThreadPageLoaderError.plannedFailure(page: 1).localizedDescription)
 }
 
@@ -1055,7 +1055,7 @@ import YamiboXTestSupport
         from: [1: firstPage],
         totalPages: 1,
         readingProgress: model.readingProgress,
-        favorite: model.favorite
+        favorite: model.favoriteActions.favorite
     )
 
     #expect(sections[0].chapters.map(\.isCurrentRead) == [false, true])
@@ -1100,7 +1100,7 @@ import YamiboXTestSupport
         from: [1: firstPage],
         totalPages: 1,
         readingProgress: model.readingProgress,
-        favorite: model.favorite
+        favorite: model.favoriteActions.favorite
     )
 
     #expect(sections[0].chapters.map(\.title) == ["喜歡的人和義妹", "喜歡的人和義妹", "喜歡的人和義妹"])
@@ -1134,7 +1134,7 @@ import YamiboXTestSupport
         from: [1: firstPage],
         totalPages: 1,
         readingProgress: model.readingProgress,
-        favorite: model.favorite
+        favorite: model.favoriteActions.favorite
     )
 
     #expect(sections[0].chapters.map(\.isCurrentRead) == [true, false, false])

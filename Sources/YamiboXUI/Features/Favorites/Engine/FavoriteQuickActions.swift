@@ -354,7 +354,9 @@ enum FavoriteRemoveRemoteDecision: Equatable, Sendable {
     }
 }
 
-private extension FavoriteItem {
+/// Thread-favorite conversion shared by every favorite entry point (detail
+/// pages, thread reader, reader cache sheets).
+extension FavoriteItem {
     func favorite(type: FavoriteType) -> Favorite {
         guard let threadID = target.threadID else {
             preconditionFailure("Thread favorite conversion requires thread target")
