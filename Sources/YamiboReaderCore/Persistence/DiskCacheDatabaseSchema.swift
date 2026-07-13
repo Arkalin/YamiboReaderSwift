@@ -16,7 +16,6 @@ enum DiskCacheDatabaseSchema: DatabaseSchemaModule {
                 table.primaryKey(["namespace", "cache_key"], onConflict: .replace)
             }
             try db.create(index: "cache_entries_namespace_last_accessed_idx", on: "cache_entries", columns: ["namespace", "last_accessed_at"])
-            try db.create(index: "cache_entries_namespace_cache_key_idx", on: "cache_entries", columns: ["namespace", "cache_key"])
         }
     }
 

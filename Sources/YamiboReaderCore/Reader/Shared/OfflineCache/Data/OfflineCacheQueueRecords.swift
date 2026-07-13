@@ -85,7 +85,7 @@ extension OfflineCacheStore {
                         ownerTitle: normalizedRequest.ownerTitle,
                         title: title
                     )
-                    try Self.save(updatedWork, in: db)
+                    try Self.save(updatedWork, replacing: work, in: db)
                     return .alreadyQueued(Self.queueWorkProjection(from: updatedWork))
                 }
                 let work = OfflineCacheRawWork(
@@ -101,7 +101,7 @@ extension OfflineCacheStore {
                     state: .queued,
                     failureMessage: nil,
                     currentBytesPerSecond: 0,
-                    insertionIndex: try Self.nextQueueInsertionIndex(readerKind: OfflineCacheReaderKind.novel.rawValue, in: db),
+                    insertionIndex: try Self.nextQueueInsertionIndex(in: db),
                     createdAt: Date(),
                     updatedAt: Date()
                 )
@@ -195,9 +195,10 @@ extension OfflineCacheStore {
         try await recoverQueueStateAfterRestart()
         do {
             try await database.write { db in
-                guard var work = try Self.rawWork(workID: id.rawValue, readerKind: id.readerKind, in: db) else {
+                guard let previous = try Self.rawWork(workID: id.rawValue, readerKind: id.readerKind, in: db) else {
                     return
                 }
+                var work = previous
                 work.state = .failed
                 work.failureMessage = message?.trimmingCharacters(in: .whitespacesAndNewlines)
                 if work.failureMessage?.isEmpty == true {
@@ -205,7 +206,7 @@ extension OfflineCacheStore {
                 }
                 work.currentBytesPerSecond = 0
                 work.updatedAt = Date()
-                try Self.save(work, in: db)
+                try Self.save(work, replacing: previous, in: db)
             }
             notifyOfflineCacheDidChange()
         } catch {
@@ -292,12 +293,28 @@ extension OfflineCacheStore {
         }
     }
 
-    static func save(_ work: OfflineCacheRawWork, in db: Database) throws {
+    /// Upserts the work row and its two image lists. Pass `previous` (the row the
+    /// caller just fetched) so unchanged lists are skipped and appended completions
+    /// insert only their new rows — progress ticks fire many times per work, and a
+    /// plain INSERT OR REPLACE would additionally cascade-delete both image lists
+    /// on every tick (REPLACE deletes the conflicting parent row first).
+    static func save(_ work: OfflineCacheRawWork, replacing previous: OfflineCacheRawWork? = nil, in db: Database) throws {
         try db.execute(
             sql: """
-            INSERT OR REPLACE INTO offline_cache_works
+            INSERT INTO offline_cache_works
             (reader_kind, work_id, owner_name, owner_title, tid, chapter_title, retains_inline_images, state, failure_message, current_bytes_per_second, insertion_index, created_at, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(reader_kind, owner_name, tid) DO UPDATE SET
+                work_id = excluded.work_id,
+                owner_title = excluded.owner_title,
+                chapter_title = excluded.chapter_title,
+                retains_inline_images = excluded.retains_inline_images,
+                state = excluded.state,
+                failure_message = excluded.failure_message,
+                current_bytes_per_second = excluded.current_bytes_per_second,
+                insertion_index = excluded.insertion_index,
+                created_at = excluded.created_at,
+                updated_at = excluded.updated_at
             """,
             arguments: [
                 work.readerKind.rawValue,
@@ -315,22 +332,58 @@ extension OfflineCacheStore {
                 offlineCacheTimeInterval(from: work.updatedAt)
             ]
         )
-        try replaceImageList(
+        try syncImageList(
             table: "offline_cache_work_images",
             readerKind: work.readerKind.rawValue,
             ownerName: work.ownerKey,
             tid: work.entryKey,
-            imageURLs: work.targetImageURLs,
+            from: previous?.targetImageURLs,
+            to: work.targetImageURLs,
             in: db
         )
-        try replaceImageList(
+        try syncImageList(
             table: "offline_cache_completed_images",
             readerKind: work.readerKind.rawValue,
             ownerName: work.ownerKey,
             tid: work.entryKey,
-            imageURLs: work.completedImageURLs,
+            from: previous?.completedImageURLs,
+            to: work.completedImageURLs,
             in: db
         )
+    }
+
+    /// Writes only the difference between the persisted list (`from`) and the new
+    /// list (`to`): no-op when equal, suffix-only inserts when appended, and a full
+    /// rewrite otherwise (or when the caller has no fetched previous state).
+    private static func syncImageList(
+        table: String,
+        readerKind: String,
+        ownerName: String,
+        tid: String,
+        from previousImageURLs: [URL]?,
+        to imageURLs: [URL],
+        in db: Database
+    ) throws {
+        guard let previousImageURLs else {
+            try replaceImageList(table: table, readerKind: readerKind, ownerName: ownerName, tid: tid, imageURLs: imageURLs, in: db)
+            return
+        }
+        let previous = previousImageURLs.map(\.absoluteString)
+        let updated = imageURLs.map(\.absoluteString)
+        if previous == updated { return }
+        guard updated.count > previous.count, Array(updated.prefix(previous.count)) == previous else {
+            try replaceImageList(table: table, readerKind: readerKind, ownerName: ownerName, tid: tid, imageURLs: imageURLs, in: db)
+            return
+        }
+        for index in previous.count..<updated.count {
+            try db.execute(
+                sql: """
+                INSERT OR REPLACE INTO \(table) (reader_kind, owner_name, tid, manual_order, image_url)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                arguments: [readerKind, ownerName, tid, index, updated[index]]
+            )
+        }
     }
 
     static func rawWork(
@@ -454,7 +507,7 @@ extension OfflineCacheStore {
                 guard let work = try Self.rawWork(workID: id.rawValue, readerKind: id.readerKind, in: db) else {
                     return
                 }
-                try Self.save(transform(work), in: db)
+                try Self.save(transform(work), replacing: work, in: db)
             }
             notifyOfflineCacheDidChange()
         } catch {

@@ -2,7 +2,7 @@ import Foundation
 @preconcurrency import GRDB
 
 /// Schema for the local Like Library owned by `LikeStore`. Independent of
-/// the favorite_items tables: liking never requires favoriting.
+/// the favorite library document: liking never requires favoriting.
 enum LikeDatabaseSchema: DatabaseSchemaModule {
     static func registerMigrations(in migrator: inout DatabaseMigrator) {
         migrator.registerMigration("like.v1") { db in
@@ -18,7 +18,6 @@ enum LikeDatabaseSchema: DatabaseSchemaModule {
                 table.column("updated_at", .double).notNull()
             }
             try db.create(index: "like_items_work_idx", on: "like_items", columns: ["work_kind", "work_id"])
-            try db.create(index: "like_items_updated_at_idx", on: "like_items", columns: ["updated_at"])
         }
 
         // Soft-delete tombstone for WebDAV sync (ADR-0049): deleting a Like Item locally

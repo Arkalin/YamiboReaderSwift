@@ -7,11 +7,11 @@ public actor MangaDirectoryStore: MangaDirectoryPersisting, MangaDirectoryRenami
     public static let changeIDUserInfoKey = "changeID"
 
     private let database: DatabasePool
-    /// Not GRDB-backed (UserDefaults JSON blob), so unlike `ContentCoverStore`
-    /// / `LikeStore` its rename cascade step can't run inside the same
-    /// `db.write` transaction — `renameDirectory` calls it as a best-effort
-    /// follow-up after the transaction commits. `nil` (the default) makes
-    /// the cascade step a no-op, matching every other store's `nil`-safe
+    /// The rename cascade writes `FavoriteUpdateStore`'s tables directly
+    /// inside this store's transaction (static `renameMangaDirectoryTracking`);
+    /// the instance is kept only so `renameDirectory` can post that store's
+    /// change notification after the transaction commits. `nil` (the default)
+    /// skips the notification, matching every other store's `nil`-safe
     /// construction pattern in this file's callers/tests.
     private let favoriteUpdateStore: FavoriteUpdateStore?
 
@@ -137,13 +137,7 @@ public actor MangaDirectoryStore: MangaDirectoryPersisting, MangaDirectoryRenami
                 try db.execute(sql: "DELETE FROM manga_directories WHERE clean_book_name = ?", arguments: [oldName])
             }
         }
-        if let favoriteUpdateStore {
-            do {
-                try await favoriteUpdateStore.renameMangaDirectoryTracking(from: oldName, to: newDirectory.cleanBookName)
-            } catch {
-                YamiboLog.persistence.error("Failed to migrate favorite-update tracking for directory rename '\(oldName)' -> '\(newDirectory.cleanBookName)': \(error.localizedDescription)")
-            }
-        }
+        favoriteUpdateStore?.notifyExternalMutation()
         postChangeNotification()
     }
 
@@ -285,86 +279,18 @@ public actor MangaDirectoryStore: MangaDirectoryPersisting, MangaDirectoryRenami
         )
     }
 
-    /// Steps 1-4 of the rename cascade, all inside the caller's GRDB
-    /// transaction. Step 5 — migrating `FavoriteUpdateStore`'s tracked-target
-    /// and event keys — is NOT here: that store isn't GRDB-backed and can't
-    /// join this transaction, so `renameDirectory` runs it separately, after
-    /// this transaction commits.
+    /// The full rename cascade, every step inside the caller's GRDB
+    /// transaction — including `FavoriteUpdateStore`'s tracked-target and
+    /// event keys now that that store is GRDB-backed. Favorites need no step
+    /// at all: since the smart-comic-mode Phase A type refactor they can only
+    /// carry thread-based identities (normalThread/novelThread/mangaThread),
+    /// never the title-merged `.mangaTitle` identity a rename would touch.
     static func renameRelatedStructuredMetadata(from oldName: String, to newName: String, in db: Database) throws {
         guard oldName != newName else { return }
-        try renameFavoriteMangaTargets(from: oldName, to: newName, in: db)
         try renameReadingProgressMangaTargets(from: oldName, to: newName, in: db)
         try ContentCoverStore.renameSmartMangaCover(from: oldName, to: newName, in: db)
         try LikeStore.renameMangaTitleLikes(from: oldName, to: newName, in: db)
-    }
-
-    /// Guaranteed-empty, harmless no-op since the smart-comic-mode Phase A
-    /// type refactor: `favorite_items.target_kind` is now populated
-    /// exclusively from `FavoriteItemTargetKind`'s three thread-based raw
-    /// values (normalThread/novelThread/mangaThread) — favorites can no
-    /// longer carry the old title-merged `.mangaTitle` identity this query
-    /// was written for (see `FavoriteItemTarget` in FavoriteLibrary.swift and
-    /// smart-comic-mode design decision #9's second correction), so the
-    /// `WHERE target_kind = 'mangaTitle'` below can never match a row. Kept
-    /// (rather than deleted) so a later phase revisiting per-directory
-    /// favorite grouping has an obvious place to look; the body below is
-    /// therefore dead code that only needs to type-check, not to be
-    /// exercised.
-    private static func renameFavoriteMangaTargets(from oldName: String, to newName: String, in db: Database) throws {
-        let rows = try Row.fetchAll(
-            db,
-            sql: """
-            SELECT id, title, item_json
-            FROM favorite_items
-            WHERE target_kind = ? AND clean_book_name = ?
-            """,
-            arguments: [FavoriteContentTargetKind.mangaTitle.rawValue, oldName]
-        )
-        guard !rows.isEmpty else { return }
-
-        let decoder = JSONDecoder()
-        let encoder = JSONEncoder()
-        for row in rows {
-            let oldID = row["id"] as String
-            let oldTitle = row["title"] as String
-            let itemJSON = row["item_json"] as String
-            guard var item = try? decoder.decode(FavoriteItem.self, from: Data(itemJSON.utf8)) else {
-                YamiboLog.persistence.error("Failed to decode favorite_items.item_json while renaming directory '\(oldName)' -> '\(newName)' for id \(oldID); only clean_book_name/title columns were patched, item_json was left stale")
-                try db.execute(
-                    sql: """
-                    UPDATE favorite_items
-                    SET clean_book_name = ?,
-                        title = CASE WHEN title = ? THEN ? ELSE title END
-                    WHERE id = ?
-                    """,
-                    arguments: [newName, oldName, newName, oldID]
-                )
-                continue
-            }
-
-            item.sourceGroup = .smartManga(mangaID: newName, cleanBookName: newName)
-            if item.title == oldName {
-                item.title = newName
-            }
-            let updatedJSON = String(data: try encoder.encode(item), encoding: .utf8) ?? itemJSON
-            try db.execute(
-                sql: """
-                UPDATE favorite_items
-                SET manga_id = ?,
-                    clean_book_name = ?,
-                    title = ?,
-                    item_json = ?
-                WHERE id = ?
-                """,
-                arguments: [
-                    newName,
-                    newName,
-                    oldTitle == oldName ? newName : oldTitle,
-                    updatedJSON,
-                    oldID,
-                ]
-            )
-        }
+        try FavoriteUpdateStore.renameMangaDirectoryTracking(from: oldName, to: newName, in: db)
     }
 
     private static func renameReadingProgressMangaTargets(from oldName: String, to newName: String, in db: Database) throws {

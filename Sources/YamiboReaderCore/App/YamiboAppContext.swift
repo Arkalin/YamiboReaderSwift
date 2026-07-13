@@ -59,7 +59,7 @@ public final class YamiboAppContext: Sendable {
         webDAVSyncSettingsStore: WebDAVSyncSettingsStore = WebDAVSyncSettingsStore(),
         readerResumeRouteStore: ReaderResumeRouteStore = ReaderResumeRouteStore(),
         localFavoriteLibraryStore: FavoriteLibraryStore? = nil,
-        favoriteUpdateStore: FavoriteUpdateStore = FavoriteUpdateStore(),
+        favoriteUpdateStore: FavoriteUpdateStore? = nil,
         favoriteSyncRunStore: FavoriteSyncRunStore? = nil,
         readingProgressStore: ReadingProgressStore? = nil,
         browsingHistoryStore: BrowsingHistoryStore? = nil,
@@ -102,7 +102,8 @@ public final class YamiboAppContext: Sendable {
             baseDirectory: Self.offlineCacheDirectory(rootDirectory: resolvedGRDBRootDirectory)
         )
         self.localFavoriteLibraryStore = localFavoriteLibraryStore ?? FavoriteLibraryStore(databasePool: resolvedGRDBDatabasePool)
-        self.favoriteUpdateStore = favoriteUpdateStore
+        let resolvedFavoriteUpdateStore = favoriteUpdateStore ?? FavoriteUpdateStore(databasePool: resolvedGRDBDatabasePool)
+        self.favoriteUpdateStore = resolvedFavoriteUpdateStore
         self.favoriteSyncRunStore = favoriteSyncRunStore ?? FavoriteSyncRunStore(databasePool: resolvedGRDBDatabasePool)
         self.readingProgressStore = readingProgressStore ?? ReadingProgressStore(databasePool: resolvedGRDBDatabasePool)
         self.browsingHistoryStore = browsingHistoryStore ?? BrowsingHistoryStore(databasePool: resolvedGRDBDatabasePool)
@@ -119,7 +120,7 @@ public final class YamiboAppContext: Sendable {
         )
         self.mangaDirectoryStore = mangaDirectoryStore ?? MangaDirectoryStore(
             databasePool: resolvedGRDBDatabasePool,
-            favoriteUpdateStore: favoriteUpdateStore
+            favoriteUpdateStore: resolvedFavoriteUpdateStore
         )
         self.mangaDirectorySearchCooldownState = mangaDirectorySearchCooldownState
         self.mangaReaderProjectionStore = mangaReaderProjectionStore ?? MangaReaderProjectionStore(diskCacheStore: diskCacheStore)

@@ -303,62 +303,6 @@ extension OfflineCacheStore {
         ) ?? 0
     }
 
-    private static func normalizedNovelEntry(_ entry: NovelOfflineCacheEntry) throws -> NovelOfflineCacheEntry {
-        guard entry.id.entryKey.mangaReaderTrimmedNonEmpty != nil else {
-            throw YamiboError.persistenceFailed("Novel offline cache entry is empty")
-        }
-        return NovelOfflineCacheEntry(
-            ownerTitle: novelDisplayOwnerTitle(ownerTitle: entry.ownerTitle, threadID: entry.document.threadID),
-            title: entry.title,
-            document: entry.document,
-            imageURLs: entry.imageURLs,
-            updatedAt: entry.updatedAt
-        )
-    }
-
-    private static func save(_ entry: NovelOfflineCacheEntry, in db: Database) throws {
-        let documentJSON = try encodeNovelDocument(entry.document)
-        let entryKey = entry.id.entryKey
-        try db.execute(
-            sql: """
-            INSERT OR REPLACE INTO offline_cache_novel_entries
-            (
-                owner_name, owner_title, entry_key, title, thread_id, view, author_id, document_json,
-                source_page_file_name, source_page_schema_version, source_page_fingerprint,
-                byte_count, created_at, updated_at
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, ?, COALESCE((SELECT created_at FROM offline_cache_novel_entries WHERE entry_key = ?), ?), ?)
-            """,
-            arguments: [
-                entry.id.ownerKey,
-                entry.ownerTitle,
-                entryKey,
-                entry.title,
-                entry.document.threadID,
-                entry.document.view,
-                entry.document.resolvedAuthorID,
-                documentJSON,
-                documentJSON.utf8.count,
-                entryKey,
-                offlineCacheTimeInterval(from: entry.updatedAt),
-                offlineCacheTimeInterval(from: entry.updatedAt)
-            ]
-        )
-        try db.execute(
-            sql: "DELETE FROM offline_cache_novel_entry_images WHERE entry_key = ?",
-            arguments: [entryKey]
-        )
-        for (index, imageURL) in entry.imageURLs.enumerated() {
-            try db.execute(
-                sql: """
-                INSERT INTO offline_cache_novel_entry_images (entry_key, manual_order, image_url)
-                VALUES (?, ?, ?)
-                """,
-                arguments: [entryKey, index, imageURL.absoluteString]
-            )
-        }
-    }
-
     static func saveNovelSourcePageMetadata(
         request: NovelOfflineCacheWorkRequest,
         documentJSON: String,
