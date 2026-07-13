@@ -89,13 +89,15 @@ struct MangaDirectorySheet: View {
             .background(YamiboColors.SystemSurface.groupedBackground)
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 if isSelecting && !usesSystemSelectionBottomToolbar {
-                    MangaDirectorySelectionActionBar(
-                        selectedChapterTIDs: selectedChapterTIDs,
-                        onDelete: deleteSelectedChapters
-                    )
+                    SelectionBottomToolbar(actions: selectionActions)
+                        .selectionBottomToolbarCapsule()
                 }
             }
-            .navigationTitle(L10n.string("manga.directory"))
+            .navigationTitle(
+                isSelecting
+                    ? L10n.string("manga.directory.selected_count", selectedChapterTIDs.count)
+                    : L10n.string("manga.directory")
+            )
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
@@ -109,10 +111,7 @@ struct MangaDirectorySheet: View {
 
                 if isSelecting && usesSystemSelectionBottomToolbar {
                     ToolbarItem(placement: .bottomBar) {
-                        MangaDirectorySelectionToolbarCapsule(
-                            selectedChapterTIDs: selectedChapterTIDs,
-                            onDelete: deleteSelectedChapters
-                        )
+                        SelectionBottomToolbar(actions: selectionActions)
                     }
                 }
             }
@@ -143,11 +142,17 @@ struct MangaDirectorySheet: View {
         }
     }
 
-    private var usesSystemSelectionBottomToolbar: Bool {
-        if #available(iOS 26, *) {
-            return true
-        }
-        return false
+    private var selectionActions: [SelectionToolbarAction] {
+        [
+            SelectionToolbarAction(
+                id: "delete",
+                title: L10n.string("common.delete"),
+                systemImage: "trash",
+                role: .destructive,
+                isEnabled: !selectedChapterTIDs.isEmpty,
+                action: deleteSelectedChapters
+            )
+        ]
     }
 
     private func seedDraft(from panel: MangaDirectoryPanelPresentation) {
@@ -227,65 +232,6 @@ private extension View {
     }
 }
 
-private struct MangaDirectorySelectionToolbarCapsule: View {
-    let selectedChapterTIDs: Set<String>
-    let onDelete: () -> Void
-
-    var body: some View {
-        HStack(spacing: 8) {
-            toolbarButton(
-                title: L10n.string("common.delete"),
-                systemImage: "trash",
-                role: .destructive,
-                isEnabled: canDelete,
-                action: onDelete
-            )
-            .disabled(!canDelete)
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-    }
-
-    private var canDelete: Bool {
-        !selectedChapterTIDs.isEmpty
-    }
-
-    private func toolbarButton(
-        title: String,
-        systemImage: String,
-        role: ButtonRole?,
-        isEnabled: Bool,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(role: role, action: action) {
-            toolbarLabel(title: title, systemImage: systemImage, role: role)
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(title)
-        .opacity(isEnabled ? 1 : 0.35)
-    }
-
-    private func toolbarLabel(
-        title: String,
-        systemImage: String,
-        role: ButtonRole?
-    ) -> some View {
-        VStack(spacing: 3) {
-            Image(systemName: systemImage)
-                .font(.system(size: 18, weight: .regular))
-                .frame(width: 24, height: 22)
-
-            Text(title)
-                .font(.caption2)
-                .lineLimit(1)
-                .minimumScaleFactor(0.78)
-        }
-        .frame(width: 66)
-        .foregroundStyle(role == .destructive ? Color.red : Color.primary)
-        .contentShape(Rectangle())
-    }
-}
-
 private struct MangaDirectoryMetadataSection: View {
     let panel: MangaDirectoryPanelPresentation
     let isSelecting: Bool
@@ -329,14 +275,14 @@ private struct MangaDirectoryMetadataSection: View {
                     onUpdateDirectory()
                 }
                 .buttonStyle(.borderedProminent)
-                .tint(panel.isSearchMode ? .indigo : .orange)
+                .tint(panel.isSearchMode ? .indigo : .accentColor)
                 .disabled(!panel.isUpdateButtonEnabled || isSelecting)
             }
 
             if let errorMessage = panel.errorMessage {
                 Label(errorMessage, systemImage: "exclamationmark.triangle")
                     .font(.caption)
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(Color.accentColor)
             }
         }
         .padding(16)
@@ -393,10 +339,10 @@ private struct MangaDirectorySortToggleButton: View {
         } label: {
             HStack(spacing: 5) {
                 Image(systemName: "arrow.down")
-                    .foregroundStyle(sortOrder == .ascending ? .orange : .gray.opacity(0.35))
+                    .foregroundStyle(sortOrder == .ascending ? .accentColor : .gray.opacity(0.35))
 
                 Image(systemName: "arrow.up")
-                    .foregroundStyle(sortOrder == .descending ? .orange : .gray.opacity(0.35))
+                    .foregroundStyle(sortOrder == .descending ? .accentColor : .gray.opacity(0.35))
             }
             .font(.subheadline.weight(.bold))
             .padding(.horizontal, 10)
@@ -431,7 +377,7 @@ private struct MangaDirectorySelectionToggleButton: View {
             } else {
                 Image(systemName: "trash")
                     .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(Color.accentColor)
             }
         }
         .buttonStyle(.plain)
@@ -475,7 +421,7 @@ private struct MangaDirectoryChapterRow: View {
                     }
                     .font(.caption.weight(.semibold))
                     .buttonStyle(.plain)
-                    .foregroundStyle(accentColor)
+                    .foregroundStyle(expandButtonTint)
                     .lineLimit(1)
                     .fixedSize()
                 }
@@ -491,7 +437,7 @@ private struct MangaDirectoryChapterRow: View {
         )
         .overlay(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .strokeBorder(isSelecting && isSelected ? Color.orange : Color.clear, lineWidth: 2)
+                .strokeBorder(isSelecting && isSelected ? Color.accentColor : Color.clear, lineWidth: 2)
         )
         .contentShape(Rectangle())
         .animation(.spring(response: 0.24, dampingFraction: 0.72), value: isSelected)
@@ -516,79 +462,22 @@ private struct MangaDirectoryChapterRow: View {
     private var numberColor: Color {
         if isSelecting {
             if isSelected {
-                return isCurrent ? .orange : .secondary
+                return isCurrent ? .accentColor : .secondary
             }
-            return isCurrent ? Color.orange.opacity(0.45) : Color.secondary.opacity(0.55)
+            return isCurrent ? Color.accentColor.opacity(0.45) : Color.secondary.opacity(0.55)
         }
-        return isCurrent ? .orange : .secondary
+        return isCurrent ? .accentColor : .secondary
     }
 
-    private var accentColor: Color {
-        isSelecting && !isSelected ? Color.orange.opacity(0.45) : .orange
+    private var expandButtonTint: Color {
+        isSelecting && !isSelected ? Color.accentColor.opacity(0.45) : .accentColor
     }
 
     private var backgroundColor: Color {
         if isCurrent {
-            return Color.orange.opacity(isSelecting && !isSelected ? 0.06 : 0.12)
+            return Color.accentColor.opacity(isSelecting && !isSelected ? 0.06 : 0.12)
         }
         return YamiboColors.SystemSurface.secondaryGroupedBackground
-    }
-}
-
-private struct MangaDirectorySelectionActionBar: View {
-    let selectedChapterTIDs: Set<String>
-    let onDelete: () -> Void
-
-    var body: some View {
-        VStack(spacing: 0) {
-            Divider()
-            HStack(spacing: 12) {
-                actionButton(
-                    title: L10n.string("common.delete"),
-                    systemImage: "trash",
-                    role: .destructive,
-                    isEnabled: canDelete,
-                    action: onDelete
-                )
-                .disabled(!canDelete)
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.horizontal, 20)
-            .padding(.top, 10)
-            .padding(.bottom, 12)
-        }
-        .background(.ultraThinMaterial)
-    }
-
-    private var canDelete: Bool {
-        !selectedChapterTIDs.isEmpty
-    }
-
-    private func actionButton(
-        title: String,
-        systemImage: String,
-        role: ButtonRole?,
-        isEnabled: Bool,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(role: role, action: action) {
-            VStack(spacing: 4) {
-                Image(systemName: systemImage)
-                    .font(.system(size: 18, weight: .regular))
-                    .frame(width: 24, height: 22)
-
-                Text(title)
-                    .font(.caption2)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.78)
-            }
-            .frame(width: 72)
-            .foregroundStyle(role == .destructive ? Color.red : Color.primary)
-            .opacity(isEnabled ? 1 : 0.35)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(title)
     }
 }
 

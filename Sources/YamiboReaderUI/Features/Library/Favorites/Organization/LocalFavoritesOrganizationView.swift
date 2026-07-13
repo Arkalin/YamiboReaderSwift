@@ -64,12 +64,13 @@ struct LocalFavoritesOrganizationView: View {
             .toolbar { favoriteToolbarContent }
             .toolbar(selection.isSelectionMode ? .hidden : .automatic, for: .tabBar)
             .safeAreaInset(edge: .bottom) {
-                if selection.isSelectionMode {
+                if selection.isSelectionMode && !usesSystemSelectionBottomToolbar {
                     LocalFavoriteSelectionActionBar(
                         organizer: organizer,
                         selection: selection,
                         routes: routes
                     )
+                    .selectionBottomToolbarCapsule()
                 }
             }
             .safeAreaInset(edge: .top) {
@@ -222,12 +223,13 @@ struct LocalFavoritesOrganizationView: View {
             }
             .toolbar(selection.isSelectionMode ? .hidden : .automatic, for: .tabBar)
             .safeAreaInset(edge: .bottom) {
-                if selection.isSelectionMode {
+                if selection.isSelectionMode && !usesSystemSelectionBottomToolbar {
                     LocalFavoriteSelectionActionBar(
                         organizer: organizer,
                         selection: selection,
                         routes: routes
                     )
+                    .selectionBottomToolbarCapsule()
                 }
             }
             .forumTransientMessage(organizer.transientMessage) {
@@ -329,12 +331,13 @@ struct LocalFavoritesOrganizationView: View {
             }
             .toolbar(selection.isSelectionMode ? .hidden : .automatic, for: .tabBar)
             .safeAreaInset(edge: .bottom) {
-                if selection.isSelectionMode {
+                if selection.isSelectionMode && !usesSystemSelectionBottomToolbar {
                     LocalFavoriteSelectionActionBar(
                         organizer: organizer,
                         selection: selection,
                         routes: routes
                     )
+                    .selectionBottomToolbarCapsule()
                 }
             }
             .forumTransientMessage(organizer.transientMessage) {
@@ -504,7 +507,7 @@ struct LocalFavoritesOrganizationView: View {
     /// the only leading item instead of stacking a second arrow next to it.
     @ToolbarContentBuilder
     private var selectionToolbarContent: some ToolbarContent {
-        ToolbarItem(placement: .topBarLeading) {
+        ToolbarItem(placement: .cancellationAction) {
             Button(
                 organizer.isAllVisibleSelected
                     ? L10n.string("common.invert_selection")
@@ -514,11 +517,20 @@ struct LocalFavoritesOrganizationView: View {
             }
             .disabled(!organizer.hasVisibleSelectableEntries)
         }
-        ToolbarItem(placement: .topBarTrailing) {
+        ToolbarItem(placement: .primaryAction) {
             Button(L10n.string("common.done")) {
                 selection.exitSelectionMode()
             }
             .fontWeight(.semibold)
+        }
+        if usesSystemSelectionBottomToolbar {
+            ToolbarItem(placement: .bottomBar) {
+                LocalFavoriteSelectionActionBar(
+                    organizer: organizer,
+                    selection: selection,
+                    routes: routes
+                )
+            }
         }
     }
 

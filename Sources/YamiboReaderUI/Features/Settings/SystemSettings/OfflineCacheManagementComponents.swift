@@ -228,72 +228,27 @@ struct OfflineCacheManagementSelectAllButton: View {
     }
 }
 
-private struct OfflineCacheManagementDeleteSelectionButton: View {
-    let actionState: OfflineCacheManagementSelectionActionState
-    let onDelete: () -> Void
-
-    var body: some View {
-        Button(role: .destructive, action: onDelete) {
-            VStack(spacing: 3) {
-                Image(systemName: "trash")
-                    .font(.system(size: 18, weight: .regular))
-                    .frame(width: 24, height: 22)
-
-                Text(L10n.string("common.delete"))
-                    .font(.caption2)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.78)
-            }
-            .frame(width: 66)
-            .foregroundStyle(Color.red)
-            .opacity(actionState.canDelete ? 1 : 0.35)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .disabled(!actionState.canDelete)
-        .accessibilityLabel(
-            L10n.string(
-                "settings.offline_cache.delete_selected_format",
-                actionState.selectedGroupCount
+/// Builds the selection-mode bottom bar's single "delete selected" action —
+/// rendering is delegated to the shared `SelectionBottomToolbar`.
+enum OfflineCacheManagementSelectionActions {
+    static func delete(
+        actionState: OfflineCacheManagementSelectionActionState,
+        onDelete: @escaping () -> Void
+    ) -> [SelectionToolbarAction] {
+        [
+            SelectionToolbarAction(
+                id: "delete",
+                title: L10n.string("common.delete"),
+                systemImage: "trash",
+                role: .destructive,
+                isEnabled: actionState.canDelete,
+                accessibilityLabel: L10n.string(
+                    "settings.offline_cache.delete_selected_format",
+                    actionState.selectedGroupCount
+                ),
+                action: onDelete
             )
-        )
-    }
-}
-
-struct OfflineCacheManagementSelectionToolbar: View {
-    let actionState: OfflineCacheManagementSelectionActionState
-    let onDelete: () -> Void
-
-    var body: some View {
-        OfflineCacheManagementDeleteSelectionButton(
-            actionState: actionState,
-            onDelete: onDelete
-        )
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-    }
-}
-
-struct OfflineCacheManagementSelectionActionBar: View {
-    let actionState: OfflineCacheManagementSelectionActionState
-    let onDelete: () -> Void
-
-    var body: some View {
-        VStack(spacing: 0) {
-            Divider()
-            HStack {
-                Spacer(minLength: 0)
-                OfflineCacheManagementDeleteSelectionButton(
-                    actionState: actionState,
-                    onDelete: onDelete
-                )
-                Spacer(minLength: 0)
-            }
-            .padding(.horizontal, 20)
-            .padding(.top, 10)
-            .padding(.bottom, 12)
-        }
-        .background(.ultraThinMaterial)
+        ]
     }
 }
 

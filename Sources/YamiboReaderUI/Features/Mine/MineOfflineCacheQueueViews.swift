@@ -43,7 +43,11 @@ struct MineOfflineCacheQueueSheet: View {
                 .padding(16)
             }
             .background(YamiboColors.SystemSurface.groupedBackground)
-            .navigationTitle(L10n.string("mine.download_queue"))
+            .navigationTitle(
+                viewModel.isOfflineCacheQueueSelectionMode
+                    ? L10n.string("mine.offline_queue.selected_count", viewModel.selectedOfflineCacheWorkCount)
+                    : L10n.string("mine.download_queue")
+            )
             .task {
                 await viewModel.loadOfflineCacheQueue()
             }
@@ -84,13 +88,14 @@ struct MineOfflineCacheQueueSheet: View {
 
                 if viewModel.isOfflineCacheQueueSelectionMode && usesSystemSelectionBottomToolbar {
                     ToolbarItem(placement: .bottomBar) {
-                        MineOfflineCacheQueueSelectionToolbar(viewModel: viewModel)
+                        SelectionBottomToolbar(actions: MineOfflineCacheQueueSelectionActions.cancel(viewModel: viewModel))
                     }
                 }
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 if viewModel.isOfflineCacheQueueSelectionMode && !usesSystemSelectionBottomToolbar {
-                    MineOfflineCacheQueueSelectionActionBar(viewModel: viewModel)
+                    SelectionBottomToolbar(actions: MineOfflineCacheQueueSelectionActions.cancel(viewModel: viewModel))
+                        .selectionBottomToolbarCapsule()
                 }
             }
             .overlay {
@@ -100,13 +105,6 @@ struct MineOfflineCacheQueueSheet: View {
             }
             .sensoryFeedback(.selection, trigger: viewModel.selectedOfflineCacheWorkIDs)
         }
-    }
-
-    private var usesSystemSelectionBottomToolbar: Bool {
-        if #available(iOS 26, *) {
-            return true
-        }
-        return false
     }
 
     private var selectedOwnerIsPresented: Binding<Bool> {
@@ -141,73 +139,29 @@ private struct MineOfflineCacheQueueSelectAllButton: View {
     }
 }
 
-private struct MineOfflineCacheQueueCancelSelectionButton: View {
-    let viewModel: MineHomeViewModel
-
-    var body: some View {
-        Button(role: .destructive) {
-            Task {
-                await viewModel.cancelSelectedOfflineCacheWorks()
-            }
-        } label: {
-            VStack(spacing: 3) {
-                Image(systemName: "xmark.circle")
-                    .font(.system(size: 18, weight: .regular))
-                    .frame(width: 24, height: 22)
-
-                Text(L10n.string("common.cancel"))
-                .font(.caption2)
-                .lineLimit(1)
-                .minimumScaleFactor(0.78)
-            }
-            .frame(width: 66)
-            .foregroundStyle(Color.red)
-            .opacity(canCancel ? 1 : 0.35)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .disabled(!canCancel)
-        .accessibilityLabel(
-            L10n.string(
-                "mine.offline_queue.cancel_selected_format",
-                viewModel.selectedOfflineCacheWorkCount
-            )
-        )
-    }
-
-    private var canCancel: Bool {
-        !viewModel.selectedOfflineCacheWorkIDs.isEmpty
+/// Builds the selection-mode bottom bar's single "cancel selected" action —
+/// rendering is delegated to the shared `SelectionBottomToolbar`.
+@MainActor
+private enum MineOfflineCacheQueueSelectionActions {
+    static func cancel(viewModel: MineHomeViewModel) -> [SelectionToolbarAction] {
+        let canCancel = !viewModel.selectedOfflineCacheWorkIDs.isEmpty
             && !viewModel.isOfflineCacheQueueCommandRunning
-    }
-}
-
-private struct MineOfflineCacheQueueSelectionToolbar: View {
-    let viewModel: MineHomeViewModel
-
-    var body: some View {
-        MineOfflineCacheQueueCancelSelectionButton(viewModel: viewModel)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-    }
-}
-
-private struct MineOfflineCacheQueueSelectionActionBar: View {
-    let viewModel: MineHomeViewModel
-    var groupID: OfflineCacheGroupID? = nil
-
-    var body: some View {
-        VStack(spacing: 0) {
-            Divider()
-            HStack {
-                Spacer(minLength: 0)
-                MineOfflineCacheQueueCancelSelectionButton(viewModel: viewModel)
-                Spacer(minLength: 0)
-            }
-            .padding(.horizontal, 20)
-            .padding(.top, 10)
-            .padding(.bottom, 12)
-        }
-        .background(.ultraThinMaterial)
+        return [
+            SelectionToolbarAction(
+                id: "cancel",
+                title: L10n.string("common.cancel"),
+                systemImage: "xmark.circle",
+                role: .destructive,
+                isEnabled: canCancel,
+                accessibilityLabel: L10n.string(
+                    "mine.offline_queue.cancel_selected_format",
+                    viewModel.selectedOfflineCacheWorkCount
+                ),
+                action: {
+                    Task { await viewModel.cancelSelectedOfflineCacheWorks() }
+                }
+            )
+        ]
     }
 }
 
@@ -405,7 +359,11 @@ private struct MineOfflineCacheQueueOwnerSheet: View {
                 .padding(16)
             }
             .background(YamiboColors.SystemSurface.groupedBackground)
-            .navigationTitle(group?.title ?? L10n.string("mine.download_queue"))
+            .navigationTitle(
+                viewModel.isOfflineCacheQueueSelectionMode
+                    ? L10n.string("mine.offline_queue.selected_count", viewModel.selectedOfflineCacheWorkCount)
+                    : (group?.title ?? L10n.string("mine.download_queue"))
+            )
             .task {
                 viewModel.setOfflineCacheQueueSelectionMode(false)
                 await viewModel.refreshOfflineCacheQueue()
@@ -450,13 +408,14 @@ private struct MineOfflineCacheQueueOwnerSheet: View {
 
                 if viewModel.isOfflineCacheQueueSelectionMode && usesSystemSelectionBottomToolbar {
                     ToolbarItem(placement: .bottomBar) {
-                        MineOfflineCacheQueueSelectionToolbar(viewModel: viewModel)
+                        SelectionBottomToolbar(actions: MineOfflineCacheQueueSelectionActions.cancel(viewModel: viewModel))
                     }
                 }
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 if viewModel.isOfflineCacheQueueSelectionMode && !usesSystemSelectionBottomToolbar {
-                    MineOfflineCacheQueueSelectionActionBar(viewModel: viewModel, groupID: groupID)
+                    SelectionBottomToolbar(actions: MineOfflineCacheQueueSelectionActions.cancel(viewModel: viewModel))
+                        .selectionBottomToolbarCapsule()
                 }
             }
             .overlay {
@@ -466,13 +425,6 @@ private struct MineOfflineCacheQueueOwnerSheet: View {
             }
             .sensoryFeedback(.selection, trigger: viewModel.selectedOfflineCacheWorkIDs)
         }
-    }
-
-    private var usesSystemSelectionBottomToolbar: Bool {
-        if #available(iOS 26, *) {
-            return true
-        }
-        return false
     }
 
     private func dismissIfGroupIsEmpty() {

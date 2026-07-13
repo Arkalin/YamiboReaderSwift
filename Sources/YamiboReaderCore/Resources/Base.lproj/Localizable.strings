@@ -646,6 +646,7 @@
 "manga.delete_current_chapter_failed" = "删除失败";
 "manga.delete_current_chapter_failed_message" = "不可删除正在阅读中的章节，请重新选择";
 "manga.directory" = "目录";
+"manga.directory.selected_count" = "已选择 %d 项";
 "manga.progress" = "进度";
 "manga.global_search" = "全局搜索";
 "manga.global_search_countdown" = "全局搜索 %ds";
@@ -661,6 +662,7 @@
 "manga.offline_cache.add_favorite_title" = "需要收藏";
 "manga.offline_cache.caching" = "缓存中";
 "manga.offline_cache.chapter_section" = "章节";
+"manga.offline_cache.selected_count" = "已选择 %d 项";
 "manga.offline_cache.title" = "漫画缓存";
 "manga.offline_cache.uncached" = "未缓存";
 "manga.double_tap_zoom" = "双击缩放";
@@ -710,6 +712,7 @@
 "mine.offline_queue.pause" = "暂停";
 "mine.offline_queue.percent_format" = "%d %%";
 "mine.offline_queue.preparing" = "准备图片列表";
+"mine.offline_queue.selected_count" = "已选择 %d 项";
 "mine.offline_queue.speed_format" = "%@/s";
 "mine.login" = "登录";
 "mine.login_card_hint" = "轻点打开登录表单";
@@ -743,6 +746,7 @@
 "reader.cache_detail.ready" = "准备开始缓存…";
 "reader.cache_detail.running" = "正在缓存第 %d 页\n%d / %d";
 "reader.cache_management" = "缓存管理";
+"reader.cache_management.selected_count" = "已选择 %d 项";
 "reader.cache_page_section" = "页码";
 "reader.cache_progress" = "缓存进度";
 "reader.cache_queue_button_accessibility_format" = "下载队列，%d 项任务";
@@ -846,6 +850,7 @@
 "settings.offline_cache.entry_count_format" = "%d 项";
 "settings.offline_cache.failed_count_format" = "%d 个失败";
 "settings.offline_cache.pending_count_format" = "%d 个未完成";
+"settings.offline_cache.selected_count" = "已选择 %d 项";
 "settings.offline_cache.state.cached" = "已缓存";
 "settings.offline_cache.state.failed" = "失败";
 "settings.offline_cache.state.paused" = "已暂停";

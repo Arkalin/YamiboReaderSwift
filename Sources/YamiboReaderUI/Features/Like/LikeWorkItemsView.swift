@@ -91,11 +91,13 @@ struct LikeWorkItemsView: View {
                     }
                     .fontWeight(.semibold)
                 }
-                if likeSelectionUsesSystemBottomToolbar {
+                if usesSystemSelectionBottomToolbar {
                     ToolbarItem(placement: .bottomBar) {
-                        LikeSelectionToolbar(selectedCount: selectedItemIDs.count) {
-                            isShowingDeleteConfirmation = true
-                        }
+                        SelectionBottomToolbar(
+                            actions: LikeSelectionActions.delete(selectedCount: selectedItemIDs.count) {
+                                isShowingDeleteConfirmation = true
+                            }
+                        )
                     }
                 }
             } else {
@@ -115,10 +117,13 @@ struct LikeWorkItemsView: View {
         }
         .toolbar(isSelecting ? .hidden : .automatic, for: .tabBar)
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            if isSelecting && !likeSelectionUsesSystemBottomToolbar {
-                LikeSelectionActionBar(selectedCount: selectedItemIDs.count) {
-                    isShowingDeleteConfirmation = true
-                }
+            if isSelecting && !usesSystemSelectionBottomToolbar {
+                SelectionBottomToolbar(
+                    actions: LikeSelectionActions.delete(selectedCount: selectedItemIDs.count) {
+                        isShowingDeleteConfirmation = true
+                    }
+                )
+                .selectionBottomToolbarCapsule()
             }
         }
         .confirmationDialog(

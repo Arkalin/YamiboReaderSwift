@@ -35,7 +35,11 @@ struct OfflineCacheManagementView: View {
             .padding(16)
         }
         .background(YamiboColors.SystemSurface.groupedBackground)
-        .navigationTitle(L10n.string("settings.offline_cache.title"))
+        .navigationTitle(
+            viewModel.isOfflineCacheManagementSelectionMode
+                ? L10n.string("settings.offline_cache.selected_count", viewModel.selectedOfflineCacheGroupIDs.count)
+                : L10n.string("settings.offline_cache.title")
+        )
         .navigationBarBackButtonHidden(viewModel.isOfflineCacheManagementSelectionMode)
         .task {
             await viewModel.refreshOfflineCacheManagement()
@@ -76,9 +80,11 @@ struct OfflineCacheManagementView: View {
             #if os(iOS)
             if viewModel.isOfflineCacheManagementSelectionMode && usesSystemSelectionBottomToolbar {
                 ToolbarItem(placement: .bottomBar) {
-                    OfflineCacheManagementSelectionToolbar(
-                        actionState: viewModel.offlineCacheManagementSelectionActionState,
-                        onDelete: viewModel.requestSelectedOfflineCacheGroupDeletion
+                    SelectionBottomToolbar(
+                        actions: OfflineCacheManagementSelectionActions.delete(
+                            actionState: viewModel.offlineCacheManagementSelectionActionState,
+                            onDelete: viewModel.requestSelectedOfflineCacheGroupDeletion
+                        )
                     )
                 }
             }
@@ -86,10 +92,13 @@ struct OfflineCacheManagementView: View {
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if viewModel.isOfflineCacheManagementSelectionMode && !usesSystemSelectionBottomToolbar {
-                OfflineCacheManagementSelectionActionBar(
-                    actionState: viewModel.offlineCacheManagementSelectionActionState,
-                    onDelete: viewModel.requestSelectedOfflineCacheGroupDeletion
+                SelectionBottomToolbar(
+                    actions: OfflineCacheManagementSelectionActions.delete(
+                        actionState: viewModel.offlineCacheManagementSelectionActionState,
+                        onDelete: viewModel.requestSelectedOfflineCacheGroupDeletion
+                    )
                 )
+                .selectionBottomToolbarCapsule()
             }
         }
         .overlay {
@@ -105,15 +114,6 @@ struct OfflineCacheManagementView: View {
         }
         .sensoryFeedback(.selection, trigger: viewModel.selectedOfflineCacheGroupIDs)
         .offlineCacheManagementAlert(viewModel: viewModel)
-    }
-
-    private var usesSystemSelectionBottomToolbar: Bool {
-        #if os(iOS)
-        if #available(iOS 26, *) {
-            return true
-        }
-        #endif
-        return false
     }
 
     private var selectedGroupIsPresented: Binding<Bool> {
