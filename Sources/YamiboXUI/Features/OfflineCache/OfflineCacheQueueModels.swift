@@ -1,7 +1,7 @@
 import Foundation
 import YamiboXCore
 
-struct MineOfflineCacheQueueOwnerGroup: Hashable, Identifiable {
+struct OfflineCacheQueueOwnerGroup: Hashable, Identifiable {
     var id: OfflineCacheGroupID
     var readerKind: OfflineCacheReaderKind
     var ownerName: String
@@ -12,10 +12,10 @@ struct MineOfflineCacheQueueOwnerGroup: Hashable, Identifiable {
     var percentageText: String
     var currentSpeedText: String?
     var failureStatusText: String?
-    var chapters: [MineOfflineCacheQueueChapterRow]
+    var chapters: [OfflineCacheQueueChapterRow]
 
     init(group: OfflineCacheQueueGroup) {
-        let rows = group.works.map(MineOfflineCacheQueueChapterRow.init(work:))
+        let rows = group.works.map(OfflineCacheQueueChapterRow.init(work:))
         let completedImageCount = group.works.reduce(0) { $0 + $1.progress.completedUnitCount }
         let targetImageCount = group.works.reduce(0) { $0 + $1.progress.targetUnitCount }
         let currentBytesPerSecond = group.works.reduce(0) { $0 + $1.currentBytesPerSecond }
@@ -40,13 +40,13 @@ struct MineOfflineCacheQueueOwnerGroup: Hashable, Identifiable {
             "mine.offline_queue.percent_format",
             Int((progressFraction * 100).rounded())
         )
-        currentSpeedText = MineOfflineCacheQueueSpeedText.make(bytesPerSecond: currentBytesPerSecond)
+        currentSpeedText = OfflineCacheQueueSpeedText.make(bytesPerSecond: currentBytesPerSecond)
         failureStatusText = rows.first { $0.failureStatusText != nil }?.failureStatusText
         chapters = rows
     }
 }
 
-struct MineOfflineCacheQueueChapterRow: Hashable, Identifiable {
+struct OfflineCacheQueueChapterRow: Hashable, Identifiable {
     var id: OfflineCacheWorkID
     var groupID: OfflineCacheGroupID
     var entryID: OfflineCacheEntryID
@@ -93,11 +93,11 @@ struct MineOfflineCacheQueueChapterRow: Hashable, Identifiable {
         } else {
             failureStatusText = nil
         }
-        speedText = MineOfflineCacheQueueSpeedText.make(bytesPerSecond: work.currentBytesPerSecond)
+        speedText = OfflineCacheQueueSpeedText.make(bytesPerSecond: work.currentBytesPerSecond)
     }
 }
 
-private enum MineOfflineCacheQueueSpeedText {
+private enum OfflineCacheQueueSpeedText {
     static func make(bytesPerSecond: Int) -> String? {
         guard bytesPerSecond > 0 else { return nil }
         let formatter = ByteCountFormatter()

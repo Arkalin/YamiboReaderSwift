@@ -42,7 +42,7 @@ struct BlogReaderView: View {
         .task {
             await model.load()
         }
-        .forumTransientMessage(model.commentResultMessage) {
+        .transientMessage(model.commentResultMessage) {
             model.clearCommentResult()
         }
         .alert(

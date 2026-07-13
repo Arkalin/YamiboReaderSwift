@@ -49,7 +49,7 @@ struct PrivateMessageView: View {
         .task {
             await model.load()
         }
-        .forumTransientMessage(model.sendResultMessage) {
+        .transientMessage(model.sendResultMessage) {
             model.clearSendResult()
         }
     }

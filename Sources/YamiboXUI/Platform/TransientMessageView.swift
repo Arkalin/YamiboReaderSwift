@@ -1,6 +1,6 @@
 import SwiftUI
 
-struct ForumTransientMessageView: View {
+struct TransientMessageView: View {
     let message: String
 
     var body: some View {
@@ -16,7 +16,7 @@ struct ForumTransientMessageView: View {
     }
 }
 
-private struct ForumTransientMessageOverlayModifier: ViewModifier {
+private struct TransientMessageOverlayModifier: ViewModifier {
     let message: String?
     let bottomPadding: CGFloat
     let clear: @MainActor () -> Void
@@ -27,7 +27,7 @@ private struct ForumTransientMessageOverlayModifier: ViewModifier {
         content
             .overlay(alignment: .bottom) {
                 if let message {
-                    ForumTransientMessageView(message: message)
+                    TransientMessageView(message: message)
                         .padding(.horizontal, 24)
                         .padding(.bottom, bottomPadding)
                         .transition(
@@ -68,12 +68,12 @@ private struct ForumTransientMessageOverlayModifier: ViewModifier {
 }
 
 extension View {
-    func forumTransientMessage(
+    func transientMessage(
         _ message: String?,
         bottomPadding: CGFloat = 24,
         clear: @escaping @MainActor () -> Void
     ) -> some View {
-        modifier(ForumTransientMessageOverlayModifier(
+        modifier(TransientMessageOverlayModifier(
             message: message,
             bottomPadding: bottomPadding,
             clear: clear

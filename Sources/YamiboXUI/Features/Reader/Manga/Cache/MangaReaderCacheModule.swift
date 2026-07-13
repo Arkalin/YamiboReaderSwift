@@ -14,31 +14,6 @@ public struct MangaReaderCacheRow: Hashable, Identifiable, Sendable {
     }
 }
 
-public struct MangaNovelReaderCacheSelectionState: Equatable, Sendable {
-    public var selectedTIDs: Set<String>
-    public var uncachedSelectedTIDs: Set<String>
-    public var removableSelectedTIDs: Set<String>
-    public var canCache: Bool
-    public var canDelete: Bool
-    public var isAllSelected: Bool
-
-    public init(
-        selectedTIDs: Set<String>,
-        uncachedSelectedTIDs: Set<String>,
-        removableSelectedTIDs: Set<String>,
-        canCache: Bool,
-        canDelete: Bool,
-        isAllSelected: Bool
-    ) {
-        self.selectedTIDs = selectedTIDs
-        self.uncachedSelectedTIDs = uncachedSelectedTIDs
-        self.removableSelectedTIDs = removableSelectedTIDs
-        self.canCache = canCache
-        self.canDelete = canDelete
-        self.isAllSelected = isAllSelected
-    }
-}
-
 public enum MangaReaderCachePrompt: Equatable, Identifiable, Sendable {
     case addFavorite(title: String)
 
@@ -118,7 +93,7 @@ public final class MangaReaderCacheViewModel: ObservableObject {
         offlineCacheQueueEntryCount = await mangaQueueWorks().count
     }
 
-    public func selectionState(for selectedTIDs: Set<String>) -> MangaNovelReaderCacheSelectionState {
+    public func selectionState(for selectedTIDs: Set<String>) -> ReaderCacheSelectionState {
         let validSelection = selectedTIDs.intersection(allChapterTIDs)
         let stateByTID = Dictionary(uniqueKeysWithValues: rows.map { ($0.chapter.tid, $0.state) })
         let uncached = validSelection.filter { stateByTID[$0] == .uncached }
@@ -130,7 +105,7 @@ public final class MangaReaderCacheViewModel: ObservableObject {
                 false
             }
         }
-        return MangaNovelReaderCacheSelectionState(
+        return ReaderCacheSelectionState(
             selectedTIDs: validSelection,
             uncachedSelectedTIDs: Set(uncached),
             removableSelectedTIDs: Set(removable),

@@ -123,7 +123,7 @@ struct LocalFavoritesOrganizationView: View {
                     routes: routes
                 )
             }
-            .forumTransientMessage(organizer.transientMessage) {
+            .transientMessage(organizer.transientMessage) {
                 organizer.transientMessage = nil
             }
             .navigationDestination(isPresented: collectionDetailBinding) {
@@ -245,7 +245,7 @@ struct LocalFavoritesOrganizationView: View {
                     .selectionBottomToolbarCapsule()
                 }
             }
-            .forumTransientMessage(organizer.transientMessage) {
+            .transientMessage(organizer.transientMessage) {
                 organizer.transientMessage = nil
             }
     }
@@ -353,7 +353,7 @@ struct LocalFavoritesOrganizationView: View {
                     .selectionBottomToolbarCapsule()
                 }
             }
-            .forumTransientMessage(organizer.transientMessage) {
+            .transientMessage(organizer.transientMessage) {
                 organizer.transientMessage = nil
             }
     }

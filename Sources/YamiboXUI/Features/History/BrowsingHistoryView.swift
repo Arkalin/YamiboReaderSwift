@@ -97,7 +97,7 @@ struct BrowsingHistoryView: View {
         .onChange(of: model.searchText) {
             model.scheduleReload()
         }
-        .forumTransientMessage(model.transientMessage, bottomPadding: 24) {
+        .transientMessage(model.transientMessage, bottomPadding: 24) {
             model.clearTransientMessage()
         }
     }

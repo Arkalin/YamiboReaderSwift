@@ -106,7 +106,7 @@ struct ForumNovelDetailView: View {
                 }
             )
         }
-        .forumTransientMessage(model.transientMessage) {
+        .transientMessage(model.transientMessage) {
             model.clearTransientMessage()
         }
     }

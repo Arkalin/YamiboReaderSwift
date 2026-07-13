@@ -152,8 +152,8 @@ final class NovelReaderCacheCoordinator: ObservableObject {
         operationModule.stopCaching()
     }
 
-    func makeOfflineCacheQueueViewModel() -> MineHomeViewModel {
-        MineHomeViewModel(dependencies: accountDependencies)
+    func makeOfflineCacheQueueViewModel() -> OfflineCacheQueueViewModel {
+        OfflineCacheQueueViewModel(dependencies: accountDependencies)
     }
 
     private var operationSnapshot: NovelReaderCacheOperationSnapshot {

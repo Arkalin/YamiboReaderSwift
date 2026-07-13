@@ -3,19 +3,19 @@ import YamiboXCore
 
 /// Sheet shell for contexts without a navigation stack of their own (the
 /// full-screen readers' cache sheets). The Mine tab pushes
-/// `MineOfflineCacheQueueScreen` directly instead.
-struct MineOfflineCacheQueueSheet: View {
-    let viewModel: MineHomeViewModel
+/// `OfflineCacheQueueScreen` directly instead.
+struct OfflineCacheQueueSheet: View {
+    let viewModel: OfflineCacheQueueViewModel
 
     var body: some View {
         NavigationStack {
-            MineOfflineCacheQueueScreen(viewModel: viewModel, showsCloseButton: true)
+            OfflineCacheQueueScreen(viewModel: viewModel, showsCloseButton: true)
         }
     }
 }
 
-struct MineOfflineCacheQueueScreen: View {
-    let viewModel: MineHomeViewModel
+struct OfflineCacheQueueScreen: View {
+    let viewModel: OfflineCacheQueueViewModel
     var showsCloseButton = false
 
     @Environment(\.dismiss) private var dismiss
@@ -24,29 +24,29 @@ struct MineOfflineCacheQueueScreen: View {
     var body: some View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
-                    if viewModel.offlineCacheQueueIsEmpty {
-                        MineOfflineCacheQueueEmptyState()
+                    if viewModel.isEmpty {
+                        OfflineCacheQueueEmptyState()
                     } else {
-                        if viewModel.showsOfflineCacheQueueControls {
-                            MineOfflineCacheQueueControls(viewModel: viewModel)
+                        if viewModel.showsControls {
+                            OfflineCacheQueueControls(viewModel: viewModel)
                         }
 
                         LazyVStack(spacing: 10) {
-                            ForEach(viewModel.offlineCacheQueueGroups) { group in
-                                MineOfflineCacheQueueOwnerRow(
+                            ForEach(viewModel.groups) { group in
+                                OfflineCacheQueueOwnerRow(
                                     group: group,
-                                    isSelecting: viewModel.isOfflineCacheQueueSelectionMode,
-                                    isSelected: viewModel.isOfflineCacheOwnerSelected(id: group.id),
+                                    isSelecting: viewModel.isSelectionMode,
+                                    isSelected: viewModel.isOwnerSelected(id: group.id),
                                     open: {
-                                        viewModel.setOfflineCacheQueueSelectionMode(false)
+                                        viewModel.setSelectionMode(false)
                                         selectedGroupID = group.id
                                     },
                                     toggleSelection: {
-                                        viewModel.toggleOfflineCacheOwnerSelection(id: group.id)
+                                        viewModel.toggleOwnerSelection(id: group.id)
                                     },
                                     cancel: {
                                         Task {
-                                            await viewModel.cancelOfflineCacheOwnerGroup(id: group.id)
+                                            await viewModel.cancelOwnerGroup(id: group.id)
                                         }
                                     }
                                 )
@@ -58,26 +58,26 @@ struct MineOfflineCacheQueueScreen: View {
             }
             .background(YamiboColors.SystemSurface.groupedBackground)
             .navigationTitle(
-                viewModel.isOfflineCacheQueueSelectionMode
-                    ? L10n.string("mine.offline_queue.selected_count", viewModel.selectedOfflineCacheWorkCount)
+                viewModel.isSelectionMode
+                    ? L10n.string("mine.offline_queue.selected_count", viewModel.selectedWorkCount)
                     : L10n.string("mine.download_queue")
             )
             .task {
-                await viewModel.loadOfflineCacheQueue()
+                await viewModel.load()
             }
             .refreshable {
-                await viewModel.refreshOfflineCacheQueue()
+                await viewModel.refresh()
             }
             .navigationDestination(item: $selectedGroupID) { groupID in
-                MineOfflineCacheQueueOwnerScreen(
+                OfflineCacheQueueOwnerScreen(
                     viewModel: viewModel,
                     groupID: groupID
                 )
             }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    if viewModel.isOfflineCacheQueueSelectionMode {
-                        MineOfflineCacheQueueSelectAllButton(viewModel: viewModel)
+                    if viewModel.isSelectionMode {
+                        OfflineCacheQueueSelectAllButton(viewModel: viewModel)
                     } else if showsCloseButton {
                         Button(L10n.string("common.close")) {
                             dismiss()
@@ -86,53 +86,53 @@ struct MineOfflineCacheQueueScreen: View {
                 }
 
                 ToolbarItem(placement: .primaryAction) {
-                    if !viewModel.offlineCacheQueueIsEmpty {
+                    if !viewModel.isEmpty {
                         Button(
-                            viewModel.isOfflineCacheQueueSelectionMode
+                            viewModel.isSelectionMode
                                 ? L10n.string("common.done")
                                 : L10n.string("common.select")
                         ) {
-                            viewModel.setOfflineCacheQueueSelectionMode(!viewModel.isOfflineCacheQueueSelectionMode)
+                            viewModel.setSelectionMode(!viewModel.isSelectionMode)
                         }
-                        .disabled(viewModel.isOfflineCacheQueueCommandRunning)
+                        .disabled(viewModel.isCommandRunning)
                     }
                 }
 
-                if viewModel.isOfflineCacheQueueSelectionMode && usesSystemSelectionBottomToolbar {
+                if viewModel.isSelectionMode && usesSystemSelectionBottomToolbar {
                     ToolbarItem(placement: .bottomBar) {
-                        SelectionBottomToolbar(actions: MineOfflineCacheQueueSelectionActions.cancel(viewModel: viewModel))
+                        SelectionBottomToolbar(actions: OfflineCacheQueueSelectionActions.cancel(viewModel: viewModel))
                     }
                 }
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
-                if viewModel.isOfflineCacheQueueSelectionMode && !usesSystemSelectionBottomToolbar {
-                    SelectionBottomToolbar(actions: MineOfflineCacheQueueSelectionActions.cancel(viewModel: viewModel))
+                if viewModel.isSelectionMode && !usesSystemSelectionBottomToolbar {
+                    SelectionBottomToolbar(actions: OfflineCacheQueueSelectionActions.cancel(viewModel: viewModel))
                         .selectionBottomToolbarCapsule()
                 }
             }
             .overlay {
-                if viewModel.isLoadingOfflineCacheQueue {
+                if viewModel.isLoading {
                     ProgressView()
                 }
             }
-            .sensoryFeedback(.selection, trigger: viewModel.selectedOfflineCacheWorkIDs)
+            .sensoryFeedback(.selection, trigger: viewModel.selectedWorkIDs)
     }
 }
 
-private struct MineOfflineCacheQueueSelectAllButton: View {
-    let viewModel: MineHomeViewModel
+private struct OfflineCacheQueueSelectAllButton: View {
+    let viewModel: OfflineCacheQueueViewModel
     var groupID: OfflineCacheGroupID? = nil
 
     var body: some View {
         Button(title) {
-            viewModel.toggleAllOfflineCacheWorks(groupID: groupID)
+            viewModel.toggleAllWorks(groupID: groupID)
         }
-        .disabled(viewModel.offlineCacheQueueIsEmpty)
+        .disabled(viewModel.isEmpty)
         .accessibilityLabel(title)
     }
 
     private var title: String {
-        viewModel.isOfflineCacheWorkSelectionComplete(groupID: groupID)
+        viewModel.isWorkSelectionComplete(groupID: groupID)
             ? L10n.string("common.invert_selection")
             : L10n.string("common.select_all")
     }
@@ -141,10 +141,10 @@ private struct MineOfflineCacheQueueSelectAllButton: View {
 /// Builds the selection-mode bottom bar's single "cancel selected" action —
 /// rendering is delegated to the shared `SelectionBottomToolbar`.
 @MainActor
-private enum MineOfflineCacheQueueSelectionActions {
-    static func cancel(viewModel: MineHomeViewModel) -> [SelectionToolbarAction] {
-        let canCancel = !viewModel.selectedOfflineCacheWorkIDs.isEmpty
-            && !viewModel.isOfflineCacheQueueCommandRunning
+private enum OfflineCacheQueueSelectionActions {
+    static func cancel(viewModel: OfflineCacheQueueViewModel) -> [SelectionToolbarAction] {
+        let canCancel = !viewModel.selectedWorkIDs.isEmpty
+            && !viewModel.isCommandRunning
         return [
             SelectionToolbarAction(
                 id: "cancel",
@@ -154,26 +154,26 @@ private enum MineOfflineCacheQueueSelectionActions {
                 isEnabled: canCancel,
                 accessibilityLabel: L10n.string(
                     "mine.offline_queue.cancel_selected_format",
-                    viewModel.selectedOfflineCacheWorkCount
+                    viewModel.selectedWorkCount
                 ),
                 action: {
-                    Task { await viewModel.cancelSelectedOfflineCacheWorks() }
+                    Task { await viewModel.cancelSelectedWorks() }
                 }
             )
         ]
     }
 }
 
-private struct MineOfflineCacheQueueControls: View {
-    let viewModel: MineHomeViewModel
+private struct OfflineCacheQueueControls: View {
+    let viewModel: OfflineCacheQueueViewModel
 
     var body: some View {
         Button {
             Task {
-                if viewModel.offlineCacheQueueRunState == .running {
-                    await viewModel.pauseOfflineCacheQueue()
+                if viewModel.runState == .running {
+                    await viewModel.pauseQueue()
                 } else {
-                    await viewModel.continueOfflineCacheQueue()
+                    await viewModel.continueQueue()
                 }
             }
         } label: {
@@ -189,22 +189,22 @@ private struct MineOfflineCacheQueueControls: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .disabled(viewModel.isOfflineCacheQueueCommandRunning)
+        .disabled(viewModel.isCommandRunning)
     }
 
     private var controlTitle: String {
-        viewModel.offlineCacheQueueRunState == .running
+        viewModel.runState == .running
             ? L10n.string("mine.offline_queue.pause")
             : L10n.string("mine.offline_queue.continue")
     }
 
     private var controlImage: String {
-        viewModel.offlineCacheQueueRunState == .running ? "pause.fill" : "play.fill"
+        viewModel.runState == .running ? "pause.fill" : "play.fill"
     }
 }
 
-private struct MineOfflineCacheQueueOwnerRow: View {
-    let group: MineOfflineCacheQueueOwnerGroup
+private struct OfflineCacheQueueOwnerRow: View {
+    let group: OfflineCacheQueueOwnerGroup
     let isSelecting: Bool
     let isSelected: Bool
     let open: () -> Void
@@ -318,35 +318,35 @@ private struct MineOfflineCacheQueueOwnerRow: View {
 /// Drill-down detail for one owner's queued chapters, pushed onto the
 /// enclosing navigation stack (system back replaces the old sheet-on-sheet
 /// close button).
-private struct MineOfflineCacheQueueOwnerScreen: View {
-    let viewModel: MineHomeViewModel
+private struct OfflineCacheQueueOwnerScreen: View {
+    let viewModel: OfflineCacheQueueViewModel
     let groupID: OfflineCacheGroupID
     @Environment(\.dismiss) private var dismiss
 
-    private var group: MineOfflineCacheQueueOwnerGroup? {
-        viewModel.offlineCacheQueueGroups.first { $0.id == groupID }
+    private var group: OfflineCacheQueueOwnerGroup? {
+        viewModel.groups.first { $0.id == groupID }
     }
 
     var body: some View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
                     if let group {
-                        if viewModel.showsOfflineCacheQueueControls {
-                            MineOfflineCacheQueueControls(viewModel: viewModel)
+                        if viewModel.showsControls {
+                            OfflineCacheQueueControls(viewModel: viewModel)
                         }
 
                         LazyVStack(spacing: 10) {
                             ForEach(group.chapters) { chapter in
-                                MineOfflineCacheQueueChapterRowView(
+                                OfflineCacheQueueChapterRowView(
                                     chapter: chapter,
-                                    isSelecting: viewModel.isOfflineCacheQueueSelectionMode,
-                                    isSelected: viewModel.selectedOfflineCacheWorkIDs.contains(chapter.id),
+                                    isSelecting: viewModel.isSelectionMode,
+                                    isSelected: viewModel.selectedWorkIDs.contains(chapter.id),
                                     toggleSelection: {
-                                        viewModel.toggleOfflineCacheWorkSelection(chapter.id)
+                                        viewModel.toggleWorkSelection(chapter.id)
                                     },
                                     cancel: {
                                         Task {
-                                            await viewModel.cancelOfflineCacheChapter(chapter.id)
+                                            await viewModel.cancelChapter(chapter.id)
                                             dismissIfGroupIsEmpty()
                                         }
                                     }
@@ -354,36 +354,36 @@ private struct MineOfflineCacheQueueOwnerScreen: View {
                             }
                         }
                     } else {
-                        MineOfflineCacheQueueEmptyState()
+                        OfflineCacheQueueEmptyState()
                     }
                 }
                 .padding(16)
             }
             .background(YamiboColors.SystemSurface.groupedBackground)
             .navigationTitle(
-                viewModel.isOfflineCacheQueueSelectionMode
-                    ? L10n.string("mine.offline_queue.selected_count", viewModel.selectedOfflineCacheWorkCount)
+                viewModel.isSelectionMode
+                    ? L10n.string("mine.offline_queue.selected_count", viewModel.selectedWorkCount)
                     : (group?.title ?? L10n.string("mine.download_queue"))
             )
             .task {
-                viewModel.setOfflineCacheQueueSelectionMode(false)
-                await viewModel.refreshOfflineCacheQueue()
+                viewModel.setSelectionMode(false)
+                await viewModel.refresh()
                 dismissIfGroupIsEmpty()
             }
             .refreshable {
-                await viewModel.refreshOfflineCacheQueue()
+                await viewModel.refresh()
                 dismissIfGroupIsEmpty()
             }
-            .onChange(of: viewModel.offlineCacheQueueEntryCount) {
+            .onChange(of: viewModel.entryCount) {
                 dismissIfGroupIsEmpty()
             }
             .onDisappear {
-                viewModel.setOfflineCacheQueueSelectionMode(false)
+                viewModel.setSelectionMode(false)
             }
             .toolbar {
-                if viewModel.isOfflineCacheQueueSelectionMode {
+                if viewModel.isSelectionMode {
                     ToolbarItem(placement: .cancellationAction) {
-                        MineOfflineCacheQueueSelectAllButton(
+                        OfflineCacheQueueSelectAllButton(
                             viewModel: viewModel,
                             groupID: groupID
                         )
@@ -393,34 +393,34 @@ private struct MineOfflineCacheQueueOwnerScreen: View {
                 ToolbarItem(placement: .primaryAction) {
                     if group != nil {
                         Button(
-                            viewModel.isOfflineCacheQueueSelectionMode
+                            viewModel.isSelectionMode
                                 ? L10n.string("common.done")
                                 : L10n.string("common.select")
                         ) {
-                            viewModel.setOfflineCacheQueueSelectionMode(!viewModel.isOfflineCacheQueueSelectionMode)
+                            viewModel.setSelectionMode(!viewModel.isSelectionMode)
                         }
-                        .disabled(viewModel.isOfflineCacheQueueCommandRunning)
+                        .disabled(viewModel.isCommandRunning)
                     }
                 }
 
-                if viewModel.isOfflineCacheQueueSelectionMode && usesSystemSelectionBottomToolbar {
+                if viewModel.isSelectionMode && usesSystemSelectionBottomToolbar {
                     ToolbarItem(placement: .bottomBar) {
-                        SelectionBottomToolbar(actions: MineOfflineCacheQueueSelectionActions.cancel(viewModel: viewModel))
+                        SelectionBottomToolbar(actions: OfflineCacheQueueSelectionActions.cancel(viewModel: viewModel))
                     }
                 }
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
-                if viewModel.isOfflineCacheQueueSelectionMode && !usesSystemSelectionBottomToolbar {
-                    SelectionBottomToolbar(actions: MineOfflineCacheQueueSelectionActions.cancel(viewModel: viewModel))
+                if viewModel.isSelectionMode && !usesSystemSelectionBottomToolbar {
+                    SelectionBottomToolbar(actions: OfflineCacheQueueSelectionActions.cancel(viewModel: viewModel))
                         .selectionBottomToolbarCapsule()
                 }
             }
             .overlay {
-                if viewModel.isLoadingOfflineCacheQueue {
+                if viewModel.isLoading {
                     ProgressView()
                 }
             }
-            .sensoryFeedback(.selection, trigger: viewModel.selectedOfflineCacheWorkIDs)
+            .sensoryFeedback(.selection, trigger: viewModel.selectedWorkIDs)
     }
 
     private func dismissIfGroupIsEmpty() {
@@ -430,8 +430,8 @@ private struct MineOfflineCacheQueueOwnerScreen: View {
     }
 }
 
-private struct MineOfflineCacheQueueChapterRowView: View {
-    let chapter: MineOfflineCacheQueueChapterRow
+private struct OfflineCacheQueueChapterRowView: View {
+    let chapter: OfflineCacheQueueChapterRow
     let isSelecting: Bool
     let isSelected: Bool
     let toggleSelection: () -> Void
@@ -516,7 +516,7 @@ private struct MineOfflineCacheQueueChapterRowView: View {
     }
 }
 
-private struct MineOfflineCacheQueueEmptyState: View {
+private struct OfflineCacheQueueEmptyState: View {
     var body: some View {
         VStack(spacing: 10) {
             Image(systemName: "tray")

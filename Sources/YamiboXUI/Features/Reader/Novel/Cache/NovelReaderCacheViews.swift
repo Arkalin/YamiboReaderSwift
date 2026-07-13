@@ -11,7 +11,7 @@ struct NovelReaderCachePanel: View {
     @State private var selectedViews: Set<Int> = []
     @State private var isQueuePresented = false
     @State private var isDeleteConfirmationPresented = false
-    @State private var queueViewModel: MineHomeViewModel
+    @State private var queueViewModel: OfflineCacheQueueViewModel
 
     init(cache: NovelReaderCacheCoordinator) {
         _cache = ObservedObject(wrappedValue: cache)
@@ -69,7 +69,7 @@ struct NovelReaderCachePanel: View {
                 }
             }
             .sheet(isPresented: $isQueuePresented) {
-                MineOfflineCacheQueueSheet(viewModel: queueViewModel)
+                OfflineCacheQueueSheet(viewModel: queueViewModel)
             }
             .confirmationDialog(
                 L10n.string(

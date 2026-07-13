@@ -28,7 +28,7 @@ struct ForumHomeView: View {
             }
         }
         .forumPageBackground()
-        .forumTransientMessage(model.transientMessage) {
+        .transientMessage(model.transientMessage) {
             model.clearTransientMessage()
         }
     }

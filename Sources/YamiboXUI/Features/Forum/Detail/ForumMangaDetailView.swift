@@ -125,7 +125,7 @@ struct ForumMangaDetailView: View {
                 }
             )
         }
-        .forumTransientMessage(model.transientMessage) {
+        .transientMessage(model.transientMessage) {
             model.clearTransientMessage()
         }
     }

@@ -116,7 +116,7 @@ struct ForumBoardView: View {
         } message: {
             Text(model.favoriteMessage ?? "")
         }
-        .forumTransientMessage(model.transientMessage) {
+        .transientMessage(model.transientMessage) {
             model.clearTransientMessage()
         }
         .task {

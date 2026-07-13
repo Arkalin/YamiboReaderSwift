@@ -5,7 +5,7 @@ import YamiboXCore
 #if os(iOS)
 struct MangaReaderCacheSheet: View {
     @StateObject private var model: MangaReaderCacheViewModel
-    @State private var queueViewModel: MineHomeViewModel
+    @State private var queueViewModel: OfflineCacheQueueViewModel
     @Environment(\.dismiss) private var dismiss
     @State private var isSelecting = false
     @State private var selectedTIDs: Set<String> = []
@@ -28,7 +28,7 @@ struct MangaReaderCacheSheet: View {
                 }
             )
         )
-        _queueViewModel = State(initialValue: MineHomeViewModel(dependencies: dependencies.account))
+        _queueViewModel = State(initialValue: OfflineCacheQueueViewModel(dependencies: dependencies.account))
     }
 
     var body: some View {
@@ -88,7 +88,7 @@ struct MangaReaderCacheSheet: View {
                 }
             }
             .sheet(isPresented: $isQueuePresented) {
-                MineOfflineCacheQueueSheet(viewModel: queueViewModel)
+                OfflineCacheQueueSheet(viewModel: queueViewModel)
             }
             .task {
                 await model.load()
@@ -140,7 +140,7 @@ struct MangaReaderCacheSheet: View {
         }
     }
 
-    private var selectionState: MangaNovelReaderCacheSelectionState {
+    private var selectionState: ReaderCacheSelectionState {
         model.selectionState(for: selectedTIDs)
     }
 
