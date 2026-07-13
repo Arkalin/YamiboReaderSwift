@@ -311,9 +311,9 @@ private struct BrowsingHistoryRow: View {
 
             if canToggleFavorite {
                 Button(action: onToggleFavorite) {
-                    Image(systemName: isFavorited ? "heart.fill" : "heart")
+                    Image(systemName: isFavorited ? "star.fill" : "star")
                         .font(.body)
-                        .foregroundStyle(isFavorited ? Color.pink : Color.secondary)
+                        .foregroundStyle(isFavorited ? Color.yellow : Color.secondary)
                         .frame(width: 34, height: 34)
                         .contentShape(Rectangle())
                 }
