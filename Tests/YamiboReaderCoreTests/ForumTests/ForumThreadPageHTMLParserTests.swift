@@ -110,6 +110,7 @@ import Testing
 
     let post = try #require(page.posts.first)
     #expect(post.floorText == "1#")
+    #expect(post.postedAtText == "2024-3-16 01:44")
     #expect(post.author.uid == "397633")
     #expect(post.images == [
         ForumThreadPostImage(
@@ -121,6 +122,69 @@ import Testing
         ThreadCoverResolver.findThreadCoverCandidate(in: page)?.absoluteString ==
         "https://bbs.yamibo.com/data/attachment/forum/202405/12/194518v77x7wqd77x75hw9.png"
     )
+}
+
+@Test func forumThreadPageParserExtractsMobileDiscuzPostedAtWithViewCountNoise() throws {
+    // Regression coverage for the real bbs.yamibo.com mobile-theme markup (fetched with
+    // the app's own mobile User-Agent + `mobile=2`): the thread's first floor concatenates
+    // the view/reply-count digits directly in front of the date with no separator
+    // ("189623" immediately before "2026-7-5 11:49"), and non-first floors are a bare
+    // "<li class=\"mtime\">" date with no "发表于" prefix at all.
+    let page = try ForumThreadPageHTMLParser.parsePage(
+        from: #"""
+        <html>
+        <head><title>普通讨论 - 百合会</title></head>
+        <body>
+          <div class="plc cl" id="pid41575986">
+            <div class="display pi pione" href="#replybtn_41575986">
+              <ul class="authi">
+                <li class="mtit">
+                  <span class="y">1<sup>#</sup></span>
+                  <span class="z"><a href="home.php?mod=space&amp;uid=729432&amp;mobile=2">longzi43</a></span>
+                </li>
+                <li class="mtime"><span class="y"><em>1896</em><em>23</em></span>2026-7-5 11:49</li>
+              </ul>
+              <div class="message">正文</div>
+            </div>
+          </div>
+          <div class="plc cl" id="pid41576018">
+            <div class="display pi" href="#replybtn_41576018">
+              <ul class="authi">
+                <li class="mtit">
+                  <span class="y">2<sup>#</sup></span>
+                  <span class="z"><a href="home.php?mod=space&amp;uid=706656&amp;mobile=2">读者甲</a></span>
+                </li>
+                <li class="mtime">2026-7-5 12:51</li>
+              </ul>
+              <div class="message">回复内容</div>
+            </div>
+          </div>
+          <div class="plc cl" id="pid41576020">
+            <div class="display pi" href="#replybtn_41576020">
+              <ul class="authi">
+                <li class="mtit">
+                  <span class="y">3<sup>#</sup></span>
+                  <span class="z"><a href="home.php?mod=space&amp;uid=706657&amp;mobile=2">读者乙</a></span>
+                </li>
+                <li class="mtime">昨天 09:12</li>
+              </ul>
+              <div class="message">回复内容2</div>
+            </div>
+          </div>
+        </body>
+        </html>
+        """#,
+        thread: ThreadIdentity(tid: "573280"),
+        fallbackTitle: nil
+    )
+
+    #expect(page.posts.count == 3)
+    #expect(page.posts[0].floorText == "1#")
+    #expect(page.posts[0].postedAtText == "2026-7-5 11:49")
+    #expect(page.posts[1].floorText == "2#")
+    #expect(page.posts[1].postedAtText == "2026-7-5 12:51")
+    #expect(page.posts[2].floorText == "3#")
+    #expect(page.posts[2].postedAtText == "昨天 09:12")
 }
 
 @Test func forumThreadPageParserCoverImagesMatchAndroidSrcOnlyExtraction() throws {

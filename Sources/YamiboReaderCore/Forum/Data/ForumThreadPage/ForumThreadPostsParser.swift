@@ -139,9 +139,29 @@ enum ForumThreadPostsParser {
     }
 
     private static func postedAtText(in container: Element) -> String? {
-        let text = container.selectFirst(".authi")?.normalizedText() ?? ""
-        return HTMLTextExtractor.firstMatch(pattern: #"(发表于|發表於)\s*([^|#]+)"#, in: text)?
+        // Desktop-style markup prefixes the date with "发表于"/"發表於" inside `.authi`.
+        let prefixedText = container.selectFirst(".authi")?.normalizedText() ?? ""
+        if let prefixed = HTMLTextExtractor.firstMatch(pattern: #"(发表于|發表於)\s*([^|#]+)"#, in: prefixedText)?
             .dropFirst()
+            .dropFirst()
+            .first?
+            .nilIfBlank {
+            return prefixed
+        }
+
+        // The mobile Discuz theme (what the app actually requests — see
+        // YamiboNetworkConfiguration.defaultMobileUserAgent) has no such prefix:
+        // `.mtime` holds a bare date/relative-time string, occasionally preceded
+        // by concatenated view/reply-count digits on the thread's first floor
+        // (e.g. "189623" immediately before "2026-7-5 11:49"), so pull out just
+        // the date/relative-time shape rather than trusting the whole node text.
+        // Scoped to `.authi .mtime` (not the whole container) so a coincidental
+        // "mtime"-classed element inside a quoted reply body can't be picked up.
+        let mtimeText = container.firstText(".authi .mtime") ?? ""
+        return HTMLTextExtractor.firstMatch(
+            pattern: #"(\d{4}[-/]\d{1,2}[-/]\d{1,2}(?:\s+\d{1,2}:\d{2})?|昨天\s*\d{1,2}:\d{2}|前天\s*\d{1,2}:\d{2}|刚刚|\d+\s*(?:秒|分钟|小时|天)前)"#,
+            in: mtimeText
+        )?
             .dropFirst()
             .first?
             .nilIfBlank
