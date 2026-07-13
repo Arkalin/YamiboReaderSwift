@@ -88,6 +88,7 @@ struct OfflineCacheManagementView: View {
             }
             #endif
         }
+        .toolbar(viewModel.isOfflineCacheManagementSelectionMode ? .hidden : .automatic, for: .tabBar)
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if viewModel.isOfflineCacheManagementSelectionMode && !usesSystemSelectionBottomToolbar {
                 SelectionBottomToolbar(

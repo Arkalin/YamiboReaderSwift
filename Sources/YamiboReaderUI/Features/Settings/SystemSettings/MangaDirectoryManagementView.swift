@@ -84,6 +84,7 @@ struct MangaDirectoryManagementView: View {
             }
             #endif
         }
+        .toolbar(viewModel.isMangaDirectoryManagementSelectionMode ? .hidden : .automatic, for: .tabBar)
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if viewModel.isMangaDirectoryManagementSelectionMode && !usesSystemSelectionBottomToolbar {
                 SelectionBottomToolbar(
