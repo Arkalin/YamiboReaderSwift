@@ -32,15 +32,22 @@ struct SelectionToolbarAction: Identifiable {
 struct SelectionBottomToolbar: View {
     let actions: [SelectionToolbarAction]
 
+    /// Matches the system tab bar's item title (`UITabBarItem` defaults to
+    /// `UIFont.systemFont(ofSize: 10)`) — one point below `.caption2`, the
+    /// smallest built-in `Font.TextStyle`, so no semantic style reaches it.
+    /// `@ScaledMetric` keeps this fixed base scaling with Dynamic Type the
+    /// way a plain `.system(size:)` wouldn't.
+    @ScaledMetric(relativeTo: .caption2) private var captionFontSize: CGFloat = 10
+
     var body: some View {
         SelectionToolbarEqualWidthLayout {
             ForEach(actions) { action in
                 Button(role: action.role, action: action.action) {
                     VStack(spacing: 4) {
                         Image(systemName: action.systemImage)
-                            .font(.title3)
+                            .font(.body)
                         Text(action.title)
-                            .font(.caption2)
+                            .font(.system(size: captionFontSize))
                             .lineLimit(1)
                     }
                     .padding(.horizontal, 12)
