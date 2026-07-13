@@ -19,6 +19,14 @@ enum MangaPagedLayoutPolicy {
     ) -> MangaPageScaleMode {
         usesTwoPageSpread ? .fitWidth : settings.pageScaleMode
     }
+
+    /// Vertical (scroll) mode always flows continuously under the notch
+    /// regardless of the "ignore top safe area" toggle, so this only ever
+    /// reserves space in paged mode when the user turned the toggle off.
+    static func pagedContentTopInset(settings: MangaReaderSettings, topInset: CGFloat) -> CGFloat {
+        guard settings.readingMode == .paged, !settings.ignoresTopSafeArea else { return 0 }
+        return topInset
+    }
 }
 
 enum MangaPagedViewportResizePolicy {

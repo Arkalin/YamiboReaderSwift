@@ -684,6 +684,7 @@
 "manga.page_edge_fill.white" = "白色";
 "manga.page_edge_fill.black" = "黑色";
 "manga.page_edge_fill.system" = "跟随系统";
+"manga.ignores_top_safe_area" = "忽略顶部安全区";
 "manga.preview_page" = "第 %d / %d 页";
 "manga.preview_page_label" = "第 %@ / %d 页";
 "manga.delete_selected_chapters_confirm_title" = "删除所选 %d 个章节？";
