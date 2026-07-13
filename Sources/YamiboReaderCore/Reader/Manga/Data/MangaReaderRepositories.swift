@@ -100,6 +100,14 @@ public protocol MangaDirectoryPersisting: Sendable {
     func directories(containingTIDs tids: [String]) async throws -> [String: MangaDirectory]
     func saveDirectory(_ directory: MangaDirectory) async throws
     func deleteDirectory(named name: String) async throws
+    /// Instance identity for filtering `MangaDirectoryStore
+    /// .didChangeNotification` (a static, type-level `Notification.Name`
+    /// reachable from any conformer) down to notifications this exact
+    /// instance posted — mirrors `ContentCoverStore`/`FavoriteLibraryStore`'s
+    /// own `changeID` pattern. Defaulted below for every conformer except the
+    /// real `MangaDirectoryStore`, which never posts through this protocol
+    /// and so never needs a listener to match against it.
+    nonisolated var changeID: String { get }
 }
 
 public extension MangaDirectoryPersisting {
@@ -112,6 +120,8 @@ public extension MangaDirectoryPersisting {
         }
         return result
     }
+
+    nonisolated var changeID: String { "" }
 }
 
 protocol MangaDirectoryRenaming: Sendable {

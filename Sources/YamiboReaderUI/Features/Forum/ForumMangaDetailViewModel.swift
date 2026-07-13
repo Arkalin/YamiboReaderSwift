@@ -40,6 +40,7 @@ final class ForumMangaDetailViewModel {
     @ObservationIgnored private var readingProgressUpdatesTask: Task<Void, Never>?
     @ObservationIgnored private var contentCoverUpdatesTask: Task<Void, Never>?
     @ObservationIgnored private var favoriteUpdatesTask: Task<Void, Never>?
+    @ObservationIgnored private var mangaDirectoryUpdatesTask: Task<Void, Never>?
     @ObservationIgnored private var automaticDirectoryUpdateTask: Task<Void, Never>?
     @ObservationIgnored private var automaticCoverResolutionTask: Task<Void, Never>?
     @ObservationIgnored private var attemptedAutomaticCoverBookNames: Set<String> = []
@@ -107,12 +108,32 @@ final class ForumMangaDetailViewModel {
                 await self.refreshFavorite(from: localFavoriteLibraryStore)
             }
         }
+        // Without this, renaming/updating this manga's directory from
+        // elsewhere while this page stays open — the manga reader's own
+        // directory sheet, a background smart-manga update check
+        // ([[smart-manga-update-check-design]]) — would leave `directory`
+        // (and the `.smartManga` cover derived from its `cleanBookName`)
+        // stale until some unrelated action happened to trigger a reload.
+        // Mirrors `FavoriteLibraryOrganizer.reloadMangaDirectories()`'s
+        // listener for the Favorites tab.
+        mangaDirectoryUpdatesTask = Task { @MainActor [weak self, mangaDirectoryStore = dependencies.mangaDirectoryStore] in
+            for await notification in NotificationCenter.default.notifications(named: MangaDirectoryStore.didChangeNotification) {
+                guard !Task.isCancelled else { return }
+                guard let self else { return }
+                guard let changeID = notification.userInfo?[MangaDirectoryStore.changeIDUserInfoKey] as? String,
+                      changeID == mangaDirectoryStore.changeID else {
+                    continue
+                }
+                await self.reloadDirectoryAfterExternalChange()
+            }
+        }
     }
 
     deinit {
         readingProgressUpdatesTask?.cancel()
         contentCoverUpdatesTask?.cancel()
         favoriteUpdatesTask?.cancel()
+        mangaDirectoryUpdatesTask?.cancel()
         automaticDirectoryUpdateTask?.cancel()
         automaticCoverResolutionTask?.cancel()
         directoryTickTask?.cancel()
@@ -691,6 +712,25 @@ final class ForumMangaDetailViewModel {
             return nil
         }
         return await dependencies.contentCoverStore.cover(for: .smartManga(cleanBookName: cleanBookName))
+    }
+
+    /// Re-resolves `directory` (and its derived `contentCover`/
+    /// `readingProgress`) in response to `MangaDirectoryStore
+    /// .didChangeNotification` fired by a rename or update performed
+    /// elsewhere while this page stays open. Looks the directory back up by
+    /// `context.thread.tid` — stable across a rename, unlike `cleanBookName`
+    /// itself (the directory's own primary key) — rather than trusting the
+    /// already-loaded `directory` value, which is exactly what this handler
+    /// exists to correct. Skipped while `directory` is still nil so this
+    /// never races ahead of the initial `reload()`.
+    private func reloadDirectoryAfterExternalChange() async {
+        guard directory != nil,
+              let refreshed = try? await dependencies.mangaDirectoryStore.directory(containingTID: context.thread.tid) else {
+            return
+        }
+        directory = refreshed
+        readingProgress = await loadReadingProgress()
+        contentCover = await loadContentCover()
     }
 
     /// Resolves a missing `.smartManga` automatic cover for the loaded
