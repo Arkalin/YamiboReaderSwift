@@ -1,7 +1,7 @@
 import Foundation
 import Testing
 @preconcurrency import GRDB
-@testable import YamiboReaderCore
+@testable import YamiboXCore
 
 @Test func likeWorkKeyDerivesFromFavoriteContentTargetAndExcludesNormalThreads() {
     #expect(LikeWorkKey(target: .novelThread(threadID: "500")) == LikeWorkKey.novel(threadID: "500"))

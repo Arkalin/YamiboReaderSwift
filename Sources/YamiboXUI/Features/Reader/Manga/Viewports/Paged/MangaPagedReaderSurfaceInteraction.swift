@@ -1,6 +1,6 @@
 import SwiftUI
 import Combine
-import YamiboReaderCore
+import YamiboXCore
 
 #if os(iOS)
 import UIKit

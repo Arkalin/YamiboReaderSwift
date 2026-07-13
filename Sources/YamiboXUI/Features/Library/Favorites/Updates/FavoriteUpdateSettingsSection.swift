@@ -2,7 +2,7 @@ import SwiftUI
 #if canImport(UIKit)
 import UIKit
 #endif
-import YamiboReaderCore
+import YamiboXCore
 
 /// The automatic-check-interval picker, smart-manga-interval picker, and
 /// notification toggle, shared between `FavoriteUpdatesPage` (behind the

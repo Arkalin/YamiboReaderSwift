@@ -30,7 +30,7 @@ public actor ForumCacheStore {
         } else {
             // An injected directory hosts both the database and the cache
             // files (tests); the no-argument fallback mirrors the app context:
-            // yamibo.sqlite in Application Support, yamibo-cache in Caches.
+            // yamibox.sqlite in Application Support, yamibox-cache in Caches.
             let injectedRootDirectory = rootDirectory ?? baseDirectory
             let resolvedDatabase = databasePool ?? Self.openDatabase(
                 rootDirectory: injectedRootDirectory ?? YamiboDatabase.defaultRootDirectory(fileManager: fileManager),

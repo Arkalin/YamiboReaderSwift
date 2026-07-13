@@ -1,6 +1,6 @@
 import Foundation
 import SwiftUI
-import YamiboReaderCore
+import YamiboXCore
 import UIKit
 
 struct MineAvatarView: View {

@@ -16,9 +16,9 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "244F46FBACBE47D1E8CB35A0"
-               BuildableName = "YamiboReader.app"
-               BlueprintName = "YamiboReader"
-               ReferencedContainer = "container:YamiboReader.xcodeproj">
+               BuildableName = "YamiboX.app"
+               BlueprintName = "YamiboX"
+               ReferencedContainer = "container:YamiboX.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
          <BuildActionEntry
@@ -30,9 +30,9 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "91A00000000000000000002A"
-               BuildableName = "YamiboReaderCoreTests.xctest"
-               BlueprintName = "YamiboReaderCoreTests"
-               ReferencedContainer = "container:YamiboReader.xcodeproj">
+               BuildableName = "YamiboXCoreTests.xctest"
+               BlueprintName = "YamiboXCoreTests"
+               ReferencedContainer = "container:YamiboX.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
          <BuildActionEntry
@@ -44,9 +44,9 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "91A000000000000000000010"
-               BuildableName = "YamiboReaderUITests.xctest"
-               BlueprintName = "YamiboReaderUITests"
-               ReferencedContainer = "container:YamiboReader.xcodeproj">
+               BuildableName = "YamiboXUITests.xctest"
+               BlueprintName = "YamiboXUITests"
+               ReferencedContainer = "container:YamiboX.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
       </BuildActionEntries>
@@ -55,11 +55,10 @@
       buildConfiguration = "Debug"
       selectedDebuggerIdentifier = "Xcode.DebuggerFoundation.Debugger.LLDB"
       selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
-      shouldUseLaunchSchemeArgsEnv = "YES"
-      shouldAutocreateTestPlan = "NO">
+      shouldUseLaunchSchemeArgsEnv = "YES">
       <TestPlans>
          <TestPlanReference
-            reference = "container:YamiboReaderTests.xctestplan"
+            reference = "container:YamiboXTests.xctestplan"
             default = "YES">
          </TestPlanReference>
       </TestPlans>
@@ -79,9 +78,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "244F46FBACBE47D1E8CB35A0"
-            BuildableName = "YamiboReader.app"
-            BlueprintName = "YamiboReader"
-            ReferencedContainer = "container:YamiboReader.xcodeproj">
+            BuildableName = "YamiboX.app"
+            BlueprintName = "YamiboX"
+            ReferencedContainer = "container:YamiboX.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </LaunchAction>
@@ -96,9 +95,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "244F46FBACBE47D1E8CB35A0"
-            BuildableName = "YamiboReader.app"
-            BlueprintName = "YamiboReader"
-            ReferencedContainer = "container:YamiboReader.xcodeproj">
+            BuildableName = "YamiboX.app"
+            BlueprintName = "YamiboX"
+            ReferencedContainer = "container:YamiboX.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </ProfileAction>

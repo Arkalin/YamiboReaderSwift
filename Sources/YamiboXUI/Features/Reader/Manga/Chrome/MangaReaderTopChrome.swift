@@ -1,5 +1,5 @@
 import SwiftUI
-import YamiboReaderCore
+import YamiboXCore
 
 #if os(iOS)
 struct MangaReaderTopChrome: View {

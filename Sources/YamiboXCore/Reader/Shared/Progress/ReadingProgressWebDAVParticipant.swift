@@ -5,7 +5,7 @@ import Foundation
 /// newest-record-wins merge semantics for progress records.
 struct ReadingProgressWebDAVParticipant: WebDAVSyncParticipant {
     let datasetID = "readingProgress"
-    let remoteFileName = "yamibo-reading-progress-v1.json"
+    let remoteFileName = "yamibox-reading-progress-v1.json"
     let uploadsOnlyWhenMarkedDirty = true
 
     private let store: ReadingProgressStore

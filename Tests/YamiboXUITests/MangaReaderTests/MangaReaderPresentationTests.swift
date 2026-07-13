@@ -1,7 +1,7 @@
 import XCTest
-@testable import YamiboReaderCore
-import YamiboReaderTestSupport
-@testable import YamiboReaderUI
+@testable import YamiboXCore
+import YamiboXTestSupport
+@testable import YamiboXUI
 
 @MainActor
 final class MangaReaderPresentationTests: XCTestCase {
@@ -100,7 +100,7 @@ final class MangaReaderPresentationTests: XCTestCase {
 
         AppModelWebDAVTestURLProtocol.setHandler(for: host) { request in
             XCTAssertEqual(request.httpMethod, "GET")
-            guard request.url?.lastPathComponent == "yamibo-reading-progress-v1.json" else {
+            guard request.url?.lastPathComponent == "yamibox-reading-progress-v1.json" else {
                 return (
                     Data(),
                     HTTPURLResponse(url: request.url!, statusCode: 404, httpVersion: nil, headerFields: nil)!
@@ -184,7 +184,7 @@ final class MangaReaderPresentationTests: XCTestCase {
 
         AppModelWebDAVTestURLProtocol.setHandler(for: host) { request in
             XCTAssertEqual(request.httpMethod, "GET")
-            guard request.url?.lastPathComponent == "yamibo-reading-progress-v1.json" else {
+            guard request.url?.lastPathComponent == "yamibox-reading-progress-v1.json" else {
                 return (
                     Data(),
                     HTTPURLResponse(url: request.url!, statusCode: 404, httpVersion: nil, headerFields: nil)!

@@ -1,5 +1,5 @@
 import SwiftUI
-import YamiboReaderCore
+import YamiboXCore
 
 struct ForumThreadRubySegment: Identifiable {
     var id = UUID()

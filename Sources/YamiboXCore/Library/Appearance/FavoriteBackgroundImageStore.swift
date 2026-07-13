@@ -17,7 +17,7 @@ public actor FavoriteBackgroundImageStore {
         self.fileManager = fileManager
         self.baseDirectory = baseDirectory
             ?? fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
-            .appendingPathComponent("YamiboReader", isDirectory: true)
+            .appendingPathComponent("YamiboX", isDirectory: true)
             .appendingPathComponent("favorite-background", isDirectory: true)
             ?? URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("favorite-background", isDirectory: true)
     }

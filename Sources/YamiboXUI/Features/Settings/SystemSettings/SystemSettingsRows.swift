@@ -1,5 +1,5 @@
 import SwiftUI
-import YamiboReaderCore
+import YamiboXCore
 
 struct SystemSettingsHomePageSelector: View {
     let homePage: AppHomePage

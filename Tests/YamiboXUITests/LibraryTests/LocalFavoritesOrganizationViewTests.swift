@@ -1,8 +1,8 @@
 import SwiftUI
 import Testing
-@testable import YamiboReaderCore
-import YamiboReaderTestSupport
-@testable import YamiboReaderUI
+@testable import YamiboXCore
+import YamiboXTestSupport
+@testable import YamiboXUI
 
 @MainActor
 @Test func localFavoritesOrganizationViewIsConstructibleWithNativeOrganizationData() async throws {

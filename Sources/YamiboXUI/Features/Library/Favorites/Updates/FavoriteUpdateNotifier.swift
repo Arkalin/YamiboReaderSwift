@@ -1,6 +1,6 @@
 import Foundation
 import UserNotifications
-import YamiboReaderCore
+import YamiboXCore
 
 /// A favorite-update local notification ready for delivery. The identifier is
 /// stable per favorite target so a re-detection for the same favorite

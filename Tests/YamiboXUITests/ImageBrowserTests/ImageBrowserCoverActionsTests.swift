@@ -1,7 +1,7 @@
 import XCTest
-@testable import YamiboReaderCore
-import YamiboReaderTestSupport
-@testable import YamiboReaderUI
+@testable import YamiboXCore
+import YamiboXTestSupport
+@testable import YamiboXUI
 
 /// Covers smart-comic-mode design decision #16: the "设为漫画封面：《书名》"
 /// entry (and its restore-manga-cover counterpart) must disappear entirely

@@ -1,6 +1,6 @@
 import Foundation
 import SwiftUI
-import YamiboReaderCore
+import YamiboXCore
 
 struct MineProfileSection: View {
     let profile: YamiboProfile?

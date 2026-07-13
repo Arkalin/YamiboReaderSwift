@@ -1,5 +1,5 @@
 import SwiftUI
-import YamiboReaderCore
+import YamiboXCore
 
 /// Confirmation dialogs for the favorite quick actions: "sync to Yamibo?" on
 /// add and "also delete from Yamibo?" on remove, each with remember-choice

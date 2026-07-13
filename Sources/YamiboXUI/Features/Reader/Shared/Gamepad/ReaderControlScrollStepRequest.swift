@@ -1,5 +1,5 @@
 import Foundation
-import YamiboReaderCore
+import YamiboXCore
 
 /// One-shot "scroll one viewport" command for the vertical viewports,
 /// deduplicated by `revision` like `MangaNovelReaderViewportPlacement`.

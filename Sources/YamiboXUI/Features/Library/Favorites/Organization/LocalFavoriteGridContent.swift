@@ -1,5 +1,5 @@
 import SwiftUI
-import YamiboReaderCore
+import YamiboXCore
 
 /// Fixed-grid and staggered layouts for the favorites screen. Collections
 /// and favorite items share one grid, merged into the sort order the user

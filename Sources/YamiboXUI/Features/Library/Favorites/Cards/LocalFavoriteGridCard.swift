@@ -1,5 +1,5 @@
 import SwiftUI
-import YamiboReaderCore
+import YamiboXCore
 
 /// One favorite card in the grid layouts: 3:4 cover, two-line title, source,
 /// plain time lines, tag chips. No visible buttons — tap resumes reading,

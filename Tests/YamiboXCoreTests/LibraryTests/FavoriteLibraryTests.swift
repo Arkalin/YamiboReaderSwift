@@ -1,7 +1,7 @@
 import Foundation
 import Testing
 @preconcurrency import GRDB
-@testable import YamiboReaderCore
+@testable import YamiboXCore
 
 @Test func localFirstFavoriteLibraryInitializesWithDefaultFavoriteCategory() {
     let document = FavoriteLibraryDocument()

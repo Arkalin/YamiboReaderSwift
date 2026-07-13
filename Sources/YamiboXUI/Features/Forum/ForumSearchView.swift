@@ -1,5 +1,5 @@
 import SwiftUI
-import YamiboReaderCore
+import YamiboXCore
 
 struct ForumSearchView: View {
     @State private var model: ForumSearchViewModel

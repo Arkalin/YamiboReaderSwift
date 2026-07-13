@@ -1,8 +1,8 @@
 import Foundation
 @preconcurrency import GRDB
 import Testing
-@testable import YamiboReaderCore
-import YamiboReaderTestSupport
+@testable import YamiboXCore
+import YamiboXTestSupport
 
 @Suite("MangaReaderTests: Manga Offline Cache Persistence")
 struct MangaReaderTestsMangaOfflineCachePersistence {

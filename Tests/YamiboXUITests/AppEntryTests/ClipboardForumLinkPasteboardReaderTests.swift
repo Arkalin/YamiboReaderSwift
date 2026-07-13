@@ -1,5 +1,5 @@
 import XCTest
-@testable import YamiboReaderUI
+@testable import YamiboXUI
 
 #if os(iOS)
 @MainActor

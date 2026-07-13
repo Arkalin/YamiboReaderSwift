@@ -1,5 +1,5 @@
 import SwiftUI
-import YamiboReaderCore
+import YamiboXCore
 
 /// Row-card layout for the favorites screen. Collections and favorite items
 /// share one list section, merged into the sort order the user picked

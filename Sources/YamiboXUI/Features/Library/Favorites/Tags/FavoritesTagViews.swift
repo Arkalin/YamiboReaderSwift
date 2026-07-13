@@ -1,5 +1,5 @@
 import SwiftUI
-import YamiboReaderCore
+import YamiboXCore
 
 extension FavoriteTagSortOrder {
     /// User-facing label for the tag sort menu; presentation mapping lives
@@ -50,7 +50,7 @@ struct FavoriteTagPickerView: View {
     @ObservedObject var organizer: FavoriteLibraryOrganizer
     let draft: LocalFavoriteTagSelectionDraft
 
-    @AppStorage("yamibo.favorite.tag.sort") private var sortRawValue = FavoriteTagSortOrder.manual.rawValue
+    @AppStorage("yamibox.favorite.tag.sort") private var sortRawValue = FavoriteTagSortOrder.manual.rawValue
     @State private var selectedTagIDs: Set<String>
     @State private var searchText = ""
     @State private var editorDraft: FavoriteTagEditorDraft?

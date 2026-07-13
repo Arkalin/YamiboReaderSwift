@@ -1,5 +1,5 @@
 import Foundation
-import YamiboReaderCore
+import YamiboXCore
 
 /// Deletes the Yamibo remote counterparts of local favorites when the user
 /// removes items "everywhere". Falls back to a remote favorite-list lookup

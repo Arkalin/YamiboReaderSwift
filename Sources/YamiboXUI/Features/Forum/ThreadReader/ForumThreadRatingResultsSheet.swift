@@ -1,5 +1,5 @@
 import SwiftUI
-import YamiboReaderCore
+import YamiboXCore
 
 struct ForumThreadRatingResultsRequest: Identifiable, Equatable {
     var postID: String

@@ -1,6 +1,6 @@
-# YamiboReader Swift
+# Yamibo X
 
-`YamiboReader Swift` 是一个面向百合会内容的小说 / 漫画阅读器 SwiftUI 实现。项目包含可复用的核心解析与数据层、SwiftUI 界面层，以及一个独立 iOS App 入口。
+`Yamibo X` 是一个面向百合会内容的小说 / 漫画阅读器 SwiftUI 实现。项目包含可复用的核心解析与数据层、SwiftUI 界面层，以及一个独立 iOS App 入口。
 
 ## 界面预览
 
@@ -76,9 +76,9 @@
 
 仓库通过 [`Package.swift`](Package.swift) 定义核心模块：
 
-- `YamiboReaderCore`：数据模型、网络访问、HTML 解析、缓存、同步与本地存储
-- `YamiboReaderUI`：SwiftUI 界面、论坛容器、收藏页、小说阅读器与漫画阅读器
-- `YamiboReaderTestSupport`：跨测试目标共享的测试基础设施
+- `YamiboXCore`：数据模型、网络访问、HTML 解析、缓存、同步与本地存储
+- `YamiboXUI`：SwiftUI 界面、论坛容器、收藏页、小说阅读器与漫画阅读器
+- `YamiboXTestSupport`：跨测试目标共享的测试基础设施
 
 依赖：
 
@@ -90,9 +90,9 @@
 
 ```bash
 xcodebuild test \
-  -project YamiboReader.xcodeproj \
-  -scheme YamiboReader \
-  -testPlan YamiboReaderTests \
+  -project YamiboX.xcodeproj \
+  -scheme YamiboX \
+  -testPlan YamiboXTests \
   -destination 'platform=iOS Simulator,name=iPhone 16' \
   -collect-test-diagnostics never \
   CODE_SIGNING_ALLOWED=NO
@@ -100,18 +100,18 @@ xcodebuild test \
 
 ### iOS App
 
-iOS App 入口位于 [`YamiboReader/YamiboReaderApp.swift`](YamiboReader/YamiboReaderApp.swift)，对应的 Xcode 工程位于 [`YamiboReader.xcodeproj`](YamiboReader.xcodeproj)。
+iOS App 入口位于 [`YamiboX/YamiboXApp.swift`](YamiboX/YamiboXApp.swift)，对应的 Xcode 工程位于 [`YamiboX.xcodeproj`](YamiboX.xcodeproj)。
 
-如果需要在模拟器或真机中运行，使用 Xcode 打开工程并构建 `YamiboReader` App target。
+如果需要在模拟器或真机中运行，使用 Xcode 打开工程并构建 `YamiboX` App target。
 
 ## 项目结构
 
-- [`Sources/YamiboReaderCore`](Sources/YamiboReaderCore)：核心模型、网络访问、解析、同步、缓存与存储，按 feature 目录组织，基础设施位于 `Infrastructure/`
-- [`Sources/YamiboReaderUI`](Sources/YamiboReaderUI)：SwiftUI 界面、论坛 Web 容器、阅读器和收藏管理，按 `Features/` 组织，跨 feature 组件位于 `Platform/`
-- [`Sources/YamiboReaderTestSupport`](Sources/YamiboReaderTestSupport)：测试目标共享的测试支撑代码
-- [`YamiboReader`](YamiboReader)：独立 iOS App 入口、资源和系统集成能力
-- [`Tests/YamiboReaderCoreTests`](Tests/YamiboReaderCoreTests)：核心解析、缓存、存储、签到与 WebDAV 同步测试
-- [`Tests/YamiboReaderUITests`](Tests/YamiboReaderUITests)：界面模型、路由、阅读器状态和漫画流程测试
+- [`Sources/YamiboXCore`](Sources/YamiboXCore)：核心模型、网络访问、解析、同步、缓存与存储，按 feature 目录组织，基础设施位于 `Infrastructure/`
+- [`Sources/YamiboXUI`](Sources/YamiboXUI)：SwiftUI 界面、论坛 Web 容器、阅读器和收藏管理，按 `Features/` 组织，跨 feature 组件位于 `Platform/`
+- [`Sources/YamiboXTestSupport`](Sources/YamiboXTestSupport)：测试目标共享的测试支撑代码
+- [`YamiboX`](YamiboX)：独立 iOS App 入口、资源和系统集成能力
+- [`Tests/YamiboXCoreTests`](Tests/YamiboXCoreTests)：核心解析、缓存、存储、签到与 WebDAV 同步测试
+- [`Tests/YamiboXUITests`](Tests/YamiboXUITests)：界面模型、路由、阅读器状态和漫画流程测试
 
 ## TODO
 

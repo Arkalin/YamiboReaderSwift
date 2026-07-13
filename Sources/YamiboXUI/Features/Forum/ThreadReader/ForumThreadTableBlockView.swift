@@ -1,5 +1,5 @@
 import SwiftUI
-import YamiboReaderCore
+import YamiboXCore
 
 struct ForumThreadTableBlockView: View {
     let rows: [[ForumThreadTableCell]]

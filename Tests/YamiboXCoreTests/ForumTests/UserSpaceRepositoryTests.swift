@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import YamiboReaderCore
+@testable import YamiboXCore
 
 private final class UserSpaceRepositoryTestURLProtocol: URLProtocol {
     typealias Handler = (URLRequest) throws -> (Data, HTTPURLResponse)

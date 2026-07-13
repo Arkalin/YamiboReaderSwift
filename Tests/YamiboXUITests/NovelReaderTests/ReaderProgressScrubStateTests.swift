@@ -1,6 +1,6 @@
 import XCTest
-@testable import YamiboReaderCore
-@testable import YamiboReaderUI
+@testable import YamiboXCore
+@testable import YamiboXUI
 
 final class ReaderProgressScrubStateTests: XCTestCase {
     func testReaderChromeProgressMapsScrubFractionToNeutralTargetIndex() {

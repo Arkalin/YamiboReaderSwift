@@ -1,5 +1,5 @@
 import SwiftUI
-import YamiboReaderCore
+import YamiboXCore
 
 struct NovelReaderPagedPageCurlLeaf: Hashable {
     enum Kind: Hashable {

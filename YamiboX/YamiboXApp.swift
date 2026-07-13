@@ -6,11 +6,11 @@ import AppIntents
 import UIKit
 import UserNotifications
 #endif
-import YamiboReaderCore
-import YamiboReaderUI
+import YamiboXCore
+import YamiboXUI
 
 @main
-struct YamiboReaderApp: App {
+struct YamiboXApp: App {
     #if os(iOS)
     @UIApplicationDelegateAdaptor(YamiboAppDelegate.self) private var appDelegate
     #endif
@@ -19,7 +19,7 @@ struct YamiboReaderApp: App {
     @State private var showsLaunchAnimation = true
 
     init() {
-        let initialTab = YamiboReaderApp.resolveInitialTab()
+        let initialTab = YamiboXApp.resolveInitialTab()
         let appContext = YamiboAppContext(ordinaryImageCache: YamiboUIImagePipeline.shared)
         #if os(iOS)
         YamiboAppDelegate.appContext = appContext

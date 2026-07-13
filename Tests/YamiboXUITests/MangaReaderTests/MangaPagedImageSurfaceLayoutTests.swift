@@ -1,7 +1,7 @@
 import CoreGraphics
 import Testing
-@testable import YamiboReaderCore
-@testable import YamiboReaderUI
+@testable import YamiboXCore
+@testable import YamiboXUI
 
 @Suite("MangaReaderTests: Paged Image Surface Layout")
 struct MangaPagedImageSurfaceLayoutTests {

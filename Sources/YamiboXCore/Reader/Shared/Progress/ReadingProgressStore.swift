@@ -2,7 +2,7 @@ import Foundation
 @preconcurrency import GRDB
 
 public actor ReadingProgressStore {
-    public static let didChangeNotification = Notification.Name("yamibo.readingProgressStore.didChange")
+    public static let didChangeNotification = Notification.Name("yamibox.readingProgressStore.didChange")
     public static let changeIDUserInfoKey = "changeID"
     nonisolated(unsafe) private static var databasePoolCache: [String: DatabasePool] = [:]
     private static let databasePoolCacheLock = NSLock()
@@ -15,7 +15,7 @@ public actor ReadingProgressStore {
 
     public init(
         defaults: UserDefaults = .standard,
-        key: String = "yamibo.readingProgress.records"
+        key: String = "yamibox.readingProgress.records"
     ) {
         self.defaults = defaults
         self.key = key
@@ -24,7 +24,7 @@ public actor ReadingProgressStore {
 
     init(
         defaults: UserDefaults = .standard,
-        key: String = "yamibo.readingProgress.records",
+        key: String = "yamibox.readingProgress.records",
         databasePool: DatabasePool
     ) {
         self.defaults = defaults
@@ -360,7 +360,7 @@ public actor ReadingProgressStore {
                 defaults.set(databaseID, forKey: idKey)
             }
             let root = FileManager.default.temporaryDirectory
-                .appendingPathComponent("yamibo-reader-reading-progress", isDirectory: true)
+                .appendingPathComponent("yamibo-x-reading-progress", isDirectory: true)
                 .appendingPathComponent(databaseID, isDirectory: true)
             return try cachedDatabasePool(rootDirectory: root)
         } catch {

@@ -1,5 +1,5 @@
 import SwiftUI
-import YamiboReaderCore
+import YamiboXCore
 import UIKit
 
 public struct NovelReaderView: View {

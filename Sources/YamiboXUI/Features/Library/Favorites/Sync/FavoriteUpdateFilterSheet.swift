@@ -1,5 +1,5 @@
 import SwiftUI
-import YamiboReaderCore
+import YamiboXCore
 
 /// Per-forum and per-category toggles controlling which favorites are checked
 /// for updates.

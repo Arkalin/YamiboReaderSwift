@@ -65,7 +65,7 @@ struct WebDAVClient: Sendable {
             throw WebDAVSyncError.invalidConfiguration
         }
 
-        let directoryURL = baseURL.appendingPathComponent("YamiboReader", isDirectory: true)
+        let directoryURL = baseURL.appendingPathComponent("YamiboX", isDirectory: true)
         return Configuration(
             directoryURL: directoryURL,
             fileURL: directoryURL.appendingPathComponent(fileName, isDirectory: false),

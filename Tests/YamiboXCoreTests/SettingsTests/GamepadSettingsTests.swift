@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import YamiboReaderCore
+@testable import YamiboXCore
 
 // gamepad-control design decisions #3/#13/#14: defaults follow physical
 // positions (bottom/left/top face button), Menu is never bindable, and

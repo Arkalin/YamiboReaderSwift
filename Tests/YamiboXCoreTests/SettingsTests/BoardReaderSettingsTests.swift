@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import YamiboReaderCore
+@testable import YamiboXCore
 
 // Pluggable-reader-config decisions #1/#4/#8: any board is configurable, the
 // factory default carries over the old hardcoded taxonomy (49/55/60 novel,

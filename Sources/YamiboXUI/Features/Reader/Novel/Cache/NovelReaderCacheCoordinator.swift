@@ -1,5 +1,5 @@
 import SwiftUI
-import YamiboReaderCore
+import YamiboXCore
 
 /// Aggregated offline-cache presentation state for the novel reader.
 struct NovelReaderCacheState: Equatable {

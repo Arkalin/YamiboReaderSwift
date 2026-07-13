@@ -1,7 +1,7 @@
 import CoreTransferable
 import SwiftUI
 import UniformTypeIdentifiers
-import YamiboReaderCore
+import YamiboXCore
 
 #if os(iOS)
 import UIKit

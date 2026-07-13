@@ -1,5 +1,5 @@
 import Foundation
-import YamiboReaderCore
+import YamiboXCore
 
 public enum YamiboTestDefaults {
     public static func suiteName(prefix: String) -> String {

@@ -1,6 +1,6 @@
 import UIKit
 import XCTest
-@testable import YamiboReaderUI
+@testable import YamiboXUI
 
 final class ImageBrowserZoomMathTests: XCTestCase {
     func testFitScaleMatchesTightestAxisAndGuardsDegenerateSizes() {

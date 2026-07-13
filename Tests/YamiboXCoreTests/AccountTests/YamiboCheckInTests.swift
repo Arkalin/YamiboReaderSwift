@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import YamiboReaderCore
+@testable import YamiboXCore
 
 private struct YamiboCheckInStubResponse {
     let statusCode: Int

@@ -1,5 +1,5 @@
 import Testing
-@testable import YamiboReaderCore
+@testable import YamiboXCore
 
 @Test func extractTidSupportsMobileAndLegacyURLs() async throws {
     #expect(MangaTitleCleaner.extractTid(from: "forum.php?mod=viewthread&tid=12345&mobile=2") == "12345")

@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import YamiboReaderCore
+@testable import YamiboXCore
 
 @Test func userSpaceParserParsesPrivateMessageList() throws {
     let page = try UserSpaceHTMLParser.parsePrivateMessageList(from: privateMessageListHTML())

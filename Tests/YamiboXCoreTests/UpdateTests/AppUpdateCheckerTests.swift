@@ -1,13 +1,13 @@
 import Foundation
 import Testing
-@testable import YamiboReaderCore
+@testable import YamiboXCore
 
 @Test func appSourceDecodesValidAltStoreSource() throws {
     let source = try JSONDecoder().decode(AppSource.self, from: Data(validSourceJSON.utf8))
 
-    #expect(source.name == "YamiboReader Repository")
+    #expect(source.name == "YamiboX Repository")
     #expect(source.identifier == "com.arkalin.yamiboreader.source")
-    #expect(source.apps.first?.bundleIdentifier == "com.arkalin.YamiboReader")
+    #expect(source.apps.first?.bundleIdentifier == "com.arkalin.YamiboX")
     #expect(source.apps.first?.versions.first?.version == "1.2.0")
     #expect(source.apps.first?.versions.first?.size == 123456)
 }
@@ -16,7 +16,7 @@ import Testing
     let source = makeSource(version: "1.2.0")
     let result = AppUpdateChecker.checkForUpdate(
         source: source,
-        currentBundleIdentifier: "com.arkalin.YamiboReader",
+        currentBundleIdentifier: "com.arkalin.YamiboX",
         currentVersion: "1.1.9"
     )
 
@@ -39,12 +39,12 @@ import Testing
 
     #expect(AppUpdateChecker.checkForUpdate(
         source: equalSource,
-        currentBundleIdentifier: "com.arkalin.YamiboReader",
+        currentBundleIdentifier: "com.arkalin.YamiboX",
         currentVersion: "1.0"
     ) == .upToDate)
     #expect(AppUpdateChecker.checkForUpdate(
         source: olderSource,
-        currentBundleIdentifier: "com.arkalin.YamiboReader",
+        currentBundleIdentifier: "com.arkalin.YamiboX",
         currentVersion: "1.0"
     ) == .upToDate)
 }
@@ -54,7 +54,7 @@ import Testing
 
     #expect(AppUpdateChecker.checkForUpdate(
         source: source,
-        currentBundleIdentifier: "com.arkalin.YamiboReader",
+        currentBundleIdentifier: "com.arkalin.YamiboX",
         currentVersion: "1.0"
     ) == .sourceDoesNotContainCurrentApp)
 }
@@ -64,7 +64,7 @@ import Testing
     let result = AppUpdateChecker.checkForUpdate(
         data: Data(validSourceJSON.utf8),
         response: response,
-        currentBundleIdentifier: "com.arkalin.YamiboReader",
+        currentBundleIdentifier: "com.arkalin.YamiboX",
         currentVersion: "1.0"
     )
 
@@ -77,14 +77,14 @@ import Testing
     #expect(AppUpdateChecker.checkForUpdate(
         data: Data(),
         response: response,
-        currentBundleIdentifier: "com.arkalin.YamiboReader",
+        currentBundleIdentifier: "com.arkalin.YamiboX",
         currentVersion: "1.0"
     ) == .failure(.emptyBody))
 
     let invalidResult = AppUpdateChecker.checkForUpdate(
         data: Data("{".utf8),
         response: response,
-        currentBundleIdentifier: "com.arkalin.YamiboReader",
+        currentBundleIdentifier: "com.arkalin.YamiboX",
         currentVersion: "1.0"
     )
     guard case .failure(.decodingFailed) = invalidResult else {
@@ -100,7 +100,7 @@ import Testing
 
     let result = await checker.checkForUpdate(
         sourceURL: URL(string: "https://example.com/app-repo.json")!,
-        currentBundleIdentifier: "com.arkalin.YamiboReader",
+        currentBundleIdentifier: "com.arkalin.YamiboX",
         currentVersion: "1.0"
     )
 
@@ -112,12 +112,12 @@ import Testing
 
 private let validSourceJSON = """
 {
-  "name": "YamiboReader Repository",
+  "name": "YamiboX Repository",
   "identifier": "com.arkalin.yamiboreader.source",
   "apps": [
     {
       "name": "Yamibo Reader",
-      "bundleIdentifier": "com.arkalin.YamiboReader",
+      "bundleIdentifier": "com.arkalin.YamiboX",
       "developerName": "Arkalin",
       "localizedDescription": "Reader",
       "iconURL": "https://example.com/icon.png",
@@ -126,7 +126,7 @@ private let validSourceJSON = """
           "version": "1.2.0",
           "date": "2026-06-08",
           "localizedDescription": "Release notes",
-          "downloadURL": "https://example.com/YamiboReader.ipa",
+          "downloadURL": "https://example.com/YamiboX.ipa",
           "size": "123456"
         }
       ]
@@ -136,7 +136,7 @@ private let validSourceJSON = """
 """
 
 private func makeSource(
-    bundleIdentifier: String = "com.arkalin.YamiboReader",
+    bundleIdentifier: String = "com.arkalin.YamiboX",
     version: String
 ) -> AppSource {
     AppSource(
@@ -149,7 +149,7 @@ private func makeSource(
                 versions: [
                     AppSourceVersion(
                         version: version,
-                        downloadURL: URL(string: "https://example.com/YamiboReader.ipa")!,
+                        downloadURL: URL(string: "https://example.com/YamiboX.ipa")!,
                         size: 123
                     )
                 ]

@@ -1,11 +1,11 @@
 import XCTest
-@testable import YamiboReaderCore
-@testable import YamiboReaderUI
+@testable import YamiboXCore
+@testable import YamiboXUI
 
 /// Focused pure-function coverage for `LocalFavoriteLibraryDerivation`,
 /// exercised directly through `Inputs`/`derive(_:)` rather than through the
 /// full `FavoriteLibraryOrganizer` — both are internal, but visible here via
-/// `@testable import YamiboReaderUI`, exactly like `FavoriteLibraryOrganizerTests`
+/// `@testable import YamiboXUI`, exactly like `FavoriteLibraryOrganizerTests`
 /// already reaches other internal types in this module.
 final class LocalFavoriteLibraryDerivationTests: XCTestCase {
     /// Regression test for the collection preview mosaic not merging smart-

@@ -1,7 +1,7 @@
 import XCTest
-@testable import YamiboReaderCore
-import YamiboReaderTestSupport
-@testable import YamiboReaderUI
+@testable import YamiboXCore
+import YamiboXTestSupport
+@testable import YamiboXUI
 
 /// Open-time reader-mode dispatch for history rows (pluggable-reader-config
 /// R13, mirroring the favorites resolver's R11/R12): a configured board entry

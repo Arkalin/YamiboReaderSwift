@@ -1,5 +1,5 @@
 import SwiftUI
-import YamiboReaderCore
+import YamiboXCore
 
 struct BlogReaderView: View {
     @State private var model: BlogReaderViewModel

@@ -1,4 +1,4 @@
-# YamiboReader Forum Context
+# Yamibo X Forum Context
 
 Domain language for native Yamibo forum browsing, forum-board presentation, and fallback web handling.
 

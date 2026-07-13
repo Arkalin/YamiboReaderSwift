@@ -1,5 +1,5 @@
 import SwiftUI
-import YamiboReaderCore
+import YamiboXCore
 
 /// One collection row in the list layouts, mixed into the same section as
 /// the favorite item rows.

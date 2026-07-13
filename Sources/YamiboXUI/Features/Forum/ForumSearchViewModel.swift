@@ -1,6 +1,6 @@
 import Foundation
 import Observation
-import YamiboReaderCore
+import YamiboXCore
 
 protocol ForumSearchPageLoading: Sendable {
     func searchForum(query: String, forumID: String?, formHash: String?) async throws -> ForumSearchPage

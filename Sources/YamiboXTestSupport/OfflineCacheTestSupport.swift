@@ -1,5 +1,5 @@
 import Foundation
-import YamiboReaderCore
+import YamiboXCore
 
 public typealias TestOfflineCacheStoring = OfflineCacheStoreCore & MangaOfflineCacheStoring & NovelOfflineCacheStoring & YamiboOfflineImageDataProviding
 

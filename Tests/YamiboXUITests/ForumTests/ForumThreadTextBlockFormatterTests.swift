@@ -2,8 +2,8 @@ import Foundation
 import SwiftUI
 import Testing
 import UIKit
-@testable import YamiboReaderCore
-@testable import YamiboReaderUI
+@testable import YamiboXCore
+@testable import YamiboXUI
 
 /// Styled runs scale their 17pt base through the body text style's metrics
 /// (Dynamic Type); at the test host's default content size this resolves to

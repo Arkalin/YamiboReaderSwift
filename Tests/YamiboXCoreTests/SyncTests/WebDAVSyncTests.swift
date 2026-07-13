@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import YamiboReaderCore
+@testable import YamiboXCore
 
 private final class WebDAVTestURLProtocol: URLProtocol {
     typealias Handler = (URLRequest) throws -> (Data, HTTPURLResponse)
@@ -102,11 +102,11 @@ private enum WebDAVTestError: Error {
             let path = try #require(request.url?.path)
             putPaths.append(path)
             let body = try #require(request.webDAVBodyData())
-            if path.hasSuffix("yamibo-favorite-library-v1.json") {
+            if path.hasSuffix("yamibox-favorite-library-v1.json") {
                 let payload = try JSONDecoder().decode(FavoriteLibraryWebDAVPayload.self, from: body)
                 #expect(payload.accountUID == "100")
                 #expect(payload.library.items.map(\.id) == [target.id])
-            } else if path.hasSuffix("yamibo-reading-progress-v1.json") {
+            } else if path.hasSuffix("yamibox-reading-progress-v1.json") {
                 let payload = try JSONDecoder().decode(ReadingProgressWebDAVPayload.self, from: body)
                 #expect(payload.records.map(\.id) == [target.id])
             }
@@ -118,8 +118,8 @@ private enum WebDAVTestError: Error {
     _ = try await fixture.makeService().upload(using: fixture.settings, allowingAccountMismatch: true)
 
     #expect(!putPaths.contains { $0.hasSuffix("yamibo-sync-v1.json") })
-    #expect(putPaths.contains { $0.hasSuffix("yamibo-favorite-library-v1.json") })
-    #expect(putPaths.contains { $0.hasSuffix("yamibo-reading-progress-v1.json") })
+    #expect(putPaths.contains { $0.hasSuffix("yamibox-favorite-library-v1.json") })
+    #expect(putPaths.contains { $0.hasSuffix("yamibox-reading-progress-v1.json") })
 }
 
 @Test func webDAVServiceLocalFirstUploadWritesAppSettingsPayloadWithoutLegacyPayload() async throws {
@@ -142,7 +142,7 @@ private enum WebDAVTestError: Error {
         case "PUT":
             let path = try #require(request.url?.path)
             putPaths.append(path)
-            if path.hasSuffix("yamibo-app-settings-v1.json") {
+            if path.hasSuffix("yamibox-app-settings-v1.json") {
                 uploadedAppSettings = try JSONDecoder().decode(AppSettingsWebDAVPayload.self, from: try #require(request.webDAVBodyData()))
             }
             return (Data(), HTTPURLResponse(url: request.url!, statusCode: 201, httpVersion: nil, headerFields: nil)!)
@@ -156,8 +156,8 @@ private enum WebDAVTestError: Error {
     _ = try await fixture.makeService().upload(using: fixture.settings)
 
     #expect(!putPaths.contains { $0.hasSuffix("yamibo-sync-v1.json") })
-    #expect(putPaths.contains { $0.hasSuffix("yamibo-favorite-library-v1.json") })
-    #expect(putPaths.contains { $0.hasSuffix("yamibo-app-settings-v1.json") })
+    #expect(putPaths.contains { $0.hasSuffix("yamibox-favorite-library-v1.json") })
+    #expect(putPaths.contains { $0.hasSuffix("yamibox-app-settings-v1.json") })
     #expect(uploadedAppSettings?.accountUID == "123")
     #expect(uploadedAppSettings?.appSettings == WebDAVSyncedAppSettings(settings: appSettings))
 }
@@ -185,7 +185,7 @@ private enum WebDAVTestError: Error {
         #expect(request.httpMethod == "GET")
         let path = try #require(request.url?.path)
         getPaths.append(path)
-        if path.hasSuffix("yamibo-app-settings-v1.json") {
+        if path.hasSuffix("yamibox-app-settings-v1.json") {
             return (
                 try JSONEncoder().encode(remotePayload),
                 HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: ["Content-Type": "application/json"])!
@@ -251,7 +251,7 @@ private enum WebDAVTestError: Error {
 
     #expect(result == .uploaded)
     #expect(!putPaths.contains { $0.hasSuffix("yamibo-sync-v1.json") })
-    #expect(putPaths.contains { $0.hasSuffix("yamibo-favorite-library-v1.json") })
+    #expect(putPaths.contains { $0.hasSuffix("yamibox-favorite-library-v1.json") })
     let updatedSettings = await fixture.settingsStore.load()
     #expect(updatedSettings.lastSyncedAt != nil)
     #expect(updatedSettings.lastRemoteUpdatedAt != nil)
@@ -391,10 +391,10 @@ private enum WebDAVTestError: Error {
     WebDAVTestURLProtocol.setHandler(for: fixture.host) { request in
         switch request.httpMethod {
         case "GET":
-            if request.url?.path.hasSuffix("yamibo-favorite-library-v1.json") == true {
+            if request.url?.path.hasSuffix("yamibox-favorite-library-v1.json") == true {
                 return (remoteFavoritePayload, HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
             }
-            if request.url?.path.hasSuffix("yamibo-app-settings-v1.json") == true {
+            if request.url?.path.hasSuffix("yamibox-app-settings-v1.json") == true {
                 return (staleRemoteAppSettingsPayload, HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
             }
             return (Data(), HTTPURLResponse(url: request.url!, statusCode: 404, httpVersion: nil, headerFields: nil)!)
@@ -579,7 +579,7 @@ private enum WebDAVTestError: Error {
     WebDAVTestURLProtocol.setHandler(for: fixture.host) { request in
         switch request.httpMethod {
         case "GET":
-            if request.url?.path.hasSuffix("yamibo-favorite-library-v1.json") == true {
+            if request.url?.path.hasSuffix("yamibox-favorite-library-v1.json") == true {
                 return (
                     encodedRemotePayload,
                     HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
@@ -672,7 +672,7 @@ private final class MutableContentWebDAVParticipant: WebDAVSyncParticipant, @unc
     }
 
     let datasetID = "mutableContent"
-    let remoteFileName = "yamibo-mutable-content-v1.json"
+    let remoteFileName = "yamibox-mutable-content-v1.json"
     let uploadsOnlyWhenMarkedDirty = true
 
     private let lock = NSLock()

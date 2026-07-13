@@ -10,7 +10,7 @@ public protocol SessionStoring: Sendable {
 }
 
 public actor SessionStore: SessionStoring {
-    public static let didChangeNotification = Notification.Name("yamibo.sessionStore.didChange")
+    public static let didChangeNotification = Notification.Name("yamibox.sessionStore.didChange")
     public static let changeIDUserInfoKey = "changeID"
 
     public nonisolated let changeID = UUID().uuidString
@@ -20,7 +20,7 @@ public actor SessionStore: SessionStoring {
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
 
-    public init(defaults: UserDefaults = .standard, key: String = "yamibo.session") {
+    public init(defaults: UserDefaults = .standard, key: String = "yamibox.session") {
         self.defaults = defaults
         self.key = key
     }

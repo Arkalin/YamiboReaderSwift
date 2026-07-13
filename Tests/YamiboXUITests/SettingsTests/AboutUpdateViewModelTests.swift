@@ -1,12 +1,12 @@
 import XCTest
-@testable import YamiboReaderCore
-@testable import YamiboReaderUI
+@testable import YamiboXCore
+@testable import YamiboXUI
 
 @MainActor
 final class AboutUpdateViewModelTests: XCTestCase {
     func testViewModelBuildsUpToDateAlert() async {
         let viewModel = AboutUpdateViewModel(
-            currentBundleIdentifier: "com.arkalin.YamiboReader",
+            currentBundleIdentifier: "com.arkalin.YamiboX",
             currentVersion: "1.0",
             checkForUpdate: { _, _, _ in .upToDate }
         )
@@ -20,7 +20,7 @@ final class AboutUpdateViewModelTests: XCTestCase {
     }
 
     func testViewModelBuildsUpdateAvailableAlert() async {
-        let downloadURL = URL(string: "https://example.com/YamiboReader.ipa")!
+        let downloadURL = URL(string: "https://example.com/YamiboX.ipa")!
         let version = AppSourceVersion(
             version: "1.2.0",
             localizedDescription: "Release notes",
@@ -28,7 +28,7 @@ final class AboutUpdateViewModelTests: XCTestCase {
             size: 1_048_576
         )
         let viewModel = AboutUpdateViewModel(
-            currentBundleIdentifier: "com.arkalin.YamiboReader",
+            currentBundleIdentifier: "com.arkalin.YamiboX",
             currentVersion: "1.0",
             checkForUpdate: { _, _, _ in .updateAvailable(version: version) }
         )
@@ -43,7 +43,7 @@ final class AboutUpdateViewModelTests: XCTestCase {
 
     func testViewModelBuildsFailureAlert() async {
         let viewModel = AboutUpdateViewModel(
-            currentBundleIdentifier: "com.arkalin.YamiboReader",
+            currentBundleIdentifier: "com.arkalin.YamiboX",
             currentVersion: "1.0",
             checkForUpdate: { _, _, _ in .failure(.emptyBody) }
         )

@@ -1,5 +1,5 @@
 import SwiftUI
-import YamiboReaderCore
+import YamiboXCore
 
 struct ForumPageNavigationBar: View {
     let navigation: ForumPageNavigation?

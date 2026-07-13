@@ -1,6 +1,6 @@
 import Foundation
 import Observation
-import YamiboReaderCore
+import YamiboXCore
 
 protocol ForumBoardPageLoading: Sendable {
     func cachedForumBoard(

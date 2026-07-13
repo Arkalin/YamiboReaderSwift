@@ -1,8 +1,8 @@
 import Foundation
 import CoreGraphics
 import XCTest
-@testable import YamiboReaderCore
-@testable import YamiboReaderUI
+@testable import YamiboXCore
+@testable import YamiboXUI
 
 #if canImport(UIKit)
 private typealias NovelTextLayoutFixture = (

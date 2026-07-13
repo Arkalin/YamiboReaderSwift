@@ -1,6 +1,6 @@
 import Foundation
 import Observation
-import YamiboReaderCore
+import YamiboXCore
 
 public protocol OfflineCacheQueueControlling: Sendable {
     func continueQueue() async throws

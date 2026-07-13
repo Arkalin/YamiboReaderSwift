@@ -1,5 +1,5 @@
 import SwiftUI
-import YamiboReaderCore
+import YamiboXCore
 
 struct LocalFavoriteCollectionDraft: Identifiable {
     enum Mode {

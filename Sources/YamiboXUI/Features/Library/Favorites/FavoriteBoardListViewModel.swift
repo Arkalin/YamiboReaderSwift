@@ -1,6 +1,6 @@
 import Foundation
 import Observation
-import YamiboReaderCore
+import YamiboXCore
 
 protocol BoardFavoriteManaging: Sendable {
     func fetchBoardFavoritesPage(page: Int) async throws -> BoardFavoriteRemotePage

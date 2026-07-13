@@ -1,7 +1,7 @@
 import Foundation
 import Testing
-@testable import YamiboReaderCore
-import YamiboReaderTestSupport
+@testable import YamiboXCore
+import YamiboXTestSupport
 
 @Test func progressSyncFlushCancelsPendingAndPersistsLatestPosition() async throws {
     let adapter = RecordingProgressSyncAdapter()

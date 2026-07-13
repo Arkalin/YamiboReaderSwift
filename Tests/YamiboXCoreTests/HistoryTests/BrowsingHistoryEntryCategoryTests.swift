@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import YamiboReaderCore
+@testable import YamiboXCore
 
 // Effective display/open category (pluggable-reader-config R13): a configured
 // board entry dictates the category regardless of the recorded identity; a

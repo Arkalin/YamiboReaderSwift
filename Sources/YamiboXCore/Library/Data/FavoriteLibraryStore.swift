@@ -2,7 +2,7 @@ import Foundation
 @preconcurrency import GRDB
 
 public actor FavoriteLibraryStore {
-    public static let didChangeNotification = Notification.Name("yamibo.favoriteLibraryStore.didChange")
+    public static let didChangeNotification = Notification.Name("yamibox.favoriteLibraryStore.didChange")
     public static let changeIDUserInfoKey = "changeID"
     nonisolated(unsafe) private static var databasePoolCache: [String: DatabasePool] = [:]
     private static let databasePoolCacheLock = NSLock()
@@ -15,7 +15,7 @@ public actor FavoriteLibraryStore {
 
     public init(
         defaults: UserDefaults = .standard,
-        key: String = "yamibo.favoriteLibrary.localFirst"
+        key: String = "yamibox.favoriteLibrary.localFirst"
     ) {
         self.defaults = defaults
         self.key = key
@@ -24,7 +24,7 @@ public actor FavoriteLibraryStore {
 
     init(
         defaults: UserDefaults = .standard,
-        key: String = "yamibo.favoriteLibrary.localFirst",
+        key: String = "yamibox.favoriteLibrary.localFirst",
         databasePool: DatabasePool
     ) {
         self.defaults = defaults
@@ -128,7 +128,7 @@ public actor FavoriteLibraryStore {
                 defaults.set(databaseID, forKey: idKey)
             }
             let root = FileManager.default.temporaryDirectory
-                .appendingPathComponent("yamibo-reader-local-favorite-library", isDirectory: true)
+                .appendingPathComponent("yamibo-x-local-favorite-library", isDirectory: true)
                 .appendingPathComponent(databaseID, isDirectory: true)
             return try cachedDatabasePool(rootDirectory: root)
         } catch {

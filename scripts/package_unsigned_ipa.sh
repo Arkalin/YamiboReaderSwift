@@ -2,8 +2,8 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-PROJECT_PATH="${ROOT_DIR}/YamiboReader.xcodeproj"
-SCHEME="YamiboReader"
+PROJECT_PATH="${ROOT_DIR}/YamiboX.xcodeproj"
+SCHEME="YamiboX"
 CONFIGURATION="${CONFIGURATION:-Release}"
 DERIVED_DATA_PATH="${ROOT_DIR}/build/UnsignedIPA"
 EXPORT_DIR="${ROOT_DIR}/build/UnsignedIPAExport"
@@ -35,7 +35,7 @@ if [[ -z "${VERSION}" ]]; then
   exit 1
 fi
 
-IPA_PATH="${EXPORT_DIR}/YamiboReader_v${VERSION}_unsigned.ipa"
+IPA_PATH="${EXPORT_DIR}/YamiboX_v${VERSION}_unsigned.ipa"
 
 rm -rf "${STAGING_DIR}"
 mkdir -p "${STAGING_DIR}/Payload"

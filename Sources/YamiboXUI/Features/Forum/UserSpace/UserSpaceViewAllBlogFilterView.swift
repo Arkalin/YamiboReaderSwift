@@ -1,5 +1,5 @@
 import SwiftUI
-import YamiboReaderCore
+import YamiboXCore
 
 struct UserSpaceViewAllBlogFilterView: View {
     let selectedFilter: UserSpaceViewAllBlogFilter

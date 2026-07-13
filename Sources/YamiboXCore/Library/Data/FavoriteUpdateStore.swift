@@ -2,7 +2,7 @@ import Foundation
 @preconcurrency import GRDB
 
 public actor FavoriteUpdateStore {
-    public static let didChangeNotification = Notification.Name("yamibo.favoriteUpdateStore.didChange")
+    public static let didChangeNotification = Notification.Name("yamibox.favoriteUpdateStore.didChange")
     public static let changeIDUserInfoKey = "changeID"
     private static let keptRunCount = 10
     nonisolated(unsafe) private static var databasePoolCache: [String: DatabasePool] = [:]
@@ -13,9 +13,9 @@ public actor FavoriteUpdateStore {
     private let database: DatabasePool
 
     /// Convenience for tests/previews, mirroring `FavoriteLibraryStore`:
-    /// `.standard` resolves the shared `yamibo.sqlite` pool; any other
+    /// `.standard` resolves the shared `yamibox.sqlite` pool; any other
     /// defaults suite gets its own temporary database keyed by `key`.
-    public init(defaults: UserDefaults = .standard, key: String = "yamibo.favoriteUpdates") {
+    public init(defaults: UserDefaults = .standard, key: String = "yamibox.favoriteUpdates") {
         self.database = Self.openDatabase(defaults: defaults, key: key)
     }
 
@@ -37,7 +37,7 @@ public actor FavoriteUpdateStore {
                 defaults.set(databaseID, forKey: idKey)
             }
             let root = FileManager.default.temporaryDirectory
-                .appendingPathComponent("yamibo-reader-favorite-updates", isDirectory: true)
+                .appendingPathComponent("yamibo-x-favorite-updates", isDirectory: true)
                 .appendingPathComponent(databaseID, isDirectory: true)
             return try cachedDatabasePool(rootDirectory: root)
         } catch {

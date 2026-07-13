@@ -1,6 +1,6 @@
 import SwiftUI
 import UIKit
-import YamiboReaderCore
+import YamiboXCore
 
 /// Maps a `ForumThreadTextBlock` (plain text + style runs + links + rubies)
 /// to renderable SwiftUI values. Pure value transformation, no view state.

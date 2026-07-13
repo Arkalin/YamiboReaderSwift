@@ -1,7 +1,7 @@
 import CoreGraphics
 import XCTest
-import YamiboReaderCore
-@testable import YamiboReaderUI
+import YamiboXCore
+@testable import YamiboXUI
 
 final class NovelNovelReaderVerticalPositioningTests: XCTestCase {
     func testViewportReadingAnchorLineMatchesProgressSamplingAnchor() {

@@ -1,5 +1,5 @@
 import SwiftUI
-import YamiboReaderCore
+import YamiboXCore
 
 public enum ReaderProgressScrubPhase: Equatable, Sendable {
     case idle

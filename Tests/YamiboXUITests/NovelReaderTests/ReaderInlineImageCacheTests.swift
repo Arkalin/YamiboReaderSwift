@@ -1,8 +1,8 @@
 #if os(iOS)
 import UIKit
 import XCTest
-import YamiboReaderCore
-@testable import YamiboReaderUI
+import YamiboXCore
+@testable import YamiboXUI
 
 final class ReaderInlineImageCacheTests: XCTestCase {
     @MainActor

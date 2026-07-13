@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import YamiboReaderCore
+@testable import YamiboXCore
 
 // Moved out of the deleted FavoriteMangaItemPathTests.swift during the
 // smart-comic-mode Phase A type refactor (2026-07-08): these three tests

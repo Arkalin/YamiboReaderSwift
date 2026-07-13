@@ -1,6 +1,6 @@
 import XCTest
-@testable import YamiboReaderCore
-@testable import YamiboReaderUI
+@testable import YamiboXCore
+@testable import YamiboXUI
 
 @MainActor
 final class MessageCenterViewModelTests: XCTestCase {

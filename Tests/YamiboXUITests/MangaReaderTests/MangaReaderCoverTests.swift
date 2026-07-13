@@ -1,7 +1,7 @@
 import XCTest
-@testable import YamiboReaderCore
-import YamiboReaderTestSupport
-@testable import YamiboReaderUI
+@testable import YamiboXCore
+import YamiboXTestSupport
+@testable import YamiboXUI
 
 /// Covers smart-comic-mode design decision #16 (Phase D "cover mode-gating"):
 /// - `MangaReaderViewModel`'s manual cover entry writes `.smartManga` when the

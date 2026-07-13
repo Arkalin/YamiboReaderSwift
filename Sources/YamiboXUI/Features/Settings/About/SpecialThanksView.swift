@@ -1,5 +1,5 @@
 import SwiftUI
-import YamiboReaderCore
+import YamiboXCore
 
 public struct SpecialThanksView: View {
     public init() {}

@@ -1,5 +1,5 @@
 import SwiftUI
-import YamiboReaderCore
+import YamiboXCore
 
 struct MineSettingsSection: View {
     let showSettings: () -> Void

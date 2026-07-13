@@ -18,7 +18,7 @@ public struct LikeTextUpsertResult: Hashable, Sendable {
 /// independent of the Favorite Library. Liking never requires or creates a
 /// favorite, and deleting a favorite never deletes Like Items.
 public actor LikeStore {
-    public static let didChangeNotification = Notification.Name("yamibo.likeStore.didChange")
+    public static let didChangeNotification = Notification.Name("yamibox.likeStore.didChange")
     public static let changeIDUserInfoKey = "changeID"
     public nonisolated let changeID = UUID().uuidString
 
@@ -31,7 +31,7 @@ public actor LikeStore {
     /// Isolated-storage convenience mirroring `ContentCoverStore`: standard
     /// defaults use the shared database, any other suite gets its own pool in
     /// a temporary directory (tests and previews).
-    public init(defaults: UserDefaults, key: String = "yamibo.likeStore") {
+    public init(defaults: UserDefaults, key: String = "yamibox.likeStore") {
         self.database = Self.openDatabase(defaults: defaults, key: key)
     }
 
@@ -372,7 +372,7 @@ public actor LikeStore {
                 defaults.set(databaseID, forKey: idKey)
             }
             let root = FileManager.default.temporaryDirectory
-                .appendingPathComponent("yamibo-reader-like-store", isDirectory: true)
+                .appendingPathComponent("yamibo-x-like-store", isDirectory: true)
                 .appendingPathComponent(databaseID, isDirectory: true)
             return try YamiboDatabase.openPool(rootDirectory: root)
         } catch {

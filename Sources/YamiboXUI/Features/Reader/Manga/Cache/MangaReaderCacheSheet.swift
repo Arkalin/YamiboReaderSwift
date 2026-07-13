@@ -1,6 +1,6 @@
 import Foundation
 import SwiftUI
-import YamiboReaderCore
+import YamiboXCore
 
 #if os(iOS)
 struct MangaReaderCacheSheet: View {

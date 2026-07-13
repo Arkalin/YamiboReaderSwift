@@ -8,7 +8,7 @@ public protocol YamiboOrdinaryImageCacheClearing: Sendable {
 final class YamiboImageDataPipeline: YamiboOrdinaryImageCacheClearing, @unchecked Sendable {
     static let shared = YamiboImageDataPipeline()
     static let defaultDataCacheLimitBytes = 512 * 1024 * 1024
-    static let defaultDataCacheName = "com.arkalin.YamiboReader.OrdinaryImageDataCache"
+    static let defaultDataCacheName = "com.arkalin.YamiboX.OrdinaryImageDataCache"
 
     private let pipeline: ImagePipeline
     private let dataCache: DataCache
@@ -265,5 +265,5 @@ private final class YamiboDataTaskCancellable: Cancellable, @unchecked Sendable 
 }
 
 private extension ImageRequest.UserInfoKey {
-    static let yamiboURLSession = ImageRequest.UserInfoKey("com.arkalin.YamiboReader.urlSession")
+    static let yamiboURLSession = ImageRequest.UserInfoKey("com.arkalin.YamiboX.urlSession")
 }

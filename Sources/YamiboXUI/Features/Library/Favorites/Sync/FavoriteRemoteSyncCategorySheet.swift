@@ -1,5 +1,5 @@
 import SwiftUI
-import YamiboReaderCore
+import YamiboXCore
 
 /// Target-category picker shown before starting a remote favorite sync.
 struct FavoriteRemoteSyncCategorySheet: View {

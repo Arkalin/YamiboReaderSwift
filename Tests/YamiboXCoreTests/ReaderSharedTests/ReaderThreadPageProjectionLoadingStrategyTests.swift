@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import YamiboReaderCore
+@testable import YamiboXCore
 
 @Suite("ReaderSharedTests: Thread Page Projection Strategy", .serialized)
 struct ReaderThreadPageProjectionLoadingStrategyTests {
@@ -218,7 +218,7 @@ private final class SharedThreadPageProjectionFixture: @unchecked Sendable {
 
     init() async throws {
         rootDirectory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("YamiboReaderSharedProjectionTests-\(testID)", isDirectory: true)
+            .appendingPathComponent("YamiboXSharedProjectionTests-\(testID)", isDirectory: true)
         try? FileManager.default.removeItem(at: rootDirectory)
         try FileManager.default.createDirectory(at: rootDirectory, withIntermediateDirectories: true)
         cacheStore = ForumCacheStore(rootDirectory: rootDirectory)

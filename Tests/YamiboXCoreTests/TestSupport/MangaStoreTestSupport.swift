@@ -1,6 +1,6 @@
 import Foundation
 @preconcurrency import GRDB
-@testable import YamiboReaderCore
+@testable import YamiboXCore
 
 func makeTestMangaStoreRoot(prefix: String) -> URL {
     FileManager.default.temporaryDirectory

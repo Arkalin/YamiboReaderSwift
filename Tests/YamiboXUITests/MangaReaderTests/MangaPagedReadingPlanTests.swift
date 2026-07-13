@@ -1,7 +1,7 @@
 import Foundation
 import Testing
-@testable import YamiboReaderCore
-@testable import YamiboReaderUI
+@testable import YamiboXCore
+@testable import YamiboXUI
 
 @Suite("MangaReaderTests: Paged Reading Plan")
 struct MangaPagedReadingPlanTests {

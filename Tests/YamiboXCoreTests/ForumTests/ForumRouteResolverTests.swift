@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import YamiboReaderCore
+@testable import YamiboXCore
 
 @Test func forumRouteResolverResolvesBoardURLs() throws {
     let url = try #require(URL(string: "https://bbs.yamibo.com/forum.php?mod=forumdisplay&fid=5&page=3&mobile=2"))

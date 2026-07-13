@@ -1,5 +1,5 @@
 import Foundation
-import YamiboReaderCore
+import YamiboXCore
 
 enum BrowsingHistoryOpenTarget: Sendable {
     case novelReader(NovelLaunchContext)

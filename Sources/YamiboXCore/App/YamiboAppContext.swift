@@ -6,15 +6,15 @@ import WebKit
 
 /// Composition root. Owns the infrastructure singletons, assembles each
 /// feature's dependency package, and is referenced only by the app-entry
-/// layer (`YamiboReaderApp`, `YamiboAppModel`, `RootTabView`,
+/// layer (`YamiboXApp`, `YamiboAppModel`, `RootTabView`,
 /// `AppContinuityWorkflow`). Feature views and view models receive their
 /// `*Dependencies` package instead of this context.
 public final class YamiboAppContext: Sendable {
     private static let resettableUserDefaultsKeys = [
-        "yamibo.favorite.filter",
-        "yamibo.favorite.sort",
-        "yamibo.favorite.tag.sort",
-        "yamibo.favorite.showHidden"
+        "yamibox.favorite.filter",
+        "yamibox.favorite.sort",
+        "yamibox.favorite.tag.sort",
+        "yamibox.favorite.showHidden"
     ]
 
     let sessionStore: SessionStore
@@ -44,7 +44,7 @@ public final class YamiboAppContext: Sendable {
     let ordinaryImageCache: any YamiboOrdinaryImageCacheClearing
     public let offlineCacheBackgroundDownloadTransport: OfflineCacheBackgroundDownloadTransport
     public let offlineCacheContinuedProcessingCoordinator: OfflineCacheContinuedProcessingCoordinator
-    /// The single pool for `yamibo.sqlite`; every GRDB-backed store receives this instance.
+    /// The single pool for `yamibox.sqlite`; every GRDB-backed store receives this instance.
     let databasePool: DatabasePool
     let session: URLSession
     private let offlineCacheQueueExecutorBox = OfflineCacheQueueExecutorBox()
@@ -452,7 +452,7 @@ public final class YamiboAppContext: Sendable {
     /// iCloud/iTunes backups yet — unlike `Library/Caches` content — must never
     /// be purged by the system, hence Application Support + the backup
     /// exclusion marker. The marker stays scoped to this directory; the rest of
-    /// the root (yamibo.sqlite, favorite-background, like-images) is user data
+    /// the root (yamibox.sqlite, favorite-background, like-images) is user data
     /// that participates in backups. Idempotent; failures are logged because
     /// the store lazily recreates the directory on first write anyway.
     private static func prepareOfflineCacheDirectory(

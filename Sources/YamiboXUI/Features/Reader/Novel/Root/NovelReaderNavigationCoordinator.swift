@@ -1,5 +1,5 @@
 import SwiftUI
-import YamiboReaderCore
+import YamiboXCore
 
 /// Position key used to expire nonlinear navigation history after enough
 /// linear reading on the same page.

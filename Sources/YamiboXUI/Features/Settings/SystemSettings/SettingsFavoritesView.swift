@@ -1,6 +1,6 @@
 import PhotosUI
 import SwiftUI
-import YamiboReaderCore
+import YamiboXCore
 
 struct SettingsFavoritesView: View {
     @ObservedObject var viewModel: SystemSettingsViewModel

@@ -1,7 +1,7 @@
 import CoreGraphics
 import Foundation
 import UIKit
-import YamiboReaderCore
+import YamiboXCore
 
 /// Short-lived preview surface for the reader settings sheet. Reuses the
 /// attributed-document styling but never builds a viewport index or touches

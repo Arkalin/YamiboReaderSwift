@@ -1,8 +1,8 @@
 import XCTest
 import GRDB
-@testable import YamiboReaderCore
-import YamiboReaderTestSupport
-@testable import YamiboReaderUI
+@testable import YamiboXCore
+import YamiboXTestSupport
+@testable import YamiboXUI
 
 @MainActor
 final class MangaReaderCacheViewModelTests: XCTestCase {

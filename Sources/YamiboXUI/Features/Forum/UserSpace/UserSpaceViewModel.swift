@@ -1,6 +1,6 @@
 import Foundation
 import Observation
-import YamiboReaderCore
+import YamiboXCore
 
 protocol UserSpacePageLoading: Sendable {
     func fetchProfile(uid: String?, titleHint: String?) async throws -> UserSpaceProfile

@@ -1,6 +1,6 @@
 import CoreGraphics
 import XCTest
-@testable import YamiboReaderUI
+@testable import YamiboXUI
 
 final class ImageContentGeometryTests: XCTestCase {
     func testAspectFitImageHitTestingUsesAspectFitFrameOnly() {

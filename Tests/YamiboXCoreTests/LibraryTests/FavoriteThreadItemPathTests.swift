@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import YamiboReaderCore
+@testable import YamiboXCore
 
 @Test func threadFavoriteImportProbesBeforeCreatingNormalThreadItem() async throws {
     let target = FavoriteItemTarget(kind: .normalThread, threadID: "420")

@@ -1,5 +1,5 @@
 import Foundation
-import YamiboReaderCore
+import YamiboXCore
 
 struct MangaPageSpread: Hashable, Sendable {
     let index: Int

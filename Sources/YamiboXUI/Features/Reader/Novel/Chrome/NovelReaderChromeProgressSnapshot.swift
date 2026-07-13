@@ -1,4 +1,4 @@
-import YamiboReaderCore
+import YamiboXCore
 
 public struct NovelReaderProgressChapterTick: Equatable, Sendable {
     public var chapter: NovelReaderChapter

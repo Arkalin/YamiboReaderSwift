@@ -1,5 +1,5 @@
 import SwiftUI
-import YamiboReaderCore
+import YamiboXCore
 
 /// Sheet shell for contexts without a navigation stack of their own (the
 /// full-screen readers' cache sheets). The Mine tab pushes

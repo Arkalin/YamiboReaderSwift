@@ -1,7 +1,7 @@
 import CoreGraphics
 import XCTest
-@testable import YamiboReaderCore
-@testable import YamiboReaderUI
+@testable import YamiboXCore
+@testable import YamiboXUI
 
 final class NovelTextDisplayAdapterTests: XCTestCase {
     func testPagedTapZoneKeepsBlankAreaNavigationAvailable() {

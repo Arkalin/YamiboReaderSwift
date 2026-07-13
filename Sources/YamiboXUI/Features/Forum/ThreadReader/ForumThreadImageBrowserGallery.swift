@@ -1,5 +1,5 @@
 import Foundation
-import YamiboReaderCore
+import YamiboXCore
 
 struct ForumThreadImageBrowserRequest: Identifiable, Equatable {
     var items: [ImageBrowserItem]

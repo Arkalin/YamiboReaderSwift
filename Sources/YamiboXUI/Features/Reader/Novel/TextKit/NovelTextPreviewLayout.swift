@@ -1,7 +1,7 @@
 import CoreGraphics
 import Foundation
 import UIKit
-import YamiboReaderCore
+import YamiboXCore
 
 enum NovelTextPreviewLayout {
     static func textFits(

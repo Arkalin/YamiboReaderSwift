@@ -1,5 +1,5 @@
 import SwiftUI
-import YamiboReaderCore
+import YamiboXCore
 
 public struct MineHomeView: View {
     @State private var viewModel: MineHomeViewModel

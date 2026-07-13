@@ -12,7 +12,7 @@ import Foundation
 /// existing `LikeWorkItemsView` fallback, no new code needed here).
 struct LikeLibraryWebDAVParticipant: WebDAVSyncParticipant {
     let datasetID = "likeLibrary"
-    let remoteFileName = "yamibo-like-library-v1.json"
+    let remoteFileName = "yamibox-like-library-v1.json"
     let uploadsOnlyWhenMarkedDirty = true
 
     private let store: LikeStore

@@ -1,4 +1,4 @@
-# YamiboReader Reader Comments Context
+# Yamibo X Reader Comments Context
 
 Domain language for chapter comments shared by native manga and novel readers.
 

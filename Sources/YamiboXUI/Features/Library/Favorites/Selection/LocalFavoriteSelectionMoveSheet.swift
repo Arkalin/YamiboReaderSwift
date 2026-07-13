@@ -1,5 +1,5 @@
 import SwiftUI
-import YamiboReaderCore
+import YamiboXCore
 
 /// Tri-state per-item location membership (all / some / none of the selected
 /// items carry a location).

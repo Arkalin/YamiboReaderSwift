@@ -1,5 +1,5 @@
 import SwiftUI
-import YamiboReaderCore
+import YamiboXCore
 
 /// Main favorites screen: navigation scaffold, toolbar, status cards, and
 /// sheet/dialog presentation. Content rendering is delegated to the list and

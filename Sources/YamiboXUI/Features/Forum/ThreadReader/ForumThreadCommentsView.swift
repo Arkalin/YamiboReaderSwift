@@ -1,5 +1,5 @@
 import SwiftUI
-import YamiboReaderCore
+import YamiboXCore
 
 struct ForumThreadCommentsView: View {
     let comments: [ForumThreadPostComment]

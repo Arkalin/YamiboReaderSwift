@@ -1,6 +1,6 @@
 import Foundation
 import XCTest
-@testable import YamiboReaderCore
+@testable import YamiboXCore
 
 @MainActor
 final class ReaderChapterCommentsModuleTests: XCTestCase {

@@ -1,8 +1,8 @@
 import Foundation
 import Testing
 import XCTest
-@testable import YamiboReaderCore
-@testable import YamiboReaderUI
+@testable import YamiboXCore
+@testable import YamiboXUI
 
 #if os(iOS)
 import Photos

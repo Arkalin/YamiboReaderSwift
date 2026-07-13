@@ -1,4 +1,4 @@
-# YamiboReader Manga Reader Context
+# Yamibo X Manga Reader Context
 
 Domain language for continuous native manga reading.
 

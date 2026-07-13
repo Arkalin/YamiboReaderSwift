@@ -1,5 +1,5 @@
 import SwiftUI
-import YamiboReaderCore
+import YamiboXCore
 
 struct ForumThreadPollVotersRequest: Identifiable, Equatable {
     var optionID: String?

@@ -1,5 +1,5 @@
 import SwiftUI
-import YamiboReaderCore
+import YamiboXCore
 
 /// Board-favorite management page, pushed from the favorites screen's
 /// overflow menu. Purely remote: the list mirrors the forum account's

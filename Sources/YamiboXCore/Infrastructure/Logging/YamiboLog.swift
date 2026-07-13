@@ -4,7 +4,7 @@ import os
 /// Use the category matching the file you're editing; add a new case only when an
 /// existing category is a poor fit for the whole subsystem.
 public enum YamiboLog {
-    private static let subsystem = "com.arkalin.YamiboReader"
+    private static let subsystem = "com.arkalin.YamiboX"
 
     public static let persistence = Logger(subsystem: subsystem, category: "persistence")
     public static let offlineCache = Logger(subsystem: subsystem, category: "offline-cache")

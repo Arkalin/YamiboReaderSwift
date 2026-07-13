@@ -1,6 +1,6 @@
 import Foundation
 import UIKit
-import YamiboReaderCore
+import YamiboXCore
 
 /// State machine for one Yamibo remote favorite sync run. The five-phase
 /// engine (`FavoriteYamiboSyncEngine`) does the actual work; this session

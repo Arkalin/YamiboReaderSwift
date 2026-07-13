@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import YamiboReaderCore
+@testable import YamiboXCore
 
 @Test func localFavoriteProjectionFiltersBySourceGroupForThreadNovelAndUnknown() throws {
     let (document, items) = try makeProjectionDocument()

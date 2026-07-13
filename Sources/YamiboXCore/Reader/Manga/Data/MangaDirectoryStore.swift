@@ -3,7 +3,7 @@ import Foundation
 
 public actor MangaDirectoryStore: MangaDirectoryPersisting, MangaDirectoryRenaming {
     public nonisolated let changeID = UUID().uuidString
-    public static let didChangeNotification = Notification.Name("yamibo.mangaDirectoryStore.didChange")
+    public static let didChangeNotification = Notification.Name("yamibox.mangaDirectoryStore.didChange")
     public static let changeIDUserInfoKey = "changeID"
 
     private let database: DatabasePool

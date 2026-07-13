@@ -1,5 +1,5 @@
 import Foundation
-import YamiboReaderCore
+import YamiboXCore
 
 /// Routes a tapped favorite-update notification to its favorite, reusing the
 /// same resolver path as the in-app updates page (resume mode, board-default

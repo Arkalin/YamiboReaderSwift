@@ -15,7 +15,7 @@ public actor LikeImageStore {
         self.fileManager = fileManager
         self.baseDirectory = baseDirectory
             ?? fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
-            .appendingPathComponent("YamiboReader", isDirectory: true)
+            .appendingPathComponent("YamiboX", isDirectory: true)
             .appendingPathComponent("like-images", isDirectory: true)
             ?? URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("like-images", isDirectory: true)
     }

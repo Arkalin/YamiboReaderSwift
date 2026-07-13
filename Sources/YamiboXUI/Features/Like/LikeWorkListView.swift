@@ -1,5 +1,5 @@
 import SwiftUI
-import YamiboReaderCore
+import YamiboXCore
 
 /// First-level Like list: one row per liked work, pushed from Mine.
 struct LikeWorkListView: View {

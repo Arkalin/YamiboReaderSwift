@@ -1,5 +1,5 @@
 import SwiftUI
-import YamiboReaderCore
+import YamiboXCore
 
 enum ForumDestination: Hashable {
     case board(fid: String, title: String?, page: Int?)

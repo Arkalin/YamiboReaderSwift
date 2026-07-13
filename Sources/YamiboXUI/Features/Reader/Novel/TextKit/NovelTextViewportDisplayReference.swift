@@ -1,6 +1,6 @@
 import CoreGraphics
 import Foundation
-import YamiboReaderCore
+import YamiboXCore
 
 /// Opaque drawing handle for one generation-scoped reader surface. Holds only
 /// a weak runtime-owner reference plus the surface identity; every query and

@@ -1,5 +1,5 @@
 import SwiftUI
-import YamiboReaderCore
+import YamiboXCore
 
 public struct ForumNavigationHostView: View {
     @State private var model: ForumHomeViewModel

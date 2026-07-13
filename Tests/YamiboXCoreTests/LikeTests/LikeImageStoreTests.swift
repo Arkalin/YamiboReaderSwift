@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import YamiboReaderCore
+@testable import YamiboXCore
 
 @Test func likeImageStoreSavesLoadsDeletesAndDeletesAll() async throws {
     let store = LikeImageStore(baseDirectory: makeLikeImageStoreTestDirectory(prefix: "like-image-basic"))

@@ -1,6 +1,6 @@
 import CoreGraphics
 import Testing
-@testable import YamiboReaderUI
+@testable import YamiboXUI
 
 @Suite("MangaReaderTests: Vertical Collection Zoom Layout")
 struct MangaVerticalCollectionZoomLayoutTests {

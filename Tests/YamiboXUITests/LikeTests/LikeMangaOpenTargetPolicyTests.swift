@@ -1,6 +1,6 @@
 import XCTest
-@testable import YamiboReaderCore
-@testable import YamiboReaderUI
+@testable import YamiboXCore
+@testable import YamiboXUI
 
 /// Liked-manga open dispatch (pluggable-reader-config R13): the smart bit
 /// follows the board's *current* configuration when the anchor recorded its

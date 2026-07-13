@@ -1,5 +1,5 @@
 import SwiftUI
-import YamiboReaderCore
+import YamiboXCore
 
 /// Wraps the root favorites screen's content in `FavoriteBackgroundLayer`.
 /// Deliberately used only at `LocalFavoritesOrganizationView`'s root call

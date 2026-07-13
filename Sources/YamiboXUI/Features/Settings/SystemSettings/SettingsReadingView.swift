@@ -1,5 +1,5 @@
 import SwiftUI
-import YamiboReaderCore
+import YamiboXCore
 
 struct SettingsReadingView: View {
     @ObservedObject var viewModel: SystemSettingsViewModel

@@ -1,5 +1,5 @@
 import SwiftUI
-import YamiboReaderCore
+import YamiboXCore
 
 struct ForumThreadPollView: View {
     @State private var selectedOptionIDs: Set<String>

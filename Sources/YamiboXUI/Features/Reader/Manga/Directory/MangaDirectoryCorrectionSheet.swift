@@ -1,5 +1,5 @@
 import SwiftUI
-import YamiboReaderCore
+import YamiboXCore
 
 /// Shared correction form for a manga directory's identity (clean book name +
 /// search keywords). Presented from both the reader's directory sheet and the

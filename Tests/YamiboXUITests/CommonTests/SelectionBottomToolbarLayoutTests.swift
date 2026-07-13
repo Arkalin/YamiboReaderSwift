@@ -1,7 +1,7 @@
 import SwiftUI
 import XCTest
-import YamiboReaderCore
-@testable import YamiboReaderUI
+import YamiboXCore
+@testable import YamiboXUI
 
 /// The iOS 26 system bottom bar sizes its floating Liquid Glass capsule to
 /// the toolbar content's *ideal* size, so the bar must already ask for

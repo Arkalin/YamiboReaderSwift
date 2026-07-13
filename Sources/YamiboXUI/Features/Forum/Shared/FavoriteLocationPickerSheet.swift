@@ -1,5 +1,5 @@
 import SwiftUI
-import YamiboReaderCore
+import YamiboXCore
 
 /// Presentation state for the star button's long-press "choose favorite
 /// location" sheet — mirrors Android's collection picker dialog.

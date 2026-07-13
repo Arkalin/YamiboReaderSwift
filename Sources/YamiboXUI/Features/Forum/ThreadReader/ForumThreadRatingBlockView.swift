@@ -1,5 +1,5 @@
 import SwiftUI
-import YamiboReaderCore
+import YamiboXCore
 
 struct ForumThreadRatingBlockView: View {
     let block: ForumThreadRatingBlock

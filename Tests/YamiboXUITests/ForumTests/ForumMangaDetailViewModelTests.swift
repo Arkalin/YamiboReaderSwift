@@ -1,9 +1,9 @@
 import Foundation
 @preconcurrency import GRDB
 import Testing
-@testable import YamiboReaderCore
-import YamiboReaderTestSupport
-@testable import YamiboReaderUI
+@testable import YamiboXCore
+import YamiboXTestSupport
+@testable import YamiboXUI
 
 /// Regression coverage for the precise directory-scoped reading-progress
 /// lookup `ForumMangaDetailViewModel` must use once its `MangaDirectory` is
@@ -814,7 +814,7 @@ import YamiboReaderTestSupport
 }
 
 /// `MangaStoreTestSupport.swift`'s `makeTestMangaDirectoryStore` lives in the
-/// `YamiboReaderCoreTests` target only, so this file builds its own GRDB pool
+/// `YamiboXCoreTests` target only, so this file builds its own GRDB pool
 /// directly — mirroring `LocalFavoriteOpenTargetResolverTests
 /// .makeMangaDirectoryStore(suiteName:)`.
 private func makeForumMangaDetailTestDirectoryStore(suiteName: String) throws -> MangaDirectoryStore {

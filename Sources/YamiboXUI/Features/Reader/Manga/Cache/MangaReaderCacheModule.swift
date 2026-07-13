@@ -1,6 +1,6 @@
 import Combine
 import Foundation
-import YamiboReaderCore
+import YamiboXCore
 
 public struct MangaReaderCacheRow: Hashable, Identifiable, Sendable {
     public var chapter: MangaChapter

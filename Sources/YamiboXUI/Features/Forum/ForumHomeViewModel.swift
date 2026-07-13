@@ -1,6 +1,6 @@
 import Foundation
 import Observation
-import YamiboReaderCore
+import YamiboXCore
 
 protocol ForumHomePageLoading: Sendable {
     func cachedForumHome(allowExpired: Bool) async -> ForumHomePage?

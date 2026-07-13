@@ -1,5 +1,5 @@
 import SwiftUI
-import YamiboReaderCore
+import YamiboXCore
 
 /// Category management sheet: select, rename, reorder, and delete categories.
 struct LocalFavoriteCategoryManagementSheet: View {

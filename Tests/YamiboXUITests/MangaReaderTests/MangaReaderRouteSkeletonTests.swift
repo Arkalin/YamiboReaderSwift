@@ -1,8 +1,8 @@
 import Foundation
 import Testing
-@testable import YamiboReaderCore
-import YamiboReaderTestSupport
-@testable import YamiboReaderUI
+@testable import YamiboXCore
+import YamiboXTestSupport
+@testable import YamiboXUI
 
 @Suite("MangaReaderTests: UI Route Contracts")
 struct MangaReaderTestsUIRouteContracts {

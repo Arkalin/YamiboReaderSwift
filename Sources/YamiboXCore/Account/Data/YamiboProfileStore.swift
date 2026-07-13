@@ -1,7 +1,7 @@
 import Foundation
 
 public actor YamiboProfileStore {
-    public static let didChangeNotification = Notification.Name("yamibo.profileStore.didChange")
+    public static let didChangeNotification = Notification.Name("yamibox.profileStore.didChange")
     public static let changeIDUserInfoKey = "changeID"
 
     public nonisolated let changeID = UUID().uuidString
@@ -11,7 +11,7 @@ public actor YamiboProfileStore {
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
 
-    public init(defaults: UserDefaults = .standard, key: String = "yamibo.profile") {
+    public init(defaults: UserDefaults = .standard, key: String = "yamibox.profile") {
         self.defaults = defaults
         self.key = key
     }

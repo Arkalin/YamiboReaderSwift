@@ -1,5 +1,5 @@
 import SwiftUI
-import YamiboReaderCore
+import YamiboXCore
 
 /// Flat list of manga directories (smart-comic grouping index entries) with
 /// per-directory swipe-delete and a select-mode bottom bar for batch delete.

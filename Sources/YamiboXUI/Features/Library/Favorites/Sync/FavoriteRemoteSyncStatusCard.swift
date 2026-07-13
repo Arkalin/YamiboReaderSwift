@@ -1,5 +1,5 @@
 import SwiftUI
-import YamiboReaderCore
+import YamiboXCore
 
 /// Compact remote sync status card pinned above the favorites list.
 struct FavoriteRemoteSyncStatusCard: View {

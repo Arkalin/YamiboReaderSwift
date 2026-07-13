@@ -6,7 +6,7 @@ public final class ReaderResumeRouteStore: @unchecked Sendable {
     private let lock = NSLock()
     private var suppressesPositionSaves = false
 
-    public init(defaults: UserDefaults = .standard, key: String = "yamibo.novelReader.resumeRoute") {
+    public init(defaults: UserDefaults = .standard, key: String = "yamibox.novelReader.resumeRoute") {
         self.defaults = defaults
         self.key = key
     }

@@ -1,7 +1,7 @@
 import Foundation
 import Testing
 @preconcurrency import GRDB
-@testable import YamiboReaderCore
+@testable import YamiboXCore
 
 private func makeBrowsingHistoryStore(prefix: String) throws -> BrowsingHistoryStore {
     let root = FileManager.default.temporaryDirectory

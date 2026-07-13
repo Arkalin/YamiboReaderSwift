@@ -1,5 +1,5 @@
 import SwiftUI
-import YamiboReaderCore
+import YamiboXCore
 
 struct MessageCenterView: View {
     @State private var model: MessageCenterViewModel

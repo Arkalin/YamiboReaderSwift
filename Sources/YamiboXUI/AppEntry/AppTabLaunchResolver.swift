@@ -1,5 +1,5 @@
 import Foundation
-import YamiboReaderCore
+import YamiboXCore
 
 public enum AppTabLaunchResolver {
     public static func resolveInitialTab(

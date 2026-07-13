@@ -1,6 +1,6 @@
 import XCTest
-@testable import YamiboReaderCore
-@testable import YamiboReaderUI
+@testable import YamiboXCore
+@testable import YamiboXUI
 
 final class WebDAVSyncSettingsViewModelTests: XCTestCase {
     func testDownloadMismatchShowsErrorWithoutConfirmationAndPreservesSyncTimestamps() async throws {
@@ -51,7 +51,7 @@ final class WebDAVSyncSettingsViewModelTests: XCTestCase {
             // appSettings, likeLibrary, ...) must 404 rather than receive
             // this payload verbatim, or their own version/shape checks throw
             // and mask the account-mismatch error this test is exercising.
-            guard request.url?.lastPathComponent == "yamibo-favorite-library-v1.json" else {
+            guard request.url?.lastPathComponent == "yamibox-favorite-library-v1.json" else {
                 return (
                     Data(),
                     HTTPURLResponse(
@@ -143,7 +143,7 @@ final class WebDAVSyncSettingsViewModelTests: XCTestCase {
             // appSettings, likeLibrary, ...) must 404 rather than receive
             // this payload verbatim, or their own version/shape checks throw
             // and mask the account-mismatch error this test is exercising.
-            guard request.url?.lastPathComponent == "yamibo-favorite-library-v1.json" else {
+            guard request.url?.lastPathComponent == "yamibox-favorite-library-v1.json" else {
                 return (
                     Data(),
                     HTTPURLResponse(

@@ -1,4 +1,4 @@
-import YamiboReaderCore
+import YamiboXCore
 
 #if canImport(UIKit)
 import SwiftUI

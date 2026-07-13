@@ -1,5 +1,5 @@
 import SwiftUI
-import YamiboReaderCore
+import YamiboXCore
 
 /// Composition root for the favorites tab: creates the library organizer,
 /// the remote sync session, and the update monitor, and routes resolved open

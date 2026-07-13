@@ -1,5 +1,5 @@
 import SwiftUI
-import YamiboReaderCore
+import YamiboXCore
 
 @MainActor
 final class SystemSettingsViewModel: ObservableObject {

@@ -1,6 +1,6 @@
 import SwiftUI
 import UIKit
-import YamiboReaderCore
+import YamiboXCore
 
 /// Full-screen read view for one liked text excerpt. Tapping a text card in
 /// `LikeWorkItemsView` opens this instead of jumping straight to the

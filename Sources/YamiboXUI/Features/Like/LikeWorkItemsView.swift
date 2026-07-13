@@ -1,5 +1,5 @@
 import SwiftUI
-import YamiboReaderCore
+import YamiboXCore
 import UIKit
 
 /// Second-level Like list for one work: Mine push destination and both

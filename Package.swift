@@ -2,15 +2,15 @@
 import PackageDescription
 
 let package = Package(
-    name: "YamiboReader",
+    name: "YamiboX",
     defaultLocalization: "zh-Hans",
     platforms: [
         .iOS(.v18)
     ],
     products: [
-        .library(name: "YamiboReaderCore", targets: ["YamiboReaderCore"]),
-        .library(name: "YamiboReaderUI", targets: ["YamiboReaderUI"]),
-        .library(name: "YamiboReaderTestSupport", targets: ["YamiboReaderTestSupport"])
+        .library(name: "YamiboXCore", targets: ["YamiboXCore"]),
+        .library(name: "YamiboXUI", targets: ["YamiboXUI"]),
+        .library(name: "YamiboXTestSupport", targets: ["YamiboXTestSupport"])
     ],
     dependencies: [
         .package(url: "https://github.com/groue/GRDB.swift.git", exact: "7.11.1"),
@@ -19,7 +19,7 @@ let package = Package(
     ],
     targets: [
         .target(
-            name: "YamiboReaderCore",
+            name: "YamiboXCore",
             dependencies: [
                 .product(name: "GRDB", package: "GRDB.swift"),
                 "Kanna",
@@ -30,32 +30,32 @@ let package = Package(
             ]
         ),
         .target(
-            name: "YamiboReaderUI",
+            name: "YamiboXUI",
             dependencies: [
-                "YamiboReaderCore",
+                "YamiboXCore",
                 .product(name: "NukeUI", package: "Nuke"),
             ]
         ),
         .target(
-            name: "YamiboReaderTestSupport",
+            name: "YamiboXTestSupport",
             dependencies: [
-                "YamiboReaderCore",
+                "YamiboXCore",
             ]
         ),
         .testTarget(
-            name: "YamiboReaderCoreTests",
+            name: "YamiboXCoreTests",
             dependencies: [
                 .product(name: "GRDB", package: "GRDB.swift"),
-                "YamiboReaderCore",
-                "YamiboReaderTestSupport",
+                "YamiboXCore",
+                "YamiboXTestSupport",
             ]
         ),
         .testTarget(
-            name: "YamiboReaderUITests",
+            name: "YamiboXUITests",
             dependencies: [
-                "YamiboReaderCore",
-                "YamiboReaderUI",
-                "YamiboReaderTestSupport",
+                "YamiboXCore",
+                "YamiboXUI",
+                "YamiboXTestSupport",
             ]
         )
     ]

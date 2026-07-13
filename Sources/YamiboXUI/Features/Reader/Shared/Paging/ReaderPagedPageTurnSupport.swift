@@ -1,6 +1,6 @@
 import Foundation
 import SwiftUI
-import YamiboReaderCore
+import YamiboXCore
 
 struct ReaderPagedPageTurnVisualMetrics: Equatable {
     var roundedPageIndex: Int

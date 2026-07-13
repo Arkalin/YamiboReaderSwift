@@ -1,4 +1,4 @@
-# YamiboReader Context
+# Yamibo X Context
 
 Agent instructions live in `AGENTS.md`. Read `AGENTS.md` first and follow its policies before using this context file.
 

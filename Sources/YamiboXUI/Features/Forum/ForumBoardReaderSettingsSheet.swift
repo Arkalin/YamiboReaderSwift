@@ -1,5 +1,5 @@
 import SwiftUI
-import YamiboReaderCore
+import YamiboXCore
 
 private enum ForumBoardReaderModeSelection: Hashable, CaseIterable {
     case plain

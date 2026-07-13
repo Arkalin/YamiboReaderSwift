@@ -1,6 +1,6 @@
 import Foundation
 import Observation
-import YamiboReaderCore
+import YamiboXCore
 
 protocol ForumNovelDocumentLoading: Sendable {
     func loadPage(_ request: NovelPageRequest) async throws -> NovelReaderProjection

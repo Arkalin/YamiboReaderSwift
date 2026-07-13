@@ -1,5 +1,5 @@
 import SwiftUI
-import YamiboReaderCore
+import YamiboXCore
 
 /// Cover with a text placeholder: when there is no cover URL or it fails to
 /// load, the full title renders bold over a tinted background, its font size

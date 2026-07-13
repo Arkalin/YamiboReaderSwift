@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Block SwiftPM test runs for YamiboReader.
+"""Block SwiftPM test runs for YamiboX.
 
 All project tests should run through the shared Xcode test plan with
 `xcodebuild test`. This avoids the macOS SwiftPM path and keeps Core and UI
@@ -108,9 +108,9 @@ def _deny_reason(tokens: list[str]) -> str | None:
         return None
 
     return (
-        "Blocked `swift test`. YamiboReader tests must run through the Xcode "
-        "test plan, for example `xcodebuild test -project YamiboReader.xcodeproj "
-        "-scheme YamiboReader -testPlan YamiboReaderTests -destination "
+        "Blocked `swift test`. YamiboX tests must run through the Xcode "
+        "test plan, for example `xcodebuild test -project YamiboX.xcodeproj "
+        "-scheme YamiboX -testPlan YamiboXTests -destination "
         "'platform=iOS Simulator,name=iPhone 16' -collect-test-diagnostics never "
         "CODE_SIGNING_ALLOWED=NO`."
     )

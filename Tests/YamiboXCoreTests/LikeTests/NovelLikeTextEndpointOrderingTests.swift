@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import YamiboReaderCore
+@testable import YamiboXCore
 
 @Test func novelLikeTextEndpointOrderingExtractsOccurrenceFromSegmentIdentity() {
     #expect(NovelLikeTextEndpointOrdering.occurrence(of: "chapter-1#text:5") == 5)

@@ -1,5 +1,5 @@
 import SwiftUI
-import YamiboReaderCore
+import YamiboXCore
 
 @MainActor
 public final class NovelReaderViewModel: ObservableObject {

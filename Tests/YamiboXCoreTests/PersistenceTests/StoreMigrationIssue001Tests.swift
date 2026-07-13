@@ -1,8 +1,8 @@
 import Foundation
 @preconcurrency import GRDB
 import Testing
-@testable import YamiboReaderCore
-import YamiboReaderTestSupport
+@testable import YamiboXCore
+import YamiboXTestSupport
 
 @Suite("GRDB store migration issue 001")
 struct StoreMigrationIssue001Tests {
@@ -41,7 +41,7 @@ struct StoreMigrationIssue001Tests {
         try await store.set(payload, namespace: "forum", key: "home")
 
         let fileURL = try await store.fileURL(namespace: "forum", key: "home")
-        #expect(fileURL.path.hasSuffix("/yamibo-cache/forum/home.json"))
+        #expect(fileURL.path.hasSuffix("/yamibox-cache/forum/home.json"))
         #expect(FileManager.default.fileExists(atPath: fileURL.path))
         #expect(try JSONDecoder().decode(CachePayload.self, from: Data(contentsOf: fileURL)) == payload)
 
@@ -157,7 +157,7 @@ struct StoreMigrationIssue001Tests {
         let (pool, root) = try makeMigratedDatabase()
         let suiteName = YamiboTestDefaults.suiteName(prefix: "grdb-reset-legacy")
         let defaults = try YamiboTestDefaults.make(suiteName: suiteName)
-        defaults.set(Data("legacy-json".utf8), forKey: "yamibo.favoriteLibrary.localFirst")
+        defaults.set(Data("legacy-json".utf8), forKey: "yamibox.favoriteLibrary.localFirst")
 
         let store = DiskCacheStore(writer: pool, rootDirectory: root)
         try await store.set(CachePayload(title: "缓存", page: 1), namespace: "forum", key: "home")
@@ -169,7 +169,7 @@ struct StoreMigrationIssue001Tests {
 
         try YamiboDatabase.reset(writer: pool, rootDirectory: root)
 
-        #expect(defaults.data(forKey: "yamibo.favoriteLibrary.localFirst") == Data("legacy-json".utf8))
+        #expect(defaults.data(forKey: "yamibox.favoriteLibrary.localFirst") == Data("legacy-json".utf8))
         #expect(!FileManager.default.fileExists(atPath: YamiboDatabase.cacheDirectoryURL(rootDirectory: root).path))
         let reset = try await libraryStore.load()
         #expect(reset.categories.map(\.id) == [FavoriteCategory.defaultID])

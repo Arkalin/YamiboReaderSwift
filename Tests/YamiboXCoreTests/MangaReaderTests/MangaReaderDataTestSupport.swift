@@ -1,5 +1,5 @@
 import Foundation
-@testable import YamiboReaderCore
+@testable import YamiboXCore
 
 struct MangaReaderDataTestResponse: Sendable {
     var statusCode: Int
@@ -103,7 +103,7 @@ final class MangaReaderDataTestHarness: @unchecked Sendable {
 
     init() {
         dataCacheDirectory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("YamiboReaderCoreTests-\(testID)", isDirectory: true)
+            .appendingPathComponent("YamiboXCoreTests-\(testID)", isDirectory: true)
         try? FileManager.default.removeItem(at: dataCacheDirectory)
         try? FileManager.default.createDirectory(
             at: dataCacheDirectory,

@@ -1,6 +1,6 @@
 import Foundation
 import UIKit
-import YamiboReaderCore
+import YamiboXCore
 
 /// The live TextKit 2 object graph for one committed runtime generation.
 /// Owns fragment geometry queries, viewport sampling, selection geometry, and

@@ -1,6 +1,6 @@
 import Foundation
 import Observation
-import YamiboReaderCore
+import YamiboXCore
 
 protocol ForumThreadPageLoading: Sendable {
     func cachedThreadPage(context: ThreadNovelLaunchContext, page: Int) async -> ForumThreadPage?

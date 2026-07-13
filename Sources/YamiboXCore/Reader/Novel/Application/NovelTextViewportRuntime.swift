@@ -183,7 +183,7 @@ private extension NovelTextLayoutRuntimeCandidate {
 
 /// Caller-isolated (non-`Sendable`) seam between the runtime owner and the
 /// platform TextKit implementation. The production adapter lives in
-/// `YamiboReaderUI`; tests substitute their own adapters.
+/// `YamiboXUI`; tests substitute their own adapters.
 package protocol NovelTextLayoutRuntimeAdapter: AnyObject {
     func prepareCandidate(
         input: NovelTextLayoutRuntimeAdapterInput

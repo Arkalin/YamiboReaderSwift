@@ -1,5 +1,5 @@
 import SwiftUI
-import YamiboReaderCore
+import YamiboXCore
 
 /// Horizontal chips showing the active source-group and tag filters, with
 /// one-tap clearing. The caller (`LocalFavoriteBrowseChrome`) only includes

@@ -1,5 +1,5 @@
 import SwiftUI
-import YamiboReaderCore
+import YamiboXCore
 
 /// Builds the selection-mode bottom bar's actions for the favorites screen —
 /// rendering itself is delegated to the shared `SelectionBottomToolbar`.

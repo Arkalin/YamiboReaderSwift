@@ -5,7 +5,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Yamibo Reader</string>
+	<string>Yamibo X</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -31,8 +31,8 @@
 	<string>用于将漫画图片保存到系统相册。</string>
 	<key>BGTaskSchedulerPermittedIdentifiers</key>
 	<array>
-		<string>com.arkalin.YamiboReader.mangaOfflineCache.continuedProcessing.*</string>
-		<string>com.arkalin.YamiboReader.favoriteUpdates.refresh</string>
+		<string>com.arkalin.YamiboX.mangaOfflineCache.continuedProcessing.*</string>
+		<string>com.arkalin.YamiboX.favoriteUpdates.refresh</string>
 	</array>
 	<key>UIBackgroundModes</key>
 	<array>

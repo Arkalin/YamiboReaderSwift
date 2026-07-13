@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import YamiboReaderCore
+@testable import YamiboXCore
 
 @Test func favoriteCategoriesCanBeCreatedRenamedReorderedAndDeletedToDefault() throws {
     var document = FavoriteLibraryDocument()

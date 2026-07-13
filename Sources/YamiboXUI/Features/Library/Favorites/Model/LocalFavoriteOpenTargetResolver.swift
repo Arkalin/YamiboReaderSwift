@@ -1,5 +1,5 @@
 import Foundation
-import YamiboReaderCore
+import YamiboXCore
 
 enum LocalFavoriteOpenTarget: Sendable {
     case novelReader(NovelLaunchContext)

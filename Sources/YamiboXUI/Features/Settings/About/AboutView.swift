@@ -1,5 +1,5 @@
 import SwiftUI
-import YamiboReaderCore
+import YamiboXCore
 
 #if canImport(UIKit)
 import UIKit
@@ -191,7 +191,7 @@ private enum AppMetadata {
         let bundle = Bundle.main
         return bundle.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String
             ?? bundle.object(forInfoDictionaryKey: "CFBundleName") as? String
-            ?? "YamiboReader"
+            ?? "Yamibo X"
     }
 
     static var versionText: String {

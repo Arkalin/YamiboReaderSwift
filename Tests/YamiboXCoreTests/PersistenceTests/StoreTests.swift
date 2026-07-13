@@ -2,8 +2,8 @@ import CoreGraphics
 import Foundation
 import Testing
 @preconcurrency import GRDB
-@testable import YamiboReaderCore
-import YamiboReaderTestSupport
+@testable import YamiboXCore
+import YamiboXTestSupport
 
 @Test func sessionStorePersistsCookieAndLoginState() async throws {
     let defaults = try #require(UserDefaults(suiteName: "session-store-tests"))

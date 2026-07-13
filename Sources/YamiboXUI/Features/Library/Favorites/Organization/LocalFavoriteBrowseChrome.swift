@@ -1,5 +1,5 @@
 import SwiftUI
-import YamiboReaderCore
+import YamiboXCore
 
 /// Chrome shared by every layout mode: the category tab bar, the active
 /// filter strip, and the layout/sort chips row. Every content view (grid,

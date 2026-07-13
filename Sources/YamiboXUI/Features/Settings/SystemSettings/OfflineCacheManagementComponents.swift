@@ -1,5 +1,5 @@
 import SwiftUI
-import YamiboReaderCore
+import YamiboXCore
 
 /// Drill-down detail of one cached work, pushed from the management list
 /// (hierarchy navigation, not a self-contained modal task).

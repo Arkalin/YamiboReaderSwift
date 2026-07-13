@@ -1,5 +1,5 @@
 import Foundation
-import YamiboReaderCore
+import YamiboXCore
 
 /// Builds the manga-reader launch context for opening a liked manga image,
 /// following the board's *current* 阅读方式 configuration (pluggable-reader-

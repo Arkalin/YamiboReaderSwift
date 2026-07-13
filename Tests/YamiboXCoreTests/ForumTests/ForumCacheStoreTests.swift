@@ -1,7 +1,7 @@
 import Foundation
 @preconcurrency import GRDB
 import Testing
-@testable import YamiboReaderCore
+@testable import YamiboXCore
 
 @Test func forumCacheStoreReturnsHomeWithinTTL() async throws {
     let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)

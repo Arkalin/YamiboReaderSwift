@@ -1,5 +1,5 @@
 import SwiftUI
-import YamiboReaderCore
+import YamiboXCore
 
 struct UserSpaceProfileHeaderView: View {
     let profile: UserSpaceProfile

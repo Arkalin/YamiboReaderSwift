@@ -1,4 +1,4 @@
-# YamiboReader Library and Account Context
+# Yamibo X Library and Account Context
 
 Domain language for favorites, reading metadata, Yamibo accounts, profiles, and sign-out semantics.
 

@@ -1,4 +1,4 @@
-# YamiboReader Novel Reader Context
+# Yamibo X Novel Reader Context
 
 Domain language for native novel reading, TextKit layout, runtime generations, and SwiftUI presentation.
 
@@ -215,10 +215,10 @@ _Avoid_: attributed string helper, UI text style factory, platform text builder,
 - The viewport controller preheats at most one chunk before and after the visible chunk set. Vertical reading position is sampled where a fixed viewport reference line intersects a generation-scoped surface, not inferred from content-offset percentage.
 - **Novel Reading Session** remains a pure-value `Sendable` state machine and must not own live TextKit objects or become main-actor isolated.
 - A session-scoped runtime owner is held by the **Novel Reading Workflow** for the current **Novel Reading Session** lifecycle. The workflow and runtime owner are caller-isolated rather than `@MainActor` types — they run entirely in the isolation domain that owns them — and all live TextKit 2 object graphs remain hidden inside the **Novel Text Layout** Implementation.
-- The runtime owner and the runtime adapter seam live in `YamiboReaderCore`; the production UIKit TextKit 2 Runtime Adapter lives in `YamiboReaderUI` under `Features/Reader/Novel/TextKit/`. Core stays UIKit-free and receives the live TextKit graph only through that seam, preserving the dependency direction in which `YamiboReaderUI` depends on Core.
+- The runtime owner and the runtime adapter seam live in `YamiboXCore`; the production UIKit TextKit 2 Runtime Adapter lives in `YamiboXUI` under `Features/Reader/Novel/TextKit/`. Core stays UIKit-free and receives the live TextKit graph only through that seam, preserving the dependency direction in which `YamiboXUI` depends on Core.
 - The **Novel Reading Workflow** creates, updates, and releases the runtime owner; the runtime owner is not stored in **Novel Reading Snapshot** or any other pure-value `Sendable` state.
 - SwiftUI consumes opaque **Novel Text Viewport** display references requested through the **Novel Reading Workflow** and does not access the runtime owner itself.
-- `YamiboReaderUI` publishes readable content through one immutable **Novel Reader Presentation** field; each committed generation or accepted navigation revision atomically replaces that value, and its surfaces, chapters, geometry, spreads, committed settings, and position are not independently published.
+- `YamiboXUI` publishes readable content through one immutable **Novel Reader Presentation** field; each committed generation or accepted navigation revision atomically replaces that value, and its surfaces, chapters, geometry, spreads, committed settings, and position are not independently published.
 - Loading and replacement-failure states may be published separately, but they must not mutate the current committed **Novel Reader Presentation**.
 - `NovelReaderViewModel` is a SwiftUI Adapter over the **Novel Reading Workflow** rather than a second reader state owner. Presented surfaces, chapters, current view and position, committed settings, presentation geometry, and spread projection are computed from its single published **Novel Reader Presentation**.
 - `NovelReaderViewModel` must not retain duplicate current or prefetched reader page documents, author identity, document page counts, pagination closures, or independently synchronized reader-layout fields.
@@ -253,7 +253,7 @@ _Avoid_: attributed string helper, UI text style factory, platform text builder,
 - A display reference does not retain `NSTextLayoutManager`, text fragments, attributed documents, or platform views.
 - Changes to the reader page document, reading mode, container layout, or text display semantics increment the runtime generation and make previously issued display references explicitly stale.
 - A stale display reference must report staleness and must not draw previous content, rebuild a TextKit object graph, or silently resolve itself against a newer runtime generation.
-- `YamiboReaderUI` requests current display references through the **Novel Reading Workflow** by **Novel Reader Surface Identity**; attributed-document reuse remains an internal runtime-owner decision across generation changes.
+- `YamiboXUI` requests current display references through the **Novel Reading Workflow** by **Novel Reader Surface Identity**; attributed-document reuse remains an internal runtime-owner decision across generation changes.
 - Surface identities, visible-surface reports, selection changes, viewport samples, scrub targets, and restoration requests are valid only within their **Novel Reader Presentation** generation and must carry that generation through the Workflow Interface.
 - The **Novel Reading Workflow** silently ignores events from stale generations; a generation change cancels in-flight page scrub, scroll sampling, and restoration retries, then restores from the captured semantic **Novel Reading Position**.
 - A reused platform cell replaces both its **Novel Reader Surface Identity** and opaque display reference; an old collection offset or surface identity must never be applied to a newer generation.

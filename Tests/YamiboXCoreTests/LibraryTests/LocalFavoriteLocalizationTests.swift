@@ -1,5 +1,5 @@
 import Testing
-@testable import YamiboReaderCore
+@testable import YamiboXCore
 
 @Test func localFavoriteCriticalLocalizationKeysResolveToDisplayText() {
     let plainKeys = [

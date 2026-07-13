@@ -1,6 +1,6 @@
-# YamiboReader Context Map
+# YamiboX Context Map
 
-YamiboReader uses multiple domain context documents. Start here, then read the context files relevant to the code or issue you are working on.
+YamiboX uses multiple domain context documents. Start here, then read the context files relevant to the code or issue you are working on.
 
 ## Contexts
 
@@ -15,14 +15,14 @@ YamiboReader uses multiple domain context documents. Start here, then read the c
 
 ## Implementation Landmarks
 
-- `Sources/YamiboReaderCore` is organized by feature (`Account`, `Forum`, `Library`, `Reader/{Manga,Novel,Shared}`, `Settings`, `Sync`, `Update`) with `Domain`/`Application`/`Data` layers inside each feature. Cross-cutting infrastructure lives under `Sources/YamiboReaderCore/Infrastructure/{Networking,HTML,Images,Routing,Localization}`; the shared GRDB database lifecycle lives under `Sources/YamiboReaderCore/Persistence/`, with each feature contributing its own schema module. Core is UIKit-free.
-- `YamiboAppContext` (`Sources/YamiboReaderCore/App/`) is the composition root. It assembles per-feature `*Dependencies` packages (`ForumDependencies`, `LibraryDependencies`, `AccountDependencies`, `MangaReaderDependencies`, `NovelReaderDependencies`, `SettingsDependencies`, `WebDAVSyncDependencies`); feature views and view models receive their dependencies package explicitly and never touch the context. Only the app-entry layer (`Sources/YamiboReaderUI/AppEntry/`) uses the context.
-- `Sources/YamiboReaderUI` mirrors the feature layout under `Features/`; cross-feature UI helpers live under `Sources/YamiboReaderUI/Platform/`.
-- Manga native reader UI lives under `Sources/YamiboReaderUI/Features/Reader/Manga/`. Read `Root/MangaReaderView.swift` first for chrome and content routing, `Viewports/Paged/` (entry point `MangaPagedReaderViewport.swift`) for paged viewport behavior, and `Support/MangaPagedReadingPlan.swift` for page/spread ordering rules.
+- `Sources/YamiboXCore` is organized by feature (`Account`, `Forum`, `Library`, `Reader/{Manga,Novel,Shared}`, `Settings`, `Sync`, `Update`) with `Domain`/`Application`/`Data` layers inside each feature. Cross-cutting infrastructure lives under `Sources/YamiboXCore/Infrastructure/{Networking,HTML,Images,Routing,Localization}`; the shared GRDB database lifecycle lives under `Sources/YamiboXCore/Persistence/`, with each feature contributing its own schema module. Core is UIKit-free.
+- `YamiboAppContext` (`Sources/YamiboXCore/App/`) is the composition root. It assembles per-feature `*Dependencies` packages (`ForumDependencies`, `LibraryDependencies`, `AccountDependencies`, `MangaReaderDependencies`, `NovelReaderDependencies`, `SettingsDependencies`, `WebDAVSyncDependencies`); feature views and view models receive their dependencies package explicitly and never touch the context. Only the app-entry layer (`Sources/YamiboXUI/AppEntry/`) uses the context.
+- `Sources/YamiboXUI` mirrors the feature layout under `Features/`; cross-feature UI helpers live under `Sources/YamiboXUI/Platform/`.
+- Manga native reader UI lives under `Sources/YamiboXUI/Features/Reader/Manga/`. Read `Root/MangaReaderView.swift` first for chrome and content routing, `Viewports/Paged/` (entry point `MangaPagedReaderViewport.swift`) for paged viewport behavior, and `Support/MangaPagedReadingPlan.swift` for page/spread ordering rules.
 - Manga paged reading keeps resume, comments, and progress at page-level **Manga Reading Position** even when the viewport displays one-page, two-page, or page-curl **Manga Page Spreads**.
-- Novel native reader UI lives under `Sources/YamiboReaderUI/Features/Reader/Novel/`. The production TextKit 2 adapters live in its `TextKit/` subdirectory; Core novel layout and the runtime seam stay platform-neutral under `Sources/YamiboReaderCore/Reader/Novel/`.
-- Shared reader paging primitives live under `Sources/YamiboReaderUI/Features/Reader/Shared/Paging/`. Use this location for cross-reader page-turn visuals, boundary page-turn gestures, leaf bookkeeping, and progress fill direction primitives before adding reader-specific copies.
-- Shared reader chrome lives under `Sources/YamiboReaderUI/Features/Reader/Shared/Chrome/`. Directional progress fill behavior for paged readers belongs there when it is not manga-only.
+- Novel native reader UI lives under `Sources/YamiboXUI/Features/Reader/Novel/`. The production TextKit 2 adapters live in its `TextKit/` subdirectory; Core novel layout and the runtime seam stay platform-neutral under `Sources/YamiboXCore/Reader/Novel/`.
+- Shared reader paging primitives live under `Sources/YamiboXUI/Features/Reader/Shared/Paging/`. Use this location for cross-reader page-turn visuals, boundary page-turn gestures, leaf bookkeeping, and progress fill direction primitives before adding reader-specific copies.
+- Shared reader chrome lives under `Sources/YamiboXUI/Features/Reader/Shared/Chrome/`. Directional progress fill behavior for paged readers belongs there when it is not manga-only.
 
 ## ADRs
 

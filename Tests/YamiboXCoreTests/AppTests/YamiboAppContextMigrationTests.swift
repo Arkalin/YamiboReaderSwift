@@ -1,8 +1,8 @@
 @preconcurrency import Foundation
 import Testing
 @preconcurrency import GRDB
-@testable import YamiboReaderCore
-import YamiboReaderTestSupport
+@testable import YamiboXCore
+import YamiboXTestSupport
 
 @MainActor
 @Test func appContextFreshStartupUsesSeededGRDBAndIgnoresLegacyJSONDefaults() async throws {
@@ -11,8 +11,8 @@ import YamiboReaderTestSupport
     let rootDirectory = makeTemporaryAppRoot()
     let legacyLibraryData = Data(#"{"items":[{"id":"legacy-library"}]}"#.utf8)
     let legacyProgressData = Data(#"{"records":[{"id":"legacy-progress"}]}"#.utf8)
-    defaults.set(legacyLibraryData, forKey: "yamibo.favoriteLibrary.localFirst")
-    defaults.set(legacyProgressData, forKey: "yamibo.readingProgress.records")
+    defaults.set(legacyLibraryData, forKey: "yamibox.favoriteLibrary.localFirst")
+    defaults.set(legacyProgressData, forKey: "yamibox.readingProgress.records")
     let appContext = try makeIsolatedAppContext(suiteName: suiteName, rootDirectory: rootDirectory)
 
     let library = try await appContext.localFavoriteLibraryStore.load()
@@ -21,8 +21,8 @@ import YamiboReaderTestSupport
     #expect(library.defaultCategory.id == FavoriteCategory.defaultID)
     #expect(library.items.isEmpty)
     #expect(progress.isEmpty)
-    #expect(defaults.data(forKey: "yamibo.favoriteLibrary.localFirst") == legacyLibraryData)
-    #expect(defaults.data(forKey: "yamibo.readingProgress.records") == legacyProgressData)
+    #expect(defaults.data(forKey: "yamibox.favoriteLibrary.localFirst") == legacyLibraryData)
+    #expect(defaults.data(forKey: "yamibox.readingProgress.records") == legacyProgressData)
 }
 
 @MainActor
@@ -94,8 +94,8 @@ import YamiboReaderTestSupport
     let rootDirectory = makeTemporaryAppRoot()
     let legacyLibraryData = Data(#"{"items":[{"id":"legacy-library"}]}"#.utf8)
     let legacyProgressData = Data(#"{"records":[{"id":"legacy-progress"}]}"#.utf8)
-    defaults.set(legacyLibraryData, forKey: "yamibo.favoriteLibrary.localFirst")
-    defaults.set(legacyProgressData, forKey: "yamibo.readingProgress.records")
+    defaults.set(legacyLibraryData, forKey: "yamibox.favoriteLibrary.localFirst")
+    defaults.set(legacyProgressData, forKey: "yamibox.readingProgress.records")
     let appContext = try makeIsolatedAppContext(suiteName: suiteName, rootDirectory: rootDirectory)
     let imageURL = try #require(URL(string: "https://img.example.test/7002-1.jpg"))
 
@@ -205,8 +205,8 @@ import YamiboReaderTestSupport
             .appendingPathComponent("forum-thread-pages", isDirectory: true)
             .path
     ))
-    #expect(defaults.data(forKey: "yamibo.favoriteLibrary.localFirst") == legacyLibraryData)
-    #expect(defaults.data(forKey: "yamibo.readingProgress.records") == legacyProgressData)
+    #expect(defaults.data(forKey: "yamibox.favoriteLibrary.localFirst") == legacyLibraryData)
+    #expect(defaults.data(forKey: "yamibox.readingProgress.records") == legacyProgressData)
 }
 
 @MainActor
@@ -282,7 +282,7 @@ import YamiboReaderTestSupport
 
 private func makeTemporaryAppRoot() -> URL {
     FileManager.default.temporaryDirectory
-        .appendingPathComponent("yamibo-app-context-grdb-\(UUID().uuidString)", isDirectory: true)
+        .appendingPathComponent("yamibox-app-context-grdb-\(UUID().uuidString)", isDirectory: true)
 }
 
 private func offlineCacheDirectory(rootDirectory: URL) -> URL {

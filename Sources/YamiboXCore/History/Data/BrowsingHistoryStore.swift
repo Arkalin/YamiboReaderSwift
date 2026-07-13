@@ -12,7 +12,7 @@ import Foundation
 /// `last_visit_time` after every insert. Purely local — never synced
 /// (decision #12).
 public actor BrowsingHistoryStore {
-    public static let didChangeNotification = Notification.Name("yamibo.browsingHistoryStore.didChange")
+    public static let didChangeNotification = Notification.Name("yamibox.browsingHistoryStore.didChange")
     public static let changeIDUserInfoKey = "changeID"
     public static let maxEntryCount = 2000
 

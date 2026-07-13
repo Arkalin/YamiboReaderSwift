@@ -1,5 +1,5 @@
 import XCTest
-@testable import YamiboReaderUI
+@testable import YamiboXUI
 
 final class ClipboardForumLinkDetectorTests: XCTestCase {
     func testExtractsForumLinksFromClipboardText() throws {

@@ -1,5 +1,5 @@
 import Foundation
-import YamiboReaderCore
+import YamiboXCore
 
 enum CategoryMoveDirection: Sendable {
     case up

@@ -1,4 +1,4 @@
-# YamiboReader Reader Navigation Context
+# Yamibo X Reader Navigation Context
 
 Domain language for cross-reader navigation behavior shared by manga and novel readers.
 

@@ -1,13 +1,13 @@
 import Foundation
 @preconcurrency import GRDB
 
-/// Owns the shared `yamibo.sqlite` pool: path resolution, pool configuration, and
+/// Owns the shared `yamibox.sqlite` pool: path resolution, pool configuration, and
 /// aggregation of the feature schema modules that own the actual tables.
 enum YamiboDatabase {
-    static let databaseFileName = "yamibo.sqlite"
-    static let cacheDirectoryName = "yamibo-cache"
+    static let databaseFileName = "yamibox.sqlite"
+    static let cacheDirectoryName = "yamibox-cache"
 
-    /// Every feature module owning tables in `yamibo.sqlite`.
+    /// Every feature module owning tables in `yamibox.sqlite`.
     private static let schemaModules: [any DatabaseSchemaModule.Type] = [
         DiskCacheDatabaseSchema.self,
         LibraryDatabaseSchema.self,
@@ -19,18 +19,18 @@ enum YamiboDatabase {
 
     static func defaultRootDirectory(fileManager: FileManager = .default) -> URL {
         fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
-            .appendingPathComponent("YamiboReader", isDirectory: true)
-            ?? URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("YamiboReader", isDirectory: true)
+            .appendingPathComponent("YamiboX", isDirectory: true)
+            ?? URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("YamiboX", isDirectory: true)
     }
 
-    /// Root for the regenerable `yamibo-cache` file cache. Lives under
+    /// Root for the regenerable `yamibox-cache` file cache. Lives under
     /// `Library/Caches`, which the OS keeps out of backups and may purge under
     /// disk pressure; anything that must survive belongs under
     /// `defaultRootDirectory()` instead.
     static func defaultCacheRootDirectory(fileManager: FileManager = .default) -> URL {
         let cachesBase = fileManager.urls(for: .cachesDirectory, in: .userDomainMask).first
             ?? URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("Caches", isDirectory: true)
-        return cachesBase.appendingPathComponent("YamiboReader", isDirectory: true)
+        return cachesBase.appendingPathComponent("YamiboX", isDirectory: true)
     }
 
     static func databaseURL(rootDirectory: URL? = nil, fileManager: FileManager = .default) -> URL {

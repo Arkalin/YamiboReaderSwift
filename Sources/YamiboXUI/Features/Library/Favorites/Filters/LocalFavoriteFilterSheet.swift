@@ -1,5 +1,5 @@
 import SwiftUI
-import YamiboReaderCore
+import YamiboXCore
 
 /// Filter sheet behind the toolbar filter button: multi-select source groups
 /// (Android's forum filter) and tags in one place.

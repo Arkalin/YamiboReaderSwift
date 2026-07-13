@@ -1,9 +1,9 @@
 import Foundation
 
 public actor WebDAVSyncSettingsStore {
-    public static let didChangeNotification = Notification.Name("yamibo.webDAVSyncSettingsStore.didChange")
+    public static let didChangeNotification = Notification.Name("yamibox.webDAVSyncSettingsStore.didChange")
     public static let changeIDUserInfoKey = "changeID"
-    public static let defaultKey = "yamibo.webdav.sync.settings"
+    public static let defaultKey = "yamibox.webdav.sync.settings"
 
     public nonisolated let changeID = UUID().uuidString
 

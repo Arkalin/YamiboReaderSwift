@@ -2,7 +2,7 @@
 import Foundation
 import GameController
 import Observation
-import YamiboReaderCore
+import YamiboXCore
 
 /// App-wide game-controller and hardware-keyboard listener. Translates
 /// `GCControllerLiveInput` element changes and `GCKeyboard` key changes into

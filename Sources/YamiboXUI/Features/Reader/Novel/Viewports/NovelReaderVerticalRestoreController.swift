@@ -1,5 +1,5 @@
 import Foundation
-import YamiboReaderCore
+import YamiboXCore
 
 struct NovelReaderVerticalTextAnchor: Equatable, Sendable {
     let position: NovelResumePoint

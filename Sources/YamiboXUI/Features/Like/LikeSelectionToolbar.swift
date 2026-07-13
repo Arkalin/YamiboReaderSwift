@@ -1,5 +1,5 @@
 import SwiftUI
-import YamiboReaderCore
+import YamiboXCore
 
 /// Builds the selection-mode bottom bar's single "delete selected" action,
 /// shared by both My Likes list screens (works and items) — rendering is

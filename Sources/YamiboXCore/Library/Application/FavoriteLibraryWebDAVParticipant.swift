@@ -5,7 +5,7 @@ import Foundation
 /// format and CRDT-style merge semantics for favorites.
 struct FavoriteLibraryWebDAVParticipant: WebDAVSyncParticipant {
     let datasetID = "favoriteLibrary"
-    let remoteFileName = "yamibo-favorite-library-v1.json"
+    let remoteFileName = "yamibox-favorite-library-v1.json"
     let uploadsOnlyWhenMarkedDirty = true
 
     private let store: FavoriteLibraryStore

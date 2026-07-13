@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import YamiboReaderCore
+@testable import YamiboXCore
 
 @Test func threadCoverResolverIncludesLaterOwnerFloorOnSamePage() throws {
     let owner = BlogReaderUser(uid: "7", name: "owner")

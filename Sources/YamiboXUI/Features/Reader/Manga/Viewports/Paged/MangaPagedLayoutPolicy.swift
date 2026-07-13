@@ -1,5 +1,5 @@
 import CoreGraphics
-import YamiboReaderCore
+import YamiboXCore
 
 enum MangaPagedLayoutPolicy {
     static func usesTwoPageSpread(

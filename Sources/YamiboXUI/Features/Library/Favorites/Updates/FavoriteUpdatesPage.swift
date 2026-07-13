@@ -1,5 +1,5 @@
 import SwiftUI
-import YamiboReaderCore
+import YamiboXCore
 
 /// Dedicated favorite-updates page behind the favorites toolbar bell:
 /// check controls, the automatic interval, notifications, and the detected

@@ -1,7 +1,7 @@
 import XCTest
-@testable import YamiboReaderCore
-import YamiboReaderTestSupport
-@testable import YamiboReaderUI
+@testable import YamiboXCore
+import YamiboXTestSupport
+@testable import YamiboXUI
 
 /// Covers the long-press "choose favorite location" feature's two new
 /// `FavoriteQuickActions` surfaces: `addFavorite(locations:)` and

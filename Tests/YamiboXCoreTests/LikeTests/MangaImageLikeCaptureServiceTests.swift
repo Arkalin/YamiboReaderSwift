@@ -1,7 +1,7 @@
 import Foundation
 import Testing
 @preconcurrency import GRDB
-@testable import YamiboReaderCore
+@testable import YamiboXCore
 
 @Test func mangaImageLikeCaptureServiceAddsNewLike() async throws {
     let store = LikeStore(databasePool: try makeImageCaptureTestDatabasePool(prefix: "manga-image-add"))

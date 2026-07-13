@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import YamiboReaderCore
+@testable import YamiboXCore
 
 @Suite("MangaReaderTests: Novel Offline Cache Store")
 struct MangaReaderTestsNovelOfflineCacheStore {

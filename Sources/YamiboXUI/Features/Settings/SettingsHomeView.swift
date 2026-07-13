@@ -1,5 +1,5 @@
 import SwiftUI
-import YamiboReaderCore
+import YamiboXCore
 
 /// Root settings screen: search plus entries into the five settings
 /// categories. Pushed onto the Mine tab's navigation stack (not a sheet),

@@ -1,5 +1,5 @@
 import SwiftUI
-import YamiboReaderCore
+import YamiboXCore
 
 /// Item actions reachable from a card's context menu and swipe actions.
 /// Cards carry no visible buttons: tap continues reading, long-press opens

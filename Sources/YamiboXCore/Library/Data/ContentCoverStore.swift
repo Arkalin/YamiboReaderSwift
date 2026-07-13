@@ -98,7 +98,7 @@ public struct ContentCover: Codable, Hashable, Sendable {
 }
 
 public actor ContentCoverStore {
-    public static let didChangeNotification = Notification.Name("yamibo.contentCoverStore.didChange")
+    public static let didChangeNotification = Notification.Name("yamibox.contentCoverStore.didChange")
     public static let changeIDUserInfoKey = "changeID"
     public nonisolated let changeID = UUID().uuidString
 
@@ -111,7 +111,7 @@ public actor ContentCoverStore {
     /// Isolated-storage convenience mirroring `FavoriteLibraryStore`: standard
     /// defaults use the shared database, any other suite gets its own pool in
     /// a temporary directory (tests and previews).
-    public init(defaults: UserDefaults, key: String = "yamibo.contentCovers") {
+    public init(defaults: UserDefaults, key: String = "yamibox.contentCovers") {
         self.database = Self.openDatabase(defaults: defaults, key: key)
     }
 
@@ -398,7 +398,7 @@ public actor ContentCoverStore {
                 defaults.set(databaseID, forKey: idKey)
             }
             let root = FileManager.default.temporaryDirectory
-                .appendingPathComponent("yamibo-reader-content-covers", isDirectory: true)
+                .appendingPathComponent("yamibo-x-content-covers", isDirectory: true)
                 .appendingPathComponent(databaseID, isDirectory: true)
             return try YamiboDatabase.openPool(rootDirectory: root)
         } catch {

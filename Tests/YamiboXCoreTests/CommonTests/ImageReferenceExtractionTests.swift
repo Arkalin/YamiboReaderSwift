@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import YamiboReaderCore
+@testable import YamiboXCore
 
 @Suite("Image Reference Extraction Rules")
 struct ImageReferenceExtractionTests {

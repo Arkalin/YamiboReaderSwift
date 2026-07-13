@@ -1,5 +1,5 @@
 import SwiftUI
-import YamiboReaderCore
+import YamiboXCore
 
 /// One favorite row in the list layouts: cover thumbnail, two-line title,
 /// source, plain time lines, and tag chips. No visible buttons — tap resumes

@@ -1,5 +1,5 @@
 import Foundation
-import YamiboReaderCore
+import YamiboXCore
 
 /// One cover-related menu entry in the image browser. The browser stays
 /// ignorant of the library: callers inject the actions that apply to their

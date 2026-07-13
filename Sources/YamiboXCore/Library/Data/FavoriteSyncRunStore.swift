@@ -18,7 +18,7 @@ public actor FavoriteSyncRunStore {
     /// Isolated-storage convenience mirroring `FavoriteLibraryStore`: standard
     /// defaults use the shared database, any other suite gets its own pool in
     /// a temporary directory (tests and previews).
-    public init(defaults: UserDefaults, key: String = "yamibo.favoriteSyncRuns") {
+    public init(defaults: UserDefaults, key: String = "yamibox.favoriteSyncRuns") {
         self.database = Self.openDatabase(defaults: defaults, key: key)
     }
 
@@ -111,7 +111,7 @@ public actor FavoriteSyncRunStore {
                 defaults.set(databaseID, forKey: idKey)
             }
             let root = FileManager.default.temporaryDirectory
-                .appendingPathComponent("yamibo-reader-favorite-sync-runs", isDirectory: true)
+                .appendingPathComponent("yamibo-x-favorite-sync-runs", isDirectory: true)
                 .appendingPathComponent(databaseID, isDirectory: true)
             return try YamiboDatabase.openPool(rootDirectory: root)
         } catch {

@@ -1,7 +1,7 @@
 import Foundation
 
 public final class OfflineCacheBackgroundDownloadTransport: NSObject, OfflineCacheImageTransporting, URLSessionDownloadDelegate, @unchecked Sendable {
-    public static let defaultIdentifier = "com.arkalin.YamiboReader.offlineCache.backgroundDownloads"
+    public static let defaultIdentifier = "com.arkalin.YamiboX.offlineCache.backgroundDownloads"
 
     private let lock = NSLock()
     private let sessionFactory: @Sendable (URLSessionDelegate) -> URLSession

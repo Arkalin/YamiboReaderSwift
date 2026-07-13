@@ -1,6 +1,6 @@
 import Foundation
 import Observation
-import YamiboReaderCore
+import YamiboXCore
 
 /// Drives the browsing-history page: timeline entries with type filtering
 /// and title search, per-row covers, and the quick-favorite heart.

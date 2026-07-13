@@ -1,6 +1,6 @@
 import Foundation
 import Observation
-import YamiboReaderCore
+import YamiboXCore
 
 protocol PrivateMessagePageLoading: Sendable {
     func fetchPrivateMessagePage(uid: String, page: Int?, titleHint: String?) async throws -> PrivateMessagePage

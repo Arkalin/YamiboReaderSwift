@@ -1,5 +1,5 @@
 import SwiftUI
-import YamiboReaderCore
+import YamiboXCore
 
 /// Horizontal category pill selector. A trailing circular "+" creates a new
 /// category; rename/reorder/delete live only in the "管理分类" sheet

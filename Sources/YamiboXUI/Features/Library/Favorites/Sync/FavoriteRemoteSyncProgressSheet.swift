@@ -1,5 +1,5 @@
 import SwiftUI
-import YamiboReaderCore
+import YamiboXCore
 
 /// Detailed progress sheet for a remote favorite sync run. Also used from
 /// system settings, which is why the actions are optional closures.

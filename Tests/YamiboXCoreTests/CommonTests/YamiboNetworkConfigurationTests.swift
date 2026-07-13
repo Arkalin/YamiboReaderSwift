@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import YamiboReaderCore
+@testable import YamiboXCore
 
 @Test func yamiboNetworkConfigurationUsesFifteenSecondTimeouts() {
     #expect(YamiboNetworkConfiguration.requestTimeout == 15)

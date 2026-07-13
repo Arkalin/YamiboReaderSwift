@@ -6,7 +6,7 @@ import os
 /// uploaded automatically after the synchronized subset actually changed.
 struct AppSettingsWebDAVParticipant: WebDAVSyncParticipant {
     let datasetID = "appSettings"
-    let remoteFileName = "yamibo-app-settings-v1.json"
+    let remoteFileName = "yamibox-app-settings-v1.json"
     let uploadsOnlyWhenMarkedDirty = true
 
     private let store: SettingsStore

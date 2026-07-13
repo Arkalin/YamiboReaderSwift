@@ -1,5 +1,5 @@
 import SwiftUI
-import YamiboReaderCore
+import YamiboXCore
 
 /// Context row under the category bar: the current view's item count
 /// (when the "show category counts" setting is on) leading, then layout,

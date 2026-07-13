@@ -1,7 +1,7 @@
 import Foundation
 @preconcurrency import GRDB
 import Testing
-@testable import YamiboReaderCore
+@testable import YamiboXCore
 
 @Suite("MangaReaderTests: Manga Stores")
 struct MangaReaderTestsMangaStores {

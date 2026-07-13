@@ -1,5 +1,5 @@
 import Foundation
-import YamiboReaderCore
+import YamiboXCore
 
 /// Filter and sort inputs for the favorites library. Any change to this value
 /// triggers one full re-derivation of `LocalFavoriteDerivedState`.

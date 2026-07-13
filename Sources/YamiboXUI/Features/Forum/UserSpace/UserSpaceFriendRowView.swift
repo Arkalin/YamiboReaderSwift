@@ -1,5 +1,5 @@
 import SwiftUI
-import YamiboReaderCore
+import YamiboXCore
 
 struct UserSpaceFriendRowView: View {
     let friend: UserSpaceFriendSummary

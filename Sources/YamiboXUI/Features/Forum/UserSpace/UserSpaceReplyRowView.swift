@@ -1,5 +1,5 @@
 import SwiftUI
-import YamiboReaderCore
+import YamiboXCore
 
 struct UserSpaceReplyRowView: View {
     let reply: UserSpaceReplyGroup

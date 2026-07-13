@@ -1,5 +1,5 @@
 import SwiftUI
-import YamiboReaderCore
+import YamiboXCore
 
 /// Browsing-history page pushed from the Mine tab's "浏览历史" entry.
 ///

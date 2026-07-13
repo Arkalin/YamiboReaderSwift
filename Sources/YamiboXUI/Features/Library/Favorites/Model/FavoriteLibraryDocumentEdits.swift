@@ -1,5 +1,5 @@
 import Foundation
-import YamiboReaderCore
+import YamiboXCore
 
 /// Batch item edits used by the favorites organizer when applying
 /// selection-based operations to the library document.

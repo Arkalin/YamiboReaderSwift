@@ -1,5 +1,5 @@
 import SwiftUI
-import YamiboReaderCore
+import YamiboXCore
 
 /// One detected favorite update with read and dismiss actions, rendered in
 /// the favorite-updates page.

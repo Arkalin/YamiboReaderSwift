@@ -1,6 +1,6 @@
 import Foundation
 import Observation
-import YamiboReaderCore
+import YamiboXCore
 
 public struct ForumNavigationRequest: Identifiable, Hashable, Sendable {
     public let id = UUID()

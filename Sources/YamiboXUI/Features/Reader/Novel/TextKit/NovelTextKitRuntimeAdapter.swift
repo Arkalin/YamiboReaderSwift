@@ -1,6 +1,6 @@
 import Foundation
 import UIKit
-import YamiboReaderCore
+import YamiboXCore
 
 final class NovelTextViewportLayoutDelegate: NSObject, NSTextViewportLayoutControllerDelegate {
     private var viewportBounds: CGRect

@@ -1,7 +1,7 @@
 import Foundation
 import Testing
-@testable import YamiboReaderCore
-import YamiboReaderTestSupport
+@testable import YamiboXCore
+import YamiboXTestSupport
 
 private final class YamiboAccountTestURLProtocol: URLProtocol {
     typealias Handler = (URLRequest) throws -> (Data, HTTPURLResponse)

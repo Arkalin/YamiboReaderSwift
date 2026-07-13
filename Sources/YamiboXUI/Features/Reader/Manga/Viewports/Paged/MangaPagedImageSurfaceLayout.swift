@@ -1,5 +1,5 @@
 import CoreGraphics
-import YamiboReaderCore
+import YamiboXCore
 
 enum MangaPageZoomPolicy {
     static let minimumScale: CGFloat = 1

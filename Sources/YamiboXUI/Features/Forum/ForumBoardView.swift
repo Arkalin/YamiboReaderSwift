@@ -1,5 +1,5 @@
 import SwiftUI
-import YamiboReaderCore
+import YamiboXCore
 
 struct ForumBoardView: View {
     let onSubBoardTap: (ForumBoardSummary) -> Void

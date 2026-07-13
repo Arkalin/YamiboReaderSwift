@@ -1,6 +1,6 @@
 import SwiftUI
 import UIKit
-import YamiboReaderCore
+import YamiboXCore
 
 /// Presentation mapping for favorite domain values: user-facing labels and
 /// colors live here, not in the library models.

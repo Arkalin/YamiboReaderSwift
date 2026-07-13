@@ -10,7 +10,7 @@ public struct YamiboCheckInSnapshot: Codable, Equatable, Sendable {
 }
 
 public actor YamiboCheckInStore {
-    public static let didChangeNotification = Notification.Name("yamibo.checkInStore.didChange")
+    public static let didChangeNotification = Notification.Name("yamibox.checkInStore.didChange")
     public static let changeIDUserInfoKey = "changeID"
 
     public nonisolated let changeID = UUID().uuidString
@@ -22,7 +22,7 @@ public actor YamiboCheckInStore {
 
     public init(
         defaults: UserDefaults = .standard,
-        keyPrefix: String = "yamibo.autoSign.lastDate"
+        keyPrefix: String = "yamibox.autoSign.lastDate"
     ) {
         self.defaults = defaults
         self.keyPrefix = keyPrefix

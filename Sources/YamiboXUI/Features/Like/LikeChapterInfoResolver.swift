@@ -1,5 +1,5 @@
 import Foundation
-import YamiboReaderCore
+import YamiboXCore
 
 /// Best-effort chapter-title lookup for Like item cards. Like anchors never
 /// persist a chapter title (see implementation-design.md §11's "resolve

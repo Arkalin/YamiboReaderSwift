@@ -2,9 +2,9 @@ import Foundation
 import os
 
 public actor SettingsStore {
-    public static let didChangeNotification = Notification.Name("yamibo.settingsStore.didChange")
+    public static let didChangeNotification = Notification.Name("yamibox.settingsStore.didChange")
     public static let changeIDUserInfoKey = "changeID"
-    public static let defaultKey = "yamibo.settings"
+    public static let defaultKey = "yamibox.settings"
 
     public nonisolated let changeID = UUID().uuidString
 

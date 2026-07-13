@@ -1,6 +1,6 @@
 import Foundation
 import UIKit
-import YamiboReaderCore
+import YamiboXCore
 
 typealias ReaderPlatformColor = UIColor
 typealias ReaderPlatformFont = UIFont

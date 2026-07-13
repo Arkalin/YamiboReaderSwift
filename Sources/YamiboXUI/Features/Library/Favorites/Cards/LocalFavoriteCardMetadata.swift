@@ -1,5 +1,5 @@
 import SwiftUI
-import YamiboReaderCore
+import YamiboXCore
 
 /// Two plain text lines mirroring the Android card: a reading line with the
 /// progress merged in ("最近阅读 3天前 · 62%"), and a content update line.

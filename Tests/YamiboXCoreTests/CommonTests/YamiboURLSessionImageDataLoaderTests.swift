@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import YamiboReaderCore
+@testable import YamiboXCore
 
 @Suite("Yamibo URLSession Image Data Loader", .serialized)
 struct YamiboURLSessionImageDataLoaderTests {

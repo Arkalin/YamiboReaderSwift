@@ -1,5 +1,5 @@
 import SwiftUI
-import YamiboReaderCore
+import YamiboXCore
 
 struct SettingsGeneralView: View {
     @Environment(\.openURL) private var openURL

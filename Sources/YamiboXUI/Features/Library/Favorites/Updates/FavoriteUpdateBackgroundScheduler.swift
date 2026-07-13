@@ -1,13 +1,13 @@
 #if os(iOS) && canImport(BackgroundTasks)
 import BackgroundTasks
 import Foundation
-import YamiboReaderCore
+import YamiboXCore
 
 /// BGAppRefreshTask wiring for automatic favorite update checks. iOS decides
 /// the actual run timing; the foreground catch-up in the favorites tab covers
 /// the gaps (`FavoriteUpdateMonitor.startCheckIfDue`).
 public enum FavoriteUpdateBackgroundScheduler {
-    public static let taskIdentifier = "com.arkalin.YamiboReader.favoriteUpdates.refresh"
+    public static let taskIdentifier = "com.arkalin.YamiboX.favoriteUpdates.refresh"
 
     /// Must run before the app finishes launching.
     @MainActor

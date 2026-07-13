@@ -55,17 +55,17 @@ jobs:
     - name: Build
       run: |
         xcodebuild build \
-          -project YamiboReader.xcodeproj \
-          -scheme YamiboReader \
+          -project YamiboX.xcodeproj \
+          -scheme YamiboX \
           -destination "${IOS_SIMULATOR_DESTINATION}" \
           CODE_SIGNING_ALLOWED=NO
     - name: Run tests
       run: |
         xcodebuild test \
           -quiet \
-          -project YamiboReader.xcodeproj \
-          -scheme YamiboReader \
-          -testPlan YamiboReaderTests \
+          -project YamiboX.xcodeproj \
+          -scheme YamiboX \
+          -testPlan YamiboXTests \
           -destination "${IOS_SIMULATOR_DESTINATION}" \
           -collect-test-diagnostics never \
           CODE_SIGNING_ALLOWED=NO

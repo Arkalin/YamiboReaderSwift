@@ -1,5 +1,5 @@
 import Foundation
-import YamiboReaderCore
+import YamiboXCore
 
 /// Presentation router for the favorites screen: which sheet and which
 /// confirmation dialog are currently shown. Child views trigger presentations

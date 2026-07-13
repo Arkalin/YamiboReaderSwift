@@ -1,5 +1,5 @@
 import Foundation
-import YamiboReaderCore
+import YamiboXCore
 
 /// State machine for favorite update detection: walks tracked threads,
 /// compares fingerprints against the stored baseline, and records update

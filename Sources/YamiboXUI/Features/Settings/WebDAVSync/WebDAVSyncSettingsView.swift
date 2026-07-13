@@ -1,5 +1,5 @@
 import SwiftUI
-import YamiboReaderCore
+import YamiboXCore
 
 enum WebDAVSyncSettingsAction: Equatable {
     case loading

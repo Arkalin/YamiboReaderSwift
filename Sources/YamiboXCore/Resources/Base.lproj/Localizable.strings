@@ -24,7 +24,7 @@
 "app.home.favorites" = "收藏";
 "app.home.forum" = "论坛";
 "app.initializing" = "初始化中…";
-"app.name" = "Yamibo Reader";
+"app.name" = "Yamibo X";
 "clipboard_forum_link.open" = "打开";
 "clipboard_forum_link.title" = "打开剪贴板链接？";
 "apple_pencil.behavior.double_tap_next_squeeze_previous" = "双击下一页，按压上一页";
@@ -966,7 +966,7 @@
 "settings.board_reader.restore_default" = "恢复默认配置";
 "settings.board_reader.restore_default_message" = "这将移除所有自定义的板块阅读方式，恢复为默认配置。";
 "settings.board_reader.smart_toggle" = "智能漫画模式";
-"settings.about_app_with_version" = "关于Yamibo Reader(%@)";
+"settings.about_app_with_version" = "关于Yamibo X(%@)";
 "settings.section.appearance" = "外观";
 "settings.section.favorite_sync_behavior" = "收藏同步偏好";
 "settings.section.favorite_smart_manga_management" = "智能漫画收藏管理";

@@ -1,7 +1,7 @@
 import Foundation
 import XCTest
-@testable import YamiboReaderCore
-@testable import YamiboReaderUI
+@testable import YamiboXCore
+@testable import YamiboXUI
 
 private typealias NovelTextLayoutFixture = @Sendable (
     NovelReaderProjection,

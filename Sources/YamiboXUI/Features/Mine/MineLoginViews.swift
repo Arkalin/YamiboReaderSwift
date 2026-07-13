@@ -1,5 +1,5 @@
 import SwiftUI
-import YamiboReaderCore
+import YamiboXCore
 
 struct MineLoginSheet: View {
     let viewModel: MineHomeViewModel
@@ -43,7 +43,7 @@ private struct MineLoginSection: View {
     let viewModel: MineHomeViewModel
     let onLoginSuccess: () -> Void
 
-    @AppStorage("yamibo.login.username") private var username = ""
+    @AppStorage("yamibox.login.username") private var username = ""
     @State private var password = ""
     @State private var selectedQuestionID = YamiboLoginQuestion.none.id
     @State private var answer = ""

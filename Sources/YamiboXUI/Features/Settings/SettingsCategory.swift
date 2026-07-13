@@ -1,5 +1,5 @@
 import Foundation
-import YamiboReaderCore
+import YamiboXCore
 
 enum SettingsCategory: String, CaseIterable, Identifiable {
     case general

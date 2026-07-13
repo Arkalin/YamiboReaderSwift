@@ -1,7 +1,7 @@
 import Foundation
 @preconcurrency import GRDB
 
-/// Contributed by each feature that owns tables in the shared `yamibo.sqlite` database.
+/// Contributed by each feature that owns tables in the shared `yamibox.sqlite` database.
 ///
 /// `YamiboDatabase` owns the pool; each module owns its tables: it registers its own
 /// migrations and knows how to erase its own rows (restoring required seed data).

@@ -5,7 +5,7 @@ import Foundation
 #endif
 
 public final class OfflineCacheContinuedProcessingCoordinator: OfflineCacheQueueRunObserving, @unchecked Sendable {
-    public static let permittedIdentifier = "com.arkalin.YamiboReader.offlineCache.continuedProcessing.*"
+    public static let permittedIdentifier = "com.arkalin.YamiboX.offlineCache.continuedProcessing.*"
 
     private let lock = NSLock()
     private let title: String
@@ -168,7 +168,7 @@ public final class OfflineCacheContinuedProcessingCoordinator: OfflineCacheQueue
 
     @available(iOS 26.0, *)
     private static func makeTaskIdentifier() -> String {
-        let bundleIdentifier = Bundle.main.bundleIdentifier ?? "com.arkalin.YamiboReader"
+        let bundleIdentifier = Bundle.main.bundleIdentifier ?? "com.arkalin.YamiboX"
         return "\(bundleIdentifier).offlineCache.continuedProcessing.\(UUID().uuidString)"
     }
     #endif
