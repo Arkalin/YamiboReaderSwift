@@ -18,24 +18,25 @@ final class FavoriteUpdateMonitor: ObservableObject {
     @Published private(set) var trackedTargets: [FavoriteUpdateTrackedTarget] = []
     @Published var errorMessage: String?
 
-    private let updateStore: FavoriteUpdateStore
+    // Lane extensions (+SmartManga, +Notifications) share these members.
+    let updateStore: FavoriteUpdateStore
     private let libraryStore: FavoriteLibraryStore
     private let makeForumThreadReaderRepository: @Sendable () async -> ForumThreadReaderRepository
-    private let settingsStore: SettingsStore?
-    private let notifier: (any FavoriteUpdateNotifying)?
+    let settingsStore: SettingsStore?
+    let notifier: (any FavoriteUpdateNotifying)?
     private let pageFetcher: ((FavoriteItem) async throws -> ForumThreadPage)?
     /// Batched tid -> directory resolution for the smart-manga check lane.
     /// `nil` (the default) makes that lane a no-op, same as every other
     /// optional dependency here — production wiring supplies the real
     /// `MangaDirectoryStore` in a later phase; this phase only wires
     /// dependency-injection plumbing plus internal candidate/check logic.
-    private let mangaDirectoryStore: (any MangaDirectoryPersisting)?
+    let mangaDirectoryStore: (any MangaDirectoryPersisting)?
     /// Builds a fresh `MangaDirectoryWorkflow` scoped to one directory
     /// group's board (`searchForumID`), mirroring `makeForumThreadReaderRepository`'s
     /// "construct fresh per call so session state stays current" shape. `nil`
     /// makes the smart-manga check lane a no-op even if `mangaDirectoryStore`
     /// is set (seeding still runs — only network refresh needs a workflow).
-    private let makeMangaDirectoryWorkflow: (@Sendable (_ searchForumID: String) async -> MangaDirectoryWorkflow)?
+    let makeMangaDirectoryWorkflow: (@Sendable (_ searchForumID: String) async -> MangaDirectoryWorkflow)?
 
     private var checkTask: Task<Void, Never>?
     private var storeUpdatesTask: Task<Void, Never>?
@@ -135,7 +136,7 @@ final class FavoriteUpdateMonitor: ObservableObject {
     /// Refreshes events and filters from the store. Kept separate from the
     /// snapshot so a run can publish fresh event state before its terminal
     /// status becomes observable.
-    private func reloadEventState() async {
+    func reloadEventState() async {
         let state = await updateStore.loadState()
         events = state.events
             .filter { $0.dismissedAt == nil }
@@ -259,84 +260,12 @@ final class FavoriteUpdateMonitor: ObservableObject {
     /// Smart-manga-only counterpart of `hasRecentEvents`, driving
     /// `SmartMangaUpdateCheckInterval.smart`'s adaptive cadence
     /// independently of thread-check activity.
-    private var hasRecentMangaDirectoryEvents: Bool {
+    var hasRecentMangaDirectoryEvents: Bool {
         events.contains {
             $0.mode == .mangaDirectory && $0.detectedAt > Date.now.addingTimeInterval(-7 * 24 * 3600)
         }
     }
 
-    // MARK: - Update notifications
-
-    /// Whether detected updates are delivered as local notifications.
-    func notificationsEnabled() async -> Bool {
-        guard let settingsStore else { return false }
-        return await settingsStore.load().favorites.updateNotificationsEnabled
-    }
-
-    /// Persists the notification toggle and returns the effective value.
-    /// Enabling requests system authorization first, so the stored setting
-    /// can only be true after a grant — a denied request leaves it off.
-    @discardableResult
-    func setNotificationsEnabled(_ enabled: Bool) async -> Bool {
-        guard let settingsStore, let notifier else { return false }
-        var effective = enabled
-        if enabled {
-            switch await notifier.authorization() {
-            case .granted:
-                break
-            case .notDetermined:
-                effective = await notifier.requestAuthorization()
-            case .denied:
-                effective = false
-            }
-        }
-        var settings = await settingsStore.load()
-        settings.favorites.updateNotificationsEnabled = effective
-        do {
-            try await settingsStore.save(settings)
-        } catch {
-            YamiboLog.persistence.error("Failed to persist favorite update notification toggle: \(error.localizedDescription)")
-        }
-        if !effective {
-            let identifiers = events.map { FavoriteUpdateNotification.identifier(forTargetID: $0.target.id) }
-            await notifier.removeDelivered(identifiers: identifiers)
-            await notifier.setBadgeCount(0)
-        }
-        return effective
-    }
-
-    /// True when the user's toggle is on but the system permission has since
-    /// been revoked — deliveries are silently skipped in that state.
-    func notificationsBlockedBySystem() async -> Bool {
-        guard let notifier, await notificationsEnabled() else { return false }
-        return await notifier.authorization() == .denied
-    }
-
-    /// Delivers a local notification for a freshly inserted event. Sharing
-    /// the event's target-keyed identifier means an accumulated re-detection
-    /// replaces the favorite's previous notification instead of stacking.
-    /// The badge is the unread count of the caller's in-memory run-in-progress
-    /// event list merged over the current store state — neither side alone is
-    /// right mid-run: the store is missing this run's not-yet-committed
-    /// detections, and the in-memory list is missing read/dismiss marks the
-    /// user applied since the run snapshotted it.
-    private func deliverNotificationIfEnabled(for event: FavoriteUpdateEvent, runEvents: [FavoriteUpdateEvent]) async {
-        guard let notifier, await notificationsEnabled() else { return }
-        guard await notifier.authorization() == .granted else { return }
-        let unreadCount = await updateStore.unreadEventCount(mergingRunEvents: runEvents)
-        await notifier.deliver(FavoriteUpdateNotification(event: event, badgeCount: unreadCount))
-    }
-
-    /// Removes the delivered notifications for events the user has handled
-    /// in-app and re-syncs the icon badge to the remaining unread count.
-    private func cleanUpNotifications(forTargetIDs targetIDs: [String]) async {
-        guard let notifier else { return }
-        if !targetIDs.isEmpty {
-            await notifier.removeDelivered(identifiers: targetIDs.map(FavoriteUpdateNotification.identifier(forTargetID:)))
-        }
-        guard await notificationsEnabled() else { return }
-        await notifier.setBadgeCount(events.filter { $0.readAt == nil }.count)
-    }
 
     /// Starts a check when the configured interval has elapsed since the last
     /// completed run — the foreground catch-up half of automatic checking
@@ -491,15 +420,13 @@ final class FavoriteUpdateMonitor: ObservableObject {
                     // `consecutiveFailures` circuit breaker; the next due
                     // check (foreground catch-up or background refresh)
                     // retries the whole scope from scratch.
-                    await commitCheckResults(trackedTargets: trackedTargets, events: events)
-                    await reloadEventState()
-                    await updateSnapshot(runID: runID) { snapshot in
-                        snapshot.status = .failed
-                        snapshot.phase = .failed
-                        snapshot.finishedAt = .now
-                        snapshot.progress = nil
-                        snapshot.errorMessage = YamiboError.offline.localizedDescription
-                    }
+                    await finishRun(
+                        runID: runID,
+                        trackedTargets: trackedTargets,
+                        events: events,
+                        status: .failed,
+                        errorMessage: YamiboError.offline.localizedDescription
+                    )
                     return
                 }
             }
@@ -514,42 +441,63 @@ final class FavoriteUpdateMonitor: ObservableObject {
             )
             try Task.checkCancellation()
 
-            await commitCheckResults(trackedTargets: trackedTargets, events: events)
-            await reloadEventState()
-            await updateSnapshot(runID: runID) { snapshot in
-                snapshot.status = .completed
-                snapshot.phase = .completed
-                snapshot.finishedAt = .now
-                snapshot.progress = nil
-            }
+            await finishRun(runID: runID, trackedTargets: trackedTargets, events: events, status: .completed)
         } catch {
-            await commitCheckResults(trackedTargets: trackedTargets, events: events)
             if error.isTaskCancellation {
-                await reloadEventState()
-                await updateSnapshot(runID: runID) { snapshot in
-                    // interrupt() may have already written the terminal state
-                    // for this exact run — its cancellation races with a
-                    // network fetch that doesn't observe Task cancellation
-                    // and runs to completion regardless. Don't re-terminate
-                    // an already-terminal snapshot, which would otherwise
-                    // duplicate the warning/log entry and push finishedAt
-                    // later than when the user actually interrupted.
-                    guard snapshot.status == .running else { return }
-                    snapshot.status = .interrupted
-                    snapshot.phase = .interrupted
-                    snapshot.finishedAt = .now
-                    snapshot.progress = nil
-                }
+                // interrupt() may have already written the terminal state for
+                // this exact run — its cancellation races with a network fetch
+                // that doesn't observe Task cancellation and runs to
+                // completion regardless; finishRun's only-if-still-running
+                // guard keeps it from re-terminating (which would duplicate
+                // the warning/log entry and push finishedAt later than when
+                // the user actually interrupted).
+                await finishRun(
+                    runID: runID,
+                    trackedTargets: trackedTargets,
+                    events: events,
+                    status: .interrupted,
+                    onlyIfStillRunning: true
+                )
                 return
             }
             YamiboLog.sync.error("Favorite update check run \(runID) failed: \(error.localizedDescription)")
-            await reloadEventState()
-            await updateSnapshot(runID: runID) { snapshot in
-                snapshot.status = .failed
-                snapshot.phase = .failed
-                snapshot.finishedAt = .now
-                snapshot.progress = nil
-                snapshot.errorMessage = error.localizedDescription
+            await finishRun(
+                runID: runID,
+                trackedTargets: trackedTargets,
+                events: events,
+                status: .failed,
+                errorMessage: error.localizedDescription
+            )
+        }
+    }
+
+    /// One terminal-state write shared by every exit path of `runCheck`:
+    /// commit the run's accumulated results, refresh the published event
+    /// state, and stamp the snapshot's terminal status/phase.
+    private func finishRun(
+        runID: String,
+        trackedTargets: [String: FavoriteUpdateTrackedTarget],
+        events: [FavoriteUpdateEvent],
+        status: FavoriteUpdateRunStatus,
+        errorMessage: String? = nil,
+        onlyIfStillRunning: Bool = false
+    ) async {
+        await commitCheckResults(trackedTargets: trackedTargets, events: events)
+        await reloadEventState()
+        let phase: FavoriteUpdateRunPhase = switch status {
+        case .completed: .completed
+        case .interrupted: .interrupted
+        case .canceled: .canceled
+        case .failed, .running: .failed
+        }
+        await updateSnapshot(runID: runID) { snapshot in
+            if onlyIfStillRunning, snapshot.status != .running { return }
+            snapshot.status = status
+            snapshot.phase = phase
+            snapshot.finishedAt = .now
+            snapshot.progress = nil
+            if let errorMessage {
+                snapshot.errorMessage = errorMessage
             }
         }
     }
@@ -573,7 +521,7 @@ final class FavoriteUpdateMonitor: ObservableObject {
         }
     }
 
-    private func updateSnapshot(
+    func updateSnapshot(
         runID: String? = nil,
         mutate: (inout FavoriteUpdateRunSnapshot) -> Void
     ) async {
@@ -690,8 +638,8 @@ final class FavoriteUpdateMonitor: ObservableObject {
     /// to being retried at most once per `circuitBreakerCooldown` instead of
     /// on every single run — otherwise a permanently broken target (deleted
     /// thread, moved board) gets re-fetched forever with no end in sight.
-    private static let circuitBreakerThreshold = 5
-    private static let circuitBreakerCooldown: TimeInterval = 24 * 3600
+    static let circuitBreakerThreshold = 5
+    static let circuitBreakerCooldown: TimeInterval = 24 * 3600
 
     private func checkUpdate(
         for item: FavoriteItem,
@@ -803,7 +751,7 @@ final class FavoriteUpdateMonitor: ObservableObject {
     /// for the same target instead of replacing it outright, so a user who
     /// misses several check cycles in a row sees the true accumulated total
     /// rather than only the most recent cycle's delta.
-    private static func mergedSummary(existing: FavoriteUpdateSummary?, new: FavoriteUpdateSummary) -> FavoriteUpdateSummary {
+    static func mergedSummary(existing: FavoriteUpdateSummary?, new: FavoriteUpdateSummary) -> FavoriteUpdateSummary {
         guard let existing else { return new }
         switch (existing, new) {
         case let (.newReplies(a), .newReplies(b)):
@@ -851,290 +799,6 @@ final class FavoriteUpdateMonitor: ObservableObject {
         return try await repository.fetchThreadPage(context: context, page: page)
     }
 
-    // MARK: - Smart-manga directory check lane
-
-    /// One or more favorited `.mangaThread` chapters that resolved to the
-    /// same `MangaDirectory`, collapsed into a single check unit (design
-    /// decision #4: detection is per-directory, not per-favorite).
-    private struct MangaDirectoryCandidate {
-        var directory: MangaDirectory
-        var forumID: String
-        var forumName: String?
-        var categoryIDs: Set<String>
-    }
-
-    private enum MangaDirectoryCheckResult {
-        case checked(detected: Int)
-        case skippedCircuitBreaker
-        case skippedCooldown
-        case failed(String)
-    }
-
-    /// Gathers eligible `.mangaThread` favorites (mode ON for their own
-    /// board, per `BoardReaderSettings.isSmartComicModeEnabled` — the
-    /// authoritative gate, never inferred from a resolved directory or any
-    /// other proxy signal) and batch-resolves their tids to directories in
-    /// ONE query, then groups the resolved ones by `cleanBookName`. A
-    /// favorite whose board is mode-off, or whose tid has no resolved
-    /// directory yet, is silently excluded here — not tracked, not an
-    /// error; this pipeline never triggers directory resolution itself.
-    private func mangaDirectoryGroups(in document: FavoriteLibraryDocument) async -> [MangaDirectoryCandidate] {
-        guard let mangaDirectoryStore, let settingsStore else { return [] }
-        let settings = await settingsStore.load()
-        let eligibleItems: [(item: FavoriteItem, forumID: String)] = document.items.compactMap { item in
-            guard item.target.kind == .mangaThread,
-                  item.target.threadID != nil,
-                  let forumID = item.forumID,
-                  settings.isSmartComicModeEnabled(forumID: forumID) else { return nil }
-            return (item, forumID)
-        }
-        guard !eligibleItems.isEmpty else { return [] }
-        let tids = eligibleItems.compactMap { $0.item.target.threadID }
-        let resolved: [String: MangaDirectory]
-        do {
-            resolved = try await mangaDirectoryStore.directories(containingTIDs: tids)
-        } catch {
-            YamiboLog.sync.warning("Failed to batch-resolve manga directories for update checking: \(error.localizedDescription)")
-            return []
-        }
-        guard !resolved.isEmpty else { return [] }
-
-        var groupsByName: [String: MangaDirectoryCandidate] = [:]
-        for (item, forumID) in eligibleItems.sorted(by: { $0.item.target.id < $1.item.target.id }) {
-            guard let tid = item.target.threadID, let directory = resolved[tid] else { continue }
-            var group = groupsByName[directory.cleanBookName] ?? MangaDirectoryCandidate(
-                directory: directory,
-                forumID: forumID,
-                forumName: item.forumName,
-                categoryIDs: []
-            )
-            group.categoryIDs.formUnion(item.locations.compactMap(\.categoryID))
-            groupsByName[directory.cleanBookName] = group
-        }
-        return groupsByName.values.sorted { $0.directory.cleanBookName < $1.directory.cleanBookName }
-    }
-
-    /// Seeds, then (for already-tracked, due groups) refreshes and diffs
-    /// smart-manga directories. Ordering/capping (design point g/h): every
-    /// never-seen-before group is seeded first (zero network cost, always
-    /// allowed), then ALL due `.tag`-strategy groups run (cheap, no search
-    /// cooldown in the common case), then up to `nonTagCheckCap` due
-    /// non-`.tag`-strategy groups run oldest-`lastCheckedAt`-first. A
-    /// cooldown/flood-control hit stops further groups of either kind for
-    /// the rest of this run — the cooldown is global, so trying another
-    /// would just fail again and waste the run's remaining budget.
-    private func checkMangaDirectoryGroups(
-        _ groups: [MangaDirectoryCandidate],
-        nonTagCheckCap: Int,
-        runID: String,
-        trackedTargets: inout [String: FavoriteUpdateTrackedTarget],
-        events: inout [FavoriteUpdateEvent]
-    ) async {
-        guard !groups.isEmpty else { return }
-        let existingByCleanBookName: [String: FavoriteUpdateTrackedTarget] = Dictionary(
-            uniqueKeysWithValues: trackedTargets.values.compactMap { target in
-                guard case let .mangaDirectory(cleanBookName) = target.target else { return nil }
-                return (cleanBookName, target)
-            }
-        )
-
-        let newGroups = groups.filter { existingByCleanBookName[$0.directory.cleanBookName] == nil }
-        for group in newGroups {
-            guard !Task.isCancelled else { return }
-            seedMangaDirectoryBaseline(group, trackedTargets: &trackedTargets)
-            await updateSnapshot(runID: runID) { snapshot in
-                snapshot.totalCount += 1
-                snapshot.completedCount += 1
-            }
-        }
-
-        guard let interval = await smartMangaInterval(),
-              let delay = interval.nextDelay(hasRecentEvents: hasRecentMangaDirectoryEvents) else {
-            return
-        }
-
-        let dueExisting: [(group: MangaDirectoryCandidate, existing: FavoriteUpdateTrackedTarget)] = groups.compactMap { group in
-            guard let existing = existingByCleanBookName[group.directory.cleanBookName] else { return nil }
-            if let lastCheckedAt = existing.lastCheckedAt, Date.now.timeIntervalSince(lastCheckedAt) < delay {
-                return nil
-            }
-            return (group, existing)
-        }
-
-        let tagDue = dueExisting.filter { $0.group.directory.strategy == .tag }
-        let nonTagDue = dueExisting
-            .filter { $0.group.directory.strategy != .tag }
-            .sorted { ($0.existing.lastCheckedAt ?? .distantPast) < ($1.existing.lastCheckedAt ?? .distantPast) }
-
-        for (group, existing) in tagDue {
-            guard !Task.isCancelled else { return }
-            await updateSnapshot(runID: runID) { snapshot in snapshot.totalCount += 1 }
-            let result = await checkMangaDirectoryUpdate(
-                group: group,
-                existing: existing,
-                trackedTargets: &trackedTargets,
-                events: &events
-            )
-            await applyMangaDirectoryResult(result, runID: runID)
-            if case .skippedCooldown = result {
-                break
-            }
-        }
-
-        var nonTagChecksPerformed = 0
-        for (group, existing) in nonTagDue {
-            guard !Task.isCancelled else { return }
-            guard nonTagChecksPerformed < nonTagCheckCap else { break }
-            nonTagChecksPerformed += 1
-            await updateSnapshot(runID: runID) { snapshot in snapshot.totalCount += 1 }
-            let result = await checkMangaDirectoryUpdate(
-                group: group,
-                existing: existing,
-                trackedTargets: &trackedTargets,
-                events: &events
-            )
-            await applyMangaDirectoryResult(result, runID: runID)
-            if case .skippedCooldown = result {
-                break
-            }
-        }
-    }
-
-    private func smartMangaInterval() async -> SmartMangaUpdateCheckInterval? {
-        guard let settingsStore else { return nil }
-        return await settingsStore.load().favorites.smartMangaUpdateCheckInterval
-    }
-
-    /// First sighting of a directory: baseline-only, zero network, no event
-    /// (design point 6 — otherwise every already-read chapter would report
-    /// as "new" the moment tracking starts).
-    private func seedMangaDirectoryBaseline(
-        _ group: MangaDirectoryCandidate,
-        trackedTargets: inout [String: FavoriteUpdateTrackedTarget]
-    ) {
-        let target = FavoriteUpdateTrackedTarget(
-            target: .mangaDirectory(cleanBookName: group.directory.cleanBookName),
-            title: group.directory.cleanBookName,
-            mode: .mangaDirectory,
-            categoryIDs: group.categoryIDs,
-            fid: group.forumID,
-            forumName: group.forumName,
-            knownChapterTIDs: Set(group.directory.chapters.map(\.tid)),
-            baselineReady: true,
-            lastCheckedAt: .now
-        )
-        trackedTargets[target.id] = target
-    }
-
-    private func applyMangaDirectoryResult(_ result: MangaDirectoryCheckResult, runID: String) async {
-        switch result {
-        case let .checked(detected):
-            await updateSnapshot(runID: runID) { snapshot in
-                snapshot.completedCount += 1
-                snapshot.detectedCount += detected
-            }
-        case .skippedCircuitBreaker, .skippedCooldown:
-            await updateSnapshot(runID: runID) { snapshot in snapshot.skippedCount += 1 }
-        case let .failed(message):
-            await updateSnapshot(runID: runID) { snapshot in
-                snapshot.failedCount += 1
-                snapshot.warningMessage = [snapshot.warningMessage, message].compactMap { $0 }.joined(separator: "\n")
-            }
-        }
-    }
-
-    /// Refreshes one directory's chapter list over the network and diffs the
-    /// result against the tracked tid baseline. `YamiboError.searchCooldown`
-    /// (the workflow's own client-side cooldown) and `.floodControl` (the
-    /// forum's own flood-control page, detected downstream in the parser)
-    /// are both an expected "not now" — never fed to the circuit breaker,
-    /// never advancing the baseline. Any other error DOES feed the breaker,
-    /// same as the thread-check lane.
-    private func checkMangaDirectoryUpdate(
-        group: MangaDirectoryCandidate,
-        existing: FavoriteUpdateTrackedTarget,
-        trackedTargets: inout [String: FavoriteUpdateTrackedTarget],
-        events: inout [FavoriteUpdateEvent]
-    ) async -> MangaDirectoryCheckResult {
-        guard let makeMangaDirectoryWorkflow else { return .skippedCircuitBreaker }
-        var target = existing
-
-        if target.consecutiveFailures >= Self.circuitBreakerThreshold,
-           let lastCheckedAt = target.lastCheckedAt,
-           Date.now.timeIntervalSince(lastCheckedAt) < Self.circuitBreakerCooldown {
-            return .skippedCircuitBreaker
-        }
-
-        let workflow = await makeMangaDirectoryWorkflow(group.forumID)
-        // Seeds the search keyword from a real chapter title when the
-        // directory has none yet — any favorited chapter in the group works,
-        // so the most recently added one is as good a representative as any.
-        let representativeTID = group.directory.chapters.last?.tid
-
-        do {
-            let result = try await workflow.updateDirectory(group.directory, currentTID: representativeTID)
-            // `existing` is only ever produced by `seedMangaDirectoryBaseline`
-            // or a prior pass through this same function, both of which
-            // always set `knownChapterTIDs` — the `?? []` here just satisfies
-            // the optional, it never actually triggers.
-            let knownTIDs = target.knownChapterTIDs ?? []
-            let refreshedTIDs = Set(result.directory.chapters.map(\.tid))
-            let newTIDs = refreshedTIDs.subtracting(knownTIDs)
-
-            target.knownChapterTIDs = knownTIDs.union(refreshedTIDs)
-            target.baselineReady = true
-            target.lastCheckedAt = .now
-            target.lastError = nil
-            target.consecutiveFailures = 0
-            target.title = group.directory.cleanBookName
-            target.fid = group.forumID
-            target.forumName = group.forumName
-            target.categoryIDs = group.categoryIDs
-
-            guard !newTIDs.isEmpty else {
-                trackedTargets[target.id] = target
-                return .checked(detected: 0)
-            }
-
-            let key = FavoriteUpdateTargetKey.mangaDirectory(cleanBookName: group.directory.cleanBookName)
-            let existingEvent = events.first { $0.target == key && $0.dismissedAt == nil }
-            let summary = Self.mergedSummary(
-                existing: existingEvent?.summary,
-                new: .newChapters(count: newTIDs.count)
-            )
-            let event = FavoriteUpdateEvent(
-                target: key,
-                title: group.directory.cleanBookName,
-                mode: .mangaDirectory,
-                fid: group.forumID,
-                forumName: group.forumName,
-                summary: summary,
-                detailIDs: newTIDs.sorted(),
-                detectedAt: .now,
-                ambiguous: false
-            )
-            events.removeAll { $0.target == event.target && $0.dismissedAt == nil }
-            events.append(event)
-            trackedTargets[target.id] = target
-            await deliverNotificationIfEnabled(for: event, runEvents: events)
-            return .checked(detected: 1)
-        } catch {
-            if case YamiboError.searchCooldown = error {
-                YamiboLog.sync.info("Smart-manga directory check for \(group.directory.cleanBookName) hit search cooldown, deferring")
-                return .skippedCooldown
-            }
-            if case YamiboError.floodControl = error {
-                YamiboLog.sync.warning("Smart-manga directory check for \(group.directory.cleanBookName) hit forum flood control, deferring")
-                return .skippedCooldown
-            }
-            YamiboLog.sync.warning("Smart-manga directory check failed for \(group.directory.cleanBookName): \(error.localizedDescription)")
-            target.consecutiveFailures += 1
-            target.lastError = error.localizedDescription
-            target.lastCheckedAt = .now
-            trackedTargets[target.id] = target
-            return .failed(error.localizedDescription)
-        }
-    }
 }
 
 /// Compact comparison key for detecting thread updates between check runs.

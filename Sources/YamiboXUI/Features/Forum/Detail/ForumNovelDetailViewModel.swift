@@ -109,16 +109,12 @@ final class ForumNovelDetailViewModel {
         self.threadRepositoryProvider = threadRepositoryProvider ?? {
             await dependencies.makeForumThreadReaderRepository()
         }
-        readingProgressUpdatesTask = Task { @MainActor [weak self, readingProgressStore = dependencies.readingProgressStore] in
-            for await notification in NotificationCenter.default.notifications(named: ReadingProgressStore.didChangeNotification) {
-                guard !Task.isCancelled else { return }
-                guard let self else { return }
-                guard let changeID = notification.userInfo?[ReadingProgressStore.changeIDUserInfoKey] as? String,
-                      changeID == readingProgressStore.changeID else {
-                    continue
-                }
-                await self.refreshReadingProgress(from: readingProgressStore)
-            }
+        readingProgressUpdatesTask = StoreChangeObservation.task(
+            named: ReadingProgressStore.didChangeNotification,
+            changeIDKey: ReadingProgressStore.changeIDUserInfoKey,
+            changeID: { [store = dependencies.readingProgressStore] in store.changeID }
+        ) { [weak self, store = dependencies.readingProgressStore] in
+            await self?.refreshReadingProgress(from: store)
         }
         favoriteActions.makeAddMetadata = { @MainActor [weak self] in
             guard let self else { return .init(title: context.title) }

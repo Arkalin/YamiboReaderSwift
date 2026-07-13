@@ -78,16 +78,12 @@ final class FavoriteActionController {
         self.type = type
         self.defaultTitle = defaultTitle
         self.dependencies = dependencies
-        favoriteUpdatesTask = Task { @MainActor [weak self, localFavoriteLibraryStore = dependencies.localFavoriteLibraryStore] in
-            for await notification in NotificationCenter.default.notifications(named: FavoriteLibraryStore.didChangeNotification) {
-                guard !Task.isCancelled else { return }
-                guard let self else { return }
-                guard let changeID = notification.userInfo?[FavoriteLibraryStore.changeIDUserInfoKey] as? String,
-                      changeID == localFavoriteLibraryStore.changeID else {
-                    continue
-                }
-                await self.refreshFavorite()
-            }
+        favoriteUpdatesTask = StoreChangeObservation.task(
+            named: FavoriteLibraryStore.didChangeNotification,
+            changeIDKey: FavoriteLibraryStore.changeIDUserInfoKey,
+            changeID: { [store = dependencies.localFavoriteLibraryStore] in store.changeID }
+        ) { [weak self] in
+            await self?.refreshFavorite()
         }
     }
 

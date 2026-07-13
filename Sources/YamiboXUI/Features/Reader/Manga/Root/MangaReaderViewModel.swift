@@ -102,7 +102,8 @@ struct MangaReaderViewModelDependencies {
 
 @MainActor
 public final class MangaReaderViewModel: ObservableObject {
-    @Published public private(set) var presentation: MangaReaderPresentation
+    // internal(set): the +Directory extension file republishes presentation.
+    @Published public internal(set) var presentation: MangaReaderPresentation
     @Published public private(set) var applePencilPageTurnSettings = ApplePencilPageTurnSettings()
     @Published public private(set) var chapterCommentsState: ReaderChapterCommentsState = .idle
     @Published public private(set) var isLoadingMoreChapterComments = false
@@ -115,26 +116,27 @@ public final class MangaReaderViewModel: ObservableObject {
     public let context: MangaLaunchContext
     private(set) var imageLoader: MangaReaderPageImageLoader?
 
-    private let dependencies: MangaReaderViewModelDependencies
+    let dependencies: MangaReaderViewModelDependencies
     private let onReaderResumeRouteChange: ReaderResumeRouteChangeHandler
     private var chapterCommentsRepository: ReaderChapterCommentsRepository?
-    private var workflow: MangaReaderWorkflow?
+    var workflow: MangaReaderWorkflow?
     private var hasPrepared = false
     private var committedSettings = MangaReaderSettings()
-    private var directoryCooldownExpiresAt: Date?
-    private var forcedSearchShortcutExpiresAt: Date?
-    private var directoryTickTask: Task<Void, Never>?
-    private var directoryMutationTask: Task<Void, Never>?
-    private var automaticDirectoryUpdateTask: Task<Void, Never>?
+    // Directory lane state, owned by MangaReaderViewModel+Directory.swift.
+    var directoryCooldownExpiresAt: Date?
+    var forcedSearchShortcutExpiresAt: Date?
+    var directoryTickTask: Task<Void, Never>?
+    var directoryMutationTask: Task<Void, Never>?
+    var automaticDirectoryUpdateTask: Task<Void, Never>?
     private var chapterJumpTask: Task<Void, Never>?
     private var adjacentPrefetchTask: Task<Void, Never>?
     private var readerContentGeneration = 0
     private var navigationRequestGeneration = 0
     private var currentStableReadingPosition: MangaReadingPosition?
     private var lastQueuedProgressSnapshot: MangaReaderProgressSnapshot?
-    private var directoryMutationGeneration = 0
+    var directoryMutationGeneration = 0
     private var chapterJumpGeneration = 0
-    private var offlineCacheOwnerName: String?
+    var offlineCacheOwnerName: String?
     private var likeChangeObservationTask: Task<Void, Never>?
     private var autoThreadCoverResolutionTask: Task<Void, Never>?
     /// `"\(entry.id)|\(entry.title)"` of the last browsing-history row this
@@ -204,6 +206,8 @@ public final class MangaReaderViewModel: ObservableObject {
             state: .loading(MangaReaderLoadingPresentation(title: Self.presentationTitle(for: context)))
         )
     }
+
+    // MARK: - Loading
 
     public func prepare() async {
         guard !hasPrepared else { return }
@@ -358,6 +362,8 @@ public final class MangaReaderViewModel: ObservableObject {
 
         await prepare()
     }
+
+    // MARK: - Page navigation
 
     public func updateCurrentPage(globalIndex: Int) {
         guard let workflow else { return }
@@ -738,6 +744,8 @@ public final class MangaReaderViewModel: ObservableObject {
         }
     }
 
+    // MARK: - Chapter comments
+
     public func loadChapterComments(for target: ReaderChapterCommentTarget?) async {
         await chapterCommentsModule.load(target)
     }
@@ -750,6 +758,8 @@ public final class MangaReaderViewModel: ObservableObject {
     public func loadNextChapterCommentsPage() async {
         await chapterCommentsModule.loadNextPage()
     }
+
+    // MARK: - Settings
 
     public func applySettings(_ settings: MangaReaderSettings) {
         let normalizedSettings = Self.normalizedSettings(settings)
@@ -774,79 +784,7 @@ public final class MangaReaderViewModel: ObservableObject {
         }
     }
 
-    public func updateDirectoryFromPanel() async {
-        guard case let .loaded(loaded) = presentation.state else { return }
-        await updateDirectory(isForcedSearch: loaded.directoryPanel.shouldForceSearchOnUpdate)
-    }
-
-    public func updateDirectory(isForcedSearch: Bool = false) async {
-        if isForcedSearch {
-            automaticDirectoryUpdateTask?.cancel()
-            automaticDirectoryUpdateTask = nil
-        }
-        await enqueueDirectoryUpdate(isForcedSearch: isForcedSearch, isAutomatic: false)
-    }
-
-    public func resetDirectory() async {
-        automaticDirectoryUpdateTask?.cancel()
-        automaticDirectoryUpdateTask = nil
-        directoryMutationTask?.cancel()
-        invalidateReaderContent()
-        directoryMutationGeneration += 1
-        let generation = directoryMutationGeneration
-        directoryMutationTask = Task { @MainActor [weak self] in
-            await self?.performDirectoryReset(mutationGeneration: generation)
-        }
-        await directoryMutationTask?.value
-    }
-
-    public func renameDirectory(cleanBookName: String, searchKeyword: String) async {
-        automaticDirectoryUpdateTask?.cancel()
-        automaticDirectoryUpdateTask = nil
-        directoryMutationTask?.cancel()
-        invalidateReaderContent()
-        directoryMutationGeneration += 1
-        let generation = directoryMutationGeneration
-        directoryMutationTask = Task { @MainActor [weak self] in
-            await self?.performRenameDirectory(
-                cleanBookName: cleanBookName,
-                searchKeyword: searchKeyword,
-                mutationGeneration: generation
-            )
-        }
-        await directoryMutationTask?.value
-    }
-
-    public func renameDirectory(with draft: MangaDirectoryEditDraft) async {
-        await renameDirectory(
-            cleanBookName: draft.cleanBookName,
-            searchKeyword: MangaDirectoryWorkflow.searchKeyword(from: draft)
-        )
-    }
-
-    public func deleteDirectoryChapters(tids: Set<String>) async {
-        guard case let .loaded(loaded) = presentation.state else { return }
-        let targetTIDs = Set(tids.compactMap(Self.normalizedNonEmpty))
-        guard !targetTIDs.isEmpty else { return }
-        if let currentChapterTID = loaded.directoryPanel.currentChapterTID,
-           targetTIDs.contains(currentChapterTID) {
-            return
-        }
-
-        automaticDirectoryUpdateTask?.cancel()
-        automaticDirectoryUpdateTask = nil
-        directoryMutationTask?.cancel()
-        invalidateReaderContent()
-        directoryMutationGeneration += 1
-        let generation = directoryMutationGeneration
-        directoryMutationTask = Task { @MainActor [weak self] in
-            await self?.performDeleteDirectoryChapters(
-                tids: targetTIDs,
-                mutationGeneration: generation
-            )
-        }
-        await directoryMutationTask?.value
-    }
+    // MARK: - Chapter jump and navigation history
 
     public func jumpToChapter(_ chapter: MangaChapter) async {
         chapterJumpTask?.cancel()
@@ -880,210 +818,6 @@ public final class MangaReaderViewModel: ObservableObject {
 
     public func navigateForward() async {
         await restoreNavigationAnchor(direction: .forward)
-    }
-
-    private func startAutomaticDirectoryUpdate() {
-        automaticDirectoryUpdateTask?.cancel()
-        automaticDirectoryUpdateTask = Task { @MainActor [weak self] in
-            await self?.enqueueDirectoryUpdate(isForcedSearch: false, isAutomatic: true)
-        }
-    }
-
-    private func enqueueDirectoryUpdate(isForcedSearch: Bool, isAutomatic: Bool) async {
-        if isAutomatic, directoryMutationTask != nil {
-            automaticDirectoryUpdateTask = nil
-            return
-        }
-
-        if !isAutomatic {
-            directoryMutationTask?.cancel()
-        }
-
-        invalidateReaderContent()
-        directoryMutationGeneration += 1
-        let generation = directoryMutationGeneration
-        let task: Task<Void, Never> = Task { @MainActor [weak self] in
-            guard let self else { return }
-            await self.performDirectoryUpdate(
-                isForcedSearch: isForcedSearch,
-                isAutomatic: isAutomatic,
-                mutationGeneration: generation
-            )
-        }
-        directoryMutationTask = task
-        await task.value
-    }
-
-    private func performDirectoryUpdate(
-        isForcedSearch: Bool,
-        isAutomatic: Bool,
-        mutationGeneration: Int
-    ) async {
-        guard let workflow else { return }
-        let previousProgressSnapshot = progressSnapshot(from: presentation)
-
-        defer {
-            if directoryMutationGeneration == mutationGeneration {
-                directoryMutationTask = nil
-            }
-            if isAutomatic {
-                automaticDirectoryUpdateTask = nil
-            }
-        }
-
-        setDirectoryPanelCommandState(isUpdating: true, errorMessage: nil)
-        do {
-            let result = try await workflow.updateDirectory(isForcedSearch: isForcedSearch)
-            guard !Task.isCancelled, directoryMutationGeneration == mutationGeneration else { return }
-            publishPresentation(workflow.presentation, previousProgressSnapshot: previousProgressSnapshot)
-            if let cooldownExpiresAt = result.cooldownExpiresAt {
-                directoryCooldownExpiresAt = cooldownExpiresAt
-                forcedSearchShortcutExpiresAt = nil
-            } else if result.shouldOfferForcedSearch {
-                directoryCooldownExpiresAt = nil
-                forcedSearchShortcutExpiresAt = dependencies.directoryWorkflowConfiguration.now()
-                    .addingTimeInterval(dependencies.directoryWorkflowConfiguration.forcedSearchShortcutDuration)
-            } else {
-                directoryCooldownExpiresAt = nil
-                forcedSearchShortcutExpiresAt = nil
-            }
-            refreshDirectoryPanelTiming(errorMessage: nil)
-        } catch is CancellationError {
-            guard directoryMutationGeneration == mutationGeneration else { return }
-            refreshDirectoryPanelTiming(errorMessage: currentDirectoryPanelErrorMessage)
-        } catch {
-            guard !Task.isCancelled, directoryMutationGeneration == mutationGeneration else { return }
-            YamiboLog.reader.error("Manga directory update failed: \(error.localizedDescription)")
-            if case let YamiboError.searchCooldown(seconds) = error {
-                directoryCooldownExpiresAt = dependencies.directoryWorkflowConfiguration.now()
-                    .addingTimeInterval(TimeInterval(seconds))
-                forcedSearchShortcutExpiresAt = nil
-            } else if let cooldown = await workflow.currentDirectorySearchCooldownExpiresAt() {
-                directoryCooldownExpiresAt = cooldown
-                forcedSearchShortcutExpiresAt = nil
-            }
-            refreshDirectoryPanelTiming(errorMessage: error.localizedDescription)
-        }
-    }
-
-    private func performDirectoryReset(mutationGeneration: Int) async {
-        guard let workflow else { return }
-        let previousProgressSnapshot = progressSnapshot(from: presentation)
-
-        defer {
-            if directoryMutationGeneration == mutationGeneration {
-                directoryMutationTask = nil
-            }
-        }
-
-        setDirectoryPanelCommandState(isUpdating: true, errorMessage: nil)
-        do {
-            let result = try await workflow.resetDirectory()
-            guard !Task.isCancelled, directoryMutationGeneration == mutationGeneration else { return }
-            publishPresentation(workflow.presentation, previousProgressSnapshot: previousProgressSnapshot)
-            if let cooldownExpiresAt = result.cooldownExpiresAt {
-                directoryCooldownExpiresAt = cooldownExpiresAt
-                forcedSearchShortcutExpiresAt = nil
-            } else if result.shouldOfferForcedSearch {
-                directoryCooldownExpiresAt = nil
-                forcedSearchShortcutExpiresAt = dependencies.directoryWorkflowConfiguration.now()
-                    .addingTimeInterval(dependencies.directoryWorkflowConfiguration.forcedSearchShortcutDuration)
-            } else {
-                directoryCooldownExpiresAt = nil
-                forcedSearchShortcutExpiresAt = nil
-            }
-            refreshDirectoryPanelTiming(errorMessage: nil)
-        } catch is CancellationError {
-            guard directoryMutationGeneration == mutationGeneration else { return }
-            refreshDirectoryPanelTiming(errorMessage: currentDirectoryPanelErrorMessage)
-        } catch {
-            guard !Task.isCancelled, directoryMutationGeneration == mutationGeneration else { return }
-            YamiboLog.reader.error("Manga directory reset failed: \(error.localizedDescription)")
-            if case let YamiboError.searchCooldown(seconds) = error {
-                directoryCooldownExpiresAt = dependencies.directoryWorkflowConfiguration.now()
-                    .addingTimeInterval(TimeInterval(seconds))
-                forcedSearchShortcutExpiresAt = nil
-            } else if let cooldown = await workflow.currentDirectorySearchCooldownExpiresAt() {
-                directoryCooldownExpiresAt = cooldown
-                forcedSearchShortcutExpiresAt = nil
-            }
-            refreshDirectoryPanelTiming(errorMessage: error.localizedDescription)
-        }
-    }
-
-    private func performRenameDirectory(
-        cleanBookName: String,
-        searchKeyword: String,
-        mutationGeneration: Int
-    ) async {
-        guard let workflow else { return }
-        let previousProgressSnapshot = progressSnapshot(from: presentation)
-        defer {
-            if directoryMutationGeneration == mutationGeneration {
-                directoryMutationTask = nil
-            }
-        }
-
-        setDirectoryPanelCommandState(isUpdating: true, errorMessage: nil)
-        do {
-            let oldOwnerName = offlineCacheOwnerName
-            let updated = try await workflow.renameDirectory(cleanBookName: cleanBookName, searchKeyword: searchKeyword)
-            if let oldOwnerName, oldOwnerName != updated.cleanBookName {
-                await dependencies.migrateMangaTitleReferences(oldOwnerName, updated.cleanBookName)
-            }
-            let cacheRenameError: Error?
-            if let oldOwnerName,
-               oldOwnerName != updated.cleanBookName,
-               let offlineCacheStore = dependencies.makeOfflineCacheStore() {
-                do {
-                    try await offlineCacheStore.renameMangaOfflineCacheOwner(from: oldOwnerName, to: updated.cleanBookName)
-                    cacheRenameError = nil
-                } catch {
-                    YamiboLog.offlineCache.error("Failed to rename offline cache owner directory after manga rename: \(error.localizedDescription)")
-                    cacheRenameError = error
-                }
-            } else {
-                cacheRenameError = nil
-            }
-            guard !Task.isCancelled, directoryMutationGeneration == mutationGeneration else { return }
-            publishPresentation(workflow.presentation, previousProgressSnapshot: previousProgressSnapshot)
-            refreshDirectoryPanelTiming(errorMessage: cacheRenameError?.localizedDescription)
-        } catch is CancellationError {
-            guard directoryMutationGeneration == mutationGeneration else { return }
-            refreshDirectoryPanelTiming(errorMessage: currentDirectoryPanelErrorMessage)
-        } catch {
-            guard !Task.isCancelled, directoryMutationGeneration == mutationGeneration else { return }
-            YamiboLog.reader.error("Manga directory rename failed: \(error.localizedDescription)")
-            refreshDirectoryPanelTiming(errorMessage: error.localizedDescription)
-        }
-    }
-
-    private func performDeleteDirectoryChapters(
-        tids: Set<String>,
-        mutationGeneration: Int
-    ) async {
-        guard let workflow else { return }
-        let previousProgressSnapshot = progressSnapshot(from: presentation)
-        defer {
-            if directoryMutationGeneration == mutationGeneration {
-                directoryMutationTask = nil
-            }
-        }
-
-        setDirectoryPanelCommandState(isUpdating: true, errorMessage: nil)
-        do {
-            let nextPresentation = try await workflow.deleteDirectoryChapters(tids: tids)
-            guard !Task.isCancelled, directoryMutationGeneration == mutationGeneration else { return }
-            publishPresentation(nextPresentation, previousProgressSnapshot: previousProgressSnapshot)
-            refreshDirectoryPanelTiming(errorMessage: nil)
-        } catch is CancellationError {
-            guard directoryMutationGeneration == mutationGeneration else { return }
-            refreshDirectoryPanelTiming(errorMessage: currentDirectoryPanelErrorMessage)
-        } catch {
-            guard !Task.isCancelled, directoryMutationGeneration == mutationGeneration else { return }
-            YamiboLog.reader.error("Deleting manga directory chapters failed: \(error.localizedDescription)")
-            refreshDirectoryPanelTiming(errorMessage: error.localizedDescription)
-        }
     }
 
     private func performJumpToChapter(
@@ -1121,6 +855,8 @@ public final class MangaReaderViewModel: ObservableObject {
     }
 
     @discardableResult
+    // MARK: - Progress
+
     public func saveProgress() async -> MangaLaunchContext {
         guard let snapshot = progressSnapshot(from: presentation) else {
             return context
@@ -1138,6 +874,8 @@ public final class MangaReaderViewModel: ObservableObject {
         }
         return snapshot.resumeContext
     }
+
+    // MARK: - Adjacent prefetch
 
     private func scheduleAdjacentPrefetch(around globalIndex: Int) {
         guard workflow != nil else { return }
@@ -1200,7 +938,9 @@ public final class MangaReaderViewModel: ObservableObject {
         }
     }
 
-    private func invalidateReaderContent() {
+    // MARK: - Reader content lifecycle and presentation publishing
+
+    func invalidateReaderContent() {
         adjacentPrefetchTask?.cancel()
         adjacentPrefetchTask = nil
         readerContentGeneration += 1
@@ -1233,7 +973,7 @@ public final class MangaReaderViewModel: ObservableObject {
         readerContentGeneration += 1
     }
 
-    private func publishPresentation(
+    func publishPresentation(
         _ nextPresentation: MangaReaderPresentation,
         previousProgressSnapshot: MangaReaderProgressSnapshot?
     ) {
@@ -1393,79 +1133,7 @@ public final class MangaReaderViewModel: ObservableObject {
         linearReadingHistoryExpiration.reset()
     }
 
-    private var currentDirectoryPanelErrorMessage: String? {
-        guard case let .loaded(loaded) = presentation.state else { return nil }
-        return loaded.directoryPanel.errorMessage
-    }
-
-    private func refreshDirectoryPanelTiming(errorMessage: String?) {
-        setDirectoryPanelCommandState(
-            isUpdating: false,
-            errorMessage: errorMessage
-        )
-        updateDirectoryTickTask()
-    }
-
-    private func setDirectoryPanelCommandState(
-        isUpdating: Bool,
-        errorMessage: String?
-    ) {
-        guard let workflow else { return }
-        let now = dependencies.directoryWorkflowConfiguration.now()
-        let cooldownRemaining = remainingSecondsValue(until: directoryCooldownExpiresAt, now: now)
-        let forcedRemaining = remainingSeconds(until: forcedSearchShortcutExpiresAt, now: now)
-        if cooldownRemaining == 0 {
-            directoryCooldownExpiresAt = nil
-        }
-        if forcedRemaining == nil {
-            forcedSearchShortcutExpiresAt = nil
-        }
-        presentation = workflow.updateDirectoryPanelCommandState(
-            MangaDirectoryPanelCommandState(
-                isUpdating: isUpdating,
-                cooldownRemaining: cooldownRemaining,
-                forcedSearchShortcutRemaining: forcedRemaining,
-                errorMessage: errorMessage
-            )
-        )
-    }
-
-    private func updateDirectoryTickTask() {
-        let hasActiveDeadline = directoryCooldownExpiresAt != nil || forcedSearchShortcutExpiresAt != nil
-        guard hasActiveDeadline else {
-            directoryTickTask?.cancel()
-            directoryTickTask = nil
-            return
-        }
-        guard directoryTickTask == nil else { return }
-
-        directoryTickTask = Task { @MainActor [weak self] in
-            while !Task.isCancelled {
-                self?.setDirectoryPanelCommandState(
-                    isUpdating: false,
-                    errorMessage: self?.currentDirectoryPanelErrorMessage
-                )
-                guard self?.directoryCooldownExpiresAt != nil || self?.forcedSearchShortcutExpiresAt != nil else {
-                    self?.directoryTickTask = nil
-                    return
-                }
-                try? await Task.sleep(nanoseconds: 1_000_000_000)
-            }
-        }
-    }
-
-    private func remainingSeconds(until deadline: Date?, now: Date) -> Int? {
-        guard let deadline else { return nil }
-        let remaining = deadline.timeIntervalSince(now)
-        guard remaining > 0 else { return nil }
-        return max(1, Int(ceil(remaining)))
-    }
-
-    private func remainingSecondsValue(until deadline: Date?, now: Date) -> Int {
-        remainingSeconds(until: deadline, now: now) ?? 0
-    }
-
-    private func progressSnapshot(from presentation: MangaReaderPresentation) -> MangaReaderProgressSnapshot? {
+    func progressSnapshot(from presentation: MangaReaderPresentation) -> MangaReaderProgressSnapshot? {
         guard case let .loaded(loaded) = presentation.state,
               let currentPage = loaded.currentPage else {
             return nil
@@ -1546,7 +1214,7 @@ public final class MangaReaderViewModel: ObservableObject {
         return min(1.5, max(0.25, brightness))
     }
 
-    private static func normalizedNonEmpty(_ value: String) -> String? {
+    static func normalizedNonEmpty(_ value: String) -> String? {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? nil : trimmed
     }
@@ -1557,7 +1225,7 @@ public final class MangaReaderViewModel: ObservableObject {
     }
 }
 
-private struct MangaReaderProgressSnapshot: Hashable, Sendable {
+struct MangaReaderProgressSnapshot: Hashable, Sendable {
     var progress: MangaProgressReadingPosition
     var resumeContext: MangaLaunchContext
 }

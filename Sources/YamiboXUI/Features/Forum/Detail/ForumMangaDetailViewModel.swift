@@ -73,27 +73,21 @@ final class ForumMangaDetailViewModel {
             ?? { [makeForumThreadReaderRepository = dependencies.makeForumThreadReaderRepository] in
                 await makeForumThreadReaderRepository()
             }
-        readingProgressUpdatesTask = Task { @MainActor [weak self, readingProgressStore = dependencies.readingProgressStore] in
-            for await notification in NotificationCenter.default.notifications(named: ReadingProgressStore.didChangeNotification) {
-                guard !Task.isCancelled else { return }
-                guard let self else { return }
-                guard let changeID = notification.userInfo?[ReadingProgressStore.changeIDUserInfoKey] as? String,
-                      changeID == readingProgressStore.changeID else {
-                    continue
-                }
-                readingProgress = await self.loadReadingProgress()
-            }
+        readingProgressUpdatesTask = StoreChangeObservation.task(
+            named: ReadingProgressStore.didChangeNotification,
+            changeIDKey: ReadingProgressStore.changeIDUserInfoKey,
+            changeID: { [store = dependencies.readingProgressStore] in store.changeID }
+        ) { [weak self] in
+            guard let self else { return }
+            readingProgress = await self.loadReadingProgress()
         }
-        contentCoverUpdatesTask = Task { @MainActor [weak self, contentCoverStore = dependencies.contentCoverStore] in
-            for await notification in NotificationCenter.default.notifications(named: ContentCoverStore.didChangeNotification) {
-                guard !Task.isCancelled else { return }
-                guard let self else { return }
-                guard let changeID = notification.userInfo?[ContentCoverStore.changeIDUserInfoKey] as? String,
-                      changeID == contentCoverStore.changeID else {
-                    continue
-                }
-                contentCover = await self.loadContentCover()
-            }
+        contentCoverUpdatesTask = StoreChangeObservation.task(
+            named: ContentCoverStore.didChangeNotification,
+            changeIDKey: ContentCoverStore.changeIDUserInfoKey,
+            changeID: { [store = dependencies.contentCoverStore] in store.changeID }
+        ) { [weak self] in
+            guard let self else { return }
+            contentCover = await self.loadContentCover()
         }
         // Without this, renaming/updating this manga's directory from
         // elsewhere while this page stays open — the manga reader's own
@@ -103,16 +97,12 @@ final class ForumMangaDetailViewModel {
         // stale until some unrelated action happened to trigger a reload.
         // Mirrors `FavoriteLibraryOrganizer.reloadMangaDirectories()`'s
         // listener for the Favorites tab.
-        mangaDirectoryUpdatesTask = Task { @MainActor [weak self, mangaDirectoryStore = dependencies.mangaDirectoryStore] in
-            for await notification in NotificationCenter.default.notifications(named: MangaDirectoryStore.didChangeNotification) {
-                guard !Task.isCancelled else { return }
-                guard let self else { return }
-                guard let changeID = notification.userInfo?[MangaDirectoryStore.changeIDUserInfoKey] as? String,
-                      changeID == mangaDirectoryStore.changeID else {
-                    continue
-                }
-                await self.reloadDirectoryAfterExternalChange()
-            }
+        mangaDirectoryUpdatesTask = StoreChangeObservation.task(
+            named: MangaDirectoryStore.didChangeNotification,
+            changeIDKey: MangaDirectoryStore.changeIDUserInfoKey,
+            changeID: { [store = dependencies.mangaDirectoryStore] in store.changeID }
+        ) { [weak self] in
+            await self?.reloadDirectoryAfterExternalChange()
         }
         favoriteActions.makeAddMetadata = { @MainActor [weak self] in
             guard let self else { return .init(title: context.title) }
@@ -716,25 +706,5 @@ final class ForumMangaDetailViewModel {
         updated.lastUpdatedAt = Date()
         try await store.saveDirectory(updated)
         return updated
-    }
-}
-
-
-/// `editDraft(for:currentTID:)` is the only pure helper this view model needs
-/// off `MangaDirectoryWorkflow` outside an update/reload, and it never touches
-/// the repository — this placeholder keeps those synchronous call sites from
-/// having to await the real repository factory just to satisfy the
-/// initializer.
-private struct UnreachedMangaDirectoryRepository: MangaDirectoryRepository {
-    func loadDirectorySeed(for threadID: String) async throws -> MangaDirectorySeed {
-        throw YamiboError.underlying("Manga directory repository is not reachable from this call site.")
-    }
-
-    func loadTagDirectory(tagIDs: [String], allowedForumID: String) async throws -> [MangaChapter] {
-        throw YamiboError.underlying("Manga directory repository is not reachable from this call site.")
-    }
-
-    func searchDirectory(keyword: String, forumID: String) async throws -> [MangaChapter] {
-        throw YamiboError.underlying("Manga directory repository is not reachable from this call site.")
     }
 }
