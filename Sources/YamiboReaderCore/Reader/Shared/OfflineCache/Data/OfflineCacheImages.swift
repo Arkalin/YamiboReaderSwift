@@ -126,12 +126,29 @@ extension OfflineCacheStore {
                     arguments: [imageURLString, fileName, data.count]
                 )
 
-                let memberships = try Self.allMangaMemberships(
-                    fileManager: fileManager,
-                    mangaSourcePagesDirectory: mangaSourcePagesDirectory,
-                    in: db
+                // Narrowed via the image_url index instead of scanning every cached chapter:
+                // only chapters that actually reference this image can possibly have just
+                // become complete.
+                let candidateOwnerTIDs = try Row.fetchAll(
+                    db,
+                    sql: """
+                    SELECT DISTINCT owner_name, tid
+                    FROM offline_cache_manga_entry_images
+                    WHERE image_url = ?
+                    """,
+                    arguments: [imageURLString]
                 )
-                for membership in memberships where membership.imageURLs.contains(imageURL) {
+                for row in candidateOwnerTIDs {
+                    guard let membership = try Self.membership(
+                        ownerName: row["owner_name"],
+                        tid: row["tid"],
+                        fileManager: fileManager,
+                        mangaSourcePagesDirectory: mangaSourcePagesDirectory,
+                        sourcePageCache: sourcePageCache,
+                        in: db
+                    ) else {
+                        continue
+                    }
                     if try Self.isMembershipComplete(membership, fileManager: fileManager, imagesDirectory: imagesDirectory, in: db) {
                         try Self.deleteWork(ownerName: membership.ownerName, tid: membership.tid, in: db)
                     }
@@ -152,6 +169,7 @@ extension OfflineCacheStore {
                 for membership in try Self.allMangaMemberships(
                     fileManager: fileManager,
                     mangaSourcePagesDirectory: mangaSourcePagesDirectory,
+                    sourcePageCache: sourcePageCache,
                     in: db
                 ) {
                     imageURLsByOwner[membership.ownerName, default: []].formUnion(membership.imageURLs.map(\.absoluteString))

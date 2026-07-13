@@ -6,6 +6,7 @@ public actor ForumCacheStore {
     public static let boardTTL: TimeInterval = 2 * 60 * 60
     public static let threadPageTTL: TimeInterval = 24 * 60 * 60
     private static let threadPageMaxEntries = 50
+    private static let boardMaxEntries = 50
     public static let homeNamespace = "forum_home"
     public static let boardNamespace = "forum_boards"
     public static let threadPageNamespace = "forum_thread_pages"
@@ -26,16 +27,17 @@ public actor ForumCacheStore {
         if let injectedCacheStore = diskCacheStore ?? threadPageDiskCache {
             self.cacheStore = injectedCacheStore
         } else {
-            let resolvedRootDirectory = rootDirectory
-                ?? baseDirectory
-                ?? YamiboDatabase.defaultRootDirectory(fileManager: fileManager)
+            // An injected directory hosts both the database and the cache
+            // files (tests); the no-argument fallback mirrors the app context:
+            // yamibo.sqlite in Application Support, yamibo_cache in Caches.
+            let injectedRootDirectory = rootDirectory ?? baseDirectory
             let resolvedDatabase = databasePool ?? Self.openDatabase(
-                rootDirectory: resolvedRootDirectory,
+                rootDirectory: injectedRootDirectory ?? YamiboDatabase.defaultRootDirectory(fileManager: fileManager),
                 fileManager: fileManager
             )
             self.cacheStore = DiskCacheStore(
                 writer: resolvedDatabase,
-                rootDirectory: resolvedRootDirectory,
+                rootDirectory: injectedRootDirectory ?? YamiboDatabase.defaultCacheRootDirectory(fileManager: fileManager),
                 now: now
             )
         }
@@ -94,6 +96,7 @@ public actor ForumCacheStore {
             namespace: Self.boardNamespace,
             key: boardCacheKey(fid: fid, page: pageNumber, filterID: filterID, orderFilter: orderFilter, orderBy: orderBy)
         )
+        try await cacheStore.trimNamespace(Self.boardNamespace, maximumEntryCount: Self.boardMaxEntries)
     }
 
     public func loadThreadPage(

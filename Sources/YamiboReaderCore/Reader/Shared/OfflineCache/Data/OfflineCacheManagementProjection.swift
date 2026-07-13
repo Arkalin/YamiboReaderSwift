@@ -9,6 +9,7 @@ extension OfflineCacheStore {
                 try Self.managementSnapshot(
                     fileManager: fileManager,
                     mangaSourcePagesDirectory: mangaSourcePagesDirectory,
+                    sourcePageCache: sourcePageCache,
                     in: db
                 )
             }
@@ -21,6 +22,7 @@ extension OfflineCacheStore {
     private static func managementSnapshot(
         fileManager: FileManager,
         mangaSourcePagesDirectory: URL,
+        sourcePageCache: NSCache<NSString, SourcePageCacheEntry>,
         in db: Database
     ) throws -> OfflineCacheManagementSnapshot {
         var builders: [OfflineCacheEntryID: OfflineCacheManagementEntryBuilder] = [:]
@@ -29,6 +31,7 @@ extension OfflineCacheStore {
         for membership in try allMangaMemberships(
             fileManager: fileManager,
             mangaSourcePagesDirectory: mangaSourcePagesDirectory,
+            sourcePageCache: sourcePageCache,
             in: db
         ) {
             let entryID = OfflineCacheEntryID(

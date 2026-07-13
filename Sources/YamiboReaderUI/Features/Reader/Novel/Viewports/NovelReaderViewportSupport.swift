@@ -27,6 +27,18 @@ struct NovelReaderVerticalSurfaceFrameValue: Equatable {
     let frame: CGRect
 }
 
+/// Per-scroll-frame pixel data (surface frames, TextKit viewport samples)
+/// only needs to be *available* to imperative restore/position-tracking code
+/// — it is never read from `NovelReaderView.body`. Holding it in a plain
+/// reference type stored behind `@State` (instead of `@State`-ing the
+/// dictionaries/samples directly) keeps per-frame writes from invalidating
+/// and re-evaluating the whole reader view tree on every scroll tick.
+@MainActor
+final class NovelReaderVerticalViewportSamplingBox {
+    var surfaceFrames: [Int: NovelReaderVerticalSurfaceFrameValue] = [:]
+    var textViewportSample: NovelTextViewportSample?
+}
+
 struct NovelReaderVerticalPositioningFingerprint: Equatable {
     let generation: UInt64
     let view: Int

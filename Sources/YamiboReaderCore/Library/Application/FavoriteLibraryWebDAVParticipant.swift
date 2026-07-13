@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 
 /// WebDAV sync participant for the local favorite library. Owns the payload
@@ -5,6 +6,7 @@ import Foundation
 struct FavoriteLibraryWebDAVParticipant: WebDAVSyncParticipant {
     let datasetID = "favoriteLibrary"
     let remoteFileName = "yamibo-favorite-library-v1.json"
+    let uploadsOnlyWhenMarkedDirty = true
 
     private let store: FavoriteLibraryStore
     private let encoder = JSONEncoder()
@@ -39,6 +41,32 @@ struct FavoriteLibraryWebDAVParticipant: WebDAVSyncParticipant {
     func applyRemote(_ data: Data) async throws {
         let payload = try decoder.decode(FavoriteLibraryWebDAVPayload.self, from: data)
         try await store.save(payload.library)
+    }
+
+    // Hashed rather than base64-of-full-JSON (unlike AppSettingsWebDAVParticipant):
+    // a favorite library can grow large, and the fingerprint is persisted inside
+    // the (already UserDefaults-backed) WebDAVSyncSettings blob. Fingerprints the
+    // locally stored document only (categories/collections/items/tags) — the
+    // upload's tombstones/clocks are sync bookkeeping derived at merge time, not
+    // local state this participant tracks between syncs.
+    func localFingerprint() async -> String? {
+        let document: FavoriteLibraryDocument
+        do {
+            document = try await store.load()
+        } catch {
+            YamiboLog.sync.warning("Failed to load favorite library for WebDAV fingerprint: \(error)")
+            return nil
+        }
+        let fingerprintEncoder = JSONEncoder()
+        fingerprintEncoder.outputFormatting = [.sortedKeys]
+        let data: Data
+        do {
+            data = try fingerprintEncoder.encode(document)
+        } catch {
+            YamiboLog.sync.warning("Failed to encode favorite library fingerprint for WebDAV sync: \(error)")
+            return nil
+        }
+        return SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
     }
 }
 

@@ -25,7 +25,7 @@ public final class YamiboUIImagePipeline {
         self.pipeline = ImagePipeline {
             $0.imageCache = ImageCache(costLimit: memoryLimitBytes)
             $0.dataCache = nil
-            $0.isResumableDataEnabled = false
+            $0.isResumableDataEnabled = true
         }
     }
 

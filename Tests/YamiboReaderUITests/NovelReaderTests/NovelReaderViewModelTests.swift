@@ -3340,6 +3340,7 @@ private func makeModel(
         offlineCacheStore: resolvedOfflineCacheStore,
         forumCacheStore: resolvedForumCacheStore,
         grdbRootDirectory: grdbRootDirectory,
+        cachesRootDirectory: grdbRootDirectory,
         session: session
     )
     let model = await MainActor.run {

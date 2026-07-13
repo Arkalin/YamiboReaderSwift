@@ -20,6 +20,7 @@ final class MangaPagedPageCurlCoordinator: NSObject, UIPageViewControllerDataSou
     weak var activePageViewController: UIPageViewController?
     private weak var pageCurlBackColorPageViewController: UIPageViewController?
     private var pageCurlBackColorDisplayLink: CADisplayLink?
+    private let pageCurlBackColorFilterCache = MangaPageCurlBackColorFilterCache()
     private(set) lazy var gestures = MangaPagedPageCurlGestureController(coordinator: self)
     private(set) lazy var zoom = MangaPagedPageCurlZoomController(coordinator: self)
 
@@ -336,7 +337,11 @@ final class MangaPagedPageCurlCoordinator: NSObject, UIPageViewControllerDataSou
             controller.applyPageBackground(pageBackgroundColor)
         }
         if !parent.sequence.usesTwoPageSpread {
-            MangaPageCurlPrivateBackColor.apply(to: pageViewController.view, backColor: pageBackgroundColor)
+            MangaPageCurlPrivateBackColor.apply(
+                to: pageViewController.view,
+                backColor: pageBackgroundColor,
+                cache: pageCurlBackColorFilterCache
+            )
         }
     }
 
@@ -346,6 +351,7 @@ final class MangaPagedPageCurlCoordinator: NSObject, UIPageViewControllerDataSou
             return
         }
 
+        pageCurlBackColorFilterCache.reset()
         pageCurlBackColorPageViewController = pageViewController
         applyPageBackground(to: pageViewController)
         guard pageCurlBackColorDisplayLink == nil else { return }

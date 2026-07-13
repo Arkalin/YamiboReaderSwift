@@ -9,7 +9,7 @@ struct MangaReaderTestsMangaOfflineCachePersistence {
     @Test func appContextDefaultsUseOfflineCacheStore() {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("app-context-offline-cache-defaults-\(UUID().uuidString)", isDirectory: true)
-        let appContext = YamiboAppContext(grdbRootDirectory: root)
+        let appContext = YamiboAppContext(grdbRootDirectory: root, cachesRootDirectory: root)
 
         #expect(appContext.offlineCacheStore is OfflineCacheStore)
     }
@@ -69,6 +69,24 @@ struct MangaReaderTestsMangaOfflineCachePersistence {
         #expect(!databaseState.membershipColumns.contains("chapter_url"))
         #expect(!databaseState.workColumns.contains("chapter_url"))
         #expect(databaseState.persistedMetadataText.allSatisfy { !$0.contains("forum.php") })
+    }
+
+    @Test func recreatedBaseDirectoryStaysExcludedFromBackupAfterClearAll() async throws {
+        let fixture = try makeOfflineCacheFixture()
+        let store = OfflineCacheStore(
+            databasePool: fixture.database,
+            baseDirectory: fixture.offlineDirectory
+        )
+        let imageURL = try #require(URL(string: "https://img.example.com/backup-exclusion.jpg"))
+
+        try await store.saveOfflineImageData(Data([1]), for: imageURL)
+        #expect(try fixture.offlineDirectory.resourceValues(forKeys: [.isExcludedFromBackupKey]).isExcludedFromBackup == true)
+
+        try await store.clearAll()
+        #expect(!FileManager.default.fileExists(atPath: fixture.offlineDirectory.path))
+
+        try await store.saveOfflineImageData(Data([2]), for: imageURL)
+        #expect(try fixture.offlineDirectory.resourceValues(forKeys: [.isExcludedFromBackupKey]).isExcludedFromBackup == true)
     }
 
     @Test func offlineImageBytesStayInFilesWhileMetadataLivesInGRDB() async throws {
@@ -363,6 +381,49 @@ struct MangaReaderTestsMangaOfflineCachePersistence {
         #expect(recoveredWork.currentBytesPerSecond == 0)
     }
 
+    @Test func progressUpdatesKeepWorkAndImageRowsInPlaceInsteadOfReplacingThem() async throws {
+        let fixture = try makeOfflineCacheFixture()
+        let store = OfflineCacheStore(
+            databasePool: fixture.database,
+            baseDirectory: fixture.offlineDirectory
+        )
+        let imageURLs = try makeOfflineImageURLs(tid: "500", count: 3)
+
+        _ = try await store.enqueueMangaOfflineCacheWork(
+            try makeOfflineWorkRequest(ownerName: "作品A", tid: "500", targetImageURLs: imageURLs)
+        )
+        try await store.updateOfflineCacheWorkProgress(
+            ownerName: "作品A",
+            tid: "500",
+            targetImageURLs: nil,
+            completedImageURLs: [imageURLs[0]],
+            currentBytesPerSecond: 128
+        )
+
+        let rowsBefore = try await offlineCacheWorkRowIDs(in: fixture.database)
+
+        try await store.updateOfflineCacheWorkProgress(
+            ownerName: "作品A",
+            tid: "500",
+            targetImageURLs: nil,
+            completedImageURLs: [imageURLs[0], imageURLs[1]],
+            currentBytesPerSecond: 256
+        )
+
+        let rowsAfter = try await offlineCacheWorkRowIDs(in: fixture.database)
+        let work = try #require(await store.mangaQueueWork(ownerName: "作品A", tid: "500"))
+
+        // An INSERT OR REPLACE of the parent row would cascade-delete every image row and
+        // re-insert it with a fresh rowid, so stable rowids prove the diffing save path.
+        #expect(rowsAfter.work == rowsBefore.work)
+        #expect(rowsAfter.targetImages == rowsBefore.targetImages)
+        #expect(rowsBefore.targetImages.count == 3)
+        #expect(rowsAfter.completedImages[imageURLs[0].absoluteString] == rowsBefore.completedImages[imageURLs[0].absoluteString])
+        #expect(rowsAfter.completedImages.count == 2)
+        #expect(work.completedImageURLs == [imageURLs[0], imageURLs[1]])
+        #expect(work.currentBytesPerSecond == 256)
+    }
+
     @Test func cancelDeleteAndUsageDeriveFromGRDBMetadataPlusFileAvailability() async throws {
         let fixture = try makeOfflineCacheFixture()
         let store = OfflineCacheStore(
@@ -597,6 +658,31 @@ private func seedMangaEntryWithoutSourceFile(
 
 private func offlineCacheColumnNames(table: String, in db: Database) throws -> [String] {
     try Row.fetchAll(db, sql: "PRAGMA table_info(\(table))").map { $0["name"] as String }
+}
+
+private struct OfflineCacheWorkRowIDs {
+    var work: Int64?
+    var targetImages: [String: Int64]
+    var completedImages: [String: Int64]
+}
+
+private func offlineCacheWorkRowIDs(in database: DatabasePool) async throws -> OfflineCacheWorkRowIDs {
+    try await database.read { db in
+        let work = try Int64.fetchOne(db, sql: "SELECT rowid FROM offline_cache_works")
+        var targetImages: [String: Int64] = [:]
+        for row in try Row.fetchAll(db, sql: "SELECT rowid, image_url FROM offline_cache_work_images") {
+            targetImages[row["image_url"] as String] = row["rowid"] as Int64
+        }
+        var completedImages: [String: Int64] = [:]
+        for row in try Row.fetchAll(db, sql: "SELECT rowid, image_url FROM offline_cache_completed_images") {
+            completedImages[row["image_url"] as String] = row["rowid"] as Int64
+        }
+        return OfflineCacheWorkRowIDs(
+            work: work,
+            targetImages: targetImages,
+            completedImages: completedImages
+        )
+    }
 }
 
 private actor RecordingOfflineImageAcquirer: OfflineCacheImageAcquiring {

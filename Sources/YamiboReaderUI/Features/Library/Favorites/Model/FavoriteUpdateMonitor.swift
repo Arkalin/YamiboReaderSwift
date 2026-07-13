@@ -184,7 +184,16 @@ final class FavoriteUpdateMonitor: ObservableObject {
         }
         checkTask?.cancel()
         checkTask = Task { @MainActor [weak self] in
-            await self?.runCheck(runID: startedSnapshot.runID, nonTagMangaDirectoryCheckCap: nonTagMangaDirectoryCheckCap)
+            // If `self` is already gone by the time this body runs,
+            // `runCheck()` never executes, so its `defer` never removes the
+            // entry inserted just below — remove it here instead, or it
+            // orphans `activeRunIDs` forever and `isRunActive` never
+            // downgrades the stale "running" snapshot to interrupted.
+            guard let self else {
+                Self.activeRunIDs.remove(startedSnapshot.runID)
+                return
+            }
+            await self.runCheck(runID: startedSnapshot.runID, nonTagMangaDirectoryCheckCap: nonTagMangaDirectoryCheckCap)
         }
         Self.activeRunIDs.insert(startedSnapshot.runID)
         return startedSnapshot.runID
@@ -306,12 +315,15 @@ final class FavoriteUpdateMonitor: ObservableObject {
     /// Delivers a local notification for a freshly inserted event. Sharing
     /// the event's target-keyed identifier means an accumulated re-detection
     /// replaces the favorite's previous notification instead of stacking.
-    private func deliverNotificationIfEnabled(for event: FavoriteUpdateEvent) async {
+    /// The badge is the unread count of the caller's in-memory run-in-progress
+    /// event list merged over the current store state — neither side alone is
+    /// right mid-run: the store is missing this run's not-yet-committed
+    /// detections, and the in-memory list is missing read/dismiss marks the
+    /// user applied since the run snapshotted it.
+    private func deliverNotificationIfEnabled(for event: FavoriteUpdateEvent, runEvents: [FavoriteUpdateEvent]) async {
         guard let notifier, await notificationsEnabled() else { return }
         guard await notifier.authorization() == .granted else { return }
-        let unreadCount = await updateStore.loadState().events
-            .filter { $0.dismissedAt == nil && $0.readAt == nil }
-            .count
+        let unreadCount = await updateStore.unreadEventCount(mergingRunEvents: runEvents)
         await notifier.deliver(FavoriteUpdateNotification(event: event, badgeCount: unreadCount))
     }
 
@@ -422,6 +434,11 @@ final class FavoriteUpdateMonitor: ObservableObject {
 
     private func runCheck(runID: String, nonTagMangaDirectoryCheckCap: Int) async {
         defer { Self.activeRunIDs.remove(runID) }
+        // Accumulated in memory across the whole loop and committed to
+        // `updateStore` at most once (`commitCheckResults`, on every exit
+        // path below) instead of per favorite — see that method's doc.
+        var trackedTargets: [String: FavoriteUpdateTrackedTarget] = [:]
+        var events: [FavoriteUpdateEvent] = []
         do {
             let document = try await libraryStore.load()
             let candidates = Self.candidates(in: document)
@@ -435,6 +452,10 @@ final class FavoriteUpdateMonitor: ObservableObject {
                 snapshot.progress = .loadedTargets(count: scopedCandidates.count)
             }
 
+            let initialState = await updateStore.loadState()
+            trackedTargets = Dictionary(uniqueKeysWithValues: initialState.trackedTargets.map { ($0.id, $0) })
+            events = initialState.events
+
             var detectedCount = 0
             for (index, item) in scopedCandidates.enumerated() {
                 try Task.checkCancellation()
@@ -445,7 +466,7 @@ final class FavoriteUpdateMonitor: ObservableObject {
                         title: item.resolvedDisplayTitle
                     )
                 }
-                let result = await checkUpdate(for: item)
+                let result = await checkUpdate(for: item, trackedTargets: &trackedTargets, events: &events)
                 switch result {
                 case let .checked(detected):
                     detectedCount += detected
@@ -462,6 +483,24 @@ final class FavoriteUpdateMonitor: ObservableObject {
                         snapshot.failedCount += 1
                         snapshot.warningMessage = [snapshot.warningMessage, message].compactMap { $0 }.joined(separator: "\n")
                     }
+                case .offline:
+                    // The network is down, not this one target — every
+                    // remaining candidate would fail the exact same way, so
+                    // stop the run here instead of grinding through the rest.
+                    // Nothing about this counts toward any target's
+                    // `consecutiveFailures` circuit breaker; the next due
+                    // check (foreground catch-up or background refresh)
+                    // retries the whole scope from scratch.
+                    await commitCheckResults(trackedTargets: trackedTargets, events: events)
+                    await reloadEventState()
+                    await updateSnapshot(runID: runID) { snapshot in
+                        snapshot.status = .failed
+                        snapshot.phase = .failed
+                        snapshot.finishedAt = .now
+                        snapshot.progress = nil
+                        snapshot.errorMessage = YamiboError.offline.localizedDescription
+                    }
+                    return
                 }
             }
 
@@ -469,10 +508,13 @@ final class FavoriteUpdateMonitor: ObservableObject {
             await checkMangaDirectoryGroups(
                 mangaGroups,
                 nonTagCheckCap: nonTagMangaDirectoryCheckCap,
-                runID: runID
+                runID: runID,
+                trackedTargets: &trackedTargets,
+                events: &events
             )
             try Task.checkCancellation()
 
+            await commitCheckResults(trackedTargets: trackedTargets, events: events)
             await reloadEventState()
             await updateSnapshot(runID: runID) { snapshot in
                 snapshot.status = .completed
@@ -481,6 +523,7 @@ final class FavoriteUpdateMonitor: ObservableObject {
                 snapshot.progress = nil
             }
         } catch {
+            await commitCheckResults(trackedTargets: trackedTargets, events: events)
             if error.isTaskCancellation {
                 await reloadEventState()
                 await updateSnapshot(runID: runID) { snapshot in
@@ -508,6 +551,25 @@ final class FavoriteUpdateMonitor: ObservableObject {
                 snapshot.progress = nil
                 snapshot.errorMessage = error.localizedDescription
             }
+        }
+    }
+
+    /// Applies this run's accumulated tracked-target/event changes to the
+    /// store in one write — a merge on the store side, so read/dismiss marks
+    /// the user applied while this run was in flight survive the commit
+    /// instead of being rolled back by the run's stale start-of-run snapshot.
+    /// A no-op before `trackedTargets` is ever seeded (an early throw from
+    /// `libraryStore.load()`/`refreshFilters`/`replaceTrackedTargetsIfNeeded`)
+    /// so it never writes an empty first-run result over existing state.
+    private func commitCheckResults(
+        trackedTargets: [String: FavoriteUpdateTrackedTarget],
+        events: [FavoriteUpdateEvent]
+    ) async {
+        guard !trackedTargets.isEmpty else { return }
+        do {
+            try await updateStore.applyCheckRunResults(trackedTargets: Array(trackedTargets.values), events: events)
+        } catch {
+            YamiboLog.persistence.error("Failed to persist favorite update check results: \(error.localizedDescription)")
         }
     }
 
@@ -620,6 +682,7 @@ final class FavoriteUpdateMonitor: ObservableObject {
     private enum CheckResult {
         case checked(detected: Int)
         case skipped
+        case offline
         case failed(String)
     }
 
@@ -630,9 +693,12 @@ final class FavoriteUpdateMonitor: ObservableObject {
     private static let circuitBreakerThreshold = 5
     private static let circuitBreakerCooldown: TimeInterval = 24 * 3600
 
-    private func checkUpdate(for item: FavoriteItem) async -> CheckResult {
-        let state = await updateStore.loadState()
-        var target = state.trackedTargets.first { $0.target == .favorite(item.target) } ?? FavoriteUpdateTrackedTarget(
+    private func checkUpdate(
+        for item: FavoriteItem,
+        trackedTargets: inout [String: FavoriteUpdateTrackedTarget],
+        events: inout [FavoriteUpdateEvent]
+    ) async -> CheckResult {
+        var target = trackedTargets[item.target.id] ?? FavoriteUpdateTrackedTarget(
             target: .favorite(item.target),
             title: item.resolvedDisplayTitle,
             mode: FavoriteUpdateTargetMode(kind: item.target.kind)
@@ -648,11 +714,19 @@ final class FavoriteUpdateMonitor: ObservableObject {
         do {
             page = try await threadPage(for: item, knownPageCount: target.knownPageCount)
         } catch {
+            // The network being unreachable is not this target's fault, and
+            // every other candidate would fail identically — don't burn a
+            // circuit-breaker strike or touch its stored baseline on it, and
+            // let the caller decide to abort the whole run instead of
+            // grinding through every remaining candidate the same way.
+            if Self.isOfflineError(error) {
+                return .offline
+            }
             YamiboLog.sync.warning("Failed to fetch thread page for favorite update check on \(item.target.id): \(error.localizedDescription)")
             target.consecutiveFailures += 1
             target.lastError = error.localizedDescription
             target.lastCheckedAt = .now
-            try? await updateStore.upsertTrackedTarget(target)
+            trackedTargets[item.target.id] = target
             return .failed(error.localizedDescription)
         }
 
@@ -682,15 +756,11 @@ final class FavoriteUpdateMonitor: ObservableObject {
         }
 
         guard previous.isReady, fingerprint.isNewer(than: previous) else {
-            do {
-                try await updateStore.upsertTrackedTarget(target)
-                return .checked(detected: 0)
-            } catch {
-                return .failed(error.localizedDescription)
-            }
+            trackedTargets[item.target.id] = target
+            return .checked(detected: 0)
         }
 
-        let existingEvent = state.events.first { $0.target == .favorite(item.target) && $0.dismissedAt == nil }
+        let existingEvent = events.first { $0.target == .favorite(item.target) && $0.dismissedAt == nil }
         let summary = Self.mergedSummary(
             existing: existingEvent?.summary,
             new: FavoriteUpdateFingerprint.summary(from: previous, to: fingerprint)
@@ -706,19 +776,27 @@ final class FavoriteUpdateMonitor: ObservableObject {
             detectedAt: .now,
             ambiguous: fingerprint.latestPostID == nil
         )
-        do {
-            // Insert the event BEFORE advancing the persisted baseline: if
-            // this throws, the target's stored baseline must not have moved,
-            // so the next check re-derives the same delta and retries
-            // instead of silently losing the detected update.
-            try await updateStore.insertEvent(event)
-            try await updateStore.upsertTrackedTarget(target)
-            await deliverNotificationIfEnabled(for: event)
-            return .checked(detected: 1)
-        } catch {
-            YamiboLog.persistence.error("Failed to persist tracked target or update event for \(item.target.id): \(error.localizedDescription)")
-            return .failed(error.localizedDescription)
+        events.removeAll { $0.target == event.target && $0.dismissedAt == nil }
+        events.append(event)
+        trackedTargets[item.target.id] = target
+        await deliverNotificationIfEnabled(for: event, runEvents: events)
+        return .checked(detected: 1)
+    }
+
+    /// Mirrors the offline-detection used by other network call sites in the
+    /// app (e.g. `MangaReaderDataSupport.mapNetworkErrors`,
+    /// `ReaderThreadPageProjectionLoadingStrategy.fetchThreadHTML`): a
+    /// `YamiboError.offline` some caller already mapped, or the raw
+    /// `URLError` codes that mean "no network," as opposed to a server- or
+    /// parsing-side failure specific to this one target.
+    private static func isOfflineError(_ error: any Error) -> Bool {
+        if let yamiboError = error as? YamiboError, case .offline = yamiboError {
+            return true
         }
+        if let urlError = error as? URLError {
+            return urlError.code == .notConnectedToInternet || urlError.code == .networkConnectionLost
+        }
+        return false
     }
 
     /// Accumulates a newly detected delta onto an existing undismissed event
@@ -848,12 +926,13 @@ final class FavoriteUpdateMonitor: ObservableObject {
     private func checkMangaDirectoryGroups(
         _ groups: [MangaDirectoryCandidate],
         nonTagCheckCap: Int,
-        runID: String
+        runID: String,
+        trackedTargets: inout [String: FavoriteUpdateTrackedTarget],
+        events: inout [FavoriteUpdateEvent]
     ) async {
         guard !groups.isEmpty else { return }
-        let state = await updateStore.loadState()
         let existingByCleanBookName: [String: FavoriteUpdateTrackedTarget] = Dictionary(
-            uniqueKeysWithValues: state.trackedTargets.compactMap { target in
+            uniqueKeysWithValues: trackedTargets.values.compactMap { target in
                 guard case let .mangaDirectory(cleanBookName) = target.target else { return nil }
                 return (cleanBookName, target)
             }
@@ -862,7 +941,7 @@ final class FavoriteUpdateMonitor: ObservableObject {
         let newGroups = groups.filter { existingByCleanBookName[$0.directory.cleanBookName] == nil }
         for group in newGroups {
             guard !Task.isCancelled else { return }
-            await seedMangaDirectoryBaseline(group)
+            seedMangaDirectoryBaseline(group, trackedTargets: &trackedTargets)
             await updateSnapshot(runID: runID) { snapshot in
                 snapshot.totalCount += 1
                 snapshot.completedCount += 1
@@ -890,7 +969,12 @@ final class FavoriteUpdateMonitor: ObservableObject {
         for (group, existing) in tagDue {
             guard !Task.isCancelled else { return }
             await updateSnapshot(runID: runID) { snapshot in snapshot.totalCount += 1 }
-            let result = await checkMangaDirectoryUpdate(group: group, existing: existing)
+            let result = await checkMangaDirectoryUpdate(
+                group: group,
+                existing: existing,
+                trackedTargets: &trackedTargets,
+                events: &events
+            )
             await applyMangaDirectoryResult(result, runID: runID)
             if case .skippedCooldown = result {
                 break
@@ -903,7 +987,12 @@ final class FavoriteUpdateMonitor: ObservableObject {
             guard nonTagChecksPerformed < nonTagCheckCap else { break }
             nonTagChecksPerformed += 1
             await updateSnapshot(runID: runID) { snapshot in snapshot.totalCount += 1 }
-            let result = await checkMangaDirectoryUpdate(group: group, existing: existing)
+            let result = await checkMangaDirectoryUpdate(
+                group: group,
+                existing: existing,
+                trackedTargets: &trackedTargets,
+                events: &events
+            )
             await applyMangaDirectoryResult(result, runID: runID)
             if case .skippedCooldown = result {
                 break
@@ -919,7 +1008,10 @@ final class FavoriteUpdateMonitor: ObservableObject {
     /// First sighting of a directory: baseline-only, zero network, no event
     /// (design point 6 — otherwise every already-read chapter would report
     /// as "new" the moment tracking starts).
-    private func seedMangaDirectoryBaseline(_ group: MangaDirectoryCandidate) async {
+    private func seedMangaDirectoryBaseline(
+        _ group: MangaDirectoryCandidate,
+        trackedTargets: inout [String: FavoriteUpdateTrackedTarget]
+    ) {
         let target = FavoriteUpdateTrackedTarget(
             target: .mangaDirectory(cleanBookName: group.directory.cleanBookName),
             title: group.directory.cleanBookName,
@@ -931,7 +1023,7 @@ final class FavoriteUpdateMonitor: ObservableObject {
             baselineReady: true,
             lastCheckedAt: .now
         )
-        try? await updateStore.upsertTrackedTarget(target)
+        trackedTargets[target.id] = target
     }
 
     private func applyMangaDirectoryResult(_ result: MangaDirectoryCheckResult, runID: String) async {
@@ -960,7 +1052,9 @@ final class FavoriteUpdateMonitor: ObservableObject {
     /// same as the thread-check lane.
     private func checkMangaDirectoryUpdate(
         group: MangaDirectoryCandidate,
-        existing: FavoriteUpdateTrackedTarget
+        existing: FavoriteUpdateTrackedTarget,
+        trackedTargets: inout [String: FavoriteUpdateTrackedTarget],
+        events: inout [FavoriteUpdateEvent]
     ) async -> MangaDirectoryCheckResult {
         guard let makeMangaDirectoryWorkflow else { return .skippedCircuitBreaker }
         var target = existing
@@ -998,13 +1092,12 @@ final class FavoriteUpdateMonitor: ObservableObject {
             target.categoryIDs = group.categoryIDs
 
             guard !newTIDs.isEmpty else {
-                try? await updateStore.upsertTrackedTarget(target)
+                trackedTargets[target.id] = target
                 return .checked(detected: 0)
             }
 
             let key = FavoriteUpdateTargetKey.mangaDirectory(cleanBookName: group.directory.cleanBookName)
-            let state = await updateStore.loadState()
-            let existingEvent = state.events.first { $0.target == key && $0.dismissedAt == nil }
+            let existingEvent = events.first { $0.target == key && $0.dismissedAt == nil }
             let summary = Self.mergedSummary(
                 existing: existingEvent?.summary,
                 new: .newChapters(count: newTIDs.count)
@@ -1020,9 +1113,10 @@ final class FavoriteUpdateMonitor: ObservableObject {
                 detectedAt: .now,
                 ambiguous: false
             )
-            try await updateStore.insertEvent(event)
-            try await updateStore.upsertTrackedTarget(target)
-            await deliverNotificationIfEnabled(for: event)
+            events.removeAll { $0.target == event.target && $0.dismissedAt == nil }
+            events.append(event)
+            trackedTargets[target.id] = target
+            await deliverNotificationIfEnabled(for: event, runEvents: events)
             return .checked(detected: 1)
         } catch {
             if case YamiboError.searchCooldown = error {
@@ -1037,7 +1131,7 @@ final class FavoriteUpdateMonitor: ObservableObject {
             target.consecutiveFailures += 1
             target.lastError = error.localizedDescription
             target.lastCheckedAt = .now
-            try? await updateStore.upsertTrackedTarget(target)
+            trackedTargets[target.id] = target
             return .failed(error.localizedDescription)
         }
     }

@@ -258,9 +258,15 @@ public struct FavoriteCardProjection: Equatable, Identifiable, Sendable {
     /// static `resolvedTitle(item:mangaDirectory:isModeOnMangaThread:)`
     /// below, so a solitary favorite still on the local-clean fallback lands
     /// on its own correctly-scoped detail page.
-    public var resolvedTitle: String {
-        Self.resolvedTitle(item: item, mangaDirectory: mangaDirectory, isModeOnMangaThread: isModeOnMangaThread)
-    }
+    ///
+    /// Stored (computed once by `card(for:...)` at construction time) rather
+    /// than a computed property — this is compared twice per pair by the
+    /// `.displayTitle` sort (`sorted(_:by:descending:)` below), and
+    /// `MangaTitleCleaner.cleanBookName`'s regex passes made recomputing it
+    /// on every comparison an O(N log N) hot path. See the `static
+    /// resolvedTitle(item:mangaDirectory:isModeOnMangaThread:)` function
+    /// below for the actual logic — this field just caches its result.
+    public var resolvedTitle: String
 
     /// The shared implementation behind the `resolvedTitle` instance property
     /// above, extracted as a static function so `cards(in:query:...)`'s
@@ -402,18 +408,104 @@ public enum LocalFavoriteLibraryProjection {
             )
         }
 
-        let cards = entries
-            .filter { entry in
-                // Directory-identity scoping replaces category/collection
-                // scoping entirely for this query — it does not combine with
-                // it (a member can live in any category/collection, or none
-                // matching the current selection, and must still show here).
-                guard !isMemberScoped else { return true }
-                if let collectionID = query.collectionID {
-                    return entry.representativeItem.locations.contains(.collection(categoryID: categoryID, collectionID: collectionID))
-                }
-                return entry.representativeItem.locations.contains(.category(categoryID))
+        let scopedEntries = entries.filter { entry in
+            // Directory-identity scoping replaces category/collection
+            // scoping entirely for this query — it does not combine with
+            // it (a member can live in any category/collection, or none
+            // matching the current selection, and must still show here).
+            guard !isMemberScoped else { return true }
+            if let collectionID = query.collectionID {
+                return entry.representativeItem.locations.contains(.collection(categoryID: categoryID, collectionID: collectionID))
             }
+            return entry.representativeItem.locations.contains(.category(categoryID))
+        }
+
+        let cards = mappedCards(
+            from: scopedEntries,
+            in: document,
+            query: query,
+            isMemberScoped: isMemberScoped,
+            progressByKey: progressByKey,
+            trimmedSearch: trimmedSearch,
+            boardReaderSettings: boardReaderSettings,
+            resolvedMangaThreadItemsByEffectiveTitle: resolvedMangaThreadItemsByEffectiveTitle
+        )
+
+        return sorted(cards, by: query.sortOrder, descending: query.sortsDescending)
+    }
+
+    /// Every card `query` would produce, ACROSS every category and
+    /// collection at once — `query.categoryID`/`collectionID` are ignored
+    /// entirely (every other filter: source, tag, search, still applies).
+    /// Unsorted, since bucketing the result by many different
+    /// category/collection ids afterward doesn't care about order.
+    ///
+    /// For a caller that needs the same (grouped + tag-unioned + filtered)
+    /// card set bucketed by every category (`LocalFavoriteLibraryDerivation
+    /// .categoryEntryCounts`) or every collection
+    /// (`.collectionAggregates`) at once, calling `cards(in:query:...)` once
+    /// per category/collection id independently re-derives this identical
+    /// grouping/mapping/search-filtering work C or K times over. Since the
+    /// category/collection scope filter is a pure per-entry location-
+    /// membership check that doesn't affect grouping, tag unions, or the
+    /// search filter (and vice versa), it commutes with the rest of the
+    /// pipeline — computing everything else once here and applying the
+    /// scope filter as a final bucketing step over this result is exactly
+    /// equivalent to calling `cards(in:query:...)` once per id and
+    /// concatenating, just O(N) instead of O(ids × N).
+    ///
+    /// Never valid for a member-scoped query (`memberScopeCleanBookName`) —
+    /// that scope already ignores category/collection entirely, so there is
+    /// nothing here to bucket by; callers needing per-category/collection
+    /// buckets never set it.
+    public static func cardsAcrossAllScopes(
+        in document: FavoriteLibraryDocument,
+        query: LocalFavoriteLibraryQuery = LocalFavoriteLibraryQuery(),
+        readingProgress: [ReadingProgressRecord] = [],
+        mangaDirectoriesByTID: [String: MangaDirectory] = [:],
+        boardReaderSettings: BoardReaderSettings = BoardReaderSettings(),
+        mangaThreadItemsByEffectiveTitle: [String: [FavoriteItem]]? = nil
+    ) -> [FavoriteCardProjection] {
+        let progressByKey = readingProgressLookup(readingProgress)
+        let trimmedSearch = query.searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let resolvedMangaThreadItemsByEffectiveTitle = mangaThreadItemsByEffectiveTitle ?? Self.mangaThreadItemsByEffectiveTitle(
+            in: document.items,
+            mangaDirectoriesByTID: mangaDirectoriesByTID,
+            boardReaderSettings: boardReaderSettings
+        )
+        let entries = groupedCardEntries(
+            for: document.items,
+            mangaDirectoriesByTID: mangaDirectoriesByTID,
+            boardReaderSettings: boardReaderSettings
+        )
+        return mappedCards(
+            from: entries,
+            in: document,
+            query: query,
+            isMemberScoped: false,
+            progressByKey: progressByKey,
+            trimmedSearch: trimmedSearch,
+            boardReaderSettings: boardReaderSettings,
+            resolvedMangaThreadItemsByEffectiveTitle: resolvedMangaThreadItemsByEffectiveTitle
+        )
+    }
+
+    /// Shared tail of `cards(in:query:...)`/`cardsAcrossAllScopes(...)`:
+    /// source/tag filters, smart-card tag-union + card construction, and the
+    /// search filter — everything downstream of entry grouping and the
+    /// (optional) category/collection scope filter, which each caller
+    /// applies to `entries` differently before calling this.
+    private static func mappedCards(
+        from entries: [GroupedFavoriteEntry],
+        in document: FavoriteLibraryDocument,
+        query: LocalFavoriteLibraryQuery,
+        isMemberScoped: Bool,
+        progressByKey: [String: ReadingProgressRecord],
+        trimmedSearch: String,
+        boardReaderSettings: BoardReaderSettings,
+        resolvedMangaThreadItemsByEffectiveTitle: [String: [FavoriteItem]]
+    ) -> [FavoriteCardProjection] {
+        entries
             .filter { entry in
                 query.selectedSourceFilters.isEmpty
                     || query.selectedSourceFilters.contains { $0.matches(entry.representativeItem) }
@@ -491,8 +583,6 @@ public enum LocalFavoriteLibraryProjection {
                     field.localizedCaseInsensitiveContains(trimmedSearch)
                 }
             }
-
-        return sorted(cards, by: query.sortOrder, descending: query.sortsDescending)
     }
 
     /// Every individual favorite currently "archived" under a smart card
@@ -866,7 +956,14 @@ public enum LocalFavoriteLibraryProjection {
             // ignore the member-scoped archive page's deliberate "show as an
             // ordinary card" intent and force every one of its cards back to
             // `true`.
-            isModeOnMangaThread: isModeOnMangaThread
+            isModeOnMangaThread: isModeOnMangaThread,
+            // Computed once here rather than left as a per-access computed
+            // property — see `resolvedTitle`'s doc comment on the struct.
+            resolvedTitle: FavoriteCardProjection.resolvedTitle(
+                item: item,
+                mangaDirectory: entry.mangaDirectory,
+                isModeOnMangaThread: isModeOnMangaThread
+            )
         )
     }
 

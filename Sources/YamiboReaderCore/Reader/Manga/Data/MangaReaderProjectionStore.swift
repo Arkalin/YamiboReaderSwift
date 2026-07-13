@@ -17,16 +17,17 @@ public actor MangaReaderProjectionStore: MangaReaderProjectionPersisting {
         if let diskCacheStore {
             self.cacheStore = diskCacheStore
         } else {
-            let resolvedRootDirectory = rootDirectory
-                ?? baseDirectory
-                ?? YamiboDatabase.defaultRootDirectory(fileManager: fileManager)
+            // An injected directory hosts both the database and the cache
+            // files (tests); the no-argument fallback mirrors the app context:
+            // yamibo.sqlite in Application Support, yamibo_cache in Caches.
+            let injectedRootDirectory = rootDirectory ?? baseDirectory
             let resolvedDatabase = databasePool ?? Self.openDatabase(
-                rootDirectory: resolvedRootDirectory,
+                rootDirectory: injectedRootDirectory ?? YamiboDatabase.defaultRootDirectory(fileManager: fileManager),
                 fileManager: fileManager
             )
             self.cacheStore = DiskCacheStore(
                 writer: resolvedDatabase,
-                rootDirectory: resolvedRootDirectory
+                rootDirectory: injectedRootDirectory ?? YamiboDatabase.defaultCacheRootDirectory(fileManager: fileManager)
             )
         }
         self.fileManager = fileManager
@@ -50,6 +51,7 @@ public actor MangaReaderProjectionStore: MangaReaderProjectionPersisting {
             namespace: Self.projectionNamespace,
             key: projectionCacheKey(identity: projection.sourceIdentity)
         )
+        try await cacheStore.trimNamespace(Self.projectionNamespace, maximumEntryCount: 100)
     }
 
     public func clearAll() async throws {

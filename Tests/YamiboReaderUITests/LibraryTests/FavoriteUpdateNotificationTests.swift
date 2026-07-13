@@ -31,6 +31,72 @@ final class FavoriteUpdateNotificationTests: XCTestCase {
         XCTAssertEqual(notification.badgeCount, 1)
     }
 
+    /// The badge delivered with a detection must reflect store writes that
+    /// landed after the run snapshotted the event list: events the user has
+    /// since read or dismissed no longer count, while an event another writer
+    /// inserted during the run does.
+    func testDeliveredBadgeCountReflectsMidRunReadDismissAndConcurrentInsert() async throws {
+        let fixture = try NotificationFixture(prefix: "favorite-update-notify-midrun-badge")
+        var pages = [
+            try NotificationFixture.makeThreadPage(threadID: "960", postID: "p1", replyCount: 1, pageCount: 1),
+            try NotificationFixture.makeThreadPage(threadID: "960", postID: "p2", replyCount: 3, pageCount: 1)
+        ]
+        var fetchCount = 0
+        var gateReached = false
+        var gateOpen = false
+        let monitor = try await fixture.makeLoadedMonitor(pages: [], pageFetcher: { _ in
+            fetchCount += 1
+            let page = pages.removeFirst()
+            if fetchCount == 2 {
+                gateReached = true
+                while !gateOpen {
+                    try await Task.sleep(nanoseconds: 5_000_000)
+                }
+            }
+            return page
+        })
+        let enabled = await monitor.setNotificationsEnabled(true)
+        XCTAssertTrue(enabled)
+
+        _ = await monitor.startCheck()
+        try await fixture.waitForStatus(.completed, in: monitor)
+
+        let readEvent = FavoriteUpdateEvent(
+            target: FavoriteItemTarget(kind: .normalThread, threadID: "961"),
+            title: "已读主题",
+            mode: .normalThread,
+            summary: .newReplies(count: 1)
+        )
+        let dismissedEvent = FavoriteUpdateEvent(
+            target: FavoriteItemTarget(kind: .normalThread, threadID: "962"),
+            title: "忽略主题",
+            mode: .normalThread,
+            summary: .newReplies(count: 1)
+        )
+        try await fixture.updateStore.insertEvent(readEvent)
+        try await fixture.updateStore.insertEvent(dismissedEvent)
+
+        _ = await monitor.startCheck()
+        for _ in 0..<100 where !gateReached {
+            try await Task.sleep(nanoseconds: 10_000_000)
+        }
+        XCTAssertTrue(gateReached)
+
+        try await fixture.updateStore.markEventRead(readEvent.id)
+        try await fixture.updateStore.dismissEvent(dismissedEvent.id)
+        try await fixture.updateStore.insertEvent(FavoriteUpdateEvent(
+            target: FavoriteItemTarget(kind: .normalThread, threadID: "963"),
+            title: "并发主题",
+            mode: .normalThread,
+            summary: .newReplies(count: 2)
+        ))
+        gateOpen = true
+        try await fixture.waitForStatus(.completed, in: monitor)
+
+        XCTAssertEqual(fixture.notifier.delivered.count, 1)
+        XCTAssertEqual(fixture.notifier.delivered.first?.badgeCount, 2)
+    }
+
     func testDetectionSkipsNotificationWhenDisabled() async throws {
         let fixture = try NotificationFixture(prefix: "favorite-update-notify-disabled")
         let monitor = try await fixture.makeLoadedMonitor(pages: [
@@ -218,8 +284,8 @@ private final class FavoriteUpdateNotifierSpy: FavoriteUpdateNotifying {
 private final class NotificationFixture {
     let target = FavoriteItemTarget(kind: .normalThread, threadID: "960")
     let notifier = FavoriteUpdateNotifierSpy()
+    let updateStore: FavoriteUpdateStore
     private let libraryStore: FavoriteLibraryStore
-    private let updateStore: FavoriteUpdateStore
     private let settingsStore: SettingsStore
 
     init(prefix: String) throws {
@@ -231,7 +297,10 @@ private final class NotificationFixture {
         settingsStore = SettingsStore(defaults: defaults, key: "settings")
     }
 
-    func makeLoadedMonitor(pages: [ForumThreadPage]) async throws -> FavoriteUpdateMonitor {
+    func makeLoadedMonitor(
+        pages: [ForumThreadPage],
+        pageFetcher: ((FavoriteItem) async throws -> ForumThreadPage)? = nil
+    ) async throws -> FavoriteUpdateMonitor {
         var document = FavoriteLibraryDocument()
         let category = document.createCategory(name: "更新通知")
         document.upsertItem(try FavoriteItem(
@@ -266,7 +335,7 @@ private final class NotificationFixture {
             },
             settingsStore: settingsStore,
             notifier: notifier,
-            pageFetcher: { _ in
+            pageFetcher: pageFetcher ?? { _ in
                 guard let page = remainingPages.first else {
                     throw YamiboError.offline
                 }

@@ -83,16 +83,18 @@ struct StoreMigrationIssue001Tests {
         let store = DiskCacheStore(writer: pool, rootDirectory: root, now: { now })
 
         try await store.set(CachePayload(title: "第一页", page: 1), namespace: "novel", key: "tid-9-page-1")
-        now = Date(timeIntervalSince1970: 120)
-        let loaded: CachePayload? = try await store.get(namespace: "novel", key: "tid-9-page-1", ttl: 30)
+
+        // Beyond DiskCacheStore's touch-throttle window so this hit actually updates last_accessed_at.
+        now = Date(timeIntervalSince1970: 450)
+        let loaded: CachePayload? = try await store.get(namespace: "novel", key: "tid-9-page-1", ttl: 400)
         #expect(loaded?.title == "第一页")
 
         let entry = try #require(try await store.entries(namespace: "novel").first)
         #expect(entry.createdAt == Date(timeIntervalSince1970: 100))
-        #expect(entry.lastAccessedAt == Date(timeIntervalSince1970: 120))
+        #expect(entry.lastAccessedAt == Date(timeIntervalSince1970: 450))
 
-        now = Date(timeIntervalSince1970: 131)
-        let expired: CachePayload? = try await store.get(namespace: "novel", key: "tid-9-page-1", ttl: 30)
+        now = Date(timeIntervalSince1970: 501)
+        let expired: CachePayload? = try await store.get(namespace: "novel", key: "tid-9-page-1", ttl: 400)
         #expect(expired == nil)
         #expect(try await store.entries(namespace: "novel").isEmpty)
     }
@@ -105,7 +107,10 @@ struct StoreMigrationIssue001Tests {
         try await store.set(CachePayload(title: "旧", page: 1), namespace: "forum", key: "old")
         now = Date(timeIntervalSince1970: 110)
         try await store.set(CachePayload(title: "新", page: 2), namespace: "forum", key: "new")
-        now = Date(timeIntervalSince1970: 120)
+
+        // Beyond DiskCacheStore's touch-throttle window so reading "old" actually bumps last_accessed_at
+        // past "new"'s, which is what makes "old" survive the trim below.
+        now = Date(timeIntervalSince1970: 411)
         let old: CachePayload? = try await store.get(namespace: "forum", key: "old")
         #expect(old?.title == "旧")
 

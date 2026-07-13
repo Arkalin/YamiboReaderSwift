@@ -121,13 +121,15 @@ private func makeNavigator(
         makeMangaDirectoryRepository: { fatalError("makeMangaDirectoryRepository is not exercised by ForumDestinationNavigatorTests") },
         makeThreadRouteResolver: { fatalError("navigator pushes must not resolve thread routes synchronously") }
     )
+    let navigatorRootDirectory = FileManager.default.temporaryDirectory
+        .appendingPathComponent("forum-destination-navigator-\(UUID().uuidString)", isDirectory: true)
     let appContext = YamiboAppContext(
         sessionStore: sessionStore,
         settingsStore: settingsStore,
         webDAVSyncSettingsStore: try WebDAVSyncSettingsStore(testSuiteName: suiteName, key: "webdav"),
         readerResumeRouteStore: try ReaderResumeRouteStore(testSuiteName: suiteName, key: "reader-route"),
-        grdbRootDirectory: FileManager.default.temporaryDirectory
-            .appendingPathComponent("forum-destination-navigator-\(UUID().uuidString)", isDirectory: true)
+        grdbRootDirectory: navigatorRootDirectory,
+        cachesRootDirectory: navigatorRootDirectory
     )
     return ForumDestinationNavigator(
         dependencies: dependencies,

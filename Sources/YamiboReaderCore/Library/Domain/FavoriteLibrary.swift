@@ -534,6 +534,17 @@ public enum FavoriteContentUpdateDateResolver {
             #"(\d{4}-\d{1,2}-\d{1,2}\s+\d{1,2}:\d{2}(?::\d{2})?)"#,
             #"(\d{4}-\d{1,2}-\d{1,2})"#
         ]
+        // Locale/calendar/timeZone never vary across patterns or formats, so
+        // one DateFormatter is built per call and reused for every attempt
+        // instead of re-constructing it (expensive: loads ICU data) on each
+        // loop iteration. Kept local to this call rather than a shared
+        // `static let` because DateFormatter is not thread-safe and this
+        // resolver has no guarantee against concurrent callers (e.g.
+        // parallel Swift Testing test functions).
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.timeZone = TimeZone(identifier: "Asia/Shanghai")
         for pattern in datePatterns {
             guard let regex = try? NSRegularExpression(pattern: pattern) else { continue }
             let range = NSRange(normalized.startIndex ..< normalized.endIndex, in: normalized)
@@ -543,10 +554,6 @@ public enum FavoriteContentUpdateDateResolver {
             }
             let value = String(normalized[matchRange])
             for format in formats(for: value) {
-                let formatter = DateFormatter()
-                formatter.locale = Locale(identifier: "zh_CN")
-                formatter.calendar = Calendar(identifier: .gregorian)
-                formatter.timeZone = TimeZone(identifier: "Asia/Shanghai")
                 formatter.dateFormat = format
                 if let date = formatter.date(from: value) {
                     return date

@@ -253,6 +253,7 @@ struct NovelReaderPagedPageCurlViewport: UIViewControllerRepresentable {
         private weak var pageCurlBackColorPageViewController: UIPageViewController?
         weak var boundaryPageTurnPanRecognizer: UIPanGestureRecognizer?
         private var pageCurlBackColorDisplayLink: CADisplayLink?
+        private let pageCurlBackColorFilterCache = NovelReaderPageCurlBackColorFilterCache()
 
         init(parent: NovelReaderPagedPageCurlViewport) {
             self.parent = parent
@@ -530,7 +531,11 @@ struct NovelReaderPagedPageCurlViewport: UIViewControllerRepresentable {
                 controller.applyPageBackground(pageBackgroundColor)
             }
             if !parent.sequence.usesTwoPageSpread {
-                NovelReaderPageCurlPrivateBackColor.apply(to: pageViewController.view, backColor: pageBackgroundColor)
+                NovelReaderPageCurlPrivateBackColor.apply(
+                    to: pageViewController.view,
+                    backColor: pageBackgroundColor,
+                    cache: pageCurlBackColorFilterCache
+                )
             }
         }
 
@@ -540,6 +545,7 @@ struct NovelReaderPagedPageCurlViewport: UIViewControllerRepresentable {
                 return
             }
 
+            pageCurlBackColorFilterCache.reset()
             pageCurlBackColorPageViewController = pageViewController
             applyPageBackground(to: pageViewController)
             guard pageCurlBackColorDisplayLink == nil else { return }
@@ -642,6 +648,19 @@ private final class NovelReaderPagedPageCurlHostingController: UIHostingControll
     }
 }
 
+/// Holds a weak reference to the private `pageCurl` filter(s) discovered by
+/// `NovelReaderPageCurlPrivateBackColor`, so repeated per-frame refreshes during a single
+/// transition can skip re-walking the layer tree. The owning coordinator resets this
+/// at the start of each new transition.
+@MainActor
+private final class NovelReaderPageCurlBackColorFilterCache {
+    fileprivate var filters = NSHashTable<NSObject>.weakObjects()
+
+    func reset() {
+        filters.removeAllObjects()
+    }
+}
+
 @MainActor
 private enum NovelReaderPageCurlPrivateBackColor {
     private static let filtersKey = "filters"
@@ -652,22 +671,42 @@ private enum NovelReaderPageCurlPrivateBackColor {
     private static let inputBackColor0Key = "inputBackColor0"
     private static let inputBackColor1Key = "inputBackColor1"
 
-    static func apply(to rootView: UIView, backColor: UIColor) {
+    /// The filter's identity is stable for the rest of a transition once found; only its
+    /// back-color inputs need refreshing each frame. An empty cache (first frame of a
+    /// transition, or the cached filter was deallocated) triggers a fresh tree walk.
+    static func apply(to rootView: UIView, backColor: UIColor, cache: NovelReaderPageCurlBackColorFilterCache) {
         let colorComponents = backColor.readerPageCurlPrivateColorComponents
-        apply(to: rootView.layer, colorComponents: colorComponents)
+        let cachedFilters = cache.filters.allObjects
+        guard cachedFilters.isEmpty else {
+            for filter in cachedFilters {
+                applyColorComponents(colorComponents, to: filter)
+            }
+            return
+        }
+
+        discoverAndApply(to: rootView.layer, colorComponents: colorComponents, cache: cache)
     }
 
-    private static func apply(to layer: CALayer, colorComponents: [NSNumber]) {
+    private static func discoverAndApply(
+        to layer: CALayer,
+        colorComponents: [NSNumber],
+        cache: NovelReaderPageCurlBackColorFilterCache
+    ) {
         for filterKey in [filtersKey, backgroundFiltersKey] {
             guard let filters = layer.value(forKey: filterKey) as? [NSObject] else { continue }
             for filter in filters where isPageCurlFilter(filter) {
-                filter.setValue(NSNumber(value: true), forKey: inputBackEnabledKey)
-                filter.setValue(colorComponents, forKey: inputBackColor0Key)
-                filter.setValue(colorComponents, forKey: inputBackColor1Key)
+                applyColorComponents(colorComponents, to: filter)
+                cache.filters.add(filter)
             }
         }
 
-        layer.sublayers?.forEach { apply(to: $0, colorComponents: colorComponents) }
+        layer.sublayers?.forEach { discoverAndApply(to: $0, colorComponents: colorComponents, cache: cache) }
+    }
+
+    private static func applyColorComponents(_ colorComponents: [NSNumber], to filter: NSObject) {
+        filter.setValue(NSNumber(value: true), forKey: inputBackEnabledKey)
+        filter.setValue(colorComponents, forKey: inputBackColor0Key)
+        filter.setValue(colorComponents, forKey: inputBackColor1Key)
     }
 
     private static func isPageCurlFilter(_ filter: NSObject) -> Bool {

@@ -52,7 +52,7 @@ final class YamiboImageDataPipeline: YamiboOrdinaryImageCacheClearing, @unchecke
         var configuration = ImagePipeline.Configuration(dataLoader: fallbackLoader)
         configuration.dataCache = dataCache
         configuration.dataCachePolicy = .storeOriginalData
-        configuration.isResumableDataEnabled = false
+        configuration.isResumableDataEnabled = true
         self.pipeline = ImagePipeline(
             configuration: configuration,
             delegate: YamiboImageDataPipelineDelegate()
@@ -153,7 +153,7 @@ private struct YamiboImageRequestSession: @unchecked Sendable {
     }
 }
 
-private final class YamiboURLSessionImageDataLoader: DataLoading, @unchecked Sendable {
+final class YamiboURLSessionImageDataLoader: DataLoading, @unchecked Sendable {
     private let session: URLSession
 
     init(session: URLSession) {
@@ -165,20 +165,16 @@ private final class YamiboURLSessionImageDataLoader: DataLoading, @unchecked Sen
         didReceiveData: @escaping @Sendable (Data, URLResponse) -> Void,
         completion: @escaping @Sendable (Error?) -> Void
     ) -> any Cancellable {
-        let task = Task {
-            do {
-                let (data, response) = try await session.data(for: request)
-                if let validationError = Self.validationError(for: response) {
-                    completion(validationError)
-                    return
-                }
-                didReceiveData(data, response)
-                completion(nil)
-            } catch {
-                completion(Self.mapNetworkError(error))
-            }
-        }
-        return YamiboTaskCancellable(task: task)
+        let task = session.dataTask(with: request)
+        // Chunked delegate delivery (instead of one-shot `data(for:)`) is what
+        // lets Nuke accumulate the partial data required for resumable
+        // downloads; the task retains its delegate until it completes.
+        task.delegate = StreamingDeliveryHandler(
+            didReceiveData: didReceiveData,
+            completion: completion
+        )
+        task.resume()
+        return YamiboDataTaskCancellable(task: task)
     }
 
     private static func validationError(for response: URLResponse) -> Error? {
@@ -205,12 +201,61 @@ private final class YamiboURLSessionImageDataLoader: DataLoading, @unchecked Sen
         }
         return error
     }
+
+    private final class StreamingDeliveryHandler: NSObject, URLSessionDataDelegate, @unchecked Sendable {
+        private let didReceiveData: @Sendable (Data, URLResponse) -> Void
+        private let completion: @Sendable (Error?) -> Void
+        // URLSession delivers a task's delegate callbacks serially; these are
+        // only touched from that serial context.
+        private var validatedResponse: URLResponse?
+        private var validationError: Error?
+
+        init(
+            didReceiveData: @escaping @Sendable (Data, URLResponse) -> Void,
+            completion: @escaping @Sendable (Error?) -> Void
+        ) {
+            self.didReceiveData = didReceiveData
+            self.completion = completion
+        }
+
+        func urlSession(
+            _ session: URLSession,
+            dataTask: URLSessionDataTask,
+            didReceive response: URLResponse,
+            completionHandler: @escaping (URLSession.ResponseDisposition) -> Void
+        ) {
+            if let error = YamiboURLSessionImageDataLoader.validationError(for: response) {
+                validationError = error
+                completionHandler(.cancel)
+                return
+            }
+            validatedResponse = response
+            completionHandler(.allow)
+        }
+
+        func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
+            guard let validatedResponse else { return }
+            didReceiveData(data, validatedResponse)
+        }
+
+        func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+            if let validationError {
+                completion(validationError)
+                return
+            }
+            guard let error else {
+                completion(nil)
+                return
+            }
+            completion(YamiboURLSessionImageDataLoader.mapNetworkError(error))
+        }
+    }
 }
 
-private final class YamiboTaskCancellable: Cancellable, @unchecked Sendable {
-    private let task: Task<Void, Never>
+private final class YamiboDataTaskCancellable: Cancellable, @unchecked Sendable {
+    private let task: URLSessionDataTask
 
-    init(task: Task<Void, Never>) {
+    init(task: URLSessionDataTask) {
         self.task = task
     }
 

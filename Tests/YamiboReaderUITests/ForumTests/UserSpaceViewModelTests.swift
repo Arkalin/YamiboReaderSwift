@@ -182,11 +182,109 @@ final class UserSpaceViewModelTests: XCTestCase {
         let calls = await repository.calls()
         XCTAssertEqual(calls, ["addFriendForm:705216:张瑞泽", "addFriend:705216:form123:你好:2"])
     }
+
+    /// generation-guard coverage: quickly switching sub-tabs must not let a
+    /// slow response for the tab that's no longer selected land after the
+    /// newly selected tab's faster response and overwrite its content.
+    func testStaleSubTabResponseDoesNotOverwriteNewerSubTabContent() async throws {
+        let repository = UserSpaceRepositoryStub()
+        await repository.setGatedThreadsPages([1])
+        let model = UserSpaceViewModel(uid: "705216", titleHint: "张瑞泽", repository: repository)
+
+        let staleTask = Task { await model.selectTab(.threads) }
+        await repository.waitUntilThreadsBlocked()
+
+        await model.selectTab(.replies)
+        if case .replies = model.content {
+        } else {
+            XCTFail("Expected replies content")
+        }
+        XCTAssertEqual(model.selectedSubPage, .replies)
+
+        await repository.releaseThreads()
+        await staleTask.value
+
+        if case .replies = model.content {
+        } else {
+            XCTFail("Expected replies content to remain after the stale threads response landed")
+        }
+        XCTAssertEqual(model.selectedSubPage, .replies)
+    }
+
+    /// Split-generation coverage: profile and content requests advance
+    /// independent generations, so switching sub-tabs while the profile is
+    /// still in flight must not get the still-relevant profile response
+    /// discarded (which would leave the navigation title stuck on the
+    /// unknown-user fallback with no way to recover on this screen).
+    func testProfileResponseSurvivesSubTabSwitchWhileInFlight() async throws {
+        let repository = UserSpaceRepositoryStub()
+        await repository.setGatedProfile(true)
+        let model = UserSpaceViewModel(uid: "705216", titleHint: nil, repository: repository)
+
+        let profileTask = Task { await model.load() }
+        await repository.waitUntilProfileBlocked()
+
+        await model.selectTab(.threads)
+        if case .threads = model.content {
+        } else {
+            XCTFail("Expected threads content")
+        }
+
+        await repository.releaseProfile()
+        await profileTask.value
+
+        XCTAssertEqual(model.profile?.uid, "705216")
+        if case .threads = model.content {
+        } else {
+            XCTFail("Expected threads content to remain after the profile response landed")
+        }
+        XCTAssertFalse(model.isLoadingProfile)
+        XCTAssertFalse(model.isLoadingContent)
+    }
+
+    /// Switching to the already-cached profile sub-page issues no request
+    /// but must still invalidate any in-flight content request — its late
+    /// response may not repopulate the content axis (or re-raise a spinner)
+    /// behind the profile page.
+    func testSwitchingToCachedProfileSubPageInvalidatesInFlightContentRequest() async throws {
+        let repository = UserSpaceRepositoryStub()
+        await repository.setGatedThreadsPages([1])
+        let model = UserSpaceViewModel(uid: "705216", titleHint: "张瑞泽", repository: repository)
+        model.profile = UserSpaceProfile(uid: "705216", username: "张瑞泽")
+
+        let staleTask = Task { await model.selectTab(.threads) }
+        await repository.waitUntilThreadsBlocked()
+
+        await model.selectTab(.profile)
+        XCTAssertEqual(model.selectedSubPage, .profile)
+        XCTAssertFalse(model.isLoadingContent)
+
+        await repository.releaseThreads()
+        await staleTask.value
+
+        XCTAssertNil(model.content)
+        XCTAssertEqual(model.selectedSubPage, .profile)
+        XCTAssertEqual(model.currentPage, 1)
+        XCTAssertNil(model.errorMessage)
+        XCTAssertFalse(model.isLoadingContent)
+    }
 }
 
 private actor UserSpaceRepositoryStub: UserSpacePageLoading {
     let error: Error?
     var recordedCalls: [String] = []
+    /// Gate used by the stale-response race test to hold a `fetchThreads`
+    /// call in flight until the newer sub-tab's response has already landed.
+    private var gatedThreadsPages: Set<Int> = []
+    private var continuation: CheckedContinuation<Void, Never>?
+    private var isBlocking = false
+    private var released = false
+    /// Separate gate holding a `fetchProfile` call in flight while content
+    /// requests come and go on their own generation axis.
+    private var gatedProfile = false
+    private var profileContinuation: CheckedContinuation<Void, Never>?
+    private var isProfileBlocking = false
+    private var profileReleased = false
 
     init(error: Error? = nil) {
         self.error = error
@@ -194,12 +292,18 @@ private actor UserSpaceRepositoryStub: UserSpacePageLoading {
 
     func fetchProfile(uid: String?, titleHint: String?) async throws -> UserSpaceProfile {
         recordedCalls.append("profile:\(uid ?? "self"):\(titleHint ?? "")")
+        if gatedProfile {
+            await waitForProfileIfNeeded()
+        }
         if let error { throw error }
         return UserSpaceProfile(uid: uid ?? "self", username: titleHint ?? "User")
     }
 
     func fetchThreads(uid: String?, page: Int) async throws -> UserSpaceThreadPage {
         recordedCalls.append("threads:\(uid ?? "self"):\(page)")
+        if gatedThreadsPages.contains(page) {
+            await waitIfNeeded()
+        }
         if let error { throw error }
         return UserSpaceThreadPage(
             threads: [ForumThreadSummary(tid: "thread-\(page)", title: "Thread", url: URL(string: "https://bbs.yamibo.com/thread-\(page)-1-1.html")!)],
@@ -265,5 +369,53 @@ private actor UserSpaceRepositoryStub: UserSpacePageLoading {
 
     func calls() -> [String] {
         recordedCalls
+    }
+
+    func setGatedThreadsPages(_ pages: Set<Int>) {
+        gatedThreadsPages = pages
+    }
+
+    private func waitIfNeeded() async {
+        guard !released else { return }
+        await withCheckedContinuation { continuation in
+            self.continuation = continuation
+            isBlocking = true
+        }
+    }
+
+    func waitUntilThreadsBlocked() async {
+        while !isBlocking {
+            await Task.yield()
+        }
+    }
+
+    func releaseThreads() {
+        released = true
+        continuation?.resume()
+        continuation = nil
+    }
+
+    func setGatedProfile(_ gated: Bool) {
+        gatedProfile = gated
+    }
+
+    private func waitForProfileIfNeeded() async {
+        guard !profileReleased else { return }
+        await withCheckedContinuation { continuation in
+            profileContinuation = continuation
+            isProfileBlocking = true
+        }
+    }
+
+    func waitUntilProfileBlocked() async {
+        while !isProfileBlocking {
+            await Task.yield()
+        }
+    }
+
+    func releaseProfile() {
+        profileReleased = true
+        profileContinuation?.resume()
+        profileContinuation = nil
     }
 }

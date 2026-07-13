@@ -1462,12 +1462,15 @@ final class FavoriteLibraryOrganizer: ObservableObject {
     /// for resolved directories come from `smartMangaCoverLookup(for:)` and
     /// merge into the same keyspace.
     private func loadContentCovers(for items: [FavoriteItem]) async -> ContentCoverLookup {
+        // Batched into one `ContentCoverStore.covers(for:)` read transaction
+        // instead of one actor round-trip + GRDB read per item — an N+1 that
+        // scaled linearly with the whole favorites library on every
+        // load()/reload().
+        let keys = items.compactMap { ContentCoverKey(target: $0.target) }
+        let covers = await contentCoverStore.covers(for: keys)
         var lookup = ContentCoverLookup()
-        for item in items {
-            guard let key = ContentCoverKey(target: item.target),
-                  let cover = await contentCoverStore.cover(for: key) else {
-                continue
-            }
+        for key in keys {
+            guard let cover = covers[key] else { continue }
             if let resolvedURL = cover.resolvedURL {
                 lookup.urlsByKey[key] = resolvedURL
             }
@@ -1524,10 +1527,14 @@ final class FavoriteLibraryOrganizer: ObservableObject {
     /// resolved directory (decision #13/#16) — the cover source for any card
     /// with a resolved `mangaDirectory`, merged or not.
     private func smartMangaCoverLookup(for directories: [MangaDirectory]) async -> ContentCoverLookup {
+        // Same batching as `loadContentCovers(for:)` above — one read
+        // transaction for every directory's `.smartManga` key instead of one
+        // actor round-trip per directory.
+        let keys = directories.map { ContentCoverKey.smartManga(cleanBookName: $0.cleanBookName) }
+        let covers = await contentCoverStore.covers(for: keys)
         var lookup = ContentCoverLookup()
-        for directory in directories {
-            let key = ContentCoverKey.smartManga(cleanBookName: directory.cleanBookName)
-            guard let cover = await contentCoverStore.cover(for: key) else { continue }
+        for key in keys {
+            guard let cover = covers[key] else { continue }
             if let resolvedURL = cover.resolvedURL {
                 lookup.urlsByKey[key] = resolvedURL
             }

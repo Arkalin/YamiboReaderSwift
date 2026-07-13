@@ -18,10 +18,12 @@ final class WebDAVSyncSettingsViewModelTests: XCTestCase {
             defaults: try XCTUnwrap(UserDefaults(suiteName: suiteName)),
             key: "session"
         )
+        let downloadMismatchRootDirectory = makeWebDAVSettingsTemporaryDirectory(prefix: "download-mismatch")
         let appContext = YamiboAppContext(
             sessionStore: sessionStore,
             webDAVSyncSettingsStore: settingsStore,
-            grdbRootDirectory: makeWebDAVSettingsTemporaryDirectory(prefix: "download-mismatch"),
+            grdbRootDirectory: downloadMismatchRootDirectory,
+            cachesRootDirectory: downloadMismatchRootDirectory,
             session: makeWebDAVSettingsTestSession()
         )
 
@@ -111,10 +113,12 @@ final class WebDAVSyncSettingsViewModelTests: XCTestCase {
             defaults: try XCTUnwrap(UserDefaults(suiteName: suiteName)),
             key: "session"
         )
+        let uploadMismatchRootDirectory = makeWebDAVSettingsTemporaryDirectory(prefix: "upload-mismatch")
         let appContext = YamiboAppContext(
             sessionStore: sessionStore,
             webDAVSyncSettingsStore: settingsStore,
-            grdbRootDirectory: makeWebDAVSettingsTemporaryDirectory(prefix: "upload-mismatch"),
+            grdbRootDirectory: uploadMismatchRootDirectory,
+            cachesRootDirectory: uploadMismatchRootDirectory,
             session: makeWebDAVSettingsTestSession()
         )
 

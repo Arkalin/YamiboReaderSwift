@@ -2,21 +2,20 @@ import Foundation
 
 public enum MangaTitleCleaner {
     public static func cleanThreadTitle(_ rawTitle: String) -> String {
-        rawTitle
-            .replacingOccurrences(
-                of: #"(?i)\s+[-—–_]+\s+(.*?[区板]\s+[-—–_]+\s+)?(百合会|论坛|手机版|Powered by).*$"#,
-                with: "",
-                options: .regularExpression
-            )
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+        HTMLTextExtractor.regexReplacing(
+            rawTitle,
+            pattern: #"(?i)\s+[-—–_]+\s+(.*?[区板]\s+[-—–_]+\s+)?(百合会|论坛|手机版|Powered by).*$"#,
+            with: ""
+        )
+        .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     public static func cleanBookName(_ rawTitle: String) -> String {
         var clean = cleanThreadTitle(rawTitle)
-        let hasLeadingMetadata = clean.range(
-            of: #"^\s*(?:【.*?】|\[.*?\])+"#,
-            options: .regularExpression
-        ) != nil
+        let hasLeadingMetadata = HTMLTextExtractor.regexContainsMatch(
+            clean,
+            pattern: #"^\s*(?:【.*?】|\[.*?\])+"#
+        )
         let replacements = [
             #"【.*?】|\[.*?\]"#,
             #"(?i)[\(（]?c\d+[\)）]?"#,
@@ -26,17 +25,17 @@ public enum MangaTitleCleaner {
             #"\s+-\s+.*?(中文百合漫画区|百合会|论坛).*$"#
         ]
         for pattern in replacements {
-            clean = clean.replacingOccurrences(of: pattern, with: "", options: .regularExpression)
+            clean = HTMLTextExtractor.regexReplacing(clean, pattern: pattern, with: "")
         }
         if hasLeadingMetadata {
-            clean = clean.replacingOccurrences(
-                of: #"\s+(?:第\s*)?\d{1,3}(?:\.\d+)?(?:\s*[-—]\s*\d{1,3}(?:\.\d+)?)?$"#,
-                with: "",
-                options: .regularExpression
+            clean = HTMLTextExtractor.regexReplacing(
+                clean,
+                pattern: #"\s+(?:第\s*)?\d{1,3}(?:\.\d+)?(?:\s*[-—]\s*\d{1,3}(?:\.\d+)?)?$"#,
+                with: ""
             )
         }
-        clean = clean.replacingOccurrences(of: #"[！？\?！!~。，、\.]+$"#, with: "", options: .regularExpression)
-        clean = clean.replacingOccurrences(of: #"^[\s\-/\)#]+|[\s\-/\(#:]+$"#, with: "", options: .regularExpression)
+        clean = HTMLTextExtractor.regexReplacing(clean, pattern: #"[！？\?！!~。，、\.]+$"#, with: "")
+        clean = HTMLTextExtractor.regexReplacing(clean, pattern: #"^[\s\-/\)#]+|[\s\-/\(#:]+$"#, with: "")
         return clean.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
@@ -75,13 +74,16 @@ public enum MangaTitleCleaner {
     }
 
     public static func extractChapterNumber(_ rawTitle: String) -> Double {
-        let cleaned = rawTitle
-            .replacingOccurrences(of: #"【.*?】|\[.*?\]|\(.*?\)|（.*?）|「.*?」|《.*?》"#, with: "", options: .regularExpression)
+        let cleaned = HTMLTextExtractor.regexReplacing(
+            rawTitle,
+            pattern: #"【.*?】|\[.*?\]|\(.*?\)|（.*?）|「.*?」|《.*?》"#,
+            with: ""
+        )
 
-        if cleaned.range(of: #"番外|特典|附录|SP|卷后附|卷彩页|小剧场|小漫画"#, options: .regularExpression) != nil {
+        if HTMLTextExtractor.regexContainsMatch(cleaned, pattern: #"番外|特典|附录|SP|卷后附|卷彩页|小剧场|小漫画"#) {
             return 0
         }
-        if cleaned.range(of: #"最终话|最終話|最终回|最終回|大结局"#, options: .regularExpression) != nil {
+        if HTMLTextExtractor.regexContainsMatch(cleaned, pattern: #"最终话|最終話|最终回|最終回|大结局"#) {
             return 999
         }
 

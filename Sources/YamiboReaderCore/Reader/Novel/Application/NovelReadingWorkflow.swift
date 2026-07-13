@@ -118,6 +118,10 @@ public final class NovelReadingWorkflow {
     private var layout: NovelReaderLayout
     private let repository: any NovelReadingPageRepository
     private var session: NovelReadingSession?
+    /// Snapshot carried by the last published `state`; every `state`
+    /// assignment must keep it in sync or `shouldRebuildPresentation`'s
+    /// accumulated-progress comparison drifts.
+    private var lastPublishedSnapshot: NovelReadingSnapshot?
     private var currentDocument: NovelReaderProjection?
     private var prefetchedDocument: NovelReaderProjection?
     private var currentLoadSource: NovelReaderProjectionLoadSource = .online
@@ -127,6 +131,12 @@ public final class NovelReadingWorkflow {
     private var usesPadPresentation: Bool
     private let viewportRuntime: NovelTextViewportRuntimeOwner
     private var pendingRuntimeUpdateTask: Task<(NovelReadingWorkflowRuntimeUpdate, NovelTextLayoutPreparedInput)?, Error>?
+    private var prefetchInFlightView: Int?
+    private var prefetchCooldown: (view: Int, until: Date)?
+    private let now: @Sendable () -> Date
+
+    private static let prefetchFailureCooldownInterval: TimeInterval = 5
+    private static let verticalSampleProgressUpdateThreshold: Double = 0.02
 
     package var runtimeDiagnostics: NovelTextViewportRuntimeDiagnostics {
         viewportRuntime.diagnostics
@@ -157,13 +167,15 @@ public final class NovelReadingWorkflow {
         layout: NovelReaderLayout,
         repository: any NovelReadingPageRepository,
         usesPadPresentation: Bool = false,
-        runtimeAdapter: any NovelTextLayoutRuntimeAdapter
+        runtimeAdapter: any NovelTextLayoutRuntimeAdapter,
+        now: @escaping @Sendable () -> Date = { Date() }
     ) {
         self.context = context
         self.settings = settings
         self.layout = layout
         self.repository = repository
         self.usesPadPresentation = usesPadPresentation
+        self.now = now
         viewportRuntime = NovelTextViewportRuntimeOwner(adapter: runtimeAdapter)
     }
 
@@ -274,6 +286,7 @@ public final class NovelReadingWorkflow {
             cachedViews: state.cachedViews
         )
         self.state = nextState
+        lastPublishedSnapshot = nextState.snapshot
         return nextState
     }
 
@@ -461,6 +474,7 @@ public final class NovelReadingWorkflow {
         currentAuthorID = transaction.currentAuthorID
         currentDocumentSurfaceCount = transaction.currentDocumentSurfaceCount
         state = transaction.state
+        lastPublishedSnapshot = transaction.state.snapshot
         return transaction.state
     }
 
@@ -517,7 +531,7 @@ public final class NovelReadingWorkflow {
     ) -> NovelReadingWorkflowState? {
         let previousSnapshot = session?.snapshot
         session?.updateVerticalViewportPosition(sample: sample)
-        guard session?.snapshot != previousSnapshot else { return nil }
+        guard shouldRebuildPresentation(afterSampleUpdateFrom: previousSnapshot) else { return nil }
         return try? updateStateFromSession(cachedViews: state?.cachedViews ?? [])
     }
 
@@ -533,8 +547,30 @@ public final class NovelReadingWorkflow {
         }
         let previousSnapshot = session?.snapshot
         session?.updateVerticalViewportPosition(sample: sample)
-        guard session?.snapshot != previousSnapshot else { return nil }
+        guard shouldRebuildPresentation(afterSampleUpdateFrom: previousSnapshot) else { return nil }
         return try? updateStateFromSession(cachedViews: state?.cachedViews ?? [])
+    }
+
+    /// TextKit-resolved viewport samples arrive at glyph precision, so a
+    /// naive `snapshot != previousSnapshot` guard rebuilds the (`O(surface
+    /// count)`) presentation on every scroll tick. Only a non-progress change
+    /// or the progress drift accumulated since `lastPublishedSnapshot`
+    /// crossing `verticalSampleProgressUpdateThreshold` justifies that
+    /// rebuild — comparing adjacent samples instead would let slow scrolling
+    /// (per-sample deltas below the threshold) starve the rebuild forever.
+    /// The session mutation above still runs unconditionally so resume-point
+    /// capture stays glyph-accurate.
+    private func shouldRebuildPresentation(afterSampleUpdateFrom previousSnapshot: NovelReadingSnapshot?) -> Bool {
+        guard let newSnapshot = session?.snapshot else {
+            return previousSnapshot != nil
+        }
+        guard newSnapshot != previousSnapshot else { return false }
+        guard let lastPublishedSnapshot else { return true }
+        var lastPublishedAtNewProgress = lastPublishedSnapshot
+        lastPublishedAtNewProgress.currentSurfaceIntraProgress = newSnapshot.currentSurfaceIntraProgress
+        let onlyProgressDiffers = lastPublishedAtNewProgress == newSnapshot
+        let progressDelta = abs(newSnapshot.currentSurfaceIntraProgress - lastPublishedSnapshot.currentSurfaceIntraProgress)
+        return !onlyProgressDiffers || progressDelta >= Self.verticalSampleProgressUpdateThreshold
     }
 
     @discardableResult
@@ -600,7 +636,10 @@ public final class NovelReadingWorkflow {
         prefetchedLoadSource = nil
         currentAuthorID = nil
         currentDocumentSurfaceCount = 0
+        prefetchInFlightView = nil
+        prefetchCooldown = nil
         state = nil
+        lastPublishedSnapshot = nil
     }
 
     private func cacheContext(for document: NovelReaderProjection) -> NovelReadingCacheContext {
@@ -643,12 +682,29 @@ public final class NovelReadingWorkflow {
             return nil
         }
 
+        let targetView = currentDocument.view + 1
+        guard prefetchInFlightView != targetView else { return nil }
+        if let prefetchCooldown, prefetchCooldown.view == targetView, prefetchCooldown.until > now() {
+            return nil
+        }
+
+        prefetchInFlightView = targetView
+        defer {
+            if prefetchInFlightView == targetView {
+                prefetchInFlightView = nil
+            }
+        }
+
         let nextRequest = NovelPageRequest(
             threadID: context.threadID,
-            view: currentDocument.view + 1,
+            view: targetView,
             authorID: currentAuthorID ?? currentDocument.resolvedAuthorID ?? context.authorID
         )
-        guard let nextLoad = try? await repository.loadPageResult(nextRequest) else { return nil }
+        guard let nextLoad = try? await repository.loadPageResult(nextRequest) else {
+            prefetchCooldown = (view: targetView, until: now().addingTimeInterval(Self.prefetchFailureCooldownInterval))
+            return nil
+        }
+        prefetchCooldown = nil
 
         let nextDocument = nextLoad.projection
         prefetchedDocument = nextDocument
@@ -824,6 +880,7 @@ public final class NovelReadingWorkflow {
             cachedViews: cachedViews
         )
         state = nextState
+        lastPublishedSnapshot = nextState.snapshot
         return nextState
     }
 

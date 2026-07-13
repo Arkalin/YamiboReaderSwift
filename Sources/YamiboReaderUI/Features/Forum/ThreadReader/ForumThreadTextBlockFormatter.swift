@@ -116,6 +116,56 @@ struct ForumThreadTextBlockFormatter {
     }
 }
 
+/// Per-view-instance memoization of `ForumThreadTextBlockFormatter` output.
+/// `ForumThreadTextBlockView` re-evaluates its `body` whenever
+/// `ForumThreadReaderBodyView`'s `visiblePostIDs` changes during scrolling,
+/// which would otherwise rebuild the `AttributedString` (an O(runs × n)
+/// operation) for every visible text block on every scroll-triggered
+/// visibility change. Held as `@State` in the view, so mutating this class's
+/// stored properties updates the cache in place without itself triggering a
+/// SwiftUI update.
+final class ForumThreadTextBlockFormatterCache {
+    private var cachedBlock: ForumThreadTextBlock?
+    private var cachedAttributedText: AttributedString?
+    private var cachedRubySegments: [ForumThreadRubySegment]?
+
+    func attributedText(for block: ForumThreadTextBlock) -> AttributedString {
+        if cachedBlock == block, let cachedAttributedText {
+            return cachedAttributedText
+        }
+        let attributedText = ForumThreadTextBlockFormatter(block: block).attributedText
+        updateCache(for: block, attributedText: attributedText, rubySegments: nil)
+        return attributedText
+    }
+
+    func rubySegments(for block: ForumThreadTextBlock) -> [ForumThreadRubySegment] {
+        if cachedBlock == block, let cachedRubySegments {
+            return cachedRubySegments
+        }
+        let rubySegments = ForumThreadTextBlockFormatter(block: block).rubySegments
+        updateCache(for: block, attributedText: nil, rubySegments: rubySegments)
+        return rubySegments
+    }
+
+    private func updateCache(
+        for block: ForumThreadTextBlock,
+        attributedText: AttributedString?,
+        rubySegments: [ForumThreadRubySegment]?
+    ) {
+        if cachedBlock != block {
+            cachedAttributedText = nil
+            cachedRubySegments = nil
+        }
+        cachedBlock = block
+        if let attributedText {
+            cachedAttributedText = attributedText
+        }
+        if let rubySegments {
+            cachedRubySegments = rubySegments
+        }
+    }
+}
+
 private extension Color {
     init?(forumThreadHex hex: String?) {
         guard let hex else { return nil }

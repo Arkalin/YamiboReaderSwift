@@ -78,16 +78,18 @@ public final class YamiboAppContext: Sendable {
         offlineCacheContinuedProcessingCoordinator: OfflineCacheContinuedProcessingCoordinator = OfflineCacheContinuedProcessingCoordinator(),
         databasePool: DatabasePool? = nil,
         grdbRootDirectory: URL? = nil,
+        cachesRootDirectory: URL? = nil,
         uiDefaults: UserDefaults = .standard,
         clearsWebDataOnReset: Bool = true,
         session: URLSession = YamiboNetworkConfiguration.makeSession()
     ) {
         let resolvedGRDBRootDirectory = grdbRootDirectory ?? YamiboDatabase.defaultRootDirectory()
+        let resolvedCachesRootDirectory = cachesRootDirectory ?? YamiboDatabase.defaultCacheRootDirectory()
         let resolvedGRDBDatabasePool = databasePool ?? Self.openGRDBDatabase(rootDirectory: resolvedGRDBRootDirectory)
         self.databasePool = resolvedGRDBDatabasePool
         let diskCacheStore = DiskCacheStore(
             writer: resolvedGRDBDatabasePool,
-            rootDirectory: resolvedGRDBRootDirectory
+            rootDirectory: resolvedCachesRootDirectory
         )
         self.uiDefaults = uiDefaults
         self.clearsWebDataOnReset = clearsWebDataOnReset
@@ -99,7 +101,7 @@ public final class YamiboAppContext: Sendable {
         self.readerResumeRouteStore = readerResumeRouteStore
         let resolvedOfflineCacheStore = offlineCacheStore ?? OfflineCacheStore(
             databasePool: resolvedGRDBDatabasePool,
-            baseDirectory: Self.offlineCacheDirectory(rootDirectory: resolvedGRDBRootDirectory)
+            baseDirectory: Self.prepareOfflineCacheDirectory(rootDirectory: resolvedGRDBRootDirectory)
         )
         self.localFavoriteLibraryStore = localFavoriteLibraryStore ?? FavoriteLibraryStore(databasePool: resolvedGRDBDatabasePool)
         self.favoriteUpdateStore = favoriteUpdateStore
@@ -437,6 +439,26 @@ public final class YamiboAppContext: Sendable {
 
     private static func likeImagesDirectory(rootDirectory: URL) -> URL {
         rootDirectory.appendingPathComponent("like-images", isDirectory: true)
+    }
+
+    /// Offline chapters are user-requested downloads: they must stay out of
+    /// iCloud/iTunes backups yet — unlike `Library/Caches` content — must never
+    /// be purged by the system, hence Application Support + the backup
+    /// exclusion marker. The marker stays scoped to this directory; the rest of
+    /// the root (yamibo.sqlite, favorite-background, like-images) is user data
+    /// that participates in backups. Idempotent; failures are logged because
+    /// the store lazily recreates the directory on first write anyway.
+    private static func prepareOfflineCacheDirectory(
+        rootDirectory: URL,
+        fileManager: FileManager = .default
+    ) -> URL {
+        let directory = offlineCacheDirectory(rootDirectory: rootDirectory)
+        do {
+            try OfflineCacheStore.createBackupExcludedDirectory(at: directory, fileManager: fileManager)
+        } catch {
+            YamiboLog.persistence.error("Failed to prepare the backup-excluded offline cache directory: \(error)")
+        }
+        return directory
     }
 
     private static func offlineCacheDirectory(rootDirectory: URL) -> URL {

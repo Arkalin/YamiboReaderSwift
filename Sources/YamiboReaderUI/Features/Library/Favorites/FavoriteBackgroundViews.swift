@@ -278,11 +278,36 @@ private struct FavoriteBackgroundImage: View {
     let data: Data
 
     var body: some View {
-        if let image = UIImage(data: data) {
+        if let image = FavoriteBackgroundImageDecodeCache.shared.image(for: data) {
             Image(uiImage: image)
                 .resizable()
                 .scaledToFill()
         }
+    }
+}
+
+/// Memoizes `UIImage(data:)` decoding so repeated `body` evaluations with the
+/// same background image `Data` reuse the same `UIImage` instance instead of
+/// redecoding and losing identity (which would otherwise defeat SwiftUI's
+/// diffing and force `.blur(radius:)` to re-render every time an unrelated
+/// state change reevaluates the favorites root, which this view wraps).
+final class FavoriteBackgroundImageDecodeCache: @unchecked Sendable {
+    static let shared = FavoriteBackgroundImageDecodeCache()
+
+    private let cache: NSCache<NSData, UIImage> = {
+        let cache = NSCache<NSData, UIImage>()
+        cache.countLimit = 4
+        return cache
+    }()
+
+    func image(for data: Data) -> UIImage? {
+        let key = data as NSData
+        if let cached = cache.object(forKey: key) {
+            return cached
+        }
+        guard let decoded = UIImage(data: data) else { return nil }
+        cache.setObject(decoded, forKey: key)
+        return decoded
     }
 }
 
@@ -407,7 +432,7 @@ private struct ApplyButtonLabel: View {
 }
 
 private func favoriteBackgroundImageSize(from data: Data) -> CGSize? {
-    UIImage(data: data)?.size
+    FavoriteBackgroundImageDecodeCache.shared.image(for: data)?.size
 }
 
 private func + (lhs: CGSize, rhs: CGSize) -> CGSize {

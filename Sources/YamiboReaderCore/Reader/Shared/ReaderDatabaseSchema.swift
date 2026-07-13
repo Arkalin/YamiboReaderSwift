@@ -121,7 +121,10 @@ enum ReaderDatabaseSchema: DatabaseSchemaModule {
                 table.column("insertion_index", .integer).notNull()
                 table.column("created_at", .double).notNull()
                 table.column("updated_at", .double).notNull()
-                table.primaryKey(["reader_kind", "owner_name", "tid"], onConflict: .replace)
+                // No .replace conflict clause: REPLACE deletes the conflicting row, and the
+                // ON DELETE CASCADE on both image tables below would wipe the child rows that
+                // OfflineCacheStore.save diffs against on every progress update.
+                table.primaryKey(["reader_kind", "owner_name", "tid"])
             }
             try db.create(index: "offline_cache_works_work_id_idx", on: "offline_cache_works", columns: ["work_id"], unique: true)
             try db.create(index: "offline_cache_works_owner_idx", on: "offline_cache_works", columns: ["reader_kind", "owner_name"])

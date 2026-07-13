@@ -13,35 +13,83 @@ extension OfflineCacheStore {
         do {
             let normalized = try Self.normalizedNovelWorkRequest(request)
             let sourceData = try Self.encodeJSONData(sourcePage, context: "novel offline source page")
+            let sourceFingerprint = try novelSourcePageFingerprint(for: sourcePage)
             let sourceFileName = novelPayloadFileName(
                 prefix: "source",
                 entryKey: normalized.entryKey
             )
-            try ensureNovelSourcePagesDirectoryExists()
             let sourceURL = novelSourcePagesDirectory.appendingPathComponent(sourceFileName, isDirectory: false)
+            let requestedTitle = normalized.title.isEmpty
+                ? L10n.string("reader.page_number_spaced", normalized.view)
+                : normalized.title
+
+            // Auto-refresh replays this on every online page load for views that are already
+            // offline-cached, so resolve whether anything would actually change before paying
+            // for a full re-encode + atomic file rewrite + metadata upsert.
+            let sourceUnchanged = try await database.read { db -> Bool in
+                let resolvedImageURLs = try Self.imageURLsForNovelSourcePageMetadata(
+                    request: normalized,
+                    imageURLs: normalized.targetImageURLs,
+                    preservesExistingImageReferencesWhenEmpty: preservesExistingImageReferencesWhenEmpty,
+                    in: db
+                )
+                return try Self.novelSourcePageUnchanged(
+                    entryKey: normalized.entryKey,
+                    ownerTitle: normalized.ownerTitle,
+                    title: requestedTitle,
+                    sourceFingerprint: sourceFingerprint,
+                    resolvedImageURLs: resolvedImageURLs,
+                    fileManager: fileManager,
+                    novelSourcePagesDirectory: novelSourcePagesDirectory,
+                    in: db
+                )
+            }
+
+            guard !sourceUnchanged else {
+                var deletedMatchingWork = false
+                if completesMatchingWork {
+                    deletedMatchingWork = try await database.write { db -> Bool in
+                        try Self.deleteWork(
+                            readerKind: OfflineCacheReaderKind.novel.rawValue,
+                            ownerName: normalized.groupKey,
+                            tid: normalized.entryKey,
+                            in: db
+                        )
+                        return db.changesCount > 0
+                    }
+                }
+                if deletedMatchingWork {
+                    notifyOfflineCacheDidChange()
+                }
+                return
+            }
+
+            try ensureNovelSourcePagesDirectoryExists()
             try sourceData.write(to: sourceURL, options: [.atomic])
             let document = try Self.projectionDocument(
                 from: sourcePage,
                 request: normalized
             )
             let documentJSON = try Self.encodeNovelDocument(document)
-            let sourceFingerprint = sha256Hex(String(decoding: sourceData, as: UTF8.self))
 
             let previousFiles = try await database.write { db in
-                let previousFiles = try Self.novelPayloadFileNames(entryKey: normalized.entryKey, in: db)
-                let imageURLs = try Self.imageURLsForNovelSourcePageMetadata(
+                // Resolved inside the write transaction: the actor can interleave other work
+                // at the awaits above, so a list captured during the earlier read could merge
+                // against stale state and overwrite image references written concurrently.
+                let resolvedImageURLs = try Self.imageURLsForNovelSourcePageMetadata(
                     request: normalized,
                     imageURLs: normalized.targetImageURLs,
                     preservesExistingImageReferencesWhenEmpty: preservesExistingImageReferencesWhenEmpty,
                     in: db
                 )
+                let previousFiles = try Self.novelPayloadFileNames(entryKey: normalized.entryKey, in: db)
                 try Self.saveNovelSourcePageMetadata(
                     request: normalized,
                     documentJSON: documentJSON,
                     sourceFileName: sourceFileName,
                     sourceFingerprint: sourceFingerprint,
                     sourceByteCount: sourceData.count,
-                    imageURLs: imageURLs,
+                    imageURLs: resolvedImageURLs,
                     updatedAt: updatedAt,
                     in: db
                 )
@@ -62,6 +110,56 @@ extension OfflineCacheStore {
         } catch {
             throw novelPayloadPersistenceError(from: error)
         }
+    }
+
+    /// Fingerprint used by the auto-refresh skip check, computed over a copy with
+    /// per-fetch/per-session fields stripped: the Discuz view counter increments on every
+    /// visit (including the fetch itself), reply counters bump on activity anywhere in the
+    /// thread, and the form hash plus manage-action links rotate with the session. Hashing
+    /// the full page would make the skip branch unreachable; the payload file still stores
+    /// the complete page.
+    func novelSourcePageFingerprint(for sourcePage: ForumThreadPage) throws -> String {
+        var canonical = sourcePage
+        canonical.totalViews = nil
+        canonical.totalReplies = nil
+        canonical.formHash = nil
+        canonical.posts = canonical.posts.map { post in
+            var post = post
+            post.manageActions = []
+            return post
+        }
+        let data = try Self.encodeJSONData(canonical, context: "novel offline source page fingerprint")
+        return sha256Hex(String(decoding: data, as: UTF8.self))
+    }
+
+    private static func novelSourcePageUnchanged(
+        entryKey: String,
+        ownerTitle: String,
+        title: String,
+        sourceFingerprint: String,
+        resolvedImageURLs: [URL],
+        fileManager: FileManager,
+        novelSourcePagesDirectory: URL,
+        in db: Database
+    ) throws -> Bool {
+        guard let row = try Row.fetchOne(
+            db,
+            sql: """
+            SELECT owner_title, title, source_page_file_name, source_page_fingerprint
+            FROM offline_cache_novel_entries
+            WHERE entry_key = ?
+            """,
+            arguments: [entryKey]
+        ),
+              (row["owner_title"] as String?) == ownerTitle,
+              (row["title"] as String?) == title,
+              let fileName = (row["source_page_file_name"] as String?)?.mangaReaderTrimmedNonEmpty,
+              (row["source_page_fingerprint"] as String?) == sourceFingerprint,
+              payloadFileExists(fileName: fileName, directory: novelSourcePagesDirectory, fileManager: fileManager) else {
+            return false
+        }
+        let existingImageURLs = try Self.novelImageURLs(entryKey: entryKey, in: db)
+        return existingImageURLs == resolvedImageURLs
     }
 
     func novelOfflineSourcePage(
@@ -241,7 +339,12 @@ extension OfflineCacheStore {
 
     private static func encodeJSONData<T: Encodable>(_ value: T, context: String) throws -> Data {
         do {
-            return try JSONEncoder().encode(value)
+            // Sorted keys make the fingerprint reproducible: re-encoding an unchanged
+            // ForumThreadPage must hash identically to the previously stored fingerprint, and
+            // JSONEncoder's default key order is not guaranteed stable across separate encode calls.
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.sortedKeys]
+            return try encoder.encode(value)
         } catch {
             throw YamiboError.persistenceFailed("Failed to encode \(context)")
         }

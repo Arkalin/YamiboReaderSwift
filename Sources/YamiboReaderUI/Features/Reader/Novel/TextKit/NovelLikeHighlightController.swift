@@ -12,38 +12,29 @@ final class NovelLikeHighlightController {
     private let registeredViews = NSHashTable<NovelTextViewportReferenceUIView>.weakObjects()
     private var workKey: LikeWorkKey?
     private var likeStore: LikeStore?
-    // deinit runs nonisolated even on a @MainActor class; this is only ever
-    // written on the main actor (configure) and read in deinit, when no
-    // concurrent access to this instance is possible.
-    private nonisolated(unsafe) var changeObserver: NSObjectProtocol?
+    private var changeObserverTask: Task<Void, Never>?
     private var items: [LikeItem] = []
     private var rangesByItemID: [String: NovelTextSelectionRange] = [:]
     private var cachedGeneration: UInt64?
 
     deinit {
-        if let changeObserver {
-            NotificationCenter.default.removeObserver(changeObserver)
-        }
+        changeObserverTask?.cancel()
     }
 
     func configure(workKey: LikeWorkKey, likeStore: LikeStore) {
         self.workKey = workKey
         self.likeStore = likeStore
-        if let changeObserver {
-            NotificationCenter.default.removeObserver(changeObserver)
-        }
+        changeObserverTask?.cancel()
         let expectedChangeID = likeStore.changeID
-        changeObserver = NotificationCenter.default.addObserver(
-            forName: LikeStore.didChangeNotification,
-            object: nil,
-            queue: .main
-        ) { notification in
-            guard let changeID = notification.userInfo?[LikeStore.changeIDUserInfoKey] as? String,
-                  changeID == expectedChangeID else {
-                return
-            }
-            Task { @MainActor [weak self] in
-                await self?.reload()
+        changeObserverTask = Task { @MainActor [weak self] in
+            for await notification in NotificationCenter.default.notifications(named: LikeStore.didChangeNotification) {
+                guard !Task.isCancelled else { return }
+                guard let self else { return }
+                guard let changeID = notification.userInfo?[LikeStore.changeIDUserInfoKey] as? String,
+                      changeID == expectedChangeID else {
+                    continue
+                }
+                await self.reload()
             }
         }
         Task { await reload() }

@@ -33,6 +33,26 @@ struct MangaReaderTestsMangaReaderProjectionStore {
         #expect(await store.projection(for: projection.sourceIdentity) == nil)
         #expect(await store.totalDiskUsageBytes() == 0)
     }
+
+    @Test func prunesToMostRecentOneHundredEntries() async throws {
+        let root = makeProjectionStoreRoot()
+        let pool = try YamiboDatabase.openPool(rootDirectory: root.appendingPathComponent("grdb", isDirectory: true))
+        nonisolated(unsafe) var now = Date(timeIntervalSince1970: 100)
+        let diskCache = DiskCacheStore(writer: pool, rootDirectory: root, now: { now })
+        let store = MangaReaderProjectionStore(diskCacheStore: diskCache)
+
+        for view in 1...101 {
+            now = Date(timeIntervalSince1970: 100 + TimeInterval(view))
+            try await store.save(try makeProjection(tid: "802", authorID: "42", view: view, imageName: "a"))
+        }
+
+        let identity = { (view: Int) in
+            MangaReaderProjectionSourceIdentity(tid: "802", authorID: "42", view: view)
+        }
+        #expect(await store.projection(for: identity(1)) == nil)
+        #expect(await store.projection(for: identity(2))?.sourceIdentity.view == 2)
+        #expect(await store.projection(for: identity(101))?.sourceIdentity.view == 101)
+    }
 }
 
 private func makeProjectionStoreRoot() -> URL {

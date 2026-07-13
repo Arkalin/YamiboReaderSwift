@@ -119,6 +119,7 @@ final class MangaReaderPresentationTests: XCTestCase {
             webDAVSyncSettingsStore: fixture.webDAVSettingsStore,
             readerResumeRouteStore: fixture.resumeRouteStore,
             grdbRootDirectory: fixture.grdbRootDirectory,
+            cachesRootDirectory: fixture.grdbRootDirectory,
             session: fixture.session
         )
         let appModel = YamiboAppModel(appContext: appContext)
@@ -202,6 +203,7 @@ final class MangaReaderPresentationTests: XCTestCase {
             webDAVSyncSettingsStore: fixture.webDAVSettingsStore,
             readerResumeRouteStore: fixture.resumeRouteStore,
             grdbRootDirectory: fixture.grdbRootDirectory,
+            cachesRootDirectory: fixture.grdbRootDirectory,
             session: fixture.session
         )
         let appModel = YamiboAppModel(appContext: appContext)
