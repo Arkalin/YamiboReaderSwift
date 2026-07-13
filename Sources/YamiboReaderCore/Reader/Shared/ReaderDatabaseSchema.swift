@@ -27,9 +27,9 @@ enum ReaderDatabaseSchema: DatabaseSchemaModule {
                 table.column("manga_page_index", .integer)
                 table.column("manga_page_count", .integer)
             }
-            try db.create(index: "reading_progress_kind_updated_idx", on: "reading_progress", columns: ["kind", "updated_at"])
             try db.create(index: "reading_progress_thread_idx", on: "reading_progress", columns: ["thread_id"])
-            try db.create(index: "reading_progress_manga_title_idx", on: "reading_progress", columns: ["manga_id", "clean_book_name"])
+            // Serves the directory-rename retarget scan (MangaDirectoryStore).
+            try db.create(index: "reading_progress_target_book_idx", on: "reading_progress", columns: ["target_kind", "clean_book_name"])
             try db.create(index: "reading_progress_manga_chapter_idx", on: "reading_progress", columns: ["manga_chapter_thread_id"])
 
             try db.create(table: "manga_directories") { table in
@@ -67,7 +67,6 @@ enum ReaderDatabaseSchema: DatabaseSchemaModule {
                 table.column("created_at", .double).notNull()
                 table.primaryKey(["owner_name", "tid"], onConflict: .replace)
             }
-            try db.create(index: "offline_cache_manga_entries_owner_idx", on: "offline_cache_manga_entries", columns: ["owner_name"])
 
             try db.create(table: "offline_cache_novel_entries") { table in
                 table.column("owner_name", .text).notNull()
@@ -127,7 +126,6 @@ enum ReaderDatabaseSchema: DatabaseSchemaModule {
                 table.primaryKey(["reader_kind", "owner_name", "tid"])
             }
             try db.create(index: "offline_cache_works_work_id_idx", on: "offline_cache_works", columns: ["work_id"], unique: true)
-            try db.create(index: "offline_cache_works_owner_idx", on: "offline_cache_works", columns: ["reader_kind", "owner_name"])
             try db.create(index: "offline_cache_works_insertion_idx", on: "offline_cache_works", columns: ["insertion_index"])
 
             try db.create(table: "offline_cache_work_images") { table in

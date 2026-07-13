@@ -246,8 +246,8 @@ extension OfflineCacheStore {
     ) throws {
         let candidates = Set(candidateImageURLs.map(\.absoluteString))
         guard !candidates.isEmpty else { return }
-        let referenced = try referencedImageURLs(in: db)
-        for imageURLString in candidates where !referenced.contains(imageURLString) {
+        for imageURLString in candidates {
+            guard try !isImageReferenced(imageURLString, in: db) else { continue }
             try deleteImage(imageURLString: imageURLString, fileManager: fileManager, imagesDirectory: imagesDirectory, in: db)
         }
     }
@@ -263,17 +263,19 @@ extension OfflineCacheStore {
         return sanitized.isEmpty ? "bin" : sanitized
     }
 
-    private static func referencedImageURLs(in db: Database) throws -> Set<String> {
-        var referenced = Set<String>()
-        for table in [
-            "offline_cache_manga_entry_images",
-            "offline_cache_novel_entry_images",
-            "offline_cache_work_images",
-            "offline_cache_completed_images"
-        ] {
-            referenced.formUnion(try String.fetchAll(db, sql: "SELECT image_url FROM \(table)"))
-        }
-        return referenced
+    /// Point lookups on the four `image_url` indexes: O(log n) per candidate,
+    /// instead of materializing every reference row for each GC pass.
+    private static func isImageReferenced(_ imageURLString: String, in db: Database) throws -> Bool {
+        try Bool.fetchOne(
+            db,
+            sql: """
+            SELECT EXISTS(SELECT 1 FROM offline_cache_manga_entry_images WHERE image_url = ?)
+                OR EXISTS(SELECT 1 FROM offline_cache_novel_entry_images WHERE image_url = ?)
+                OR EXISTS(SELECT 1 FROM offline_cache_work_images WHERE image_url = ?)
+                OR EXISTS(SELECT 1 FROM offline_cache_completed_images WHERE image_url = ?)
+            """,
+            arguments: [imageURLString, imageURLString, imageURLString, imageURLString]
+        ) ?? false
     }
 
     private static func deleteImage(

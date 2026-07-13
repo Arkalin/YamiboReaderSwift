@@ -201,10 +201,9 @@ struct MangaReaderTestsMangaStores {
 
     @Test func directoryRenameMigratesFavoriteUpdateTrackingAsFifthCascadeStep() async throws {
         let database = try YamiboDatabase.openPool(rootDirectory: makeMangaStoreRoot())
-        let updateStore = FavoriteUpdateStore(
-            defaults: try #require(UserDefaults(suiteName: "GRDBMangaStoreUpdateTracking.\(UUID().uuidString)")),
-            key: "favorite-updates"
-        )
+        // Same pool as the directory store: the cascade step now writes the
+        // update-store tables inside the rename transaction.
+        let updateStore = FavoriteUpdateStore(databasePool: database)
         let directoryStore = MangaDirectoryStore(databasePool: database, favoriteUpdateStore: updateStore)
 
         try await directoryStore.saveDirectory(MangaDirectory(

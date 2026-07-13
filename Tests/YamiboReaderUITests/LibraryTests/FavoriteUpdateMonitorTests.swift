@@ -225,13 +225,13 @@ final class FavoriteUpdateMonitorTests: XCTestCase {
         try await waitForStatus(.completed, in: monitor)
 
         let readEvent = FavoriteUpdateEvent(
-            target: FavoriteItemTarget(kind: .normalThread, threadID: "961"),
+            target: .favorite(FavoriteItemTarget(kind: .normalThread, threadID: "961")),
             title: "已读主题",
             mode: .normalThread,
             summary: .newReplies(count: 1)
         )
         let dismissedEvent = FavoriteUpdateEvent(
-            target: FavoriteItemTarget(kind: .normalThread, threadID: "962"),
+            target: .favorite(FavoriteItemTarget(kind: .normalThread, threadID: "962")),
             title: "忽略主题",
             mode: .normalThread,
             summary: .newReplies(count: 1)
@@ -248,14 +248,14 @@ final class FavoriteUpdateMonitorTests: XCTestCase {
         try await favoriteUpdateStore.markEventRead(readEvent.id)
         try await favoriteUpdateStore.dismissEvent(dismissedEvent.id)
         let storeOnlyEvent = FavoriteUpdateEvent(
-            target: FavoriteItemTarget(kind: .normalThread, threadID: "963"),
+            target: .favorite(FavoriteItemTarget(kind: .normalThread, threadID: "963")),
             title: "并发主题",
             mode: .normalThread,
             summary: .newReplies(count: 2)
         )
         try await favoriteUpdateStore.insertEvent(storeOnlyEvent)
         let storeOnlyTarget = FavoriteUpdateTrackedTarget(
-            target: FavoriteItemTarget(kind: .normalThread, threadID: "999"),
+            target: .favorite(FavoriteItemTarget(kind: .normalThread, threadID: "999")),
             title: "并发目标",
             mode: .normalThread
         )
@@ -270,7 +270,7 @@ final class FavoriteUpdateMonitorTests: XCTestCase {
         let persistedDismissed = try XCTUnwrap(state.events.first { $0.id == dismissedEvent.id })
         XCTAssertNotNil(persistedDismissed.dismissedAt)
         XCTAssertNotNil(state.events.first { $0.id == storeOnlyEvent.id })
-        let detected = try XCTUnwrap(state.events.first { $0.target == target })
+        let detected = try XCTUnwrap(state.events.first { $0.target == .favorite(target) })
         XCTAssertEqual(detected.summary, .newReplies(count: 2))
         XCTAssertNil(detected.readAt)
         XCTAssertNil(detected.dismissedAt)
@@ -350,7 +350,7 @@ final class FavoriteUpdateMonitorTests: XCTestCase {
         let state = await favoriteUpdateStore.loadState()
         let dismissed = try XCTUnwrap(state.events.first { $0.id == firstEventID })
         XCTAssertNotNil(dismissed.dismissedAt)
-        let replacement = try XCTUnwrap(state.events.first { $0.target == target && $0.dismissedAt == nil })
+        let replacement = try XCTUnwrap(state.events.first { $0.target == .favorite(target) && $0.dismissedAt == nil })
         XCTAssertNotEqual(replacement.id, firstEventID)
         XCTAssertNil(replacement.readAt)
         XCTAssertEqual(replacement.summary, .newReplies(count: 3))

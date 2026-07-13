@@ -1,4 +1,5 @@
 import Foundation
+@preconcurrency import GRDB
 
 /// Descriptive label mirroring the tracked target's kind.
 /// `.normalThread`/`.novelThread`/`.mangaThread` map 1:1 from
@@ -319,124 +320,225 @@ public struct FavoriteUpdateStoreState: Codable, Hashable, Sendable {
 public actor FavoriteUpdateStore {
     public static let didChangeNotification = Notification.Name("yamibo.favoriteUpdateStore.didChange")
     public static let changeIDUserInfoKey = "changeID"
-    public static let defaultKey = "yamibo.favoriteUpdates"
+    private static let keptRunCount = 10
+    nonisolated(unsafe) private static var databasePoolCache: [String: DatabasePool] = [:]
+    private static let databasePoolCacheLock = NSLock()
 
     public nonisolated let changeID = UUID().uuidString
 
-    private let defaults: UserDefaults
-    private let key: String
-    private let encoder = JSONEncoder()
-    private let decoder = JSONDecoder()
+    private let database: DatabasePool
 
-    public init(defaults: UserDefaults = .standard, key: String = FavoriteUpdateStore.defaultKey) {
-        self.defaults = defaults
-        self.key = key
+    /// Convenience for tests/previews, mirroring `FavoriteLibraryStore`:
+    /// `.standard` resolves the shared `yamibo.sqlite` pool; any other
+    /// defaults suite gets its own temporary database keyed by `key`.
+    public init(defaults: UserDefaults = .standard, key: String = "yamibo.favoriteUpdates") {
+        self.database = Self.openDatabase(defaults: defaults, key: key)
+    }
+
+    init(databasePool: DatabasePool) {
+        self.database = databasePool
+    }
+
+    private static func openDatabase(defaults: UserDefaults, key: String) -> DatabasePool {
+        do {
+            if defaults === UserDefaults.standard {
+                return try cachedDatabasePool(rootDirectory: YamiboDatabase.defaultRootDirectory())
+            }
+            let idKey = "\(key).grdbDatabaseID"
+            let databaseID: String
+            if let existing = defaults.string(forKey: idKey), !existing.isEmpty {
+                databaseID = existing
+            } else {
+                databaseID = UUID().uuidString
+                defaults.set(databaseID, forKey: idKey)
+            }
+            let root = FileManager.default.temporaryDirectory
+                .appendingPathComponent("YamiboReaderFavoriteUpdates", isDirectory: true)
+                .appendingPathComponent(databaseID, isDirectory: true)
+            return try cachedDatabasePool(rootDirectory: root)
+        } catch {
+            fatalError("Failed to open FavoriteUpdateStore database: \(error)")
+        }
+    }
+
+    private static func cachedDatabasePool(rootDirectory: URL) throws -> DatabasePool {
+        let key = rootDirectory.standardizedFileURL.path
+        databasePoolCacheLock.lock()
+        defer { databasePoolCacheLock.unlock() }
+        if let pool = databasePoolCache[key] {
+            return pool
+        }
+
+        let pool = try YamiboDatabase.openPool(rootDirectory: rootDirectory)
+        databasePoolCache[key] = pool
+        return pool
     }
 
     public func loadState() async -> FavoriteUpdateStoreState {
-        loadStateSync()
+        do {
+            return try await database.read { db in try Self.state(in: db) }
+        } catch {
+            YamiboLog.library.error("Failed to load stored favorite update tracking state, returning empty state: \(error)")
+            return FavoriteUpdateStoreState()
+        }
     }
 
     public func latestRun() async -> FavoriteUpdateRunSnapshot? {
-        loadStateSync().runs.sorted { $0.updatedAt > $1.updatedAt }.first
+        try? await database.read { db in
+            guard let json = try String.fetchOne(
+                db,
+                sql: """
+                SELECT run_json FROM favorite_update_runs
+                ORDER BY updated_at DESC, run_id DESC
+                LIMIT 1
+                """
+            ) else {
+                return nil
+            }
+            return try Self.decode(FavoriteUpdateRunSnapshot.self, from: json)
+        }
     }
 
     public func activeEvents() async -> [FavoriteUpdateEvent] {
-        loadStateSync().events
-            .filter { $0.dismissedAt == nil }
-            .sorted { lhs, rhs in
-                if lhs.detectedAt != rhs.detectedAt { return lhs.detectedAt > rhs.detectedAt }
-                return lhs.id > rhs.id
-            }
+        (try? await database.read { db in try Self.activeEvents(in: db) }) ?? []
     }
 
     public func saveRun(_ snapshot: FavoriteUpdateRunSnapshot) async throws {
-        var state = loadStateSync()
-        state.runs.removeAll { $0.runID == snapshot.runID }
-        state.runs.append(snapshot)
-        state.runs = Array(state.runs.sorted { $0.updatedAt > $1.updatedAt }.prefix(10))
-        try persist(state)
+        try await write { db in
+            try db.execute(
+                sql: """
+                INSERT INTO favorite_update_runs (run_id, updated_at, run_json)
+                VALUES (?, ?, ?)
+                ON CONFLICT(run_id) DO UPDATE SET
+                    updated_at = excluded.updated_at,
+                    run_json = excluded.run_json
+                """,
+                arguments: [snapshot.runID, snapshot.updatedAt.timeIntervalSince1970, try Self.encode(snapshot)]
+            )
+            try db.execute(
+                sql: """
+                DELETE FROM favorite_update_runs
+                WHERE run_id NOT IN (
+                    SELECT run_id FROM favorite_update_runs
+                    ORDER BY updated_at DESC, run_id DESC
+                    LIMIT ?
+                )
+                """,
+                arguments: [Self.keptRunCount]
+            )
+            return true
+        }
     }
 
     public func upsertTrackedTarget(_ target: FavoriteUpdateTrackedTarget) async throws {
-        var state = loadStateSync()
-        state.trackedTargets.removeAll { $0.id == target.id }
-        state.trackedTargets.append(target)
-        try persist(state)
+        try await write { db in
+            try Self.upsertTrackedTarget(target, in: db)
+            return true
+        }
     }
 
     public func replaceTrackedTargets(_ targets: [FavoriteUpdateTrackedTarget]) async throws {
-        var state = loadStateSync()
-        state.trackedTargets = targets.sorted { $0.id < $1.id }
-        try persist(state)
+        try await write { db in
+            try db.execute(sql: "DELETE FROM favorite_update_tracked_targets")
+            for target in targets {
+                try Self.upsertTrackedTarget(target, in: db)
+            }
+            return true
+        }
     }
 
     public func insertEvent(_ event: FavoriteUpdateEvent) async throws {
-        var state = loadStateSync()
-        state.events.removeAll { $0.target == event.target && $0.dismissedAt == nil }
-        state.events.append(event)
-        try persist(state)
+        try await write { db in
+            try db.execute(
+                sql: "DELETE FROM favorite_update_events WHERE target_id = ? AND dismissed_at IS NULL",
+                arguments: [event.target.id]
+            )
+            try Self.insertEventRow(event, in: db)
+            return true
+        }
     }
 
     /// Migrates a `.mangaDirectory` tracked target and its events from
     /// `oldCleanBookName` to `newCleanBookName` when `MangaDirectoryStore`
-    /// renames/merges a directory (its 5th rename-cascade step). Unlike the
-    /// GRDB-backed `ContentCoverStore`/`LikeStore` cascades this store
-    /// mirrors, this store is UserDefaults-backed and cannot join the same
-    /// database transaction — the caller invokes this as a best-effort
-    /// follow-up after the GRDB write commits, not atomically with it.
+    /// renames/merges a directory. `MangaDirectoryStore` runs the static
+    /// variant inside its own rename transaction; this instance method exists
+    /// for callers outside that cascade.
+    public func renameMangaDirectoryTracking(from oldCleanBookName: String, to newCleanBookName: String) async throws {
+        guard oldCleanBookName != newCleanBookName else { return }
+        try await write { db in
+            try Self.renameMangaDirectoryTracking(from: oldCleanBookName, to: newCleanBookName, in: db)
+            return true
+        }
+    }
+
     /// A rename that merges into an ALREADY-tracked `newCleanBookName`
     /// unions the two known-chapter-tid baselines (never shrinks either
     /// side) and keeps only the more recently detected of any two
     /// now-colliding undismissed events for the merged target.
-    public func renameMangaDirectoryTracking(from oldCleanBookName: String, to newCleanBookName: String) async throws {
+    public static func renameMangaDirectoryTracking(
+        from oldCleanBookName: String,
+        to newCleanBookName: String,
+        in db: Database
+    ) throws {
         guard oldCleanBookName != newCleanBookName else { return }
-        var state = loadStateSync()
         let oldKey = FavoriteUpdateTargetKey.mangaDirectory(cleanBookName: oldCleanBookName)
         let newKey = FavoriteUpdateTargetKey.mangaDirectory(cleanBookName: newCleanBookName)
 
-        if let oldTarget = state.trackedTargets.first(where: { $0.target == oldKey }) {
-            state.trackedTargets.removeAll { $0.target == oldKey }
-            if let existingIndex = state.trackedTargets.firstIndex(where: { $0.target == newKey }) {
-                var merged = state.trackedTargets[existingIndex]
+        if let oldTarget = try trackedTarget(id: oldKey.id, in: db) {
+            try db.execute(
+                sql: "DELETE FROM favorite_update_tracked_targets WHERE target_id = ?",
+                arguments: [oldKey.id]
+            )
+            if var merged = try trackedTarget(id: newKey.id, in: db) {
                 merged.knownChapterTIDs = (merged.knownChapterTIDs ?? []).union(oldTarget.knownChapterTIDs ?? [])
                 merged.categoryIDs.formUnion(oldTarget.categoryIDs)
-                state.trackedTargets[existingIndex] = merged
+                try upsertTrackedTarget(merged, in: db)
             } else {
                 var renamed = oldTarget
                 renamed.target = newKey
                 renamed.title = newCleanBookName
-                state.trackedTargets.append(renamed)
+                try upsertTrackedTarget(renamed, in: db)
             }
         }
 
-        state.events = state.events.map { event in
-            guard event.target == oldKey else { return event }
-            var renamed = event
-            renamed.target = newKey
-            renamed.title = newCleanBookName
-            return renamed
+        let oldEventRows = try Row.fetchAll(
+            db,
+            sql: "SELECT id, event_json FROM favorite_update_events WHERE target_id = ?",
+            arguments: [oldKey.id]
+        )
+        for row in oldEventRows {
+            var event = try decode(FavoriteUpdateEvent.self, from: row["event_json"] as String)
+            event.target = newKey
+            event.title = newCleanBookName
+            try db.execute(
+                sql: "UPDATE favorite_update_events SET target_id = ?, event_json = ? WHERE id = ?",
+                arguments: [newKey.id, try encode(event), row["id"] as String]
+            )
         }
-        var seenActiveTargetIDs: Set<String> = []
-        state.events = state.events
-            .sorted { $0.detectedAt > $1.detectedAt }
-            .filter { event in
-                guard event.dismissedAt == nil else { return true }
-                return seenActiveTargetIDs.insert(event.target.id).inserted
-            }
 
-        try persist(state)
+        // The one-undismissed-event-per-target invariant can only break for
+        // the merged target; keep the most recently detected event.
+        let collidingIDs = try String.fetchAll(
+            db,
+            sql: """
+            SELECT id FROM favorite_update_events
+            WHERE target_id = ? AND dismissed_at IS NULL
+            ORDER BY detected_at DESC, id DESC
+            """,
+            arguments: [newKey.id]
+        )
+        for id in collidingIDs.dropFirst() {
+            try db.execute(sql: "DELETE FROM favorite_update_events WHERE id = ?", arguments: [id])
+        }
     }
 
     /// Commits a whole check run's tracked-target and event changes in one
-    /// decode/encode pass instead of the one-`upsertTrackedTarget`/
+    /// write transaction instead of the one-`upsertTrackedTarget`/
     /// `insertEvent`-call-per-favorite pattern a check loop would otherwise
-    /// produce — each of those is a full-blob rewrite of this actor's single
-    /// `UserDefaults` key, so batching turns an O(favorite count) number of
-    /// rewrites into one. Callers pass the complete post-run arrays as
-    /// accumulated in memory over the run — but a run takes minutes, and the
-    /// caller's arrays were seeded from a store snapshot taken at run start,
-    /// so anything written to the store since (the user marking events
+    /// produce. Callers pass the complete post-run arrays as accumulated in
+    /// memory over the run — but a run takes minutes, and the caller's
+    /// arrays were seeded from a store snapshot taken at run start, so
+    /// anything written to the store since (the user marking events
     /// read/dismissed from the updates page, another writer inserting) must
     /// not be clobbered by that stale snapshot. This therefore MERGES rather
     /// than replaces: the run is authoritative for its detection products,
@@ -446,14 +548,17 @@ public actor FavoriteUpdateStore {
         trackedTargets: [FavoriteUpdateTrackedTarget],
         events: [FavoriteUpdateEvent]
     ) async throws {
-        var state = loadStateSync()
-        var mergedTargets = Dictionary(uniqueKeysWithValues: state.trackedTargets.map { ($0.id, $0) })
-        for target in trackedTargets {
-            mergedTargets[target.id] = target
+        try await write { db in
+            for target in trackedTargets {
+                try Self.upsertTrackedTarget(target, in: db)
+            }
+            let merged = Self.mergingRunEvents(events, intoStored: try Self.events(in: db))
+            try db.execute(sql: "DELETE FROM favorite_update_events")
+            for event in merged {
+                try Self.insertEventRow(event, in: db)
+            }
+            return true
         }
-        state.trackedTargets = Array(mergedTargets.values).sorted { $0.id < $1.id }
-        state.events = Self.mergingRunEvents(events, intoStored: state.events)
-        try persist(state)
     }
 
     /// Unread undismissed event count as it will stand once the given run's
@@ -463,7 +568,8 @@ public actor FavoriteUpdateStore {
     /// detections, while the run's snapshot is missing read/dismiss marks the
     /// user applied since the run started.
     public func unreadEventCount(mergingRunEvents runEvents: [FavoriteUpdateEvent]) async -> Int {
-        Self.mergingRunEvents(runEvents, intoStored: loadStateSync().events)
+        let storedEvents = (try? await database.read { db in try Self.events(in: db) }) ?? []
+        return Self.mergingRunEvents(runEvents, intoStored: storedEvents)
             .filter { $0.readAt == nil && $0.dismissedAt == nil }
             .count
     }
@@ -515,90 +621,253 @@ public actor FavoriteUpdateStore {
     }
 
     public func markEventRead(_ id: String, date: Date = .now) async throws {
-        var state = loadStateSync()
-        guard let index = state.events.firstIndex(where: { $0.id == id }) else { return }
-        state.events[index].readAt = date
-        try persist(state)
+        try await write { db in
+            guard var event = try Self.event(id: id, in: db) else { return false }
+            event.readAt = date
+            try db.execute(
+                sql: "UPDATE favorite_update_events SET event_json = ? WHERE id = ?",
+                arguments: [try Self.encode(event), id]
+            )
+            return true
+        }
     }
 
     public func dismissEvent(_ id: String, date: Date = .now) async throws {
-        var state = loadStateSync()
-        guard let index = state.events.firstIndex(where: { $0.id == id }) else { return }
-        state.events[index].dismissedAt = date
-        try persist(state)
+        try await write { db in
+            guard var event = try Self.event(id: id, in: db) else { return false }
+            event.dismissedAt = date
+            try db.execute(
+                sql: "UPDATE favorite_update_events SET dismissed_at = ?, event_json = ? WHERE id = ?",
+                arguments: [date.timeIntervalSince1970, try Self.encode(event), id]
+            )
+            return true
+        }
     }
 
     public func dismissAllEvents(date: Date = .now) async throws {
-        var state = loadStateSync()
-        for index in state.events.indices where state.events[index].dismissedAt == nil {
-            state.events[index].dismissedAt = date
+        try await write { db in
+            for var event in try Self.activeEvents(in: db) {
+                event.dismissedAt = date
+                try db.execute(
+                    sql: "UPDATE favorite_update_events SET dismissed_at = ?, event_json = ? WHERE id = ?",
+                    arguments: [date.timeIntervalSince1970, try Self.encode(event), event.id]
+                )
+            }
+            return true
         }
-        try persist(state)
     }
 
     public func replaceFilters(
         fidFilters: [FavoriteUpdateFidFilter],
         categoryFilters: [FavoriteUpdateCategoryFilter]
     ) async throws {
-        var state = loadStateSync()
-        let previousFids = Dictionary(uniqueKeysWithValues: state.fidFilters.map { ($0.fid, $0.enabled) })
-        let previousCategories = Dictionary(uniqueKeysWithValues: state.categoryFilters.map { ($0.categoryID, $0.enabled) })
-        state.fidFilters = fidFilters.map { filter in
-            FavoriteUpdateFidFilter(
-                fid: filter.fid,
-                forumName: filter.forumName,
-                enabled: previousFids[filter.fid] ?? filter.enabled,
-                itemCount: filter.itemCount,
-                updatedAt: filter.updatedAt
-            )
+        try await write { db in
+            let previousFids = Dictionary(uniqueKeysWithValues: try Self.fidFilters(in: db).map { ($0.fid, $0.enabled) })
+            let previousCategories = Dictionary(uniqueKeysWithValues: try Self.categoryFilters(in: db).map { ($0.categoryID, $0.enabled) })
+            try db.execute(sql: "DELETE FROM favorite_update_fid_filters")
+            for (index, filter) in fidFilters.enumerated() {
+                let resolved = FavoriteUpdateFidFilter(
+                    fid: filter.fid,
+                    forumName: filter.forumName,
+                    enabled: previousFids[filter.fid] ?? filter.enabled,
+                    itemCount: filter.itemCount,
+                    updatedAt: filter.updatedAt
+                )
+                try Self.insertFidFilterRow(resolved, order: index, in: db)
+            }
+            try db.execute(sql: "DELETE FROM favorite_update_category_filters")
+            for (index, filter) in categoryFilters.enumerated() {
+                let resolved = FavoriteUpdateCategoryFilter(
+                    categoryID: filter.categoryID,
+                    categoryName: filter.categoryName,
+                    enabled: previousCategories[filter.categoryID] ?? filter.enabled,
+                    itemCount: filter.itemCount,
+                    updatedAt: filter.updatedAt
+                )
+                try Self.insertCategoryFilterRow(resolved, order: index, in: db)
+            }
+            return true
         }
-        state.categoryFilters = categoryFilters.map { filter in
-            FavoriteUpdateCategoryFilter(
-                categoryID: filter.categoryID,
-                categoryName: filter.categoryName,
-                enabled: previousCategories[filter.categoryID] ?? filter.enabled,
-                itemCount: filter.itemCount,
-                updatedAt: filter.updatedAt
-            )
-        }
-        try persist(state)
     }
 
     public func setFidEnabled(_ fid: String, enabled: Bool, date: Date = .now) async throws {
-        var state = loadStateSync()
-        guard let index = state.fidFilters.firstIndex(where: { $0.fid == fid }) else { return }
-        state.fidFilters[index].enabled = enabled
-        state.fidFilters[index].updatedAt = date
-        try persist(state)
+        try await write { db in
+            guard let row = try Row.fetchOne(
+                db,
+                sql: "SELECT manual_order, filter_json FROM favorite_update_fid_filters WHERE fid = ?",
+                arguments: [fid]
+            ) else {
+                return false
+            }
+            var filter = try Self.decode(FavoriteUpdateFidFilter.self, from: row["filter_json"] as String)
+            filter.enabled = enabled
+            filter.updatedAt = date
+            try Self.insertFidFilterRow(filter, order: row["manual_order"] as Int, in: db)
+            return true
+        }
     }
 
     public func setCategoryEnabled(_ categoryID: String, enabled: Bool, date: Date = .now) async throws {
-        var state = loadStateSync()
-        guard let index = state.categoryFilters.firstIndex(where: { $0.categoryID == categoryID }) else { return }
-        state.categoryFilters[index].enabled = enabled
-        state.categoryFilters[index].updatedAt = date
-        try persist(state)
-    }
-
-    private func loadStateSync() -> FavoriteUpdateStoreState {
-        guard let data = defaults.data(forKey: key) else {
-            return FavoriteUpdateStoreState()
-        }
-        do {
-            return try decoder.decode(FavoriteUpdateStoreState.self, from: data)
-        } catch {
-            YamiboLog.library.error("Failed to decode stored favorite update tracking state, resetting to empty state: \(error)")
-            return FavoriteUpdateStoreState()
+        try await write { db in
+            guard let row = try Row.fetchOne(
+                db,
+                sql: "SELECT manual_order, filter_json FROM favorite_update_category_filters WHERE category_id = ?",
+                arguments: [categoryID]
+            ) else {
+                return false
+            }
+            var filter = try Self.decode(FavoriteUpdateCategoryFilter.self, from: row["filter_json"] as String)
+            filter.enabled = enabled
+            filter.updatedAt = date
+            try Self.insertCategoryFilterRow(filter, order: row["manual_order"] as Int, in: db)
+            return true
         }
     }
 
-    private func persist(_ state: FavoriteUpdateStoreState) throws {
+    /// Lets a cascade writer that mutated this store's tables inside its own
+    /// GRDB transaction (`MangaDirectoryStore`'s rename) emit the same change
+    /// signal the actor's own mutations post.
+    public nonisolated func notifyExternalMutation() {
+        postChangeNotification()
+    }
+
+    /// Runs `updates` in one write transaction and posts the change
+    /// notification when the closure reports it actually mutated state.
+    private func write(_ updates: @escaping @Sendable (Database) throws -> Bool) async throws {
+        let didMutate: Bool
         do {
-            defaults.set(try encoder.encode(state), forKey: key)
-            postChangeNotification()
+            didMutate = try await database.write(updates)
         } catch {
             throw YamiboError.persistenceFailed(error.localizedDescription)
         }
+        if didMutate {
+            postChangeNotification()
+        }
+    }
+
+    private static func state(in db: Database) throws -> FavoriteUpdateStoreState {
+        FavoriteUpdateStoreState(
+            trackedTargets: try String.fetchAll(
+                db,
+                sql: "SELECT target_json FROM favorite_update_tracked_targets ORDER BY target_id ASC"
+            ).map { try decode(FavoriteUpdateTrackedTarget.self, from: $0) },
+            events: try events(in: db),
+            runs: try String.fetchAll(
+                db,
+                sql: "SELECT run_json FROM favorite_update_runs ORDER BY updated_at DESC, run_id DESC"
+            ).map { try decode(FavoriteUpdateRunSnapshot.self, from: $0) },
+            fidFilters: try fidFilters(in: db),
+            categoryFilters: try categoryFilters(in: db)
+        )
+    }
+
+    private static func events(in db: Database) throws -> [FavoriteUpdateEvent] {
+        try String.fetchAll(
+            db,
+            sql: "SELECT event_json FROM favorite_update_events ORDER BY detected_at DESC, id DESC"
+        ).map { try decode(FavoriteUpdateEvent.self, from: $0) }
+    }
+
+    private static func activeEvents(in db: Database) throws -> [FavoriteUpdateEvent] {
+        try String.fetchAll(
+            db,
+            sql: """
+            SELECT event_json FROM favorite_update_events
+            WHERE dismissed_at IS NULL
+            ORDER BY detected_at DESC, id DESC
+            """
+        ).map { try decode(FavoriteUpdateEvent.self, from: $0) }
+    }
+
+    private static func event(id: String, in db: Database) throws -> FavoriteUpdateEvent? {
+        guard let json = try String.fetchOne(
+            db,
+            sql: "SELECT event_json FROM favorite_update_events WHERE id = ?",
+            arguments: [id]
+        ) else {
+            return nil
+        }
+        return try decode(FavoriteUpdateEvent.self, from: json)
+    }
+
+    private static func trackedTarget(id: String, in db: Database) throws -> FavoriteUpdateTrackedTarget? {
+        guard let json = try String.fetchOne(
+            db,
+            sql: "SELECT target_json FROM favorite_update_tracked_targets WHERE target_id = ?",
+            arguments: [id]
+        ) else {
+            return nil
+        }
+        return try decode(FavoriteUpdateTrackedTarget.self, from: json)
+    }
+
+    private static func fidFilters(in db: Database) throws -> [FavoriteUpdateFidFilter] {
+        try String.fetchAll(
+            db,
+            sql: "SELECT filter_json FROM favorite_update_fid_filters ORDER BY manual_order ASC, fid ASC"
+        ).map { try decode(FavoriteUpdateFidFilter.self, from: $0) }
+    }
+
+    private static func categoryFilters(in db: Database) throws -> [FavoriteUpdateCategoryFilter] {
+        try String.fetchAll(
+            db,
+            sql: "SELECT filter_json FROM favorite_update_category_filters ORDER BY manual_order ASC, category_id ASC"
+        ).map { try decode(FavoriteUpdateCategoryFilter.self, from: $0) }
+    }
+
+    private static func upsertTrackedTarget(_ target: FavoriteUpdateTrackedTarget, in db: Database) throws {
+        try db.execute(
+            sql: """
+            INSERT INTO favorite_update_tracked_targets (target_id, target_json)
+            VALUES (?, ?)
+            ON CONFLICT(target_id) DO UPDATE SET target_json = excluded.target_json
+            """,
+            arguments: [target.id, try encode(target)]
+        )
+    }
+
+    private static func insertEventRow(_ event: FavoriteUpdateEvent, in db: Database) throws {
+        try db.execute(
+            sql: """
+            INSERT OR REPLACE INTO favorite_update_events (id, target_id, detected_at, dismissed_at, event_json)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            arguments: [
+                event.id,
+                event.target.id,
+                event.detectedAt.timeIntervalSince1970,
+                event.dismissedAt?.timeIntervalSince1970,
+                try encode(event),
+            ]
+        )
+    }
+
+    private static func insertFidFilterRow(_ filter: FavoriteUpdateFidFilter, order: Int, in db: Database) throws {
+        try db.execute(
+            sql: """
+            INSERT OR REPLACE INTO favorite_update_fid_filters (fid, manual_order, filter_json)
+            VALUES (?, ?, ?)
+            """,
+            arguments: [filter.fid, order, try encode(filter)]
+        )
+    }
+
+    private static func insertCategoryFilterRow(_ filter: FavoriteUpdateCategoryFilter, order: Int, in db: Database) throws {
+        try db.execute(
+            sql: """
+            INSERT OR REPLACE INTO favorite_update_category_filters (category_id, manual_order, filter_json)
+            VALUES (?, ?, ?)
+            """,
+            arguments: [filter.categoryID, order, try encode(filter)]
+        )
+    }
+
+    private static func encode<T: Encodable>(_ value: T) throws -> String {
+        String(decoding: try JSONEncoder().encode(value), as: UTF8.self)
+    }
+
+    private static func decode<T: Decodable>(_ type: T.Type, from json: String) throws -> T {
+        try JSONDecoder().decode(type, from: Data(json.utf8))
     }
 
     private nonisolated func postChangeNotification() {

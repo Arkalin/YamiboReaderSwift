@@ -6,7 +6,7 @@ import YamiboReaderTestSupport
 
 @Suite("GRDB store migration issue 001")
 struct StoreMigrationIssue001Tests {
-    @Test func databaseBootstrapCreatesCacheEntriesAndSeedsDefaultFavoriteCategoryOnce() async throws {
+    @Test func databaseBootstrapCreatesCacheEntriesAndYieldsDefaultFavoriteDocument() async throws {
         let root = makeTemporaryPersistenceRoot()
         let pool = try YamiboDatabase.openPool(rootDirectory: root)
 
@@ -20,29 +20,17 @@ struct StoreMigrationIssue001Tests {
 
         try YamiboDatabase.migrate(pool)
 
-        let defaultRows = try await pool.read { db in
-            try Row.fetchAll(
-                db,
-                sql: """
-                SELECT id, name, manual_order, is_default
-                FROM favorite_categories
-                WHERE id = ?
-                """,
-                arguments: [FavoriteCategory.defaultID]
-            ).map { row in
-                let id: String = row["id"]
-                let name: String = row["name"]
-                let manualOrder: Int = row["manual_order"]
-                let isDefault: Bool = row["is_default"]
-                return (id: id, name: name, manualOrder: manualOrder, isDefault: isDefault)
-            }
-        }
-        #expect(defaultRows.count == 1)
-        let defaultRow = try #require(defaultRows.first)
-        #expect(defaultRow.id == FavoriteCategory.defaultID)
-        #expect(defaultRow.name == FavoriteCategory.defaultStorageName)
-        #expect(defaultRow.manualOrder == 0)
-        #expect(defaultRow.isDefault)
+        // A fresh database stores no document row; loading synthesizes the
+        // default document with exactly the default category.
+        let store = FavoriteLibraryStore(databasePool: pool)
+        let fresh = try await store.load()
+        #expect(fresh.categories.count == 1)
+        let defaultCategory = try #require(fresh.categories.first)
+        #expect(defaultCategory.id == FavoriteCategory.defaultID)
+        #expect(defaultCategory.name == FavoriteCategory.defaultStorageName)
+        #expect(defaultCategory.manualOrder == 0)
+        #expect(defaultCategory.isDefault)
+        #expect(await store.hasStoredDocument() == false)
     }
 
     @Test func genericCacheStoresJSONBodyOnDiskAndThinMetadataInDatabase() async throws {
@@ -77,24 +65,31 @@ struct StoreMigrationIssue001Tests {
         #expect(metadataColumns == ["namespace", "cache_key", "created_at", "last_accessed_at"])
     }
 
-    @Test func readsDoNotExtendTTLAndOnlyUpdateLRUAccessTime() async throws {
+    @Test func readsDoNotExtendTTLAndOnlyUpdateLRUAccessTimePastTheTouchThrottle() async throws {
         let (pool, root) = try makeMigratedDatabase()
         nonisolated(unsafe) var now = Date(timeIntervalSince1970: 100)
         let store = DiskCacheStore(writer: pool, rootDirectory: root, now: { now })
 
         try await store.set(CachePayload(title: "第一页", page: 1), namespace: "novel", key: "tid-9-page-1")
 
-        // Beyond DiskCacheStore's touch-throttle window so this hit actually updates last_accessed_at.
-        now = Date(timeIntervalSince1970: 450)
-        let loaded: CachePayload? = try await store.get(namespace: "novel", key: "tid-9-page-1", ttl: 400)
+        // Within the 5-minute touch throttle a hit leaves last_accessed_at alone.
+        now = Date(timeIntervalSince1970: 120)
+        let throttled: CachePayload? = try await store.get(namespace: "novel", key: "tid-9-page-1", ttl: 3_000)
+        #expect(throttled?.title == "第一页")
+        let throttledEntry = try #require(try await store.entries(namespace: "novel").first)
+        #expect(throttledEntry.lastAccessedAt == Date(timeIntervalSince1970: 100))
+
+        // Past the throttle window the hit refreshes LRU recency.
+        now = Date(timeIntervalSince1970: 500)
+        let loaded: CachePayload? = try await store.get(namespace: "novel", key: "tid-9-page-1", ttl: 3_000)
         #expect(loaded?.title == "第一页")
 
         let entry = try #require(try await store.entries(namespace: "novel").first)
         #expect(entry.createdAt == Date(timeIntervalSince1970: 100))
-        #expect(entry.lastAccessedAt == Date(timeIntervalSince1970: 450))
+        #expect(entry.lastAccessedAt == Date(timeIntervalSince1970: 500))
 
-        now = Date(timeIntervalSince1970: 501)
-        let expired: CachePayload? = try await store.get(namespace: "novel", key: "tid-9-page-1", ttl: 400)
+        now = Date(timeIntervalSince1970: 3_101)
+        let expired: CachePayload? = try await store.get(namespace: "novel", key: "tid-9-page-1", ttl: 3_000)
         #expect(expired == nil)
         #expect(try await store.entries(namespace: "novel").isEmpty)
     }
@@ -107,10 +102,8 @@ struct StoreMigrationIssue001Tests {
         try await store.set(CachePayload(title: "旧", page: 1), namespace: "forum", key: "old")
         now = Date(timeIntervalSince1970: 110)
         try await store.set(CachePayload(title: "新", page: 2), namespace: "forum", key: "new")
-
-        // Beyond DiskCacheStore's touch-throttle window so reading "old" actually bumps last_accessed_at
-        // past "new"'s, which is what makes "old" survive the trim below.
-        now = Date(timeIntervalSince1970: 411)
+        // Far enough past the touch throttle that this hit refreshes recency.
+        now = Date(timeIntervalSince1970: 500)
         let old: CachePayload? = try await store.get(namespace: "forum", key: "old")
         #expect(old?.title == "旧")
 
@@ -168,20 +161,19 @@ struct StoreMigrationIssue001Tests {
 
         let store = DiskCacheStore(writer: pool, rootDirectory: root)
         try await store.set(CachePayload(title: "缓存", page: 1), namespace: "forum", key: "home")
-        try await pool.write { db in
-            try db.execute(
-                sql: "INSERT INTO favorite_categories (id, name, manual_order, is_default) VALUES ('custom', 'Custom', 1, 0)"
-            )
-        }
+        let libraryStore = FavoriteLibraryStore(databasePool: pool)
+        var document = FavoriteLibraryDocument()
+        _ = document.createCategory(name: "Custom")
+        try await libraryStore.save(document)
+        #expect(await libraryStore.hasStoredDocument())
 
         try YamiboDatabase.reset(writer: pool, rootDirectory: root)
 
         #expect(defaults.data(forKey: "yamibo.favoriteLibrary.localFirst") == Data("legacy-json".utf8))
         #expect(!FileManager.default.fileExists(atPath: YamiboDatabase.cacheDirectoryURL(rootDirectory: root).path))
-        let categoryIDs = try await pool.read { db in
-            try String.fetchAll(db, sql: "SELECT id FROM favorite_categories ORDER BY id")
-        }
-        #expect(categoryIDs == [FavoriteCategory.defaultID])
+        let reset = try await libraryStore.load()
+        #expect(reset.categories.map(\.id) == [FavoriteCategory.defaultID])
+        #expect(await libraryStore.hasStoredDocument() == false)
         #expect(try await store.entries(namespace: "forum").isEmpty)
         defaults.removePersistentDomain(forName: suiteName)
     }

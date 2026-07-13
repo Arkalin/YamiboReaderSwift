@@ -177,47 +177,21 @@ import Testing
     #expect(loadedItem.remoteMapping?.yamiboFavoriteID == "remote-321")
     #expect(await store.hasStoredDocument())
 
-    let databaseRows = try await database.read { db in
-        let itemRow = try Row.fetchOne(
-            db,
-            sql: "SELECT id, target_kind, thread_id, item_json FROM favorite_items WHERE id = ?",
-            arguments: [loadedItem.id]
-        )
-        let locationRows = try Row.fetchAll(
-            db,
-            sql: "SELECT category_id, collection_id FROM favorite_locations WHERE item_id = ? ORDER BY manual_order",
-            arguments: [loadedItem.id]
-        )
-        let remoteID = try String.fetchOne(
-            db,
-            sql: "SELECT yamibo_favorite_id FROM favorite_remote_mappings WHERE item_id = ?",
-            arguments: [loadedItem.id]
-        )
-        let tagID = try String.fetchOne(
-            db,
-            sql: "SELECT tag_id FROM favorite_item_tags WHERE item_id = ?",
-            arguments: [loadedItem.id]
-        )
-        return (
-            itemID: itemRow?["id"] as String?,
-            targetKind: itemRow?["target_kind"] as String?,
-            threadID: itemRow?["thread_id"] as String?,
-            itemJSON: itemRow?["item_json"] as String?,
-            locationCategoryIDs: locationRows.map { $0["category_id"] as String },
-            locationCollectionIDs: locationRows.map { $0["collection_id"] as String? },
-            remoteID: remoteID,
-            tagID: tagID
-        )
+    let documentRow = try await database.read { db in
+        try Row.fetchOne(db, sql: "SELECT id, document_json FROM favorite_library_document")
     }
-
-    #expect(databaseRows.itemID == "thread:novel:321")
-    #expect(databaseRows.targetKind == FavoriteItemTargetKind.novelThread.rawValue)
-    #expect(databaseRows.threadID == "321")
-    #expect(databaseRows.itemJSON?.contains("canonicalURL") == false)
-    #expect(databaseRows.locationCategoryIDs == [category.id, category.id])
-    #expect(databaseRows.locationCollectionIDs == [nil, collection.id])
-    #expect(databaseRows.remoteID == "remote-321")
-    #expect(databaseRows.tagID == tag.id)
+    let row = try #require(documentRow)
+    #expect(row["id"] as Int == 1)
+    let documentJSON = row["document_json"] as String
+    #expect(documentJSON.contains("canonicalURL") == false)
+    let storedDocument = try JSONDecoder().decode(FavoriteLibraryDocument.self, from: Data(documentJSON.utf8))
+    let storedItem = try #require(storedDocument.items.first)
+    #expect(storedItem.id == "thread:novel:321")
+    #expect(storedItem.target.kind == .novelThread)
+    #expect(storedItem.target.threadID == "321")
+    #expect(storedItem.locations == [.category(category.id), .collection(categoryID: category.id, collectionID: collection.id)])
+    #expect(storedItem.tagIDs == [tag.id])
+    #expect(storedItem.remoteMapping?.yamiboFavoriteID == "remote-321")
 }
 
 @Test func favoriteLibraryStoreUpdatePersistsTransformAndReturnsItsResult() async throws {

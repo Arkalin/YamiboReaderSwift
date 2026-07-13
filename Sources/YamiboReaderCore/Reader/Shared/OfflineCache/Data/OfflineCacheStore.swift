@@ -337,7 +337,7 @@ actor OfflineCacheStore {
                     state: .queued,
                     failureMessage: nil,
                     currentBytesPerSecond: 0,
-                    insertionIndex: try Self.nextQueueInsertionIndex(readerKind: OfflineCacheReaderKind.manga.rawValue, in: db),
+                    insertionIndex: try Self.nextQueueInsertionIndex(in: db),
                     createdAt: Date(),
                     updatedAt: Date()
                 )
@@ -947,15 +947,13 @@ actor OfflineCacheStore {
         }
     }
 
-    private static func nextQueueInsertionIndex(in db: Database) throws -> Int {
-        try nextQueueInsertionIndex(readerKind: mangaReaderKind, in: db)
-    }
-
-    static func nextQueueInsertionIndex(readerKind: String, in db: Database) throws -> Int {
+    /// Global max keeps per-kind enqueue order (a new work sorts after every
+    /// existing one) while `offline_cache_works_insertion_idx` answers it in
+    /// O(log n) — a per-kind MAX would scan that kind's rows.
+    static func nextQueueInsertionIndex(in db: Database) throws -> Int {
         (try Int.fetchOne(
             db,
-            sql: "SELECT MAX(insertion_index) FROM offline_cache_works WHERE reader_kind = ?",
-            arguments: [readerKind]
+            sql: "SELECT MAX(insertion_index) FROM offline_cache_works"
         ) ?? 0) + 1
     }
 

@@ -11,6 +11,7 @@ enum YamiboDatabase {
     private static let schemaModules: [any DatabaseSchemaModule.Type] = [
         DiskCacheDatabaseSchema.self,
         LibraryDatabaseSchema.self,
+        FavoriteUpdateDatabaseSchema.self,
         LikeDatabaseSchema.self,
         ReaderDatabaseSchema.self,
         BrowsingHistoryDatabaseSchema.self,

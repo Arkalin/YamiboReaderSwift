@@ -62,13 +62,13 @@ final class FavoriteUpdateNotificationTests: XCTestCase {
         try await fixture.waitForStatus(.completed, in: monitor)
 
         let readEvent = FavoriteUpdateEvent(
-            target: FavoriteItemTarget(kind: .normalThread, threadID: "961"),
+            target: .favorite(FavoriteItemTarget(kind: .normalThread, threadID: "961")),
             title: "已读主题",
             mode: .normalThread,
             summary: .newReplies(count: 1)
         )
         let dismissedEvent = FavoriteUpdateEvent(
-            target: FavoriteItemTarget(kind: .normalThread, threadID: "962"),
+            target: .favorite(FavoriteItemTarget(kind: .normalThread, threadID: "962")),
             title: "忽略主题",
             mode: .normalThread,
             summary: .newReplies(count: 1)
@@ -85,7 +85,7 @@ final class FavoriteUpdateNotificationTests: XCTestCase {
         try await fixture.updateStore.markEventRead(readEvent.id)
         try await fixture.updateStore.dismissEvent(dismissedEvent.id)
         try await fixture.updateStore.insertEvent(FavoriteUpdateEvent(
-            target: FavoriteItemTarget(kind: .normalThread, threadID: "963"),
+            target: .favorite(FavoriteItemTarget(kind: .normalThread, threadID: "963")),
             title: "并发主题",
             mode: .normalThread,
             summary: .newReplies(count: 2)

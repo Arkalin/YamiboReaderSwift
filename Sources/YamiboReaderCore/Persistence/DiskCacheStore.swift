@@ -16,16 +16,15 @@ actor DiskCacheStore {
         }
     }
 
+    /// Minimum age of `last_accessed_at` before a cache hit rewrites it.
+    private static let lastAccessedTouchInterval: TimeInterval = 300
+
     private let writer: any DatabaseWriter
     private let rootDirectory: URL
     private let fileManager: FileManager
     private let now: @Sendable () -> Date
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
-
-    /// Cache hits only need last_accessed_at accurate enough for LRU ordering,
-    /// so repeated hits within this window skip the write transaction entirely.
-    private static let touchThrottleInterval: TimeInterval = 300
 
     init(
         writer: any DatabaseWriter,
@@ -91,7 +90,9 @@ actor DiskCacheStore {
 
         do {
             let value = try decoder.decode(Value.self, from: try Data(contentsOf: fileURL))
-            if now().timeIntervalSince(entry.lastAccessedAt) > Self.touchThrottleInterval {
+            // Coarse LRU: skip the per-hit write transaction while the stored
+            // timestamp is fresh enough — eviction only needs minute-level order.
+            if now().timeIntervalSince(entry.lastAccessedAt) >= Self.lastAccessedTouchInterval {
                 try await touchLastAccessedAt(namespace: resolvedNamespace, key: resolvedKey)
             }
             return value

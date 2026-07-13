@@ -54,7 +54,7 @@ import YamiboReaderTestSupport
     let database = appContext.databasePool
     let counts = try await database.read { db in
         [
-            "favorite_items": try tableCount("favorite_items", in: db),
+            "favorite_library_document": try tableCount("favorite_library_document", in: db),
             "reading_progress": try tableCount("reading_progress", in: db),
             "manga_directories": try tableCount("manga_directories", in: db),
             "offline_cache_manga_entries": try tableCount("offline_cache_manga_entries", in: db),
@@ -62,7 +62,7 @@ import YamiboReaderTestSupport
         ]
     }
 
-    #expect(counts["favorite_items"] == 1)
+    #expect(counts["favorite_library_document"] == 1)
     #expect(counts["reading_progress"] == 1)
     #expect(counts["manga_directories"] == 1)
     #expect(counts["offline_cache_manga_entries"] == 1)
@@ -153,8 +153,7 @@ import YamiboReaderTestSupport
     let database = appContext.databasePool
     let counts = try await database.read { db in
         [
-            "favorite_categories": try tableCount("favorite_categories", in: db),
-            "favorite_items": try tableCount("favorite_items", in: db),
+            "favorite_library_document": try tableCount("favorite_library_document", in: db),
             "reading_progress": try tableCount("reading_progress", in: db),
             "manga_directories": try tableCount("manga_directories", in: db),
             "offline_cache_manga_entries": try tableCount("offline_cache_manga_entries", in: db),
@@ -163,8 +162,11 @@ import YamiboReaderTestSupport
         ]
     }
 
-    #expect(counts["favorite_categories"] == 1)
-    #expect(counts["favorite_items"] == 0)
+    // Reset drops the whole favorites document; loading afterwards
+    // synthesizes the default-category document from no row at all.
+    #expect(counts["favorite_library_document"] == 0)
+    let resetLibrary = try await appContext.localFavoriteLibraryStore.load()
+    #expect(resetLibrary.categories.map(\.id) == [FavoriteCategory.defaultID])
     #expect(counts["reading_progress"] == 0)
     #expect(counts["manga_directories"] == 0)
     #expect(counts["offline_cache_manga_entries"] == 0)
