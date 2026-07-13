@@ -83,9 +83,14 @@ enum HTMLTextExtractor {
 
 // Some callers interpolate variable content (e.g. a thread ID) into patterns, so cache keys
 // aren't a small fixed set. NSCache is thread-safe without manual locking and evicts under
-// memory pressure, unlike a plain Dictionary.
+// memory pressure, unlike a plain Dictionary; countLimit bounds the interpolated-key growth
+// over a long session without waiting for memory pressure.
 private final class RegexCache: @unchecked Sendable {
     private let storage = NSCache<NSString, NSRegularExpression>()
+
+    init() {
+        storage.countLimit = 512
+    }
 
     func regex(pattern: String, options: NSRegularExpression.Options) -> NSRegularExpression? {
         let key = "\(options.rawValue):\(pattern)" as NSString

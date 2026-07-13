@@ -1621,6 +1621,114 @@ final class NovelReadingWorkflowTests: XCTestCase {
         XCTAssertNotEqual(beyondThresholdState.presentation?.revision, firstRevision)
     }
 
+    func testVerticalViewportSmallSamplesAccumulatingPastThresholdRebuildPresentation() async throws {
+        let threadID = "9160"
+        let document = makeSegmentedNovelDocument(
+            threadID: threadID,
+            view: 1,
+            maxView: 1,
+            authorID: "author-1",
+            segmentCount: 17
+        )
+        let repository = RecordingNovelReadingRepository(documents: [
+            1: document
+        ])
+        let workflow = NovelReadingWorkflow(
+            context: NovelLaunchContext(
+                threadID: threadID,
+                threadTitle: "Thread",
+                source: .forum,
+                initialView: 1,
+                authorID: "author-1"
+            ),
+            settings: NovelReaderAppearanceSettings(readingMode: .vertical),
+            layout: NovelReaderLayout(width: 320, height: 568),
+            repository: repository,
+            pagination: { document, _, _ in
+                let ranges = [
+                    NovelRenderedTextRange(segmentIndex: 15, startOffset: 0, endOffset: 2_000),
+                    NovelRenderedTextRange(segmentIndex: 16, startOffset: 1_101, endOffset: 2_000)
+                ]
+                return layoutResult(
+                    pages: [
+                        viewportTestPage(
+                            index: 0,
+                            blocks: [
+                                .text(
+                                    "第六十页",
+                                    chapterTitle: "第二章",
+                                    ranges: ranges
+                                )
+                            ],
+                            documentView: document.view,
+                            chapterOrdinal: 1,
+                            chapterTitle: "第二章"
+                        )
+                    ],
+                    chapters: [
+                        NovelReaderChapter(ordinal: 1, title: "第二章", startIndex: 0)
+                    ],
+                    viewportIndex: NovelTextViewportIndex(
+                        documentView: document.view,
+                        readingMode: .vertical,
+                        surfaces: [
+                            NovelTextViewportIndexSurface(
+                                surfaceOrdinal: 0,
+                                documentView: document.view,
+                                chapterOrdinal: 1,
+                                chapterTitle: "第二章",
+                                ranges: ranges
+                            )
+                        ],
+                        chapters: [
+                            NovelTextViewportIndexChapter(ordinal: 1, title: "第二章", startSurfaceOrdinal: 0)
+                        ]
+                    )
+                )
+            }
+        )
+        let initialState = try await workflow.start(initial: NovelReadingInitialPosition())
+        let segmentIdentity = try XCTUnwrap(document.semantics(forSegmentIndex: 16)?.textSegmentIdentity)
+        let surfaceIdentity = try XCTUnwrap(initialState.presentation?.surfaces.first?.identity)
+
+        func sample(offset: Int) -> NovelTextViewportSample {
+            NovelTextViewportSample(
+                surfaceIdentity: surfaceIdentity,
+                documentView: 1,
+                textSegmentIdentity: segmentIdentity,
+                displayedTextOffset: offset
+            )
+        }
+
+        let initialRevision = try XCTUnwrap(initialState.presentation?.revision)
+        let firstState = try XCTUnwrap(
+            workflow.updateVerticalViewportPosition(sample: sample(offset: 1_200), presentationRevision: initialRevision)
+        )
+        let firstRevision = try XCTUnwrap(firstState.presentation?.revision)
+
+        // Each 25-character step is ~0.009 progress on the ~2,899-character
+        // surface, well under the 0.02 threshold; two steps accumulate to
+        // ~0.017 and must still skip the rebuild.
+        XCTAssertNil(
+            workflow.updateVerticalViewportPosition(sample: sample(offset: 1_225), presentationRevision: firstRevision)
+        )
+        XCTAssertNil(
+            workflow.updateVerticalViewportPosition(sample: sample(offset: 1_250), presentationRevision: firstRevision)
+        )
+        XCTAssertEqual(workflow.state?.presentation?.revision, firstRevision)
+
+        // The third small step pushes the drift accumulated since the last
+        // published presentation to ~0.026: the rebuild must fire even though
+        // every adjacent-sample delta stayed below the threshold.
+        let accumulatedState = try XCTUnwrap(
+            workflow.updateVerticalViewportPosition(sample: sample(offset: 1_275), presentationRevision: firstRevision),
+            "Slow scrolling whose per-sample deltas stay below the threshold must still rebuild once the accumulated drift crosses it"
+        )
+        XCTAssertNotEqual(accumulatedState.presentation?.revision, firstRevision)
+        let resumePoint = try XCTUnwrap(workflow.captureNovelReadingPosition())
+        XCTAssertEqual(resumePoint.displayedTextOffset, 1_275)
+    }
+
     func testExternalBlockViewportMovementPreservesTextOnlyResumeUntilNextTextSample() async throws {
         let threadID = "9154"
         let document = NovelReaderProjection(

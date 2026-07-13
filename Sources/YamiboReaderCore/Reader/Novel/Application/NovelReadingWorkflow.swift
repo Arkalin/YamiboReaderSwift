@@ -118,6 +118,10 @@ public final class NovelReadingWorkflow {
     private var layout: NovelReaderLayout
     private let repository: any NovelReadingPageRepository
     private var session: NovelReadingSession?
+    /// Snapshot carried by the last published `state`; every `state`
+    /// assignment must keep it in sync or `shouldRebuildPresentation`'s
+    /// accumulated-progress comparison drifts.
+    private var lastPublishedSnapshot: NovelReadingSnapshot?
     private var currentDocument: NovelReaderProjection?
     private var prefetchedDocument: NovelReaderProjection?
     private var currentLoadSource: NovelReaderProjectionLoadSource = .online
@@ -282,6 +286,7 @@ public final class NovelReadingWorkflow {
             cachedViews: state.cachedViews
         )
         self.state = nextState
+        lastPublishedSnapshot = nextState.snapshot
         return nextState
     }
 
@@ -469,6 +474,7 @@ public final class NovelReadingWorkflow {
         currentAuthorID = transaction.currentAuthorID
         currentDocumentSurfaceCount = transaction.currentDocumentSurfaceCount
         state = transaction.state
+        lastPublishedSnapshot = transaction.state.snapshot
         return transaction.state
     }
 
@@ -547,19 +553,23 @@ public final class NovelReadingWorkflow {
 
     /// TextKit-resolved viewport samples arrive at glyph precision, so a
     /// naive `snapshot != previousSnapshot` guard rebuilds the (`O(surface
-    /// count)`) presentation on every scroll tick. Only a surface change or a
-    /// progress delta crossing `verticalSampleProgressUpdateThreshold`
-    /// justifies that rebuild; the session mutation above still runs
-    /// unconditionally so resume-point capture stays glyph-accurate.
+    /// count)`) presentation on every scroll tick. Only a non-progress change
+    /// or the progress drift accumulated since `lastPublishedSnapshot`
+    /// crossing `verticalSampleProgressUpdateThreshold` justifies that
+    /// rebuild — comparing adjacent samples instead would let slow scrolling
+    /// (per-sample deltas below the threshold) starve the rebuild forever.
+    /// The session mutation above still runs unconditionally so resume-point
+    /// capture stays glyph-accurate.
     private func shouldRebuildPresentation(afterSampleUpdateFrom previousSnapshot: NovelReadingSnapshot?) -> Bool {
-        guard let previousSnapshot, let newSnapshot = session?.snapshot else {
-            return session?.snapshot != previousSnapshot
+        guard let newSnapshot = session?.snapshot else {
+            return previousSnapshot != nil
         }
         guard newSnapshot != previousSnapshot else { return false }
-        var previousSnapshotAtNewProgress = previousSnapshot
-        previousSnapshotAtNewProgress.currentSurfaceIntraProgress = newSnapshot.currentSurfaceIntraProgress
-        let onlyProgressDiffers = previousSnapshotAtNewProgress == newSnapshot
-        let progressDelta = abs(newSnapshot.currentSurfaceIntraProgress - previousSnapshot.currentSurfaceIntraProgress)
+        guard let lastPublishedSnapshot else { return true }
+        var lastPublishedAtNewProgress = lastPublishedSnapshot
+        lastPublishedAtNewProgress.currentSurfaceIntraProgress = newSnapshot.currentSurfaceIntraProgress
+        let onlyProgressDiffers = lastPublishedAtNewProgress == newSnapshot
+        let progressDelta = abs(newSnapshot.currentSurfaceIntraProgress - lastPublishedSnapshot.currentSurfaceIntraProgress)
         return !onlyProgressDiffers || progressDelta >= Self.verticalSampleProgressUpdateThreshold
     }
 
@@ -629,6 +639,7 @@ public final class NovelReadingWorkflow {
         prefetchInFlightView = nil
         prefetchCooldown = nil
         state = nil
+        lastPublishedSnapshot = nil
     }
 
     private func cacheContext(for document: NovelReaderProjection) -> NovelReadingCacheContext {
@@ -869,6 +880,7 @@ public final class NovelReadingWorkflow {
             cachedViews: cachedViews
         )
         state = nextState
+        lastPublishedSnapshot = nextState.snapshot
         return nextState
     }
 
