@@ -20,6 +20,7 @@ private enum ForumBoardReaderModeSelection: Hashable, CaseIterable {
 
 struct ForumBoardReaderSettingsSheet: View {
     @Environment(\.dismiss) private var dismiss
+    @State private var showsSmartMangaHelp = false
 
     let model: ForumBoardViewModel
 
@@ -35,10 +36,32 @@ struct ForumBoardReaderSettingsSheet: View {
                     }
 
                     if case .manga = model.boardReaderEntry?.mode {
-                        Toggle(
-                            L10n.string("forum.board.reader_settings.smart_toggle"),
-                            isOn: smartComicModeBinding
-                        )
+                        HStack(spacing: 8) {
+                            Text(L10n.string("forum.board.reader_settings.smart_toggle"))
+                            Button {
+                                withAnimation(.easeInOut(duration: 0.18)) {
+                                    showsSmartMangaHelp.toggle()
+                                }
+                            } label: {
+                                Image(systemName: "questionmark.circle")
+                                    .font(.headline.weight(.semibold))
+                                    .foregroundStyle(Color.accentColor)
+                                    .expandedHitTarget()
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel(L10n.string("forum.board.reader_settings.smart_toggle_help_toggle"))
+                            Spacer(minLength: 8)
+                            Toggle("", isOn: smartComicModeBinding)
+                                .labelsHidden()
+                        }
+                        if showsSmartMangaHelp {
+                            Text(L10n.string("forum.board.reader_settings.smart_toggle_help"))
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .padding(.vertical, 6)
+                                .transition(.opacity.combined(with: .move(edge: .top)))
+                        }
                     }
                 } footer: {
                     Text(L10n.string("forum.board.reader_settings.footer"))
