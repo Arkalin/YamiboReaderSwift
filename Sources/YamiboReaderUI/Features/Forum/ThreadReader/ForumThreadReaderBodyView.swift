@@ -2,6 +2,7 @@ import SwiftUI
 import YamiboReaderCore
 
 struct ForumThreadReaderBodyView: View {
+    @Namespace private var imageBrowserZoomNamespace
     @State private var imageBrowserRequest: ForumThreadImageBrowserRequest?
     @State private var ratingResultsRequest: ForumThreadRatingResultsRequest?
     @State private var pollVotersRequest: ForumThreadPollVotersRequest?
@@ -35,11 +36,13 @@ struct ForumThreadReaderBodyView: View {
 
     var body: some View {
         contentWithSheets
+            .environment(\.imageBrowserZoomNamespace, imageBrowserZoomNamespace)
             .fullScreenCover(item: $imageBrowserRequest) { request in
                 ImageBrowserView(
                     items: request.items,
                     initialItemID: request.initialItemID,
                     mode: .multiple,
+                    presentation: .zoom(imageBrowserZoomNamespace),
                     coverActionsProvider: imageBrowserCoverActionsProvider,
                     onDismiss: {
                         imageBrowserRequest = nil

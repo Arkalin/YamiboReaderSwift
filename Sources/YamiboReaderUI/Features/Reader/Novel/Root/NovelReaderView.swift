@@ -1591,7 +1591,6 @@ private struct NovelReaderPresentationModifier: ViewModifier {
                 ) {
                     imageBrowserItem = nil
                 }
-                .presentationBackground(.clear)
             }
             .sheet(isPresented: $showingLikes) {
                 NavigationStack {

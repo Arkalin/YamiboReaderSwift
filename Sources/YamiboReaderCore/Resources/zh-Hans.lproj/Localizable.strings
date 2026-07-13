@@ -611,6 +611,7 @@
 "cover.use_image_cover_success_message" = "已切换为图片封面。";
 "image.actions.title" = "图片操作";
 "image.load_failed" = "图片加载失败";
+"image.position_accessibility" = "第 %1$d 张，共 %2$d 张";
 "image.loading" = "加载图片中…";
 "image.action_failed" = "图片操作失败，请稍后重试。";
 "image.copy" = "复制图片";
