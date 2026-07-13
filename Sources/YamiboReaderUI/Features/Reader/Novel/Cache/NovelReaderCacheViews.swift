@@ -32,7 +32,11 @@ struct NovelReaderCachePanel: View {
                 .padding(16)
             }
             .background(YamiboColors.SystemSurface.groupedBackground)
-            .navigationTitle(L10n.string("reader.cache_management"))
+            .navigationTitle(
+                isSelecting
+                    ? L10n.string("reader.cache_management.selected_count", selectedViews.count)
+                    : L10n.string("reader.cache_management")
+            )
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
@@ -53,23 +57,14 @@ struct NovelReaderCachePanel: View {
 
                 if isSelecting && usesSystemSelectionBottomToolbar {
                     ToolbarItem(placement: .bottomBar) {
-                        NovelReaderCacheSelectionToolbar(
-                            selectionState: selectionState,
-                            onCache: cacheSelection,
-                            onUpdate: updateSelection,
-                            onDelete: deleteSelection
-                        )
+                        SelectionBottomToolbar(actions: selectionActions)
                     }
                 }
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 if isSelecting && !usesSystemSelectionBottomToolbar {
-                    NovelReaderCacheSelectionActionBar(
-                        selectionState: selectionState,
-                        onCache: cacheSelection,
-                        onUpdate: updateSelection,
-                        onDelete: deleteSelection
-                    )
+                    SelectionBottomToolbar(actions: selectionActions)
+                        .selectionBottomToolbarCapsule()
                 }
             }
             .sheet(isPresented: $isQueuePresented) {
@@ -99,11 +94,31 @@ struct NovelReaderCachePanel: View {
         cache.selectionState(for: selectedViews)
     }
 
-    private var usesSystemSelectionBottomToolbar: Bool {
-        if #available(iOS 26, *) {
-            return true
-        }
-        return false
+    private var selectionActions: [SelectionToolbarAction] {
+        [
+            SelectionToolbarAction(
+                id: "cache",
+                title: L10n.string("reader.cache_action.cache"),
+                systemImage: "square.and.arrow.down",
+                isEnabled: selectionState.canCache,
+                action: cacheSelection
+            ),
+            SelectionToolbarAction(
+                id: "update",
+                title: L10n.string("reader.cache_action.update"),
+                systemImage: "arrow.triangle.2.circlepath",
+                isEnabled: selectionState.canUpdate,
+                action: updateSelection
+            ),
+            SelectionToolbarAction(
+                id: "delete",
+                title: L10n.string("common.delete"),
+                systemImage: "trash",
+                role: .destructive,
+                isEnabled: selectionState.canDelete,
+                action: deleteSelection
+            )
+        ]
     }
 
     private func toggleAll() {
@@ -346,90 +361,6 @@ private struct NovelReaderCacheStateBadge: View {
         case .caching:
             return Color.orange
         }
-    }
-}
-
-private struct NovelReaderCacheSelectionToolbar: View {
-    let selectionState: NovelReaderCacheSelectionState
-    let onCache: () -> Void
-    let onUpdate: () -> Void
-    let onDelete: () -> Void
-
-    var body: some View {
-        HStack(spacing: 16) {
-            toolbarButton(
-                title: L10n.string("reader.cache_action.cache"),
-                systemImage: "square.and.arrow.down",
-                role: nil,
-                isEnabled: selectionState.canCache,
-                action: onCache
-            )
-            toolbarButton(
-                title: L10n.string("reader.cache_action.update"),
-                systemImage: "arrow.triangle.2.circlepath",
-                role: nil,
-                isEnabled: selectionState.canUpdate,
-                action: onUpdate
-            )
-            toolbarButton(
-                title: L10n.string("common.delete"),
-                systemImage: "trash",
-                role: .destructive,
-                isEnabled: selectionState.canDelete,
-                action: onDelete
-            )
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-    }
-
-    private func toolbarButton(
-        title: String,
-        systemImage: String,
-        role: ButtonRole?,
-        isEnabled: Bool,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(role: role, action: action) {
-            VStack(spacing: 3) {
-                Image(systemName: systemImage)
-                    .font(.system(size: 18, weight: .regular))
-                    .frame(width: 24, height: 22)
-                Text(title)
-                    .font(.caption2)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.78)
-            }
-            .frame(width: 66)
-            .foregroundStyle(role == .destructive ? Color.red : Color.primary)
-            .opacity(isEnabled ? 1 : 0.35)
-        }
-        .buttonStyle(.plain)
-        .disabled(!isEnabled)
-        .accessibilityLabel(title)
-    }
-}
-
-private struct NovelReaderCacheSelectionActionBar: View {
-    let selectionState: NovelReaderCacheSelectionState
-    let onCache: () -> Void
-    let onUpdate: () -> Void
-    let onDelete: () -> Void
-
-    var body: some View {
-        VStack(spacing: 0) {
-            Divider()
-            NovelReaderCacheSelectionToolbar(
-                selectionState: selectionState,
-                onCache: onCache,
-                onUpdate: onUpdate,
-                onDelete: onDelete
-            )
-            .frame(maxWidth: .infinity)
-            .padding(.top, 10)
-            .padding(.bottom, 12)
-        }
-        .background(.ultraThinMaterial)
     }
 }
 

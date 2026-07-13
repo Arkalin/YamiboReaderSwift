@@ -1,78 +1,56 @@
 import SwiftUI
 import YamiboReaderCore
 
-/// Floating bottom action bar shown while multi-selection is active, in a
-/// Liquid Glass container (material fallback below iOS 26). Select-all/invert
-/// live in the top-leading toolbar menu and done in the top-trailing button.
-/// Nav/tab-bar style: icon over title, evenly distributed. Each action is
-/// hidden (not merely disabled) when the current selection can't use it, and
-/// the whole bar disappears once nothing is available (i.e. nothing is
-/// selected — every action needs at least one selected entry).
+/// Builds the selection-mode bottom bar's actions for the favorites screen —
+/// rendering itself is delegated to the shared `SelectionBottomToolbar`.
+/// Each action is omitted (not merely disabled) when the current selection
+/// can't use it, and the whole bar disappears once nothing is available
+/// (i.e. nothing is selected — every action needs at least one selected
+/// entry).
 struct LocalFavoriteSelectionActionBar: View {
     @ObservedObject var organizer: FavoriteLibraryOrganizer
     @ObservedObject var selection: LocalFavoriteBrowseSession
     let routes: LocalFavoritesRoutes
 
     var body: some View {
-        if hasAnyAvailableAction {
-            HStack(spacing: 0) {
-                if canMove {
-                    actionButton(L10n.string("common.move"), systemImage: "folder") {
-                        routes.sheet = .selectionMove
-                    }
-                }
-                if canCreateCollection {
-                    actionButton(L10n.string("favorites.create_collection"), systemImage: "folder.badge.plus") {
-                        routes.sheet = .collectionEditor(LocalFavoriteCollectionDraft(mode: .createFromSelection))
-                    }
-                }
-                if canEditTags {
-                    actionButton(L10n.string("favorites.tags_action"), systemImage: "tag") {
-                        routes.sheet = .tagSelection(.selection(organizer.commonTagIDsForSelection))
-                    }
-                }
-                if let collection = editableCollection {
-                    actionButton(L10n.string("common.edit"), systemImage: "pencil") {
-                        routes.sheet = .collectionEditor(LocalFavoriteCollectionDraft(collection: collection))
-                    }
-                }
-                if canDissolve {
-                    actionButton(L10n.string("favorites.dissolve"), systemImage: "folder.badge.minus") {
-                        routes.dialog = .dissolveSelectedCollections
-                    }
-                }
-                if canDelete {
-                    actionButton(L10n.string("common.delete"), systemImage: "trash", tint: .red, role: .destructive) {
-                        routes.dialog = .deleteSelection
-                    }
-                }
-            }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 10)
-            .modifier(LocalFavoriteGlassBarBackground())
-            .padding(.horizontal, 12)
-            .padding(.bottom, 4)
+        if !actions.isEmpty {
+            SelectionBottomToolbar(actions: actions)
         }
     }
 
-    private func actionButton(
-        _ title: String,
-        systemImage: String,
-        tint: Color? = nil,
-        role: ButtonRole? = nil,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(role: role, action: action) {
-            VStack(spacing: 4) {
-                Image(systemName: systemImage)
-                    .font(.system(size: 20))
-                Text(title)
-                    .font(.caption2)
-            }
-            .frame(maxWidth: .infinity)
-            .foregroundStyle(tint ?? .primary)
+    private var actions: [SelectionToolbarAction] {
+        var actions: [SelectionToolbarAction] = []
+        if canMove {
+            actions.append(SelectionToolbarAction(id: "move", title: L10n.string("common.move"), systemImage: "folder") {
+                routes.sheet = .selectionMove
+            })
         }
-        .buttonStyle(.plain)
+        if canCreateCollection {
+            actions.append(SelectionToolbarAction(id: "createCollection", title: L10n.string("favorites.create_collection"), systemImage: "folder.badge.plus") {
+                routes.sheet = .collectionEditor(LocalFavoriteCollectionDraft(mode: .createFromSelection))
+            })
+        }
+        if canEditTags {
+            actions.append(SelectionToolbarAction(id: "tags", title: L10n.string("favorites.tags_action"), systemImage: "tag") {
+                routes.sheet = .tagSelection(.selection(organizer.commonTagIDsForSelection))
+            })
+        }
+        if let collection = editableCollection {
+            actions.append(SelectionToolbarAction(id: "edit", title: L10n.string("common.edit"), systemImage: "pencil") {
+                routes.sheet = .collectionEditor(LocalFavoriteCollectionDraft(collection: collection))
+            })
+        }
+        if canDissolve {
+            actions.append(SelectionToolbarAction(id: "dissolve", title: L10n.string("favorites.dissolve"), systemImage: "folder.badge.minus") {
+                routes.dialog = .dissolveSelectedCollections
+            })
+        }
+        if canDelete {
+            actions.append(SelectionToolbarAction(id: "delete", title: L10n.string("common.delete"), systemImage: "trash", role: .destructive) {
+                routes.dialog = .deleteSelection
+            })
+        }
+        return actions
     }
 
     // MARK: - Availability
@@ -109,26 +87,6 @@ struct LocalFavoriteSelectionActionBar: View {
     /// that silently does nothing when tapped.
     private var canDelete: Bool {
         organizer.hasDeletableSelection
-    }
-
-    private var hasAnyAvailableAction: Bool {
-        canMove || canCreateCollection || canEditTags || editableCollection != nil || canDissolve || canDelete
-    }
-}
-
-/// Liquid Glass container with a material fallback for pre-iOS-26 systems.
-private struct LocalFavoriteGlassBarBackground: ViewModifier {
-    func body(content: Content) -> some View {
-        if #available(iOS 26.0, *) {
-            content.glassEffect(.regular, in: .rect(cornerRadius: 26, style: .continuous))
-        } else {
-            content
-                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 26, style: .continuous))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 26, style: .continuous)
-                        .stroke(.quaternary, lineWidth: 0.5)
-                }
-        }
     }
 }
 

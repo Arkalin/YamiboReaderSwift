@@ -50,7 +50,11 @@ struct MangaReaderCacheSheet: View {
                 .padding(16)
             }
             .background(YamiboColors.SystemSurface.groupedBackground)
-            .navigationTitle(L10n.string("manga.offline_cache.title"))
+            .navigationTitle(
+                isSelecting
+                    ? L10n.string("manga.offline_cache.selected_count", selectedTIDs.count)
+                    : L10n.string("manga.offline_cache.title")
+            )
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
@@ -73,21 +77,14 @@ struct MangaReaderCacheSheet: View {
 
                 if isSelecting && usesSystemSelectionBottomToolbar {
                     ToolbarItem(placement: .bottomBar) {
-                        MangaReaderCacheSelectionToolbar(
-                            selectionState: selectionState,
-                            onCache: cacheSelection,
-                            onDelete: deleteSelection
-                        )
+                        SelectionBottomToolbar(actions: selectionActions)
                     }
                 }
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 if isSelecting && !usesSystemSelectionBottomToolbar {
-                    MangaReaderCacheSelectionActionBar(
-                        selectionState: selectionState,
-                        onCache: cacheSelection,
-                        onDelete: deleteSelection
-                    )
+                    SelectionBottomToolbar(actions: selectionActions)
+                        .selectionBottomToolbarCapsule()
                 }
             }
             .sheet(isPresented: $isQueuePresented) {
@@ -116,18 +113,21 @@ struct MangaReaderCacheSheet: View {
                 }
             }
         }
-        .overlayPreferenceValue(MangaReaderCacheQueueBadgeAnchorPreferenceKey.self) { anchors in
-            GeometryReader { proxy in
-                MangaReaderCacheQueueBadgeFlightLayer(
-                    flight: cacheQueueBadgeFlight,
-                    sourceFrame: anchors[.cacheButton].map { proxy[$0] },
-                    destinationFrame: anchors[.queueButton].map { proxy[$0] },
-                    containerSize: proxy.size,
-                    safeAreaInsets: proxy.safeAreaInsets,
-                    onFinished: clearCacheQueueBadgeFlight
-                )
-            }
-            .allowsHitTesting(false)
+        .overlayPreferenceValue(MangaReaderCacheQueueButtonAnchorKey.self) { queueButtonAnchor in
+            Color.clear
+                .overlayPreferenceValue(SelectionBottomToolbarActionAnchorKey.self) { actionAnchors in
+                    GeometryReader { proxy in
+                        MangaReaderCacheQueueBadgeFlightLayer(
+                            flight: cacheQueueBadgeFlight,
+                            sourceFrame: actionAnchors["cache"].map { proxy[$0] },
+                            destinationFrame: queueButtonAnchor.map { proxy[$0] },
+                            containerSize: proxy.size,
+                            safeAreaInsets: proxy.safeAreaInsets,
+                            onFinished: clearCacheQueueBadgeFlight
+                        )
+                    }
+                    .allowsHitTesting(false)
+                }
         }
     }
 
@@ -135,11 +135,24 @@ struct MangaReaderCacheSheet: View {
         model.selectionState(for: selectedTIDs)
     }
 
-    private var usesSystemSelectionBottomToolbar: Bool {
-        if #available(iOS 26, *) {
-            return true
-        }
-        return false
+    private var selectionActions: [SelectionToolbarAction] {
+        [
+            SelectionToolbarAction(
+                id: "cache",
+                title: L10n.string("reader.cache_action.cache"),
+                systemImage: "square.and.arrow.down",
+                isEnabled: selectionState.canCache,
+                action: cacheSelection
+            ),
+            SelectionToolbarAction(
+                id: "delete",
+                title: L10n.string("common.delete"),
+                systemImage: "trash",
+                role: .destructive,
+                isEnabled: selectionState.canDelete,
+                action: deleteSelection
+            )
+        ]
     }
 
     private func toggleAll() {
@@ -190,41 +203,17 @@ private struct MangaReaderCacheQueueBadgeFlight: Identifiable, Equatable {
     let count: Int
 }
 
-private enum MangaReaderCacheQueueBadgeAnchorRole: Hashable {
-    case cacheButton
-    case queueButton
-}
+/// The nav-bar queue button's own frame, for the badge-flight destination —
+/// the flight's source (the bottom bar's "cache" action) is tracked by the
+/// shared `SelectionBottomToolbarActionAnchorKey` instead, since that button
+/// now lives inside the shared `SelectionBottomToolbar`.
+private struct MangaReaderCacheQueueButtonAnchorKey: PreferenceKey {
+    static let defaultValue: Anchor<CGRect>? = nil
 
-private struct MangaReaderCacheQueueBadgeAnchorPreferenceKey: PreferenceKey {
-    static let defaultValue: [MangaReaderCacheQueueBadgeAnchorRole: Anchor<CGRect>] = [:]
-
-    static func reduce(
-        value: inout [MangaReaderCacheQueueBadgeAnchorRole: Anchor<CGRect>],
-        nextValue: () -> [MangaReaderCacheQueueBadgeAnchorRole: Anchor<CGRect>]
-    ) {
-        value.merge(nextValue(), uniquingKeysWith: { _, next in next })
-    }
-}
-
-private struct MangaReaderCacheQueueBadgeAnchorModifier: ViewModifier {
-    let role: MangaReaderCacheQueueBadgeAnchorRole?
-
-    func body(content: Content) -> some View {
-        content.anchorPreference(
-            key: MangaReaderCacheQueueBadgeAnchorPreferenceKey.self,
-            value: .bounds
-        ) { anchor in
-            guard let role else { return [:] }
-            return [role: anchor]
+    static func reduce(value: inout Anchor<CGRect>?, nextValue: () -> Anchor<CGRect>?) {
+        if let next = nextValue() {
+            value = next
         }
-    }
-}
-
-private extension View {
-    func mangaReaderCacheQueueBadgeAnchor(
-        _ role: MangaReaderCacheQueueBadgeAnchorRole?
-    ) -> some View {
-        modifier(MangaReaderCacheQueueBadgeAnchorModifier(role: role))
     }
 }
 
@@ -354,7 +343,7 @@ private struct MangaNovelReaderCacheQueueToolbarButton: View {
         Button(action: action) {
             HStack(spacing: 5) {
                 ReaderCacheDownloadQueueIcon(isActive: entryCount > 0)
-                    .mangaReaderCacheQueueBadgeAnchor(.queueButton)
+                    .anchorPreference(key: MangaReaderCacheQueueButtonAnchorKey.self, value: .bounds) { $0 }
                 Text(verbatim: "\(entryCount)")
                     .font(.caption.monospacedDigit().weight(.semibold))
                     .lineLimit(1)
@@ -589,80 +578,4 @@ private struct MangaReaderCacheStateBadge: View {
     }
 }
 
-private struct MangaReaderCacheSelectionToolbar: View {
-    let selectionState: MangaNovelReaderCacheSelectionState
-    let onCache: () -> Void
-    let onDelete: () -> Void
-
-    var body: some View {
-        HStack(spacing: 16) {
-            toolbarButton(
-                title: L10n.string("reader.cache_action.cache"),
-                systemImage: "square.and.arrow.down",
-                role: nil,
-                isEnabled: selectionState.canCache,
-                badgeAnchorRole: .cacheButton,
-                action: onCache
-            )
-            toolbarButton(
-                title: L10n.string("common.delete"),
-                systemImage: "trash",
-                role: .destructive,
-                isEnabled: selectionState.canDelete,
-                action: onDelete
-            )
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-    }
-
-    private func toolbarButton(
-        title: String,
-        systemImage: String,
-        role: ButtonRole?,
-        isEnabled: Bool,
-        badgeAnchorRole: MangaReaderCacheQueueBadgeAnchorRole? = nil,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(role: role, action: action) {
-            VStack(spacing: 3) {
-                Image(systemName: systemImage)
-                    .font(.system(size: 18, weight: .regular))
-                    .frame(width: 24, height: 22)
-                Text(title)
-                    .font(.caption2)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.78)
-            }
-            .frame(width: 66)
-            .foregroundStyle(role == .destructive ? Color.red : Color.primary)
-            .opacity(isEnabled ? 1 : 0.35)
-        }
-        .buttonStyle(.plain)
-        .disabled(!isEnabled)
-        .mangaReaderCacheQueueBadgeAnchor(badgeAnchorRole)
-        .accessibilityLabel(title)
-    }
-}
-
-private struct MangaReaderCacheSelectionActionBar: View {
-    let selectionState: MangaNovelReaderCacheSelectionState
-    let onCache: () -> Void
-    let onDelete: () -> Void
-
-    var body: some View {
-        VStack(spacing: 0) {
-            Divider()
-            MangaReaderCacheSelectionToolbar(
-                selectionState: selectionState,
-                onCache: onCache,
-                onDelete: onDelete
-            )
-            .frame(maxWidth: .infinity)
-            .padding(.top, 10)
-            .padding(.bottom, 12)
-        }
-        .background(.ultraThinMaterial)
-    }
-}
 #endif

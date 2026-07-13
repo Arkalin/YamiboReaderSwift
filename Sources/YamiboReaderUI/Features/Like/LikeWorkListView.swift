@@ -78,11 +78,13 @@ struct LikeWorkListView: View {
                     }
                     .fontWeight(.semibold)
                 }
-                if likeSelectionUsesSystemBottomToolbar {
+                if usesSystemSelectionBottomToolbar {
                     ToolbarItem(placement: .bottomBar) {
-                        LikeSelectionToolbar(selectedCount: selectedWorkKeys.count) {
-                            isShowingDeleteConfirmation = true
-                        }
+                        SelectionBottomToolbar(
+                            actions: LikeSelectionActions.delete(selectedCount: selectedWorkKeys.count) {
+                                isShowingDeleteConfirmation = true
+                            }
+                        )
                     }
                 }
             } else {
@@ -97,10 +99,13 @@ struct LikeWorkListView: View {
         }
         .toolbar(isSelecting ? .hidden : .automatic, for: .tabBar)
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            if isSelecting && !likeSelectionUsesSystemBottomToolbar {
-                LikeSelectionActionBar(selectedCount: selectedWorkKeys.count) {
-                    isShowingDeleteConfirmation = true
-                }
+            if isSelecting && !usesSystemSelectionBottomToolbar {
+                SelectionBottomToolbar(
+                    actions: LikeSelectionActions.delete(selectedCount: selectedWorkKeys.count) {
+                        isShowingDeleteConfirmation = true
+                    }
+                )
+                .selectionBottomToolbarCapsule()
             }
         }
         .navigationDestination(item: $pushedWorkKey) { workKey in
