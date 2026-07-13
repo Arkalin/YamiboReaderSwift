@@ -293,18 +293,18 @@ extension OfflineCacheStore {
     }
 
     static func save(_ work: OfflineCacheRawWork, in db: Database) throws {
+        // Existing rows are UPDATEd rather than INSERT OR REPLACEd: REPLACE deletes the old
+        // parent row, and the ON DELETE CASCADE from both image tables would clear the rows
+        // replaceImageList diffs against, degrading every progress update to a full re-insert.
         try db.execute(
             sql: """
-            INSERT OR REPLACE INTO offline_cache_works
-            (reader_kind, work_id, owner_name, owner_title, tid, chapter_title, retains_inline_images, state, failure_message, current_bytes_per_second, insertion_index, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            UPDATE offline_cache_works
+            SET work_id = ?, owner_title = ?, chapter_title = ?, retains_inline_images = ?, state = ?, failure_message = ?, current_bytes_per_second = ?, insertion_index = ?, created_at = ?, updated_at = ?
+            WHERE reader_kind = ? AND owner_name = ? AND tid = ?
             """,
             arguments: [
-                work.readerKind.rawValue,
                 work.workID,
-                work.ownerKey,
                 work.ownerTitle,
-                work.entryKey,
                 work.title,
                 work.retainsInlineImages,
                 work.state.rawValue,
@@ -312,9 +312,36 @@ extension OfflineCacheStore {
                 work.currentBytesPerSecond,
                 work.insertionIndex,
                 offlineCacheTimeInterval(from: work.createdAt),
-                offlineCacheTimeInterval(from: work.updatedAt)
+                offlineCacheTimeInterval(from: work.updatedAt),
+                work.readerKind.rawValue,
+                work.ownerKey,
+                work.entryKey
             ]
         )
+        if db.changesCount == 0 {
+            try db.execute(
+                sql: """
+                INSERT INTO offline_cache_works
+                (reader_kind, work_id, owner_name, owner_title, tid, chapter_title, retains_inline_images, state, failure_message, current_bytes_per_second, insertion_index, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                arguments: [
+                    work.readerKind.rawValue,
+                    work.workID,
+                    work.ownerKey,
+                    work.ownerTitle,
+                    work.entryKey,
+                    work.title,
+                    work.retainsInlineImages,
+                    work.state.rawValue,
+                    work.failureMessage,
+                    work.currentBytesPerSecond,
+                    work.insertionIndex,
+                    offlineCacheTimeInterval(from: work.createdAt),
+                    offlineCacheTimeInterval(from: work.updatedAt)
+                ]
+            )
+        }
         try replaceImageList(
             table: "offline_cache_work_images",
             readerKind: work.readerKind.rawValue,

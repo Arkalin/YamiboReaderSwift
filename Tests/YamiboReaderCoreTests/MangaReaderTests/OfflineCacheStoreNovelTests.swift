@@ -261,6 +261,121 @@ struct MangaReaderTestsNovelOfflineCacheStore {
         #expect(loadedSource == updatedSourcePage)
     }
 
+    @Test func resavingSourcePageChangedOnlyInVolatileFieldsSkipsRewrite() async throws {
+        let store = try makeTestOfflineCacheStore(rootDirectory: try makeTemporaryNovelOfflineCacheDirectory())
+        let request = try makeNovelWorkRequest(tid: "7022", view: 1)
+        let firstFetch = try makeVolatileNovelSourcePage(
+            tid: "7022",
+            totalViews: 100,
+            totalReplies: 5,
+            formHash: "hash-a",
+            manageActionToken: "token-a"
+        )
+        let secondFetch = try makeVolatileNovelSourcePage(
+            tid: "7022",
+            totalViews: 173,
+            totalReplies: 9,
+            formHash: "hash-b",
+            manageActionToken: "token-b"
+        )
+        let firstUpdatedAt = Date(timeIntervalSince1970: 70_220)
+
+        try await store.saveNovelOfflineSourcePage(
+            firstFetch,
+            request: request,
+            updatedAt: firstUpdatedAt
+        )
+        let fileURL = try await novelSourcePageFileURL(store, entryKey: request.entryKey)
+        let mtimeBefore = try #require(FileManager.default.attributesOfItem(atPath: fileURL.path)[.modificationDate] as? Date)
+
+        try await store.saveNovelOfflineSourcePage(
+            secondFetch,
+            request: request,
+            updatedAt: Date(timeIntervalSince1970: 70_221)
+        )
+
+        let mtimeAfter = try #require(FileManager.default.attributesOfItem(atPath: fileURL.path)[.modificationDate] as? Date)
+        let snapshot = await store.novelOfflineCacheViewsSnapshot(
+            ownerTitle: request.ownerTitle,
+            threadID: request.threadID,
+            authorID: request.authorID
+        )
+        let loadedSource = await store.novelOfflineSourcePage(
+            ownerTitle: request.ownerTitle,
+            threadID: request.threadID,
+            view: request.view,
+            authorID: request.authorID
+        )
+
+        #expect(mtimeAfter == mtimeBefore)
+        #expect(snapshot.updateTimesByView[1] == firstUpdatedAt)
+        #expect(loadedSource == firstFetch)
+
+        var changedFetch = secondFetch
+        changedFetch.posts[0].contentHTML = "<strong>第1章</strong><br>修改后的正文"
+        changedFetch.posts[0].contentText = "修改后的正文"
+        let changedUpdatedAt = Date(timeIntervalSince1970: 70_222)
+
+        try await store.saveNovelOfflineSourcePage(
+            changedFetch,
+            request: request,
+            updatedAt: changedUpdatedAt
+        )
+
+        let changedSnapshot = await store.novelOfflineCacheViewsSnapshot(
+            ownerTitle: request.ownerTitle,
+            threadID: request.threadID,
+            authorID: request.authorID
+        )
+        #expect(changedSnapshot.updateTimesByView[1] == changedUpdatedAt)
+        #expect(await store.novelOfflineSourcePage(
+            ownerTitle: request.ownerTitle,
+            threadID: request.threadID,
+            view: request.view,
+            authorID: request.authorID
+        ) == changedFetch)
+    }
+
+    @Test func skippedResaveNotifiesWhenItCompletesMatchingWork() async throws {
+        let store = try makeTestOfflineCacheStore(rootDirectory: try makeTemporaryNovelOfflineCacheDirectory())
+        let request = try makeNovelWorkRequest(tid: "7023", view: 1)
+        let sourcePage = try makeNovelSourcePage(tid: "7023", view: 1, totalPages: 1)
+
+        try await store.saveNovelOfflineSourcePage(
+            sourcePage,
+            request: request,
+            updatedAt: Date(timeIntervalSince1970: 70_230)
+        )
+        _ = try await store.enqueueNovelOfflineCacheUpdateWork(request)
+        #expect(await store.offlineCacheQueueWorks().count == 1)
+
+        let updates = store.offlineCacheUpdates()
+
+        try await store.saveNovelOfflineSourcePage(
+            sourcePage,
+            request: request,
+            updatedAt: Date(timeIntervalSince1970: 70_231)
+        )
+
+        #expect(await store.offlineCacheQueueWorks().isEmpty)
+        // The skipped re-save removed a queued work, so queue/management listeners must be
+        // notified; the yield happens synchronously inside the save and is buffered.
+        let notified = await withTaskGroup(of: Bool.self) { group in
+            group.addTask {
+                var iterator = updates.makeAsyncIterator()
+                return await iterator.next() != nil
+            }
+            group.addTask {
+                try? await Task.sleep(for: .seconds(5))
+                return false
+            }
+            let first = await group.next() ?? false
+            group.cancelAll()
+            return first
+        }
+        #expect(notified)
+    }
+
     @Test func novelOfflineImageDataMatchesCanonicalRefererAndReferencedImage() async throws {
         let store = try makeTestOfflineCacheStore(rootDirectory: try makeTemporaryNovelOfflineCacheDirectory())
         let sharedImageURL = try #require(URL(string: "https://img.example.com/shared-inline.jpg"))
@@ -413,6 +528,26 @@ private func makeNovelSourcePage(tid: String, view: Int, totalPages: Int) throws
         ],
         pageNavigation: ForumPageNavigation(currentPage: view, totalPages: totalPages)
     )
+}
+
+private func makeVolatileNovelSourcePage(
+    tid: String,
+    totalViews: Int,
+    totalReplies: Int,
+    formHash: String,
+    manageActionToken: String
+) throws -> ForumThreadPage {
+    var page = try makeNovelSourcePage(tid: tid, view: 1, totalPages: 1)
+    page.totalViews = totalViews
+    page.totalReplies = totalReplies
+    page.formHash = formHash
+    page.posts[0].manageActions = [
+        ForumThreadManageAction(
+            title: "编辑",
+            url: try #require(URL(string: "https://bbs.example.com/forum.php?mod=topicadmin&action=edit&tid=\(tid)&formhash=\(manageActionToken)"))
+        )
+    ]
+    return page
 }
 
 private func makeNovelDocument(tid: String, view: Int, maxView: Int) throws -> NovelReaderProjection {

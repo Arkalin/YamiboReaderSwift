@@ -13,7 +13,7 @@ extension OfflineCacheStore {
         do {
             let normalized = try Self.normalizedNovelWorkRequest(request)
             let sourceData = try Self.encodeJSONData(sourcePage, context: "novel offline source page")
-            let sourceFingerprint = sha256Hex(String(decoding: sourceData, as: UTF8.self))
+            let sourceFingerprint = try novelSourcePageFingerprint(for: sourcePage)
             let sourceFileName = novelPayloadFileName(
                 prefix: "source",
                 entryKey: normalized.entryKey
@@ -26,14 +26,14 @@ extension OfflineCacheStore {
             // Auto-refresh replays this on every online page load for views that are already
             // offline-cached, so resolve whether anything would actually change before paying
             // for a full re-encode + atomic file rewrite + metadata upsert.
-            let (resolvedImageURLs, sourceUnchanged) = try await database.read { db -> ([URL], Bool) in
+            let sourceUnchanged = try await database.read { db -> Bool in
                 let resolvedImageURLs = try Self.imageURLsForNovelSourcePageMetadata(
                     request: normalized,
                     imageURLs: normalized.targetImageURLs,
                     preservesExistingImageReferencesWhenEmpty: preservesExistingImageReferencesWhenEmpty,
                     in: db
                 )
-                let unchanged = try Self.novelSourcePageUnchanged(
+                return try Self.novelSourcePageUnchanged(
                     entryKey: normalized.entryKey,
                     ownerTitle: normalized.ownerTitle,
                     title: requestedTitle,
@@ -43,19 +43,23 @@ extension OfflineCacheStore {
                     novelSourcePagesDirectory: novelSourcePagesDirectory,
                     in: db
                 )
-                return (resolvedImageURLs, unchanged)
             }
 
             guard !sourceUnchanged else {
+                var deletedMatchingWork = false
                 if completesMatchingWork {
-                    try await database.write { db in
+                    deletedMatchingWork = try await database.write { db -> Bool in
                         try Self.deleteWork(
                             readerKind: OfflineCacheReaderKind.novel.rawValue,
                             ownerName: normalized.groupKey,
                             tid: normalized.entryKey,
                             in: db
                         )
+                        return db.changesCount > 0
                     }
+                }
+                if deletedMatchingWork {
+                    notifyOfflineCacheDidChange()
                 }
                 return
             }
@@ -69,6 +73,15 @@ extension OfflineCacheStore {
             let documentJSON = try Self.encodeNovelDocument(document)
 
             let previousFiles = try await database.write { db in
+                // Resolved inside the write transaction: the actor can interleave other work
+                // at the awaits above, so a list captured during the earlier read could merge
+                // against stale state and overwrite image references written concurrently.
+                let resolvedImageURLs = try Self.imageURLsForNovelSourcePageMetadata(
+                    request: normalized,
+                    imageURLs: normalized.targetImageURLs,
+                    preservesExistingImageReferencesWhenEmpty: preservesExistingImageReferencesWhenEmpty,
+                    in: db
+                )
                 let previousFiles = try Self.novelPayloadFileNames(entryKey: normalized.entryKey, in: db)
                 try Self.saveNovelSourcePageMetadata(
                     request: normalized,
@@ -97,6 +110,26 @@ extension OfflineCacheStore {
         } catch {
             throw novelPayloadPersistenceError(from: error)
         }
+    }
+
+    /// Fingerprint used by the auto-refresh skip check, computed over a copy with
+    /// per-fetch/per-session fields stripped: the Discuz view counter increments on every
+    /// visit (including the fetch itself), reply counters bump on activity anywhere in the
+    /// thread, and the form hash plus manage-action links rotate with the session. Hashing
+    /// the full page would make the skip branch unreachable; the payload file still stores
+    /// the complete page.
+    func novelSourcePageFingerprint(for sourcePage: ForumThreadPage) throws -> String {
+        var canonical = sourcePage
+        canonical.totalViews = nil
+        canonical.totalReplies = nil
+        canonical.formHash = nil
+        canonical.posts = canonical.posts.map { post in
+            var post = post
+            post.manageActions = []
+            return post
+        }
+        let data = try Self.encodeJSONData(canonical, context: "novel offline source page fingerprint")
+        return sha256Hex(String(decoding: data, as: UTF8.self))
     }
 
     private static func novelSourcePageUnchanged(
