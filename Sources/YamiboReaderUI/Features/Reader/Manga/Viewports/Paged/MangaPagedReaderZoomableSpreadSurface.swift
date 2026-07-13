@@ -108,7 +108,9 @@ struct MangaPagedReaderZoomableSpreadSurface: View {
     }
 
     private var surfaceDragGestureMask: GestureMask {
-        surfaceDragGestureEnabled ? .gesture : .subviews
+        // `.gesture` would disable the long-press hit region nested inside each page
+        // slot (a subview) whenever the spread is zoomed and panning.
+        surfaceDragGestureEnabled ? .all : .subviews
     }
 
     private var surfaceDragGestureEnabled: Bool {

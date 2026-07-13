@@ -211,7 +211,9 @@ private struct MangaPagedReaderScaledImage: View {
     }
 
     private var surfaceDragGestureMask: GestureMask {
-        surfaceDragGestureEnabled ? .gesture : .subviews
+        // `.gesture` would disable the long-press hit region below (a subview) whenever
+        // pan is active — which for an unzoomed single page is effectively always.
+        surfaceDragGestureEnabled ? .all : .subviews
     }
 
     private var surfaceDragGestureEnabled: Bool {
