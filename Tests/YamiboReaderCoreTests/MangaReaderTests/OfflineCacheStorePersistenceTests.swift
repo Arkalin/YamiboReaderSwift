@@ -71,6 +71,24 @@ struct MangaReaderTestsMangaOfflineCachePersistence {
         #expect(databaseState.persistedMetadataText.allSatisfy { !$0.contains("forum.php") })
     }
 
+    @Test func recreatedBaseDirectoryStaysExcludedFromBackupAfterClearAll() async throws {
+        let fixture = try makeOfflineCacheFixture()
+        let store = OfflineCacheStore(
+            databasePool: fixture.database,
+            baseDirectory: fixture.offlineDirectory
+        )
+        let imageURL = try #require(URL(string: "https://img.example.com/backup-exclusion.jpg"))
+
+        try await store.saveOfflineImageData(Data([1]), for: imageURL)
+        #expect(try fixture.offlineDirectory.resourceValues(forKeys: [.isExcludedFromBackupKey]).isExcludedFromBackup == true)
+
+        try await store.clearAll()
+        #expect(!FileManager.default.fileExists(atPath: fixture.offlineDirectory.path))
+
+        try await store.saveOfflineImageData(Data([2]), for: imageURL)
+        #expect(try fixture.offlineDirectory.resourceValues(forKeys: [.isExcludedFromBackupKey]).isExcludedFromBackup == true)
+    }
+
     @Test func offlineImageBytesStayInFilesWhileMetadataLivesInGRDB() async throws {
         let fixture = try makeOfflineCacheFixture()
         let store = OfflineCacheStore(

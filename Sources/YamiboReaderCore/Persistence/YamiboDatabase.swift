@@ -22,6 +22,16 @@ enum YamiboDatabase {
             ?? URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("YamiboReader", isDirectory: true)
     }
 
+    /// Root for the regenerable `yamibo_cache` file cache. Lives under
+    /// `Library/Caches`, which the OS keeps out of backups and may purge under
+    /// disk pressure; anything that must survive belongs under
+    /// `defaultRootDirectory()` instead.
+    static func defaultCacheRootDirectory(fileManager: FileManager = .default) -> URL {
+        let cachesBase = fileManager.urls(for: .cachesDirectory, in: .userDomainMask).first
+            ?? URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("Caches", isDirectory: true)
+        return cachesBase.appendingPathComponent("YamiboReader", isDirectory: true)
+    }
+
     static func databaseURL(rootDirectory: URL? = nil, fileManager: FileManager = .default) -> URL {
         (rootDirectory ?? defaultRootDirectory(fileManager: fileManager))
             .appendingPathComponent(databaseFileName, isDirectory: false)

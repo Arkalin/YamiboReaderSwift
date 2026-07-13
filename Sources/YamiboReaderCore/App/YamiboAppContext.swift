@@ -84,11 +84,7 @@ public final class YamiboAppContext: Sendable {
         session: URLSession = YamiboNetworkConfiguration.makeSession()
     ) {
         let resolvedGRDBRootDirectory = grdbRootDirectory ?? YamiboDatabase.defaultRootDirectory()
-        let resolvedCachesRootDirectory = cachesRootDirectory ?? Self.defaultCachesRootDirectory()
-        Self.migrateLegacyCacheDirectoriesIfNeeded(
-            legacyRootDirectory: resolvedGRDBRootDirectory,
-            cachesRootDirectory: resolvedCachesRootDirectory
-        )
+        let resolvedCachesRootDirectory = cachesRootDirectory ?? YamiboDatabase.defaultCacheRootDirectory()
         let resolvedGRDBDatabasePool = databasePool ?? Self.openGRDBDatabase(rootDirectory: resolvedGRDBRootDirectory)
         self.databasePool = resolvedGRDBDatabasePool
         let diskCacheStore = DiskCacheStore(
@@ -105,7 +101,7 @@ public final class YamiboAppContext: Sendable {
         self.readerResumeRouteStore = readerResumeRouteStore
         let resolvedOfflineCacheStore = offlineCacheStore ?? OfflineCacheStore(
             databasePool: resolvedGRDBDatabasePool,
-            baseDirectory: Self.offlineCacheDirectory(rootDirectory: resolvedCachesRootDirectory)
+            baseDirectory: Self.prepareOfflineCacheDirectory(rootDirectory: resolvedGRDBRootDirectory)
         )
         self.localFavoriteLibraryStore = localFavoriteLibraryStore ?? FavoriteLibraryStore(databasePool: resolvedGRDBDatabasePool)
         self.favoriteUpdateStore = favoriteUpdateStore
@@ -440,63 +436,28 @@ public final class YamiboAppContext: Sendable {
         rootDirectory.appendingPathComponent("like-images", isDirectory: true)
     }
 
+    /// Offline chapters are user-requested downloads: they must stay out of
+    /// iCloud/iTunes backups yet — unlike `Library/Caches` content — must never
+    /// be purged by the system, hence Application Support + the backup
+    /// exclusion marker. The marker stays scoped to this directory; the rest of
+    /// the root (yamibo.sqlite, favorite-background, like-images) is user data
+    /// that participates in backups. Idempotent; failures are logged because
+    /// the store lazily recreates the directory on first write anyway.
+    private static func prepareOfflineCacheDirectory(
+        rootDirectory: URL,
+        fileManager: FileManager = .default
+    ) -> URL {
+        let directory = offlineCacheDirectory(rootDirectory: rootDirectory)
+        do {
+            try OfflineCacheStore.createBackupExcludedDirectory(at: directory, fileManager: fileManager)
+        } catch {
+            YamiboLog.persistence.error("Failed to prepare the backup-excluded offline cache directory: \(error)")
+        }
+        return directory
+    }
+
     private static func offlineCacheDirectory(rootDirectory: URL) -> URL {
         rootDirectory.appendingPathComponent("offline-cache", isDirectory: true)
-    }
-
-    /// Root for purely regenerable file caches (offline-cache, `yamibo_cache`'s
-    /// forum/reader projection namespaces). `Library/Caches` is excluded from
-    /// iCloud/iTunes backups by the OS, unlike `Application Support`.
-    private static func defaultCachesRootDirectory(fileManager: FileManager = .default) -> URL {
-        let cachesBase = fileManager.urls(for: .cachesDirectory, in: .userDomainMask).first
-            ?? URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("Caches", isDirectory: true)
-        return cachesBase.appendingPathComponent("YamiboReader", isDirectory: true)
-    }
-
-    /// One-time move of directories that used to live under the (backed-up)
-    /// GRDB root into the (never-backed-up) caches root. Idempotent: once a
-    /// legacy directory has been moved away, later launches see it gone and
-    /// skip. Never throws — a failed migration just leaves the legacy
-    /// directory in place for the store to keep using next time.
-    private static func migrateLegacyCacheDirectoriesIfNeeded(
-        legacyRootDirectory: URL,
-        cachesRootDirectory: URL,
-        fileManager: FileManager = .default
-    ) {
-        for directoryName in ["offline-cache", YamiboDatabase.cacheDirectoryName] {
-            migrateLegacyCacheDirectoryIfNeeded(
-                directoryName: directoryName,
-                legacyRootDirectory: legacyRootDirectory,
-                cachesRootDirectory: cachesRootDirectory,
-                fileManager: fileManager
-            )
-        }
-    }
-
-    private static func migrateLegacyCacheDirectoryIfNeeded(
-        directoryName: String,
-        legacyRootDirectory: URL,
-        cachesRootDirectory: URL,
-        fileManager: FileManager
-    ) {
-        let legacyDirectory = legacyRootDirectory.appendingPathComponent(directoryName, isDirectory: true)
-        guard fileManager.fileExists(atPath: legacyDirectory.path) else { return }
-
-        let newDirectory = cachesRootDirectory.appendingPathComponent(directoryName, isDirectory: true)
-        guard !fileManager.fileExists(atPath: newDirectory.path) else {
-            YamiboLog.persistence.warning("Skipping cache migration for \(directoryName, privacy: .public): a directory already exists at the Caches destination")
-            return
-        }
-
-        do {
-            if !fileManager.fileExists(atPath: cachesRootDirectory.path) {
-                try fileManager.createDirectory(at: cachesRootDirectory, withIntermediateDirectories: true)
-            }
-            try fileManager.moveItem(at: legacyDirectory, to: newDirectory)
-            YamiboLog.persistence.info("Migrated \(directoryName, privacy: .public) out of the iCloud-backed Application Support directory into Caches")
-        } catch {
-            YamiboLog.persistence.error("Failed to migrate \(directoryName, privacy: .public) into Caches, leaving it in Application Support: \(error)")
-        }
     }
 
     @MainActor

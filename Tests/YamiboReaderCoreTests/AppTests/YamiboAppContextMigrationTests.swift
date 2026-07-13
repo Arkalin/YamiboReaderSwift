@@ -261,7 +261,12 @@ import YamiboReaderTestSupport
     let appContext = try makeIsolatedAppContext(suiteName: suiteName, rootDirectory: rootDirectory, databasePool: database)
 
     #expect(FileManager.default.fileExists(atPath: legacyOfflineCacheDirectory(rootDirectory: rootDirectory).path))
-    #expect(!FileManager.default.fileExists(atPath: offlineCacheDirectory(rootDirectory: rootDirectory).path))
+    // The context eagerly prepares an (empty, backup-excluded) offline-cache
+    // directory; the point here is that no legacy payload gets moved into it.
+    let newOfflineCacheDirectoryContents = (try? FileManager.default.contentsOfDirectory(
+        atPath: offlineCacheDirectory(rootDirectory: rootDirectory).path
+    )) ?? []
+    #expect(newOfflineCacheDirectoryContents.isEmpty)
     #expect(await appContext.offlineCacheStore.offlineImageData(for: imageURL) == nil)
     #expect(await appContext.offlineCacheStore.mangaOfflineCacheState(ownerName: "Legacy Manga", tid: "9003") == .uncached)
     let loadedNovelSourcePage = await appContext.offlineCacheStore.novelOfflineSourcePage(

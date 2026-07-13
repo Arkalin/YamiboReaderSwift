@@ -493,7 +493,26 @@ actor OfflineCacheStore {
 
     func ensureBaseDirectoryExists() throws {
         if !fileManager.fileExists(atPath: baseDirectory.path) {
-            try fileManager.createDirectory(at: baseDirectory, withIntermediateDirectories: true)
+            try Self.createBackupExcludedDirectory(at: baseDirectory, fileManager: fileManager)
+        }
+    }
+
+    /// `clearAll()` deletes the whole base directory, so every path that
+    /// recreates it must restore the backup exclusion or fresh downloads would
+    /// silently re-enter iCloud/iTunes backups until the next launch. A failed
+    /// marker write is logged instead of thrown: it must not fail the download
+    /// that triggered the directory creation.
+    static func createBackupExcludedDirectory(at directory: URL, fileManager: FileManager) throws {
+        if !fileManager.fileExists(atPath: directory.path) {
+            try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
+        }
+        var resourceValues = URLResourceValues()
+        resourceValues.isExcludedFromBackup = true
+        var directory = directory
+        do {
+            try directory.setResourceValues(resourceValues)
+        } catch {
+            YamiboLog.offlineCache.error("Failed to exclude the offline cache directory from backups: \(error)")
         }
     }
 
@@ -976,10 +995,7 @@ actor OfflineCacheStore {
     }
 
     private static func defaultBaseDirectory(fileManager: FileManager) -> URL {
-        let root = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
-            ?? URL(fileURLWithPath: NSTemporaryDirectory())
-        return root
-            .appendingPathComponent("YamiboReader", isDirectory: true)
+        YamiboDatabase.defaultRootDirectory(fileManager: fileManager)
             .appendingPathComponent("offline-cache", isDirectory: true)
     }
 
