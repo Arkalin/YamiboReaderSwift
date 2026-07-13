@@ -94,19 +94,26 @@ private struct ForumHomeCarouselView: View {
     let onTap: (ForumHomeCarouselItem) -> Void
 
     @State private var selection = 0
+    @State private var isUserInteracting = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
     var body: some View {
-        VStack(spacing: 8) {
-            TabView(selection: $selection) {
-                ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
-                    ForumCarouselImageButton(item: item, onTap: onTap)
-                        .tag(index)
-                }
+        Group {
+            // A full-width banner in a regular-width window (iPad, Max phones
+            // in landscape) gets enormous at 2.63:1, so those widths use a
+            // capped centered card with the neighboring banners peeking in
+            // on both sides.
+            if horizontalSizeClass == .regular {
+                ForumHomePeekCarouselView(
+                    items: items,
+                    selection: $selection,
+                    isUserInteracting: $isUserInteracting,
+                    onTap: onTap
+                )
+            } else {
+                fullWidthPager
             }
-            .tabViewStyle(.page(indexDisplayMode: items.count > 1 ? .automatic : .never))
-            .frame(maxWidth: .infinity)
-            .aspectRatio(2.63, contentMode: .fit)
         }
         // Reduce Motion disables auto-advance entirely; the banners stay
         // swipeable by hand.
@@ -115,11 +122,230 @@ private struct ForumHomeCarouselView: View {
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(3))
                 guard !Task.isCancelled else { return }
+                guard !isUserInteracting else { continue }
                 withAnimation(.easeInOut(duration: 0.25)) {
                     selection = (selection + 1) % items.count
                 }
             }
         }
+    }
+
+    private var fullWidthPager: some View {
+        TabView(selection: $selection) {
+            ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
+                ForumCarouselImageButton(item: item, onTap: onTap)
+                    .tag(index)
+            }
+        }
+        .tabViewStyle(.page(indexDisplayMode: items.count > 1 ? .automatic : .never))
+        .frame(maxWidth: .infinity)
+        .aspectRatio(2.63, contentMode: .fit)
+    }
+}
+
+/// Index arithmetic for the looping peek carousel. The strip renders the
+/// banners three times; the scroll position lives in the middle copy so both
+/// edges always show a real neighbor, and settles back there after every
+/// gesture via an invisible congruent jump.
+enum ForumHomeCarouselLoop {
+    static func loopCount(itemCount: Int) -> Int {
+        itemCount > 1 ? itemCount * 3 : itemCount
+    }
+
+    /// Clones flank the middle copy; they exist to be peeked at and scrolled
+    /// through, never to rest on.
+    static func isCloneIndex(_ index: Int, itemCount: Int) -> Bool {
+        itemCount > 1 && (index < itemCount || index >= 2 * itemCount)
+    }
+
+    static func middleLoopIndex(for selection: Int, itemCount: Int) -> Int {
+        guard itemCount > 1 else { return 0 }
+        return itemCount + min(max(selection, 0), itemCount - 1)
+    }
+
+    /// The congruent middle-copy index to silently snap back to once a scroll
+    /// settles, or `nil` when the position is already in the middle copy.
+    static func recenteredIndex(from current: Int, itemCount: Int) -> Int? {
+        guard itemCount > 1 else { return nil }
+        guard current >= 0, current < loopCount(itemCount: itemCount) else {
+            return middleLoopIndex(for: 0, itemCount: itemCount)
+        }
+        guard isCloneIndex(current, itemCount: itemCount) else { return nil }
+        return middleLoopIndex(for: current % itemCount, itemCount: itemCount)
+    }
+
+    /// The strip index to animate to for a new selection: the shortest
+    /// congruent hop, so the auto-advance +1 keeps rolling forward across the
+    /// wrap and a dot tap never travels the long way around. `nil` when the
+    /// current position already shows the selection.
+    static func hopTarget(from current: Int, to selection: Int, itemCount: Int) -> Int? {
+        guard itemCount > 0 else { return nil }
+        guard current % itemCount != selection else { return nil }
+        var delta = (selection - current % itemCount + itemCount) % itemCount
+        if delta > itemCount / 2 {
+            delta -= itemCount
+        }
+        let target = current + delta
+        return min(max(target, 0), loopCount(itemCount: itemCount) - 1)
+    }
+}
+
+/// Sizing for the regular-width peek carousel: the centered card is capped so
+/// it stays banner-sized on wide iPads, and the leftover width on each side
+/// shows the previous/next banner through symmetric insets.
+struct ForumHomeCarouselPeekLayout: Equatable {
+    static let maxCardWidth: CGFloat = 560
+    static let minSideInset: CGFloat = 44
+    static let cardSpacing: CGFloat = 12
+
+    let cardWidth: CGFloat
+    let sideInset: CGFloat
+
+    /// - Parameter containerWidth: measured carousel width; `nil` before the
+    ///   first layout pass, which assumes a max-width card until measured.
+    init(containerWidth: CGFloat?) {
+        guard let containerWidth, containerWidth > 0 else {
+            cardWidth = Self.maxCardWidth
+            sideInset = Self.minSideInset
+            return
+        }
+        let width = min(Self.maxCardWidth, max(0, containerWidth - 2 * Self.minSideInset))
+        cardWidth = width
+        sideInset = max(Self.minSideInset, (containerWidth - width) / 2)
+    }
+}
+
+private struct ForumHomePeekCarouselView: View {
+    let items: [ForumHomeCarouselItem]
+    @Binding var selection: Int
+    @Binding var isUserInteracting: Bool
+    let onTap: (ForumHomeCarouselItem) -> Void
+
+    @State private var containerWidth: CGFloat?
+    // Index into the tripled strip, so the visible card always has a
+    // neighbor on both sides; `selection` is this modulo `items.count`.
+    @State private var scrolledLoopIndex: Int?
+
+    private var layout: ForumHomeCarouselPeekLayout {
+        ForumHomeCarouselPeekLayout(containerWidth: containerWidth)
+    }
+
+    private var loopCount: Int {
+        ForumHomeCarouselLoop.loopCount(itemCount: items.count)
+    }
+
+    var body: some View {
+        VStack(spacing: 8) {
+            ScrollView(.horizontal) {
+                LazyHStack(spacing: ForumHomeCarouselPeekLayout.cardSpacing) {
+                    ForEach(0..<loopCount, id: \.self) { index in
+                        ForumCarouselImageButton(item: items[index % items.count], onTap: onTap)
+                            .frame(width: layout.cardWidth)
+                            // VoiceOver should see each banner once, not three
+                            // times; the middle copy is where the scroll
+                            // position always settles.
+                            .accessibilityHidden(isCloneIndex(index))
+                            .id(index)
+                    }
+                }
+                .scrollTargetLayout()
+            }
+            .scrollTargetBehavior(.viewAligned(limitBehavior: .always))
+            .scrollPosition(id: $scrolledLoopIndex, anchor: .center)
+            .scrollIndicators(.hidden)
+            .safeAreaPadding(.horizontal, layout.sideInset)
+            .onScrollPhaseChange { _, newPhase in
+                isUserInteracting = newPhase != .idle
+                if newPhase == .idle {
+                    recenterIntoMiddleCopy()
+                }
+            }
+
+            if items.count > 1 {
+                pageIndicator
+            }
+        }
+        .onGeometryChange(for: CGFloat.self) { proxy in
+            proxy.size.width
+        } action: { width in
+            containerWidth = width
+        }
+        .onAppear {
+            scrolledLoopIndex = middleLoopIndex(for: selection)
+        }
+        .onChange(of: scrolledLoopIndex) { _, newValue in
+            guard let newValue, !items.isEmpty else { return }
+            let canonical = newValue % items.count
+            if selection != canonical {
+                selection = canonical
+            }
+        }
+        .onChange(of: selection) { _, newValue in
+            scrollToSelection(newValue)
+        }
+        .onDisappear {
+            // A mid-gesture size-class change would otherwise leave the
+            // auto-advance guard stuck on.
+            isUserInteracting = false
+        }
+    }
+
+    private func isCloneIndex(_ index: Int) -> Bool {
+        ForumHomeCarouselLoop.isCloneIndex(index, itemCount: items.count)
+    }
+
+    private func middleLoopIndex(for selection: Int) -> Int {
+        ForumHomeCarouselLoop.middleLoopIndex(for: selection, itemCount: items.count)
+    }
+
+    /// Snaps the settled position back into the middle copy of the strip
+    /// without animation; the congruent card renders identical content, so
+    /// the jump is invisible and the edges of the strip stay unreachable.
+    private func recenterIntoMiddleCopy() {
+        guard let current = scrolledLoopIndex,
+              let recentered = ForumHomeCarouselLoop.recenteredIndex(from: current, itemCount: items.count)
+        else { return }
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            scrolledLoopIndex = recentered
+        }
+    }
+
+    private func scrollToSelection(_ newSelection: Int) {
+        guard !items.isEmpty else { return }
+        guard let current = scrolledLoopIndex, current < loopCount else {
+            scrolledLoopIndex = middleLoopIndex(for: newSelection)
+            return
+        }
+        guard let target = ForumHomeCarouselLoop.hopTarget(
+            from: current,
+            to: newSelection,
+            itemCount: items.count
+        ) else { return }
+        withAnimation(.easeInOut(duration: 0.25)) {
+            scrolledLoopIndex = target
+        }
+    }
+
+    private var pageIndicator: some View {
+        HStack(spacing: 5) {
+            ForEach(items.indices, id: \.self) { index in
+                Capsule(style: .continuous)
+                    .fill(index == selection ? ForumColors.brownEmphasis : ForumColors.tertiaryText.opacity(0.45))
+                    .frame(width: index == selection ? 18 : 6, height: 6)
+                    .contentShape(Capsule())
+                    .onTapGesture {
+                        withAnimation(.easeInOut(duration: 0.25)) {
+                            selection = index
+                        }
+                    }
+            }
+        }
+        .animation(.easeInOut(duration: 0.2), value: selection)
+        // The banner buttons themselves are the accessible elements; the dots
+        // are a redundant visual affordance.
+        .accessibilityHidden(true)
     }
 }
 
