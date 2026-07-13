@@ -187,6 +187,9 @@ public struct MangaReaderView: View {
                     onUpdateDirectory: {
                         Task { await model.updateDirectoryFromPanel() }
                     },
+                    onResetDirectory: {
+                        Task { await model.resetDirectory() }
+                    },
                     onSaveCorrection: { draft in
                         Task { await model.renameDirectory(with: draft) }
                     },

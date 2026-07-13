@@ -332,6 +332,28 @@ public final class MangaReaderWorkflow {
         return result
     }
 
+    /// Seeds from the currently open chapter (falling back to the
+    /// directory's first known chapter, then the launch context's own
+    /// chapter) so a reset works even the moment after `prepare()`, before
+    /// any reading position has resolved.
+    @discardableResult
+    public nonisolated(nonsending) func resetDirectory() async throws -> MangaDirectoryUpdateResult {
+        try Task.checkCancellation()
+
+        guard var window else {
+            throw YamiboError.underlying("Manga reader workflow is not prepared.")
+        }
+        let position = window.resolvedPosition
+        let seedTID = position?.tid ?? window.directory.chapters.first?.tid ?? context.chapterTID
+        let result = try await directoryWorkflow.resetDirectory(window.directory, seedTID: seedTID)
+        try Task.checkCancellation()
+
+        _ = window.updateDirectory(result.directory, preserving: position)
+        self.window = window
+        presentation = loadedPresentation(from: window)
+        return result
+    }
+
     @discardableResult
     public nonisolated(nonsending) func renameDirectory(
         cleanBookName: String,

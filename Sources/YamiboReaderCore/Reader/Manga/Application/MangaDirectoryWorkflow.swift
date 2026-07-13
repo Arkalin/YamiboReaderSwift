@@ -216,6 +216,35 @@ public struct MangaDirectoryWorkflow: Sendable {
         )
     }
 
+    /// Discards the locally cached directory — including manual corrections
+    /// such as a renamed/reordered/deleted chapter list — and rebuilds it
+    /// from the network exactly like a cold start: re-seeds from
+    /// `seedTID`'s thread page, saves that minimal seed, then immediately
+    /// runs a full `updateDirectory` pass so tag/search-derived chapters are
+    /// fetched too (respecting the same cooldown gate any other update
+    /// would). `cleanBookName` — the identity favorites/reading-progress/
+    /// covers key off — is preserved even if the source page now derives a
+    /// different name, so a reset never orphans data owned by other
+    /// subsystems.
+    public func resetDirectory(
+        _ currentDirectory: MangaDirectory,
+        seedTID: String
+    ) async throws -> MangaDirectoryUpdateResult {
+        try Task.checkCancellation()
+        guard let resolvedSeedTID = normalizedNonEmpty(seedTID) else {
+            throw YamiboError.persistenceFailed("Directory reset requires a chapter to reseed from")
+        }
+
+        let seed = try await repository.loadDirectorySeed(for: resolvedSeedTID)
+        try Task.checkCancellation()
+
+        var seeded = MangaDirectoryInitialization.directory(from: seed)
+        seeded.cleanBookName = currentDirectory.cleanBookName
+        try await store.saveDirectory(seeded)
+
+        return try await updateDirectory(seeded, currentTID: resolvedSeedTID, isForcedSearch: false)
+    }
+
     public func renameDirectory(
         _ currentDirectory: MangaDirectory,
         cleanBookName: String,

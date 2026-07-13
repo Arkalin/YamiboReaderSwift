@@ -595,6 +595,46 @@ struct MangaReaderTestsWorkflow {
         #expect(await repository.tagDirectoryRequests == [["12"]])
     }
 
+    @Test func workflowResetsDirectoryReseedingFromNetworkWhilePreservingCurrentReadingPosition() async throws {
+        let document = try makeWorkflowDocument(tid: "700", pageCount: 2)
+        let directory = makeWorkflowDirectory(
+            name: "测试漫画",
+            strategy: .searched,
+            sourceKey: "旧来源",
+            tids: ["700", "999"]
+        )
+        let repository = RecordingMangaDirectoryRepository(
+            output: .seed(makeWorkflowSeed(currentTID: "700", tagIDs: ["12"])),
+            tagChapters: [
+                makeWorkflowChapter(tid: "699", title: "第699话"),
+                makeWorkflowChapter(tid: "701", title: "第701话")
+            ]
+        )
+        let workflow = MangaReaderWorkflow(
+            context: try makeWorkflowContext(tid: "700", initialPage: 1, directoryName: "测试漫画"),
+            projectionLoader: RecordingMangaReaderProjectionLoader(output: .document(document)),
+            directoryRepository: repository,
+            directoryStore: RecordingMangaDirectoryStore(directories: [directory])
+        )
+
+        _ = await workflow.prepare()
+        let result = try await workflow.resetDirectory()
+
+        guard case let .loaded(loaded) = workflow.presentation.state else {
+            Issue.record("Expected loaded presentation")
+            return
+        }
+        #expect(result.directory.cleanBookName == "测试漫画")
+        #expect(result.directory.strategy == .tag)
+        #expect(result.directory.sourceKey == "12")
+        #expect(loaded.directoryPanel.displayChapters.map(\.tid) == ["699", "700", "701"])
+        #expect(!loaded.directoryPanel.displayChapters.contains(where: { $0.tid == "999" }))
+        #expect(loaded.readingPosition == MangaReadingPosition(tid: "700", localIndex: 1))
+        #expect(loaded.currentPage?.id == "700#1")
+        #expect(await repository.seedThreadIDs == ["700"])
+        #expect(await repository.tagDirectoryRequests == [["12"]])
+    }
+
     @Test func workflowDeletesDirectoryChaptersPreservingCurrentReadingPosition() async throws {
         let documents = try ["699", "700", "701"].map { try makeWorkflowDocument(tid: $0, pageCount: 1) }
         let documentsByTID = Dictionary(uniqueKeysWithValues: documents.map { ($0.tid, $0) })

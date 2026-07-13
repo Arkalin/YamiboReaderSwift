@@ -135,6 +135,42 @@ struct MangaDirectoryWorkflowTests {
         #expect(await repository.searchRequests.first?.keyword == "作者 测试漫画")
     }
 
+    /// Reset must discard the locally cached chapter list (including any
+    /// manual correction like the "999" chapter here) and rebuild it from a
+    /// fresh network seed, while keeping the directory's existing
+    /// `cleanBookName` identity even though the freshly fetched seed derives
+    /// a different one — otherwise a reset would silently orphan whatever
+    /// other subsystem (favorites, reading progress) keys off that name.
+    @Test func resetDirectoryReseedsFromNetworkDiscardingStaleChaptersButPreservesIdentity() async throws {
+        let directory = makeDirectory(
+            name: "自定义命名",
+            strategy: .searched,
+            sourceKey: "旧来源",
+            chapters: [
+                makeChapter(tid: "700", title: "第1话", chapterNumber: 1),
+                makeChapter(tid: "999", title: "手动新增的章节", chapterNumber: 99),
+            ],
+            searchKeyword: "自定义关键词"
+        )
+        let store = RecordingDirectoryStore(directories: [directory])
+        let repository = RecordingDirectoryRepository(
+            seed: makeSeed(tid: "700", tagIDs: ["31"]),
+            tagChapters: [makeChapter(tid: "701", title: "第2话")]
+        )
+        let workflow = MangaDirectoryWorkflow(repository: repository, store: store)
+
+        let result = try await workflow.resetDirectory(directory, seedTID: "700")
+
+        #expect(result.directory.cleanBookName == "自定义命名")
+        #expect(result.directory.strategy == .tag)
+        #expect(result.directory.sourceKey == "31")
+        #expect(result.directory.chapters.map(\.tid) == ["700", "701"])
+        #expect(!result.directory.chapters.contains(where: { $0.tid == "999" }))
+        #expect(result.shouldOfferForcedSearch)
+        #expect(await repository.seedThreadIDs == ["700"])
+        #expect(await repository.tagDirectoryRequests.map(\.tagIDs) == [["31"]])
+    }
+
     @Test func forcedSearchBypassesTagAndUsesTypedCooldownError() async throws {
         let firstNow = Date(timeIntervalSince1970: 3_000)
         let secondNow = Date(timeIntervalSince1970: 3_005)

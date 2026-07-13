@@ -333,6 +333,15 @@ final class ForumMangaDetailViewModel {
         await performDirectoryUpdate(isForcedSearch: forcedSearchShortcutRemaining != nil)
     }
 
+    /// Discards the locally cached directory (including manual corrections)
+    /// and rebuilds it from the network, mirroring the reader directory
+    /// sheet's reset action (`MangaReaderViewModel.resetDirectory`).
+    func resetDirectoryFromDetail() async {
+        automaticDirectoryUpdateTask?.cancel()
+        automaticDirectoryUpdateTask = nil
+        await performDirectoryReset()
+    }
+
     func clearDirectoryActionError() {
         directoryActionErrorMessage = nil
     }
@@ -379,6 +388,51 @@ final class ForumMangaDetailViewModel {
         } catch {
             guard !Task.isCancelled else { return }
             YamiboLog.forum.error("Manga detail directory update failed: \(error.localizedDescription)")
+            if case let YamiboError.searchCooldown(seconds) = error {
+                directoryCooldownExpiresAt = workflowConfiguration.now()
+                    .addingTimeInterval(TimeInterval(seconds))
+                forcedSearchShortcutExpiresAt = nil
+            } else if let cooldown = await workflow.cooldownExpiresAt() {
+                directoryCooldownExpiresAt = cooldown
+                forcedSearchShortcutExpiresAt = nil
+            }
+            directoryActionErrorMessage = error.localizedDescription
+        }
+    }
+
+    private func performDirectoryReset() async {
+        guard let directory, !isDirectoryActionRunning else { return }
+        isDirectoryActionRunning = true
+        directoryActionErrorMessage = nil
+        defer {
+            isDirectoryActionRunning = false
+            refreshDirectoryTiming()
+        }
+
+        let workflow = await makeDirectoryWorkflowWithRepository()
+        do {
+            let result = try await workflow.resetDirectory(
+                directory,
+                seedTID: focusedChapterTID ?? context.thread.tid
+            )
+            guard !Task.isCancelled else { return }
+            self.directory = result.directory
+            startAutomaticCoverResolutionIfNeeded()
+            if let cooldownExpiresAt = result.cooldownExpiresAt {
+                directoryCooldownExpiresAt = cooldownExpiresAt
+                forcedSearchShortcutExpiresAt = nil
+            } else if result.shouldOfferForcedSearch {
+                directoryCooldownExpiresAt = nil
+                forcedSearchShortcutExpiresAt = workflowConfiguration.now()
+                    .addingTimeInterval(workflowConfiguration.forcedSearchShortcutDuration)
+            } else {
+                directoryCooldownExpiresAt = nil
+                forcedSearchShortcutExpiresAt = nil
+            }
+        } catch is CancellationError {
+        } catch {
+            guard !Task.isCancelled else { return }
+            YamiboLog.forum.error("Manga detail directory reset failed: \(error.localizedDescription)")
             if case let YamiboError.searchCooldown(seconds) = error {
                 directoryCooldownExpiresAt = workflowConfiguration.now()
                     .addingTimeInterval(TimeInterval(seconds))

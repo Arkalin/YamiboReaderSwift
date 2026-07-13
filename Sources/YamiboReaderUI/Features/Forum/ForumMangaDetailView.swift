@@ -8,6 +8,7 @@ import UIKit
 struct ForumMangaDetailView: View {
     @State private var model: ForumMangaDetailViewModel
     @State private var isCorrectionPresented = false
+    @State private var isResetConfirmationPresented = false
     @State private var correctionDraft = MangaDirectoryEditDraft(
         cleanBookName: "",
         primaryKeyword: "",
@@ -53,8 +54,30 @@ struct ForumMangaDetailView: View {
         )
         .navigationTitle(model.navigationTitle)
         .yamiboInlineNavigationTitleDisplayMode()
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    isResetConfirmationPresented = true
+                } label: {
+                    Image(systemName: "arrow.counterclockwise")
+                }
+                .disabled(model.directory == nil || model.isDirectoryActionRunning)
+                .accessibilityLabel(L10n.string("manga.directory.reset"))
+            }
+        }
         .task {
             await model.load()
+        }
+        .alert(
+            L10n.string("manga.directory.reset_confirm_title"),
+            isPresented: $isResetConfirmationPresented
+        ) {
+            Button(L10n.string("common.cancel"), role: .cancel) {}
+            Button(L10n.string("manga.directory.reset"), role: .destructive) {
+                Task { await model.resetDirectoryFromDetail() }
+            }
+        } message: {
+            Text(L10n.string("manga.directory.reset_confirm_message"))
         }
         .sheet(isPresented: $isCorrectionPresented) {
             MangaDirectoryCorrectionSheet(
