@@ -108,6 +108,15 @@ struct MangaVerticalCollectionViewport: UIViewRepresentable {
         private var pendingControlScrollTarget: (y: CGFloat, timestamp: TimeInterval)?
         private(set) var verticalZoomScale = MangaPageZoomPolicy.minimumScale
         private var pinchStartScale: CGFloat?
+        private var lastScrollMotionTime = CACurrentMediaTime()
+        /// Grace window after real scroll motion in which a completed tap is
+        /// treated as "braking the scroll" rather than a chrome toggle.
+        /// UIKit halts deceleration synchronously on touch-down, so by the
+        /// time this tap's `.ended` fires, `isDecelerating` already reads
+        /// false again — the recent-motion timestamp is what still proves
+        /// the tap landed on a moving list. Mirrors
+        /// `NovelReaderVerticalScrollCoordinator.motionSuppressionInterval`.
+        private static let chromeToggleMotionSuppressionInterval: CFTimeInterval = 0.35
         lazy var tapGesture = UITapGestureRecognizer(target: self, action: #selector(handleTap(_:)))
         lazy var doubleTapGesture: UITapGestureRecognizer = {
             let recognizer = UITapGestureRecognizer(target: self, action: #selector(handleDoubleTap(_:)))
@@ -206,6 +215,7 @@ struct MangaVerticalCollectionViewport: UIViewRepresentable {
         }
 
         func scrollViewDidScroll(_ scrollView: UIScrollView) {
+            lastScrollMotionTime = CACurrentMediaTime()
             guard pendingInitialPageIndex == nil,
                   let collectionView = scrollView as? UICollectionView else {
                 return
@@ -340,6 +350,8 @@ struct MangaVerticalCollectionViewport: UIViewRepresentable {
 
         @objc private func handleTap(_ recognizer: UITapGestureRecognizer) {
             guard recognizer.state == .ended else { return }
+            let sinceLastMotion = CACurrentMediaTime() - lastScrollMotionTime
+            guard sinceLastMotion > Self.chromeToggleMotionSuppressionInterval else { return }
             let onTap = parent.onTap
             callbackScheduler.publish {
                 onTap()
