@@ -63,6 +63,17 @@ struct LocalFavoriteGridContent: View {
                 }
                 .padding(.vertical, 12)
             }
+            // ScrollView clips its content to its own bounds by default —
+            // independent of `favoriteSelectionEmphasis`'s opacity group
+            // (already worked around in `LocalFavoriteGridCard`/
+            // `LocalFavoriteItemRow`), this cuts off the smart-card badge's
+            // outward corner offset for any card whose overflow lands close
+            // enough to the scroll content's own edge, which is common in
+            // the fixed-grid and staggered layouts here. The badge is a
+            // small (~5pt), non-interactive, accessibility-hidden overlay,
+            // so the documented tradeoff — overflowed content no longer
+            // participates in hit-testing — is a non-issue.
+            .scrollClipDisabled()
         }
         .sensoryFeedback(.selection, trigger: selection.selectedFavoriteIDs)
         .sensoryFeedback(.selection, trigger: selection.selectedCollectionIDs)
