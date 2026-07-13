@@ -159,14 +159,14 @@ struct LikeWorkListView: View {
 
                 Spacer(minLength: 0)
             }
-            .frame(height: 128, alignment: .topLeading)
+            .frame(minHeight: 128, alignment: .topLeading)
 
             Spacer(minLength: 0)
 
             Image(systemName: "chevron.right")
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.tertiary)
-                .frame(height: 128, alignment: .center)
+                .frame(minHeight: 128, alignment: .center)
                 .opacity(isSelecting ? 0 : 1)
                 .accessibilityHidden(isSelecting)
         }

@@ -233,7 +233,9 @@ final class ForumBoardViewModel {
 
         do {
             let repository = await repositoryProvider()
-            favoriteMessage = try await repository.addBoardFavorite(fid: fid, formHash: page?.formHash)
+            // Success is a lightweight confirmation: surface it through the
+            // non-modal transient channel; only failures interrupt via alert.
+            transientMessage = try await repository.addBoardFavorite(fid: fid, formHash: page?.formHash)
         } catch {
             favoriteMessage = error.localizedDescription
         }

@@ -6,6 +6,7 @@ public struct NovelReaderView: View {
     @StateObject private var model: NovelReaderViewModel
     @State private var verticalScrollCoordinator = NovelReaderVerticalScrollCoordinator()
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var showingSettings = false
     @State private var showingCachePanel = false
     @State private var showingCacheProgress = false
@@ -330,6 +331,15 @@ public struct NovelReaderView: View {
         }
     }
 
+    /// Reduce Motion downgrades the 3D page-curl transition to the already
+    /// available quick-fade style; direct-manipulation slide stays as is.
+    private var effectivePagedSettings: NovelReaderAppearanceSettings {
+        guard reduceMotion, model.settings.pagedTurnStyle == .pageCurl else { return model.settings }
+        var adjusted = model.settings
+        adjusted.pagedTurnStyle = .quickFade
+        return adjusted
+    }
+
     private func pagedContent(topInset: CGFloat, layout: NovelReaderLayout) -> some View {
         let pagerIdentity = ReaderPagedPagerIdentity(
             visibleView: model.visibleView,
@@ -340,11 +350,11 @@ public struct NovelReaderView: View {
         )
         let pagedTopInset = topInset + layout.chromeInsets.top
         return Group {
-            if model.settings.pagedTurnStyle == .pageCurl {
+            if effectivePagedSettings.pagedTurnStyle == .pageCurl {
                 NovelReaderPagedPageCurlViewport(
                     spreads: model.presentationSpreads,
                     surfaces: model.novelReaderSurfaces,
-                    settings: model.settings,
+                    settings: effectivePagedSettings,
                     refererURL: model.forumURL,
                     offlineScope: model.inlineImageOfflineScope,
                     topInset: pagedTopInset,
@@ -389,7 +399,7 @@ public struct NovelReaderView: View {
                 NovelReaderPresentationSpreadCollectionViewport(
                     spreads: model.presentationSpreads,
                     surfaces: model.novelReaderSurfaces,
-                    settings: model.settings,
+                    settings: effectivePagedSettings,
                     refererURL: model.forumURL,
                     offlineScope: model.inlineImageOfflineScope,
                     topInset: pagedTopInset,
@@ -432,7 +442,7 @@ public struct NovelReaderView: View {
             } else {
                 NovelReaderPagedCollectionViewport(
                     surfaces: model.novelReaderSurfaces,
-                    settings: model.settings,
+                    settings: effectivePagedSettings,
                     refererURL: model.forumURL,
                     offlineScope: model.inlineImageOfflineScope,
                     topInset: pagedTopInset,
@@ -1615,7 +1625,7 @@ private struct NovelReaderStateObserverModifier: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .statusBar(hidden: isStatusBarHidden)
+            .statusBarHidden(isStatusBarHidden)
             .onChange(of: model.isLoading) { _, _ in
                 onUpdateChromeForContentState()
             }

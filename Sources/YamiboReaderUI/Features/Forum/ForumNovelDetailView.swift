@@ -7,7 +7,6 @@ import UIKit
 
 struct ForumNovelDetailView: View {
     @State private var model: ForumNovelDetailViewModel
-    @State private var copiedTextMessage: String?
 
     let onChapterTap: (NovelLaunchContext) -> Void
     let onUserTap: (String, String?) -> Void
@@ -107,23 +106,6 @@ struct ForumNovelDetailView: View {
                 }
             )
         }
-        .alert(
-            L10n.string("forum.thread_route.copied"),
-            isPresented: Binding(
-                get: { copiedTextMessage != nil },
-                set: { isPresented in
-                    if !isPresented {
-                        copiedTextMessage = nil
-                    }
-                }
-            )
-        ) {
-            Button(L10n.string("common.ok")) {
-                copiedTextMessage = nil
-            }
-        } message: {
-            Text(copiedTextMessage ?? "")
-        }
         .forumTransientMessage(model.transientMessage) {
             model.clearTransientMessage()
         }
@@ -132,7 +114,7 @@ struct ForumNovelDetailView: View {
     private func copyText(_ text: String) {
         #if canImport(UIKit)
         UIPasteboard.general.string = text
-        copiedTextMessage = text
+        model.transientMessage = L10n.string("forum.thread_route.copied")
         #endif
     }
 }
@@ -232,6 +214,7 @@ private struct ForumNovelFirstFloorPreview: View {
                     Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
                         .font(.caption.weight(.semibold))
                         .frame(width: 28, height: 28)
+                        .expandedHitTarget()
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(
@@ -556,7 +539,7 @@ private struct ForumNovelHeaderActions: View {
             .font(.subheadline.weight(.semibold))
             .lineLimit(1)
             .padding(.horizontal, 14)
-            .frame(height: 38)
+            .frame(minHeight: 38)
             .foregroundStyle(.white)
             .background(ForumColors.brownDeep, in: Capsule())
         }
@@ -570,8 +553,9 @@ private struct ForumNovelHeaderActions: View {
             Image(systemName: isFavorited ? "star.fill" : "star")
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(ForumColors.brownEmphasis)
-                .frame(width: 42, height: 38)
+                .frame(minWidth: 42, minHeight: 38)
                 .background(ForumColors.brownPrimary.opacity(0.16), in: Capsule())
+                .expandedHitTarget()
         }
         .buttonStyle(.plain)
         .simultaneousGesture(LongPressGesture(minimumDuration: 0.5).onEnded { _ in onFavoriteLongPress() })
@@ -583,8 +567,9 @@ private struct ForumNovelHeaderActions: View {
             Image(systemName: "square.and.arrow.up")
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(ForumColors.brownEmphasis)
-                .frame(width: 42, height: 38)
+                .frame(minWidth: 42, minHeight: 38)
                 .background(ForumColors.brownPrimary.opacity(0.16), in: Capsule())
+                .expandedHitTarget()
         }
         .buttonStyle(.plain)
         .accessibilityLabel(L10n.string("forum.thread.share"))
@@ -602,7 +587,7 @@ private struct ForumNovelHeaderActions: View {
                 .lineLimit(1)
                 .foregroundStyle(ForumColors.brownEmphasis)
                 .padding(.horizontal, showsTitle ? 12 : 0)
-                .frame(width: showsTitle ? nil : 42, height: 38)
+                .frame(minWidth: showsTitle ? nil : 42, minHeight: 38)
                 .background(ForumColors.brownPrimary.opacity(0.16), in: Capsule())
         }
         .buttonStyle(.plain)

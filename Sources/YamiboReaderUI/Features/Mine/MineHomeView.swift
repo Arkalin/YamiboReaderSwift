@@ -6,7 +6,7 @@ public struct MineHomeView: View {
     @State private var navigator: ForumDestinationNavigator
     @State private var showingLoginSheet = false
     @State private var isSettingsPushed = false
-    @State private var showingOfflineCacheQueueSheet = false
+    @State private var isOfflineCacheQueuePushed = false
     @State private var isMyLikesPushed = false
     @State private var isHistoryPushed = false
 
@@ -76,7 +76,7 @@ public struct MineHomeView: View {
                         }
                     },
                     showOfflineCacheQueue: {
-                        showingOfflineCacheQueueSheet = true
+                        isOfflineCacheQueuePushed = true
                     },
                     showMyLikes: {
                         isMyLikesPushed = true
@@ -107,13 +107,9 @@ public struct MineHomeView: View {
             }, message: {
                 Text(viewModel.errorMessage ?? "")
             })
-            .alert(L10n.string("mine.check_in"), isPresented: checkInResultIsPresented, actions: {
-                Button(L10n.string("common.ok")) {
-                    viewModel.checkInResultMessage = nil
-                }
-            }, message: {
-                Text(viewModel.checkInResultMessage ?? "")
-            })
+            .forumTransientMessage(viewModel.checkInResultMessage) {
+                viewModel.checkInResultMessage = nil
+            }
             .sheet(isPresented: $showingLoginSheet) {
                 MineLoginSheet(viewModel: viewModel) {
                     showingLoginSheet = false
@@ -137,8 +133,8 @@ public struct MineHomeView: View {
                     }
                 )
             }
-            .sheet(isPresented: $showingOfflineCacheQueueSheet) {
-                MineOfflineCacheQueueSheet(viewModel: viewModel)
+            .navigationDestination(isPresented: $isOfflineCacheQueuePushed) {
+                MineOfflineCacheQueueScreen(viewModel: viewModel)
             }
             .navigationDestination(isPresented: $isMyLikesPushed) {
                 LikeWorkListView(
@@ -169,14 +165,4 @@ public struct MineHomeView: View {
         )
     }
 
-    private var checkInResultIsPresented: Binding<Bool> {
-        Binding(
-            get: { viewModel.checkInResultMessage != nil },
-            set: { isPresented in
-                if !isPresented {
-                    viewModel.checkInResultMessage = nil
-                }
-            }
-        )
-    }
 }

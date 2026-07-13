@@ -47,6 +47,9 @@ struct ForumBoardView: View {
             retry: retry,
             refresh: refresh,
             goToPage: goToPage,
+            restorePreviousPage: model.canRestorePreviousPage
+                ? { _ = model.restorePreviousPage() }
+                : nil,
             selectFilter: selectFilter,
             selectOrder: selectOrder,
             onSubBoardTap: onSubBoardTap,
@@ -57,19 +60,10 @@ struct ForumBoardView: View {
         .forumPageBackground()
         .tint(ForumColors.brownDeep)
         .navigationTitle(model.title)
-        .navigationBarBackButtonHidden(model.canRestorePreviousPage)
+        // The system back button always pops the screen; undoing an in-page
+        // page jump is an explicit control in the pagination bar instead of
+        // a hijacked back button (which also killed edge-swipe back).
         .toolbar {
-            if model.canRestorePreviousPage {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button {
-                        _ = model.restorePreviousPage()
-                    } label: {
-                        Image(systemName: "chevron.left")
-                    }
-                    .accessibilityLabel(L10n.string("common.back"))
-                }
-            }
-
             ToolbarItemGroup(placement: .primaryAction) {
                 Button(action: onSearchTap) {
                     Image(systemName: "magnifyingglass")
@@ -106,7 +100,7 @@ struct ForumBoardView: View {
             ForumBoardReaderSettingsSheet(model: model)
         }
         .alert(
-            L10n.string("forum.board.favorite"),
+            L10n.string("common.operation_failed"),
             isPresented: Binding(
                 get: { model.favoriteMessage != nil },
                 set: { isPresented in
@@ -187,6 +181,7 @@ private struct ForumBoardBodyView: View {
     let retry: () -> Void
     let refresh: () async -> Void
     let goToPage: (Int) -> Void
+    let restorePreviousPage: (() -> Void)?
     let selectFilter: (String?) -> Void
     let selectOrder: (String?) -> Void
     let onSubBoardTap: (ForumBoardSummary) -> Void
@@ -213,6 +208,7 @@ private struct ForumBoardBodyView: View {
                 isRefreshing: isRefreshing,
                 refresh: refresh,
                 goToPage: goToPage,
+                restorePreviousPage: restorePreviousPage,
                 filters: filters,
                 orders: orders,
                 selectFilter: selectFilter,
@@ -241,6 +237,7 @@ private struct ForumBoardContentView: View {
     let isRefreshing: Bool
     let refresh: () async -> Void
     let goToPage: (Int) -> Void
+    let restorePreviousPage: (() -> Void)?
     let filters: [ForumFilterOption]
     let orders: [ForumOrderOption]
     let selectFilter: (String?) -> Void
@@ -282,7 +279,11 @@ private struct ForumBoardContentView: View {
                     }
 
                     if let pageNavigation {
-                        ForumPageNavigationView(navigation: pageNavigation, goToPage: goToPage)
+                        ForumPageNavigationView(
+                            navigation: pageNavigation,
+                            goToPage: goToPage,
+                            restorePreviousPage: restorePreviousPage
+                        )
                     }
                 }
 
@@ -716,9 +717,17 @@ private struct ForumPinnedRowView: View {
 private struct ForumPageNavigationView: View {
     let navigation: ForumPageNavigation
     let goToPage: (Int) -> Void
+    var restorePreviousPage: (() -> Void)? = nil
 
     var body: some View {
         HStack(spacing: 12) {
+            if let restorePreviousPage {
+                Button(action: restorePreviousPage) {
+                    Image(systemName: "arrow.uturn.backward")
+                }
+                .accessibilityLabel(L10n.string("forum.page_navigation.undo_jump"))
+            }
+
             Button {
                 goToPage(navigation.currentPage - 1)
             } label: {

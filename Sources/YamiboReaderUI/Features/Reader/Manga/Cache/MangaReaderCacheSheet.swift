@@ -103,16 +103,25 @@ struct MangaReaderCacheSheet: View {
                 selectedTIDs.formIntersection(validTIDs)
             }
             .sensoryFeedback(.selection, trigger: selectedTIDs)
-            .alert(item: Binding(get: { model.prompt }, set: { _ in model.clearPrompt() })) { prompt in
-                switch prompt {
-                case let .addFavorite(title):
-                    Alert(
-                        title: Text(L10n.string("manga.offline_cache.add_favorite_title")),
-                        message: Text(L10n.string("manga.offline_cache.add_favorite_message", title)),
-                        dismissButton: .default(Text(L10n.string("common.ok"))) {
+            .alert(
+                L10n.string("manga.offline_cache.add_favorite_title"),
+                isPresented: Binding(
+                    get: { model.prompt != nil },
+                    set: { isPresented in
+                        if !isPresented {
                             model.clearPrompt()
                         }
-                    )
+                    }
+                ),
+                presenting: model.prompt
+            ) { _ in
+                Button(L10n.string("common.ok"), role: .cancel) {
+                    model.clearPrompt()
+                }
+            } message: { prompt in
+                switch prompt {
+                case let .addFavorite(title):
+                    Text(L10n.string("manga.offline_cache.add_favorite_message", title))
                 }
             }
         }
@@ -461,8 +470,11 @@ private struct MangaReaderCacheSelectionHeader: View {
     var body: some View {
         HStack {
             if isSelecting {
-                Button(isAllSelected ? L10n.string("common.invert_selection") : L10n.string("common.select_all")) {
+                Button {
                     onToggleAll()
+                } label: {
+                    Text(isAllSelected ? L10n.string("common.invert_selection") : L10n.string("common.select_all"))
+                        .expandedHitTarget(width: 0)
                 }
                 .font(.subheadline.weight(.semibold))
                 .disabled(isEmpty)
@@ -474,8 +486,11 @@ private struct MangaReaderCacheSelectionHeader: View {
 
             Spacer(minLength: 0)
 
-            Button(isSelecting ? L10n.string("common.done") : L10n.string("common.select")) {
+            Button {
                 onToggleSelectionMode()
+            } label: {
+                Text(isSelecting ? L10n.string("common.done") : L10n.string("common.select"))
+                    .expandedHitTarget(width: 0)
             }
             .font(.subheadline.weight(.semibold))
             .buttonStyle(.plain)
@@ -627,14 +642,14 @@ private struct MangaReaderCacheSelectionToolbar: View {
         Button(role: role, action: action) {
             VStack(spacing: 3) {
                 Image(systemName: systemImage)
-                    .font(.system(size: 18, weight: .regular))
-                    .frame(width: 24, height: 22)
+                    .font(.body)
+                    .frame(minWidth: 24, minHeight: 22)
                 Text(title)
                     .font(.caption2)
                     .lineLimit(1)
                     .minimumScaleFactor(0.78)
             }
-            .frame(width: 66)
+            .frame(minWidth: 66)
             .foregroundStyle(role == .destructive ? Color.red : Color.primary)
             .opacity(isEnabled ? 1 : 0.35)
         }

@@ -121,6 +121,7 @@ private struct ForumThreadPostActionRow: View {
                 Button(action: onRate) {
                     Label(L10n.string("forum.thread.rate"), systemImage: "heart")
                         .font(.caption.weight(.semibold))
+                        .expandedHitTarget()
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(ForumColors.brownPrimary)
@@ -128,6 +129,7 @@ private struct ForumThreadPostActionRow: View {
                 Button(action: onComment) {
                     Label(L10n.string("forum.thread.comment"), systemImage: "text.bubble")
                         .font(.caption.weight(.semibold))
+                        .expandedHitTarget()
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(ForumColors.brownPrimary)
@@ -137,6 +139,7 @@ private struct ForumThreadPostActionRow: View {
                 } label: {
                     Label(L10n.string("forum.thread.reply"), systemImage: "arrowshape.turn.up.left")
                         .font(.caption.weight(.semibold))
+                        .expandedHitTarget()
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(ForumColors.brownPrimary)

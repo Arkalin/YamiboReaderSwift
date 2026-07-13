@@ -13,7 +13,11 @@ enum YamiboColors {
         static let orangeAccent = Color(light: 0xF59E2A, dark: 0xF0A33A)
         static let textDark = Color(light: 0x2E1A0E, dark: 0xF4E7D1)
         static let htmlTextDark = Color(light: 0x6E2B19, dark: 0xF0D8BC)
-        static let redAccent = Color(light: 0xFF5656, dark: 0xFF7A70)
+        /// Light variant deepened from 0xFF5656: as caption text on the 12%
+        /// red-tinted cream badge that value measured ~2.6:1; 0xA61B29 clears
+        /// 4.5:1 in every current usage (badge text, header stat text, and
+        /// as a fill under white text). The dark variant already passes.
+        static let redAccent = Color(light: 0xA61B29, dark: 0xFF7A70)
         static let pinnedBackground = Color(light: 0xFFF0C8, dark: 0x302416)
         static let announcementBackground = Color(light: 0xFFE8B0, dark: 0x382711)
         static let navBarBackground = Color(light: 0xFFE6B7, dark: 0x21150F)

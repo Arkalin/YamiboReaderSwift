@@ -195,15 +195,15 @@ struct NovelReaderSliderLeadingIcon: View {
         case .characterSpacing:
             VStack(spacing: -1) {
                 Text(L10n.string("reader.character_spacing_sample"))
-                    .font(.system(size: 10, weight: .bold))
+                    .font(.caption2.weight(.bold))
                     .foregroundStyle(palette.primaryText)
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
                 Image(systemName: "arrow.left.and.right")
-                    .font(.system(size: 10, weight: .semibold))
+                    .font(.caption2.weight(.semibold))
                     .foregroundStyle(palette.primaryText)
             }
-            .frame(width: 26, height: 24)
+            .frame(minWidth: 26, minHeight: 24)
         }
     }
 }

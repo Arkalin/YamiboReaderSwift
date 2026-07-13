@@ -10,6 +10,8 @@ struct FavoriteUpdatesPage: View {
     let isEventVisible: (FavoriteUpdateEvent) -> Bool
     let onOpen: (FavoriteUpdateEvent) async -> Void
 
+    @State private var isDismissAllConfirmationPresented = false
+
     var body: some View {
         List {
             statusSection
@@ -18,6 +20,15 @@ struct FavoriteUpdatesPage: View {
         }
         .navigationTitle(L10n.string("favorites.updates.title"))
         .navigationBarTitleDisplayMode(.inline)
+        .confirmationDialog(
+            L10n.string("favorites.updates.dismiss_all_confirm_title"),
+            isPresented: $isDismissAllConfirmationPresented,
+            titleVisibility: .visible
+        ) {
+            Button(L10n.string("favorites.updates.dismiss_all"), role: .destructive) {
+                Task { await updateMonitor.dismissAllEvents() }
+            }
+        }
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button {
@@ -105,9 +116,11 @@ struct FavoriteUpdatesPage: View {
                 Spacer()
                 if !visibleEvents.isEmpty {
                     Button(L10n.string("favorites.updates.dismiss_all")) {
-                        Task { await updateMonitor.dismissAllEvents() }
+                        isDismissAllConfirmationPresented = true
                     }
                     .font(.footnote)
+                    .frame(minWidth: 44, minHeight: 44, alignment: .trailing)
+                    .contentShape(Rectangle())
                 }
             }
         }

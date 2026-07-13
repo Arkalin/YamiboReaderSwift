@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import YamiboReaderCore
 
 /// Maps a `ForumThreadTextBlock` (plain text + style runs + links + rubies)
@@ -99,8 +100,12 @@ struct ForumThreadTextBlockFormatter {
     }
 
     private func font(for style: ForumThreadTextStyle) -> Font {
+        // Styled runs must track Dynamic Type like the unstyled body text
+        // around them, so the author-relative size is scaled through the
+        // body text style's metrics instead of being frozen at 17pt.
         let baseSize = 17 * (style.relativeFontSize ?? 1)
-        var font = Font.system(size: baseSize)
+        let scaledSize = UIFontMetrics(forTextStyle: .body).scaledValue(for: baseSize)
+        var font = Font.system(size: scaledSize)
         if style.isBold {
             font = font.bold()
         }

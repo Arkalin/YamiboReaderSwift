@@ -142,25 +142,27 @@ private struct ClipboardForumLinkPromptAlert: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .alert(item: promptBinding) { prompt in
-                Alert(
-                    title: Text(L10n.string("clipboard_forum_link.title")),
-                    message: Text(prompt.url.absoluteString),
-                    primaryButton: .default(Text(L10n.string("clipboard_forum_link.open"))) {
-                        appModel.confirmClipboardForumLinkPrompt(prompt)
-                    },
-                    secondaryButton: .cancel(Text(L10n.string("common.cancel"))) {
-                        appModel.dismissClipboardForumLinkPrompt()
-                    }
-                )
+            .alert(
+                L10n.string("clipboard_forum_link.title"),
+                isPresented: promptIsPresented,
+                presenting: isActive ? appModel.clipboardForumLinkPrompt : nil
+            ) { prompt in
+                Button(L10n.string("clipboard_forum_link.open")) {
+                    appModel.confirmClipboardForumLinkPrompt(prompt)
+                }
+                Button(L10n.string("common.cancel"), role: .cancel) {
+                    appModel.dismissClipboardForumLinkPrompt()
+                }
+            } message: { prompt in
+                Text(prompt.url.absoluteString)
             }
     }
 
-    private var promptBinding: Binding<ClipboardForumLinkPrompt?> {
+    private var promptIsPresented: Binding<Bool> {
         Binding(
-            get: { isActive ? appModel.clipboardForumLinkPrompt : nil },
-            set: { prompt in
-                if prompt == nil, isActive {
+            get: { isActive && appModel.clipboardForumLinkPrompt != nil },
+            set: { isPresented in
+                if !isPresented, isActive {
                     appModel.dismissClipboardForumLinkPrompt()
                 }
             }

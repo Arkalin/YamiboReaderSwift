@@ -383,7 +383,7 @@ private struct FavoriteTagPickerRow: View {
             .frame(width: 26, height: 26)
         }
         .padding(.horizontal, 14)
-        .frame(maxWidth: .infinity, minHeight: 58, maxHeight: 58, alignment: .leading)
+        .frame(maxWidth: .infinity, minHeight: 58, alignment: .leading)
         .background {
             RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .fill(isSelected ? tag.color.swiftUIColor.opacity(0.10) : .clear)

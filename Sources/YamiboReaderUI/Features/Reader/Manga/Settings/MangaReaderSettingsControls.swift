@@ -87,6 +87,7 @@ private struct MangaReaderRoundIconButton: View {
                 .foregroundStyle(palette.primaryText)
                 .frame(width: 42, height: 42)
                 .background(palette.segmentedBackground, in: Circle())
+                .expandedHitTarget()
         }
         .buttonStyle(.plain)
     }
@@ -277,7 +278,7 @@ struct MangaReaderPageScaleModeMenuRow: View {
 
                 HStack(spacing: 8) {
                     Text(scaleMode.title)
-                        .font(.system(size: 18))
+                        .font(.body)
                         .foregroundStyle(palette.secondaryText)
                         .lineLimit(1)
                         .minimumScaleFactor(0.78)
@@ -320,7 +321,7 @@ struct MangaReaderPageEdgeFillMenuRow: View {
 
                 HStack(spacing: 8) {
                     Text(edgeFillStyle.title)
-                        .font(.system(size: 18))
+                        .font(.body)
                         .foregroundStyle(palette.secondaryText)
                         .lineLimit(1)
                         .minimumScaleFactor(0.78)

@@ -31,6 +31,7 @@
 "apple_pencil.behavior.double_tap_previous_squeeze_next" = "双击上一页，按压下一页";
 "apple_pencil.behavior.title" = "Apple Pencil Pro 翻页行为";
 "apple_pencil.help" = "Apple Pencil Pro 支持「按压」和「双击翻页」（请在系统设置中确保开启 Apple Pencil Pro 的轻点两下开关），其它 Apple Pencil 支持「双击翻页」";
+"apple_pencil.help_toggle" = "查看说明";
 "apple_pencil.page_turn" = "使用 Apple Pencil 翻页";
 "yamibo_check_in.already_checked_in_today" = "今日已打卡";
 "yamibo_check_in.network_failed" = "网络异常，请稍后重试";
@@ -332,6 +333,7 @@
 "favorites.updates.checking_item" = "正在检查 %d/%d：%@";
 "favorites.updates.completed" = "检查完成";
 "favorites.updates.dismiss" = "忽略";
+"favorites.updates.dismiss_all_confirm_title" = "忽略全部更新事件？此操作不可撤销。";
 "favorites.updates.dismiss_all" = "全部忽略";
 "favorites.updates.events" = "收藏更新";
 "favorites.updates.events_count" = "%d 个更新";
@@ -439,6 +441,7 @@
 "forum.search.loading" = "搜索中…";
 "forum.search.placeholder" = "搜索标题或论坛链接";
 "forum.search.result_count" = "找到 %d 笔搜索结果";
+"forum.page_navigation.undo_jump" = "返回跳转前的页码";
 "forum.search.title" = "论坛搜索";
 "forum.thread.author" = "作者";
 "forum.thread.collapse_title" = "点击展开 / 收起";
@@ -614,6 +617,7 @@
 "image.copy_success_message" = "图片已复制。";
 "image.copy_success_title" = "复制成功";
 "image.save_failed" = "保存图片失败，请稍后重试。";
+"image.save_photo_permission_denied_title" = "无法保存到相册";
 "image.save_photo_permission_denied" = "无法写入系统相册，请在系统设置中允许保存照片。";
 "image.save_success_message" = "图片已保存到系统相册。";
 "image.save_success_title" = "保存成功";
@@ -676,6 +680,7 @@
 "manga.page_edge_fill.system" = "跟随系统";
 "manga.preview_page" = "第 %d / %d 页";
 "manga.preview_page_label" = "第 %@ / %d 页";
+"manga.delete_selected_chapters_confirm_title" = "删除所选 %d 个章节？";
 "manga.reader.current_index" = "索引 %d / %d";
 "manga.reader.loaded_pages_count" = "已载入 %d 页";
 "manga.reader.title" = "漫画阅读";
@@ -742,6 +747,7 @@
 "reader.cache_detail.completed" = "已完成 %d / %d 页";
 "reader.cache_detail.ready" = "准备开始缓存…";
 "reader.cache_detail.running" = "正在缓存第 %d 页\n%d / %d";
+"reader.cache.delete_selected_confirm_title" = "删除所选 %d 页缓存？离线时需重新下载。";
 "reader.cache_management" = "缓存管理";
 "reader.cache_page_section" = "页码";
 "reader.cache_progress" = "缓存进度";
@@ -788,6 +794,7 @@
 "reader.next_chapter" = "下一章";
 "reader.next_web_page" = "下一网页";
 "reader.no_cacheable_pages" = "当前没有可缓存的网页页码";
+"reader.page_number_compact" = "第%d页";
 "reader.page_number_spaced" = "第 %d 页";
 "reader.page_turn_direction" = "翻页方向";
 "reader.page_turn_direction.left_to_right" = "从左向右";
@@ -796,6 +803,8 @@
 "reader.preview_mode_hint" = "不会记录阅读进度";
 "reader.previous_chapter" = "上一章";
 "reader.previous_web_page" = "上一网页";
+"reader.progress_capsule.directory_percent" = "目录 · %@";
+"reader.progress_capsule.directory_progress" = "目录 · 进度";
 "reader.progress" = "第 %@ / %d 页 · 网页第 %d / %d 页";
 "reader.progress_with_chapter" = "第 %@ / %d 页 · 网页第 %d / %d 页 · %@";
 "reader.pull_next_web_page" = "继续拖动前往下一网页";

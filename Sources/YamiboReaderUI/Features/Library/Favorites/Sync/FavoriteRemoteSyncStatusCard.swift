@@ -29,6 +29,7 @@ struct FavoriteRemoteSyncStatusCard: View {
                 Button(action: onHide) {
                     Image(systemName: "xmark.circle.fill")
                         .foregroundStyle(.secondary)
+                        .expandedHitTarget()
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(L10n.string("favorites.sync.hide_card"))

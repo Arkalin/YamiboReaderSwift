@@ -23,6 +23,7 @@ struct MangaDirectorySheet: View {
     @State private var isSelecting = false
     @State private var selectedChapterTIDs: Set<String> = []
     @State private var isCurrentChapterDeleteAlertPresented = false
+    @State private var isBatchDeleteConfirmationPresented = false
 
     var body: some View {
         NavigationStack {
@@ -130,6 +131,15 @@ struct MangaDirectorySheet: View {
             } message: {
                 Text(L10n.string("manga.delete_current_chapter_failed_message"))
             }
+            .confirmationDialog(
+                L10n.string("manga.delete_selected_chapters_confirm_title", selectedChapterTIDs.count),
+                isPresented: $isBatchDeleteConfirmationPresented,
+                titleVisibility: .visible
+            ) {
+                Button(L10n.string("common.delete"), role: .destructive) {
+                    performDeleteSelectedChapters()
+                }
+            }
             .sheet(isPresented: $isCorrectionPresented) {
                 MangaDirectoryCorrectionSheet(
                     draft: $draft,
@@ -138,7 +148,7 @@ struct MangaDirectorySheet: View {
                         isCorrectionPresented = false
                     }
                 )
-                .presentationDetents([.height(MangaDirectoryCorrectionSheet.preferredHeight)])
+                .presentationDetents(MangaDirectoryCorrectionSheet.presentationDetents)
             }
         }
     }
@@ -158,6 +168,9 @@ struct MangaDirectorySheet: View {
         )
     }
 
+    /// Batch removal destroys every selected chapter in one tap, so it asks
+    /// for confirmation first; single-chapter swipe deletion keeps the
+    /// standard no-confirmation iOS behavior.
     private func deleteSelectedChapters() {
         let selectedTIDs = selectedChapterTIDs
         guard !selectedTIDs.isEmpty else {
@@ -165,6 +178,14 @@ struct MangaDirectorySheet: View {
         }
         if selectedTIDs.contains(panel.currentChapterTID ?? "") {
             isCurrentChapterDeleteAlertPresented = true
+            return
+        }
+        isBatchDeleteConfirmationPresented = true
+    }
+
+    private func performDeleteSelectedChapters() {
+        let selectedTIDs = selectedChapterTIDs
+        guard !selectedTIDs.isEmpty else {
             return
         }
         onDeleteChapters(selectedTIDs)
@@ -272,15 +293,15 @@ private struct MangaDirectorySelectionToolbarCapsule: View {
     ) -> some View {
         VStack(spacing: 3) {
             Image(systemName: systemImage)
-                .font(.system(size: 18, weight: .regular))
-                .frame(width: 24, height: 22)
+                .font(.body)
+                .frame(minWidth: 24, minHeight: 22)
 
             Text(title)
                 .font(.caption2)
                 .lineLimit(1)
                 .minimumScaleFactor(0.78)
         }
-        .frame(width: 66)
+        .frame(minWidth: 66)
         .foregroundStyle(role == .destructive ? Color.red : Color.primary)
         .contentShape(Rectangle())
     }
@@ -360,8 +381,11 @@ private struct MangaDirectoryChapterControlsRow: View {
     var body: some View {
         HStack {
             if isSelecting {
-                Button(visibleSelectionIsComplete ? L10n.string("common.invert_selection") : L10n.string("common.select_all")) {
+                Button {
                     onToggleVisibleSelection()
+                } label: {
+                    Text(visibleSelectionIsComplete ? L10n.string("common.invert_selection") : L10n.string("common.select_all"))
+                        .expandedHitTarget(width: 0)
                 }
                 .font(.subheadline.weight(.semibold))
                 .buttonStyle(.plain)
@@ -405,6 +429,7 @@ private struct MangaDirectorySortToggleButton: View {
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .fill(YamiboColors.SystemSurface.secondaryGroupedBackground)
             )
+            .expandedHitTarget()
         }
         .buttonStyle(.plain)
         .accessibilityLabel(L10n.string("favorites.sort"))
@@ -425,14 +450,17 @@ private struct MangaDirectorySelectionToggleButton: View {
 
     var body: some View {
         Button(action: action) {
-            if isSelecting {
-                Text(L10n.string("common.done"))
-                    .font(.subheadline.weight(.semibold))
-            } else {
-                Image(systemName: "trash")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.orange)
+            Group {
+                if isSelecting {
+                    Text(L10n.string("common.done"))
+                        .font(.subheadline.weight(.semibold))
+                } else {
+                    Image(systemName: "trash")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.orange)
+                }
             }
+            .expandedHitTarget()
         }
         .buttonStyle(.plain)
         .accessibilityLabel(isSelecting ? L10n.string("common.done") : L10n.string("common.select"))
@@ -470,14 +498,17 @@ private struct MangaDirectoryChapterRow: View {
                 .layoutPriority(1)
 
                 if isTruncated {
-                    Button(isExpanded ? L10n.string("common.collapse") : L10n.string("common.expand")) {
+                    Button {
                         isExpanded.toggle()
+                    } label: {
+                        Text(isExpanded ? L10n.string("common.collapse") : L10n.string("common.expand"))
+                            .lineLimit(1)
+                            .fixedSize()
+                            .expandedHitTarget(width: 0)
                     }
                     .font(.caption.weight(.semibold))
                     .buttonStyle(.plain)
                     .foregroundStyle(accentColor)
-                    .lineLimit(1)
-                    .fixedSize()
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -574,15 +605,15 @@ private struct MangaDirectorySelectionActionBar: View {
         Button(role: role, action: action) {
             VStack(spacing: 4) {
                 Image(systemName: systemImage)
-                    .font(.system(size: 18, weight: .regular))
-                    .frame(width: 24, height: 22)
+                    .font(.body)
+                    .frame(minWidth: 24, minHeight: 22)
 
                 Text(title)
                     .font(.caption2)
                     .lineLimit(1)
                     .minimumScaleFactor(0.78)
             }
-            .frame(width: 72)
+            .frame(minWidth: 72)
             .foregroundStyle(role == .destructive ? Color.red : Color.primary)
             .opacity(isEnabled ? 1 : 0.35)
             .contentShape(Rectangle())

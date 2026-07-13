@@ -7,7 +7,6 @@ import UIKit
 
 struct ForumMangaDetailView: View {
     @State private var model: ForumMangaDetailViewModel
-    @State private var copiedTextMessage: String?
     @State private var isCorrectionPresented = false
     @State private var correctionDraft = MangaDirectoryEditDraft(
         cleanBookName: "",
@@ -65,7 +64,7 @@ struct ForumMangaDetailView: View {
                     Task { await model.saveCorrection(draft) }
                 }
             )
-            .presentationDetents([.height(MangaDirectoryCorrectionSheet.preferredHeight)])
+            .presentationDetents(MangaDirectoryCorrectionSheet.presentationDetents)
         }
         .alert(
             L10n.string("forum.thread.favorite_failed"),
@@ -103,23 +102,6 @@ struct ForumMangaDetailView: View {
                 }
             )
         }
-        .alert(
-            L10n.string("forum.thread_route.copied"),
-            isPresented: Binding(
-                get: { copiedTextMessage != nil },
-                set: { isPresented in
-                    if !isPresented {
-                        copiedTextMessage = nil
-                    }
-                }
-            )
-        ) {
-            Button(L10n.string("common.ok")) {
-                copiedTextMessage = nil
-            }
-        } message: {
-            Text(copiedTextMessage ?? "")
-        }
         .forumTransientMessage(model.transientMessage) {
             model.clearTransientMessage()
         }
@@ -140,7 +122,7 @@ struct ForumMangaDetailView: View {
     private func copyText(_ text: String) {
         #if canImport(UIKit)
         UIPasteboard.general.string = text
-        copiedTextMessage = text
+        model.transientMessage = L10n.string("forum.thread_route.copied")
         #endif
     }
 }
@@ -339,6 +321,7 @@ private struct ForumMangaDetailHeader: View {
                     .foregroundStyle(ForumColors.brownPrimary)
                     .frame(width: 28, height: 28)
                     .background(ForumColors.brownPrimary.opacity(0.12), in: Circle())
+                    .expandedHitTarget()
             }
             .buttonStyle(.plain)
             .disabled(!isCorrectionEnabled)
@@ -468,7 +451,7 @@ private struct ForumMangaHeaderActions: View {
             .font(.subheadline.weight(.semibold))
             .lineLimit(1)
             .padding(.horizontal, 14)
-            .frame(height: 38)
+            .frame(minHeight: 38)
             .foregroundStyle(.white)
             .background(ForumColors.brownDeep, in: Capsule())
         }
@@ -480,8 +463,9 @@ private struct ForumMangaHeaderActions: View {
             Image(systemName: isFavorited ? "star.fill" : "star")
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(ForumColors.brownEmphasis)
-                .frame(width: 42, height: 38)
+                .frame(minWidth: 42, minHeight: 38)
                 .background(ForumColors.brownPrimary.opacity(0.16), in: Capsule())
+                .expandedHitTarget()
         }
         .buttonStyle(.plain)
         .simultaneousGesture(LongPressGesture(minimumDuration: 0.5).onEnded { _ in onFavoriteLongPress() })
@@ -501,7 +485,7 @@ private struct ForumMangaHeaderActions: View {
             .font(.subheadline.weight(.semibold))
             .lineLimit(1)
             .padding(.horizontal, 12)
-            .frame(height: 38)
+            .frame(minHeight: 38)
             .foregroundStyle(isForcedSearchShortcutActive ? ForumColors.orangeAccent : ForumColors.brownEmphasis)
             .background(
                 isForcedSearchShortcutActive
@@ -528,7 +512,7 @@ private struct ForumMangaHeaderActions: View {
             .lineLimit(1)
             .foregroundStyle(ForumColors.brownEmphasis)
             .padding(.horizontal, showsTitle ? 12 : 0)
-            .frame(width: showsTitle ? nil : 42, height: 38)
+            .frame(minWidth: showsTitle ? nil : 42, minHeight: 38)
             .background(ForumColors.brownPrimary.opacity(0.16), in: Capsule())
         }
         .buttonStyle(.plain)

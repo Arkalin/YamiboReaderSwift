@@ -1,7 +1,9 @@
 import SwiftUI
 import YamiboReaderCore
 
-struct OfflineCacheManagementGroupSheet: View {
+/// Drill-down detail of one cached work, pushed from the management list
+/// (hierarchy navigation, not a self-contained modal task).
+struct OfflineCacheManagementGroupScreen: View {
     @ObservedObject var viewModel: SystemSettingsViewModel
     let groupID: OfflineCacheGroupID
     @Environment(\.dismiss) private var dismiss
@@ -11,48 +13,39 @@ struct OfflineCacheManagementGroupSheet: View {
     }
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 12) {
-                    if let row {
-                        ForEach(row.entries) { entry in
-                            OfflineCacheManagementEntryRowView(entry: entry) {
-                                viewModel.requestOfflineCacheEntryDeletion(id: entry.id)
-                            }
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                if let row {
+                    ForEach(row.entries) { entry in
+                        OfflineCacheManagementEntryRowView(entry: entry) {
+                            viewModel.requestOfflineCacheEntryDeletion(id: entry.id)
                         }
-                    } else {
-                        OfflineCacheManagementEmptyState()
                     }
-                }
-                .padding(16)
-            }
-            .background(YamiboColors.SystemSurface.groupedBackground)
-            .navigationTitle(row?.title ?? L10n.string("settings.offline_cache.title"))
-            .task {
-                await viewModel.refreshOfflineCacheManagement()
-                dismissIfGroupMissing()
-            }
-            .refreshable {
-                await viewModel.refreshOfflineCacheManagement()
-                dismissIfGroupMissing()
-            }
-            .onChange(of: viewModel.offlineCacheManagementRows) {
-                dismissIfGroupMissing()
-            }
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button(L10n.string("common.close")) {
-                        dismiss()
-                    }
+                } else {
+                    OfflineCacheManagementEmptyState()
                 }
             }
-            .overlay {
-                if viewModel.activeAction == .loading || viewModel.activeAction == .clearingOfflineCache {
-                    ProgressView()
-                }
-            }
-            .offlineCacheManagementAlert(viewModel: viewModel)
+            .padding(16)
         }
+        .background(YamiboColors.SystemSurface.groupedBackground)
+        .navigationTitle(row?.title ?? L10n.string("settings.offline_cache.title"))
+        .task {
+            await viewModel.refreshOfflineCacheManagement()
+            dismissIfGroupMissing()
+        }
+        .refreshable {
+            await viewModel.refreshOfflineCacheManagement()
+            dismissIfGroupMissing()
+        }
+        .onChange(of: viewModel.offlineCacheManagementRows) {
+            dismissIfGroupMissing()
+        }
+        .overlay {
+            if viewModel.activeAction == .loading || viewModel.activeAction == .clearingOfflineCache {
+                ProgressView()
+            }
+        }
+        .offlineCacheManagementAlert(viewModel: viewModel)
     }
 
     private func dismissIfGroupMissing() {
@@ -236,15 +229,15 @@ private struct OfflineCacheManagementDeleteSelectionButton: View {
         Button(role: .destructive, action: onDelete) {
             VStack(spacing: 3) {
                 Image(systemName: "trash")
-                    .font(.system(size: 18, weight: .regular))
-                    .frame(width: 24, height: 22)
+                    .font(.body)
+                    .frame(minWidth: 24, minHeight: 22)
 
                 Text(L10n.string("common.delete"))
                     .font(.caption2)
                     .lineLimit(1)
                     .minimumScaleFactor(0.78)
             }
-            .frame(width: 66)
+            .frame(minWidth: 66)
             .foregroundStyle(Color.red)
             .opacity(actionState.canDelete ? 1 : 0.35)
             .contentShape(Rectangle())

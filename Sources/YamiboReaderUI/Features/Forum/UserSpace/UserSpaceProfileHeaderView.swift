@@ -222,8 +222,12 @@ private struct UserSpaceInfoTableView: View {
                             .foregroundStyle(ForumColors.secondaryText)
                         Spacer(minLength: 8)
                         if let url = row.url {
-                            Button(row.value) {
+                            Button {
                                 onWebTap(url)
+                            } label: {
+                                Text(row.value)
+                                    .multilineTextAlignment(.trailing)
+                                    .expandedHitTarget(width: 0)
                             }
                             .buttonStyle(.plain)
                             .foregroundStyle(ForumColors.brownPrimary)

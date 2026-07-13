@@ -14,7 +14,7 @@ public struct SettingsHomeView: View {
     @StateObject private var viewModel: SystemSettingsViewModel
     @State private var searchText = ""
     @State private var pushedCategory: SettingsCategory?
-    @State private var showingAboutSheet = false
+    @State private var isAboutPushed = false
     @State private var pendingConfirmation: SystemSettingsConfirmation?
     @State private var isSigningOut = false
 
@@ -53,7 +53,7 @@ public struct SettingsHomeView: View {
         .task {
             await viewModel.load()
         }
-        .sheet(isPresented: $showingAboutSheet) {
+        .navigationDestination(isPresented: $isAboutPushed) {
             AboutView()
         }
         .navigationDestination(item: $pushedCategory) { category in
@@ -102,7 +102,7 @@ public struct SettingsHomeView: View {
     private var aboutSection: some View {
         Section {
             Button {
-                showingAboutSheet = true
+                isAboutPushed = true
             } label: {
                 SystemSettingsRow(title: aboutSettingsTitle, titleColor: .accentColor)
             }

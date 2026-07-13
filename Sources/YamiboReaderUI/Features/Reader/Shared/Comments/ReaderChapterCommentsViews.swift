@@ -144,7 +144,7 @@ struct ReaderChapterCommentsContent: View {
                 Spacer()
             }
             .padding(.vertical, 8)
-            .frame(maxWidth: .infinity)
+            .frame(maxWidth: .infinity, minHeight: 44)
             .foregroundStyle(Self.loadNextColor)
             .contentShape(Rectangle())
         }
@@ -384,6 +384,7 @@ private struct ReaderChapterCommentRow: View {
                         openOriginalPost(originalPostURL)
                     } label: {
                         Image(systemName: "arrow.up.forward.square")
+                            .expandedHitTarget()
                     }
                     .buttonStyle(.borderless)
                     .accessibilityLabel(L10n.string("reader.open_original_post"))

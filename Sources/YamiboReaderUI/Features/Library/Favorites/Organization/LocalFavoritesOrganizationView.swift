@@ -532,7 +532,7 @@ struct LocalFavoritesOrganizationView: View {
                     .overlay(alignment: .topTrailing) {
                         if unreadUpdateCount > 0 {
                             Text("\(min(unreadUpdateCount, 99))")
-                                .font(.system(size: 9, weight: .bold))
+                                .font(.caption2.weight(.bold))
                                 .foregroundStyle(.white)
                                 .padding(.horizontal, 3.5)
                                 .padding(.vertical, 1.5)

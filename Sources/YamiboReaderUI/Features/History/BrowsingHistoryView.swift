@@ -315,7 +315,7 @@ private struct BrowsingHistoryRow: View {
                         .font(.body)
                         .foregroundStyle(isFavorited ? Color.pink : Color.secondary)
                         .frame(width: 34, height: 34)
-                        .contentShape(Rectangle())
+                        .minimumHitTarget()
                 }
                 .buttonStyle(.plain)
                 .simultaneousGesture(

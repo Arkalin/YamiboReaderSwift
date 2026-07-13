@@ -29,8 +29,11 @@ private struct ForumThreadCommentRow: View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 if let uid = comment.author.uid {
-                    Button(comment.author.name) {
+                    Button {
                         onUserTap(uid, comment.author.name)
+                    } label: {
+                        Text(comment.author.name)
+                            .expandedHitTarget(width: 0)
                     }
                     .buttonStyle(.plain)
                     .font(.caption.weight(.semibold))

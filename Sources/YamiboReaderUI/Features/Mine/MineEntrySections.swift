@@ -24,11 +24,13 @@ struct MineCheckInSection: View {
 
     var body: some View {
         Section {
+            // In-place action row: no disclosure chevron — that affordance is
+            // reserved for rows that push a detail screen.
             MineEntryButtonRow(
                 title: title,
                 systemImage: "checkmark.seal.fill",
                 showsProgress: isCheckingIn,
-                showsDisclosureIndicator: !hasCheckedInToday,
+                showsDisclosureIndicator: false,
                 action: checkIn
             )
             .disabled(isInteractionDisabled || hasCheckedInToday)
@@ -86,7 +88,7 @@ struct MineLibraryEntriesSection: View {
             MineEntryButtonRow(
                 title: L10n.string("mine.download_queue"),
                 systemImage: "arrow.down.circle.fill",
-                badgeText: String(offlineCacheQueueCount),
+                badgeText: offlineCacheQueueCount > 0 ? String(offlineCacheQueueCount) : nil,
                 action: showOfflineCacheQueue
             )
         }

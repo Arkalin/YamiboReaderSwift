@@ -14,15 +14,15 @@ struct LikeSelectionDeleteButton: View {
         Button(role: .destructive, action: onDelete) {
             VStack(spacing: 3) {
                 Image(systemName: "trash")
-                    .font(.system(size: 18, weight: .regular))
-                    .frame(width: 24, height: 22)
+                    .font(.body)
+                    .frame(minWidth: 24, minHeight: 22)
 
                 Text(L10n.string("common.delete"))
                     .font(.caption2)
                     .lineLimit(1)
                     .minimumScaleFactor(0.78)
             }
-            .frame(width: 66)
+            .frame(minWidth: 66)
             .foregroundStyle(Color.red)
             .opacity(selectedCount > 0 ? 1 : 0.35)
             .contentShape(Rectangle())

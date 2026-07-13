@@ -82,7 +82,7 @@ struct SettingsStorageView: View {
         .navigationTitle(L10n.string("settings.section.data_storage"))
         .navigationBarTitleDisplayMode(.inline)
         .overlay(content: loadingOverlay)
-        .sheet(isPresented: $showingWebDAVSettings) {
+        .navigationDestination(isPresented: $showingWebDAVSettings) {
             WebDAVSyncSettingsView(dependencies: dependencies.webDAVSync)
         }
         .navigationDestination(isPresented: $showingOfflineCacheManagement) {

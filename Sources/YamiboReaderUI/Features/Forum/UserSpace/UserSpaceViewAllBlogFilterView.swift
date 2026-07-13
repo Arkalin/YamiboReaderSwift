@@ -14,10 +14,12 @@ struct UserSpaceViewAllBlogFilterView: View {
                     Text(title(for: filter))
                         .font(.footnote.weight(filter == selectedFilter ? .semibold : .regular))
                         .padding(.horizontal, 12)
-                        .frame(height: 30)
+                        .frame(minHeight: 30)
+                        .expandedHitTarget(width: 0)
                 }
                 .buttonStyle(.bordered)
                 .tint(filter == selectedFilter ? ForumColors.brownEmphasis : ForumColors.brownLight)
+                .accessibilityAddTraits(filter == selectedFilter ? .isSelected : [])
             }
         }
     }

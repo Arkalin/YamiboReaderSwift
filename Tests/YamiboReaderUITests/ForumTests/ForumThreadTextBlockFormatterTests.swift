@@ -1,8 +1,17 @@
 import Foundation
 import SwiftUI
 import Testing
+import UIKit
 @testable import YamiboReaderCore
 @testable import YamiboReaderUI
+
+/// Styled runs scale their 17pt base through the body text style's metrics
+/// (Dynamic Type); at the test host's default content size this resolves to
+/// exactly 17, but the expectation mirrors the production computation so the
+/// tests stay valid under any category.
+private var expectedBaseBodyFontSize: CGFloat {
+    UIFontMetrics(forTextStyle: .body).scaledValue(for: 17)
+}
 
 @Test func textBlockFormatterAppliesStyleRunsToCharacterRanges() throws {
     let block = ForumThreadTextBlock(
@@ -25,7 +34,7 @@ import Testing
 
     #expect(String(attributed.characters) == "abcdef")
     let boldRange = try #require(attributed.range(of: "bc"))
-    #expect(attributed[boldRange].runs.allSatisfy { $0.font == Font.system(size: 17).bold() })
+    #expect(attributed[boldRange].runs.allSatisfy { $0.font == Font.system(size: expectedBaseBodyFontSize).bold() })
     #expect(attributed[boldRange].runs.allSatisfy { $0.foregroundColor == Color(red: 1, green: 0, blue: 0) })
 
     // The second run is clamped to the end of the text.
@@ -89,7 +98,7 @@ import Testing
     #expect(segments.map { String($0.attributedText.characters) } == ["前", "漢字", "後"])
     #expect(segments.map(\.rubyText) == [nil, "かんじ", nil])
     let rubySegment = segments[1]
-    #expect(rubySegment.attributedText.runs.allSatisfy { $0.font == Font.system(size: 17).bold() })
+    #expect(rubySegment.attributedText.runs.allSatisfy { $0.font == Font.system(size: expectedBaseBodyFontSize).bold() })
 }
 
 @Test func textBlockFormatterDropsInvalidAndOverlappingRubies() {

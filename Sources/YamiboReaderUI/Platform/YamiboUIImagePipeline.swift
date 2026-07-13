@@ -79,7 +79,11 @@ public final class YamiboUIImagePipeline {
             data: { try await core.data(for: source) },
             options: [.disableDiskCache]
         )
-        imageRequest.scale = Float(UIScreen.main.scale)
+        // UIScreen.main is deprecated; the current trait collection carries
+        // the effective display scale (falls back to 2.0 in the rare
+        // unspecified case, matching every current iPhone floor).
+        let displayScale = UITraitCollection.current.displayScale
+        imageRequest.scale = Float(displayScale > 0 ? displayScale : 2)
         return imageRequest
     }
 

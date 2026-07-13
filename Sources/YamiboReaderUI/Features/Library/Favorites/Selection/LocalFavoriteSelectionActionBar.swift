@@ -65,7 +65,7 @@ struct LocalFavoriteSelectionActionBar: View {
         Button(role: role, action: action) {
             VStack(spacing: 4) {
                 Image(systemName: systemImage)
-                    .font(.system(size: 20))
+                    .font(.title3)
                 Text(title)
                     .font(.caption2)
             }
