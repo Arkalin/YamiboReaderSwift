@@ -1,7 +1,6 @@
 import Foundation
 import XCTest
 @testable import YamiboXCore
-@testable import YamiboXUI
 
 @MainActor
 final class NovelReaderCacheOperationModuleTests: XCTestCase {
