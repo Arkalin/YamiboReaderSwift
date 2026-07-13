@@ -175,6 +175,19 @@ struct LocalFavoritesOrganizationView: View {
                 )
                 .toolbar(selection.isSelectionMode ? .hidden : .automatic, for: .tabBar)
             }
+            #if DEBUG
+            // `START_FAVORITES_SELECTION=1` launch hook (`START_TAB`'s
+            // sibling): keeps the first favorite card selected so simulator
+            // sessions without touch injection can screenshot the selection
+            // UI. Re-asserts on every derived-state publish because startup
+            // reloads can prune the selection away again.
+            .onReceive(organizer.$rootDerived) { derived in
+                guard ProcessInfo.processInfo.environment["START_FAVORITES_SELECTION"] == "1",
+                      !selection.isSelectionMode,
+                      let firstCard = derived.cards.first else { return }
+                selection.toggleFavoriteSelection(id: firstCard.id)
+            }
+            #endif
         }
     }
 
