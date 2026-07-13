@@ -58,7 +58,11 @@ struct SelectionBottomToolbar: View {
             }
         }
         .padding(.horizontal, 8)
-        .padding(.vertical, 10)
+        // 6pt instead of a rounder 8-10: with the buttons' 44pt minimum
+        // touch-target height this lands the capsule at ~61pt — the same
+        // height as the system floating tab bar this bar replaces while
+        // selection mode is active.
+        .padding(.vertical, 6)
     }
 }
 

@@ -23,8 +23,11 @@ final class SelectionBottomToolbarLayoutTests: XCTestCase {
         // instead of exploding past what an iPhone-width capsule can hold.
         XCTAssertLessThanOrEqual(ideal.width, 400)
         // Icon-over-caption buttons keep a >=44pt hit target inside the
-        // bar's 20pt of vertical padding.
-        XCTAssertGreaterThanOrEqual(ideal.height, 44 + 20)
+        // bar's 12pt of vertical padding; the total stays low enough that
+        // the iOS 26 floating capsule matches the ~61pt system tab bar it
+        // replaces during selection mode.
+        XCTAssertGreaterThanOrEqual(ideal.height, 44 + 12)
+        XCTAssertLessThanOrEqual(ideal.height, 60)
     }
 
     @MainActor
