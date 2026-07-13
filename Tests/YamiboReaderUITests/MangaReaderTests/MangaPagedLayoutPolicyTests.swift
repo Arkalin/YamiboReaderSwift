@@ -81,6 +81,20 @@ struct MangaPagedLayoutPolicyTests {
         ) == .fitWidth)
     }
 
+    @Test func pagedContentTopInsetReservesSpaceOnlyWhenPagedAndToggleDisabled() {
+        let pagedIgnoring = MangaReaderSettings(readingMode: .paged, ignoresTopSafeArea: true)
+        let pagedRespecting = MangaReaderSettings(readingMode: .paged, ignoresTopSafeArea: false)
+        let verticalRespecting = MangaReaderSettings(readingMode: .vertical, ignoresTopSafeArea: false)
+
+        #expect(MangaPagedLayoutPolicy.pagedContentTopInset(settings: pagedIgnoring, topInset: 47) == 0)
+        #expect(MangaPagedLayoutPolicy.pagedContentTopInset(settings: pagedRespecting, topInset: 47) == 47)
+        #expect(MangaPagedLayoutPolicy.pagedContentTopInset(settings: verticalRespecting, topInset: 47) == 0)
+    }
+
+    @Test func mangaReaderSettingsDefaultsToIgnoringTopSafeArea() {
+        #expect(MangaReaderSettings().ignoresTopSafeArea)
+    }
+
     @Test func resizedViewportKeepsSameVisibleItemAtNewPageWidth() {
         let targetOffset = MangaPagedViewportResizePolicy.alignedContentOffsetX(
             previousContentOffsetX: 1_800,

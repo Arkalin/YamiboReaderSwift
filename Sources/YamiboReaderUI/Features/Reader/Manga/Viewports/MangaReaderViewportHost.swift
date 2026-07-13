@@ -9,6 +9,7 @@ struct MangaReaderPresentationContent: View {
     let imageLoader: MangaReaderPageImageLoader?
     let isChromeVisible: Bool
     let likedPageIDs: Set<String>
+    let pagedContentTopInset: CGFloat
     let controlScrollStep: ReaderControlScrollStepRequest?
     let controlPageTurnBridge: MangaPagedControlPageTurnBridge
     let onRetryInitialLoad: () -> Void
@@ -33,6 +34,7 @@ struct MangaReaderPresentationContent: View {
                     imageLoader: imageLoader,
                     isChromeVisible: isChromeVisible,
                     likedPageIDs: likedPageIDs,
+                    pagedContentTopInset: pagedContentTopInset,
                     controlScrollStep: controlScrollStep,
                     controlPageTurnBridge: controlPageTurnBridge,
                     onCurrentPageChange: onCurrentPageChange,
@@ -77,6 +79,7 @@ private struct MangaReaderLoadedContent: View {
     let imageLoader: MangaReaderPageImageLoader?
     let isChromeVisible: Bool
     let likedPageIDs: Set<String>
+    let pagedContentTopInset: CGFloat
     let controlScrollStep: ReaderControlScrollStepRequest?
     let controlPageTurnBridge: MangaPagedControlPageTurnBridge
     let onCurrentPageChange: (Int) -> Void
@@ -176,6 +179,7 @@ private struct MangaReaderLoadedContent: View {
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                     }
                 }
+                .padding(.top, pagedContentTopInset)
             }
         } else {
             ReaderLoadStateView(status: .loading, tint: .white)

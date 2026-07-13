@@ -52,12 +52,17 @@ public struct MangaReaderView: View {
                 isPadDevice: UIDevice.current.userInterfaceIdiom == .pad,
                 availableSize: proxy.size
             )
+            let pagedContentTopInset = MangaPagedLayoutPolicy.pagedContentTopInset(
+                settings: model.presentation.settings,
+                topInset: topInset
+            )
 
             MangaReaderPresentationContent(
                 presentation: model.presentation,
                 imageLoader: model.imageLoader,
                 isChromeVisible: isChromeVisible,
                 likedPageIDs: model.likedPageIDs,
+                pagedContentTopInset: pagedContentTopInset,
                 controlScrollStep: controlScrollStep,
                 controlPageTurnBridge: controlPageTurnBridge,
                 onRetryInitialLoad: {

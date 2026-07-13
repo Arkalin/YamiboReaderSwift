@@ -71,6 +71,7 @@ public struct MangaReaderSettings: Codable, Hashable, Sendable {
     public var brightness: Double
     public var zoomEnabled: Bool
     public var showsTwoPagesInLandscapeOnPad: Bool
+    public var ignoresTopSafeArea: Bool
     public var directorySortOrder: MangaDirectorySortOrder
 
     public init(
@@ -82,6 +83,7 @@ public struct MangaReaderSettings: Codable, Hashable, Sendable {
         brightness: Double = 1,
         zoomEnabled: Bool = true,
         showsTwoPagesInLandscapeOnPad: Bool = false,
+        ignoresTopSafeArea: Bool = true,
         directorySortOrder: MangaDirectorySortOrder = .ascending
     ) {
         self.readingMode = readingMode
@@ -92,6 +94,7 @@ public struct MangaReaderSettings: Codable, Hashable, Sendable {
         self.brightness = brightness
         self.zoomEnabled = zoomEnabled
         self.showsTwoPagesInLandscapeOnPad = showsTwoPagesInLandscapeOnPad
+        self.ignoresTopSafeArea = ignoresTopSafeArea
         self.directorySortOrder = directorySortOrder
     }
 }

@@ -98,6 +98,12 @@ private struct MangaReaderSettingsPagingSection: View {
                     edgeFillStyle: $settings.pageEdgeFillStyle,
                     palette: palette
                 )
+                MangaReaderSettingsDivider(palette: palette)
+                MangaReaderSettingsToggleRow(
+                    title: L10n.string("manga.ignores_top_safe_area"),
+                    palette: palette,
+                    isOn: $settings.ignoresTopSafeArea
+                )
             }
         }
     }
