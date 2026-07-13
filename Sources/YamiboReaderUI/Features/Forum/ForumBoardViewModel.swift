@@ -159,7 +159,17 @@ final class ForumBoardViewModel {
         generation += 1
         let requestGeneration = generation
         isLoading = true
-        defer { isLoading = false }
+        // Only the latest-generation request may clear the spinners — a
+        // superseded request finishing must not hide the indicator of the
+        // newer request still in flight. Both flags are cleared because a
+        // load/goToPage can supersede a refresh and vice versa; the stale
+        // request's own defer no longer runs its reset.
+        defer {
+            if requestGeneration == generation {
+                isLoading = false
+                isRefreshing = false
+            }
+        }
 
         let repository = await repositoryProvider()
         if let cached = await repository.cachedForumBoard(
@@ -178,6 +188,11 @@ final class ForumBoardViewModel {
     }
 
     func refresh() async {
+        // The reentry guard must precede the generation bump: a second
+        // refresh that early-returns after bumping would turn the in-flight
+        // refresh stale without starting a replacement, discarding its
+        // response and leaving `isRefreshing` stuck true forever.
+        guard !isRefreshing else { return }
         generation += 1
         await refresh(requestGeneration: generation)
     }
@@ -194,7 +209,12 @@ final class ForumBoardViewModel {
         errorMessage = nil
         transientMessage = nil
         isLoading = true
-        defer { isLoading = false }
+        defer {
+            if requestGeneration == generation {
+                isLoading = false
+                isRefreshing = false
+            }
+        }
         await fetchPage(
             nextPage,
             preferCache: true,
@@ -301,7 +321,12 @@ final class ForumBoardViewModel {
         errorMessage = nil
         transientMessage = nil
         isLoading = true
-        defer { isLoading = false }
+        defer {
+            if requestGeneration == generation {
+                isLoading = false
+                isRefreshing = false
+            }
+        }
         await fetchPage(
             1,
             preferCache: true,
@@ -313,9 +338,13 @@ final class ForumBoardViewModel {
     }
 
     private func refresh(requestGeneration: Int) async {
-        guard !isRefreshing else { return }
         isRefreshing = true
-        defer { isRefreshing = false }
+        defer {
+            if requestGeneration == generation {
+                isLoading = false
+                isRefreshing = false
+            }
+        }
         await fetchPage(currentPage, preferCache: false, failurePresentation: .refreshToast, requestGeneration: requestGeneration)
     }
 

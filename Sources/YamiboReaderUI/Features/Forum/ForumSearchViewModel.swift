@@ -46,6 +46,10 @@ final class ForumSearchViewModel {
             errorMessage = snapshot.errorMessage
             currentPage = snapshot.currentPage
             currentSearchID = snapshot.currentSearchID
+            // The generation bump turns any in-flight search stale; its
+            // generation-guarded defer will no longer clear the spinner, so
+            // the restore clears it here (mirroring ForumBoardViewModel).
+            isLoading = false
         }
     )
 
@@ -120,7 +124,11 @@ final class ForumSearchViewModel {
         let requestGeneration = generation
         isLoading = true
         errorMessage = nil
-        defer { isLoading = false }
+        defer {
+            if requestGeneration == generation {
+                isLoading = false
+            }
+        }
 
         do {
             let repository = await repositoryProvider()

@@ -589,7 +589,11 @@ final class ForumThreadReaderViewModel {
         isLoading = true
         errorMessage = nil
         transientMessage = nil
-        defer { isLoading = false }
+        defer {
+            if requestGeneration == generation {
+                isLoading = false
+            }
+        }
         let previousLoadedPage = self.page == nil ? nil : currentPage
 
         do {
@@ -617,6 +621,7 @@ final class ForumThreadReaderViewModel {
                 return
             }
 
+            guard requestGeneration == generation else { return }
             if preservesCurrentContentOnFailure, self.page != nil {
                 errorMessage = nil
                 transientMessage = L10n.string("forum.thread.refresh_failed", error.localizedDescription)

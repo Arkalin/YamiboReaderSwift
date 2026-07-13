@@ -309,6 +309,36 @@ final class ForumBoardViewModelTests: XCTestCase {
         )
     }
 
+    /// Reentry/generation interplay: a second `refresh()` while one is
+    /// already in flight must be a no-op — it may not advance the generation
+    /// and turn the in-flight refresh stale, which would both discard that
+    /// refresh's response and (with the generation-guarded defer) leave
+    /// `isRefreshing` stuck true forever.
+    func testReentrantRefreshDoesNotInvalidateInFlightRefresh() async throws {
+        let cached = makeBoardPage(fid: "5", title: "Cached", page: 1, threadIDs: ["cached"])
+        let fetched = makeBoardPage(fid: "5", title: "Fetched", page: 1, threadIDs: ["fresh"])
+        let repository = ForumBoardRepositoryStub(cached: cached, fetched: fetched)
+        let model = ForumBoardViewModel(fid: "5", title: "動漫區", repository: repository)
+        await model.load()
+        XCTAssertEqual(model.title, "Cached")
+
+        await repository.setGatedPages([1])
+        let refreshTask = Task { await model.refresh() }
+        await repository.waitUntilBlocked()
+        XCTAssertTrue(model.isRefreshing)
+
+        await model.refresh()
+        XCTAssertTrue(model.isRefreshing)
+
+        await repository.release()
+        await refreshTask.value
+
+        XCTAssertFalse(model.isRefreshing)
+        XCTAssertFalse(model.isLoading)
+        XCTAssertEqual(model.title, "Fetched")
+        XCTAssertEqual(model.threads.map(\.tid), ["fresh"])
+    }
+
     func testPagingFailureClearsCurrentPageAndCanRestorePreviousSnapshot() async throws {
         let first = makeBoardPage(fid: "5", title: "動漫區", page: 1, threadIDs: ["first"])
         let repository = ForumBoardRepositoryStub(cached: nil, fetched: first)
@@ -405,6 +435,12 @@ private actor ForumBoardRepositoryStub: ForumBoardPageLoading {
     var fetchedPages: [ForumBoardPage]
     var fetchRequests: [FetchRequest] = []
     var boardFavoriteRequests: [FavoriteRequest] = []
+    /// Gate holding a `fetchForumBoard` call for the listed pages in flight
+    /// until `release()`, for deterministic in-flight-request tests.
+    private var gatedPages: Set<Int> = []
+    private var gateContinuation: CheckedContinuation<Void, Never>?
+    private var isBlocking = false
+    private var released = false
 
     init(
         cached: ForumBoardPage?,
@@ -446,6 +482,9 @@ private actor ForumBoardRepositoryStub: ForumBoardPageLoading {
         fetchRequests.append(
             FetchRequest(page: page, filterID: filterID, orderFilter: orderFilter, orderBy: orderBy, preferCache: preferCache)
         )
+        if gatedPages.contains(page) {
+            await waitIfNeeded()
+        }
         if let error {
             throw error
         }
@@ -473,6 +512,30 @@ private actor ForumBoardRepositoryStub: ForumBoardPageLoading {
 
     func favoriteRequests() -> [FavoriteRequest] {
         boardFavoriteRequests
+    }
+
+    func setGatedPages(_ pages: Set<Int>) {
+        gatedPages = pages
+    }
+
+    private func waitIfNeeded() async {
+        guard !released else { return }
+        await withCheckedContinuation { continuation in
+            gateContinuation = continuation
+            isBlocking = true
+        }
+    }
+
+    func waitUntilBlocked() async {
+        while !isBlocking {
+            await Task.yield()
+        }
+    }
+
+    func release() {
+        released = true
+        gateContinuation?.resume()
+        gateContinuation = nil
     }
 }
 

@@ -93,7 +93,11 @@ final class MessageCenterViewModel {
         let requestGeneration = generation
         isLoading = true
         errorMessage = nil
-        defer { isLoading = false }
+        defer {
+            if requestGeneration == generation {
+                isLoading = false
+            }
+        }
 
         do {
             let repository = await repositoryProvider()

@@ -78,6 +78,37 @@ final class MessageCenterViewModelTests: XCTestCase {
         }
         XCTAssertEqual(model.selectedTab, .notices)
     }
+
+    /// isLoading generation coverage: a superseded request completing while
+    /// the newer request is still in flight must not clear the newer
+    /// request's loading indicator.
+    func testStaleRequestCompletionDoesNotClearNewerRequestLoadingIndicator() async throws {
+        let repository = MessageCenterRepositoryStub()
+        await repository.setGatedPrivateMessagesPages([1])
+        await repository.setGatedNoticesPages([1])
+        let model = MessageCenterViewModel(repository: repository)
+
+        let staleTask = Task { await model.load() }
+        await repository.waitUntilPrivateMessagesBlocked()
+        XCTAssertTrue(model.isLoading)
+
+        let newerTask = Task { await model.selectTab(.notices) }
+        await repository.waitUntilNoticesBlocked()
+        XCTAssertTrue(model.isLoading)
+
+        await repository.releasePrivateMessages()
+        await staleTask.value
+        XCTAssertTrue(model.isLoading)
+
+        await repository.releaseNotices()
+        await newerTask.value
+
+        XCTAssertFalse(model.isLoading)
+        if case .notices = model.content {
+        } else {
+            XCTFail("Expected notices content")
+        }
+    }
 }
 
 private actor MessageCenterRepositoryStub: MessageCenterPageLoading {
@@ -90,6 +121,12 @@ private actor MessageCenterRepositoryStub: MessageCenterPageLoading {
     private var continuation: CheckedContinuation<Void, Never>?
     private var isBlocking = false
     private var released = false
+    /// Independent gate for `fetchNotices`, so a test can hold two requests
+    /// in flight at once and release them in a chosen order.
+    private var gatedNoticesPages: Set<Int> = []
+    private var noticesContinuation: CheckedContinuation<Void, Never>?
+    private var isNoticesBlocking = false
+    private var noticesReleased = false
 
     init(error: Error? = nil) {
         self.error = error
@@ -117,6 +154,9 @@ private actor MessageCenterRepositoryStub: MessageCenterPageLoading {
 
     func fetchNotices(page: Int) async throws -> UserSpaceNoticePage {
         recordedCalls.append("notices:\(page)")
+        if gatedNoticesPages.contains(page) {
+            await waitForNoticesIfNeeded()
+        }
         if let error { throw error }
         return UserSpaceNoticePage(
             notices: [
@@ -156,5 +196,29 @@ private actor MessageCenterRepositoryStub: MessageCenterPageLoading {
         released = true
         continuation?.resume()
         continuation = nil
+    }
+
+    func setGatedNoticesPages(_ pages: Set<Int>) {
+        gatedNoticesPages = pages
+    }
+
+    private func waitForNoticesIfNeeded() async {
+        guard !noticesReleased else { return }
+        await withCheckedContinuation { continuation in
+            noticesContinuation = continuation
+            isNoticesBlocking = true
+        }
+    }
+
+    func waitUntilNoticesBlocked() async {
+        while !isNoticesBlocking {
+            await Task.yield()
+        }
+    }
+
+    func releaseNotices() {
+        noticesReleased = true
+        noticesContinuation?.resume()
+        noticesContinuation = nil
     }
 }

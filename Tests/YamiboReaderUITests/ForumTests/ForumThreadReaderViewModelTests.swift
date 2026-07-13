@@ -343,6 +343,64 @@ import Testing
     #expect(model.errorMessage == nil)
 }
 
+/// generation-guard coverage for the failure fall-through branches: a stale
+/// refresh failure that resumes (inside its catch block's cache-fallback
+/// lookup) only after a newer page has already rendered must be discarded
+/// entirely — no stale failure toast over the newer page.
+@MainActor
+@Test func forumThreadReaderStaleRefreshFailureDoesNotShowStaleToastOverNewerPage() async throws {
+    let fixture = try ForumThreadReaderViewModelFixture()
+    let model = fixture.makeModel()
+    await model.load()
+
+    fixture.repository.fetchError = ForumThreadReaderTestError.plannedFailure
+    fixture.repository.gatedCachedPages = [1]
+    let staleTask = Task { await model.refresh() }
+    await fixture.repository.gate.waitUntilBlocked()
+
+    fixture.repository.fetchError = nil
+    await model.goToPage(3)
+    #expect(model.currentPage == 3)
+    #expect(model.transientMessage == nil)
+
+    await fixture.repository.gate.release()
+    await staleTask.value
+
+    #expect(model.currentPage == 3)
+    #expect(model.page?.pageNavigation?.currentPage == 3)
+    #expect(model.transientMessage == nil)
+    #expect(model.errorMessage == nil)
+    #expect(!model.isLoading)
+}
+
+/// The failure fall-through's page-clearing branch is guarded the same way:
+/// a stale refresh failure resuming after a newer request already recorded
+/// its own failure must not rewrite `currentPage` back to the stale
+/// request's page.
+@MainActor
+@Test func forumThreadReaderStaleRefreshFailureDoesNotClobberNewerFailureState() async throws {
+    let fixture = try ForumThreadReaderViewModelFixture(fetchError: ForumThreadReaderTestError.plannedFailure)
+    let model = fixture.makeModel()
+    await model.load()
+    #expect(model.page == nil)
+    #expect(model.currentPage == 1)
+
+    fixture.repository.gatedCachedPages = [1]
+    let staleTask = Task { await model.refresh() }
+    await fixture.repository.gate.waitUntilBlocked()
+
+    await model.goToPage(3)
+    #expect(model.currentPage == 3)
+
+    await fixture.repository.gate.release()
+    await staleTask.value
+
+    #expect(model.currentPage == 3)
+    #expect(model.page == nil)
+    #expect(model.errorMessage == ForumThreadReaderTestError.plannedFailure.localizedDescription)
+    #expect(!model.isLoading)
+}
+
 @MainActor
 @Test func forumThreadReaderInitialLoadFailureWithoutCacheUsesPageError() async throws {
     let fixture = try ForumThreadReaderViewModelFixture(fetchError: ForumThreadReaderTestError.plannedFailure)
@@ -594,6 +652,11 @@ private final class FakeForumThreadPageLoader: ForumThreadPageLoading, @unchecke
     let threadURL: URL
     let gate = ForumThreadPageFetchGate()
     var gatedPages: Set<Int> = []
+    /// Gates the `cachedThreadPage` lookup instead of the fetch — that
+    /// lookup is the suspension point inside `loadPage`'s catch block, so
+    /// gating it holds a failure response mid-catch while a newer request
+    /// lands.
+    var gatedCachedPages: Set<Int> = []
     private let cachedPages: [Int: ForumThreadPage]
     private let formHash: String?
     var fetchError: Error?
@@ -617,6 +680,9 @@ private final class FakeForumThreadPageLoader: ForumThreadPageLoading, @unchecke
 
     func cachedThreadPage(context _: ThreadNovelLaunchContext, page: Int) async -> ForumThreadPage? {
         recordedCachedPages.append(page)
+        if gatedCachedPages.contains(page) {
+            await gate.waitIfNeeded()
+        }
         return cachedPages[page]
     }
 

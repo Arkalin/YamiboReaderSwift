@@ -50,7 +50,12 @@ final class UserSpaceViewModel {
 
     @ObservationIgnored private let repositoryProvider: @Sendable () async -> any UserSpacePageLoading
     @ObservationIgnored private let accountUIDProvider: @Sendable () async -> String?
-    @ObservationIgnored private var generation = 0
+    /// Independent generations for the two state axes this view model writes:
+    /// `profile` vs `content`/`currentPage`. A shared counter would let a
+    /// sub-page switch turn a still-relevant in-flight profile response
+    /// stale (and vice versa) even though the two never conflict.
+    @ObservationIgnored private var profileGeneration = 0
+    @ObservationIgnored private var contentGeneration = 0
 
     init(
         uid: String?,
@@ -177,6 +182,12 @@ final class UserSpaceViewModel {
 
     func selectSubPage(_ subPage: UserSpaceSubPage) async {
         guard subPage != selectedSubPage else { return }
+        // The switch itself rewrites the content axis, so it must invalidate
+        // any in-flight content request even when no new request follows
+        // (switching to an already-cached profile) — and then also clear the
+        // spinner that doomed request can no longer clear.
+        contentGeneration += 1
+        isLoadingContent = false
         selectedSubPage = subPage
         selectedSection = subPage.section
         currentPage = 1
@@ -274,29 +285,37 @@ final class UserSpaceViewModel {
     }
 
     private func loadProfile() async {
-        generation += 1
-        let requestGeneration = generation
+        profileGeneration += 1
+        let requestGeneration = profileGeneration
         isLoadingProfile = true
         errorMessage = nil
-        defer { isLoadingProfile = false }
+        defer {
+            if requestGeneration == profileGeneration {
+                isLoadingProfile = false
+            }
+        }
 
         do {
             let repository = await repositoryProvider()
             let loadedProfile = try await repository.fetchProfile(uid: uid, titleHint: titleHint)
-            guard requestGeneration == generation else { return }
+            guard requestGeneration == profileGeneration else { return }
             profile = loadedProfile
         } catch {
-            guard requestGeneration == generation else { return }
+            guard requestGeneration == profileGeneration else { return }
             errorMessage = error.localizedDescription
         }
     }
 
     private func loadSelectedSubPage(page: Int) async {
-        generation += 1
-        let requestGeneration = generation
+        contentGeneration += 1
+        let requestGeneration = contentGeneration
         isLoadingContent = true
         errorMessage = nil
-        defer { isLoadingContent = false }
+        defer {
+            if requestGeneration == contentGeneration {
+                isLoadingContent = false
+            }
+        }
 
         do {
             let repository = await repositoryProvider()
@@ -323,11 +342,11 @@ final class UserSpaceViewModel {
             case .traces:
                 loadedContent = .friends(try await repository.fetchFriendPage(type: .myTrace, page: page))
             }
-            guard requestGeneration == generation else { return }
+            guard requestGeneration == contentGeneration else { return }
             content = loadedContent
             currentPage = pageNavigation?.currentPage ?? page
         } catch {
-            guard requestGeneration == generation else { return }
+            guard requestGeneration == contentGeneration else { return }
             content = nil
             currentPage = page
             errorMessage = error.localizedDescription
