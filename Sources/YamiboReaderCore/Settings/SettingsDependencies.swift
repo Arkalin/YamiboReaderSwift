@@ -10,6 +10,10 @@ public struct SettingsDependencies: Sendable {
     public let novelReaderCacheStore: NovelReaderProjectionStore
     public let mangaDirectoryStore: MangaDirectoryStore
     public let mangaReaderProjectionStore: MangaReaderProjectionStore
+    public let forumCacheStore: ForumCacheStore
+    public let contentCoverStore: ContentCoverStore
+    public let checkInStore: YamiboCheckInStore
+    public let favoriteUpdateStore: FavoriteUpdateStore
     public let offlineCacheStore: any OfflineCacheStoring
     public let clearOrdinaryImageCache: @Sendable () async -> Void
     public let resetApplicationData: @Sendable () async throws -> Void
@@ -24,6 +28,10 @@ public struct SettingsDependencies: Sendable {
         novelReaderCacheStore: NovelReaderProjectionStore,
         mangaDirectoryStore: MangaDirectoryStore,
         mangaReaderProjectionStore: MangaReaderProjectionStore,
+        forumCacheStore: ForumCacheStore,
+        contentCoverStore: ContentCoverStore,
+        checkInStore: YamiboCheckInStore,
+        favoriteUpdateStore: FavoriteUpdateStore,
         offlineCacheStore: any OfflineCacheStoring,
         clearOrdinaryImageCache: @escaping @Sendable () async -> Void,
         resetApplicationData: @escaping @Sendable () async throws -> Void,
@@ -36,6 +44,10 @@ public struct SettingsDependencies: Sendable {
         self.novelReaderCacheStore = novelReaderCacheStore
         self.mangaDirectoryStore = mangaDirectoryStore
         self.mangaReaderProjectionStore = mangaReaderProjectionStore
+        self.forumCacheStore = forumCacheStore
+        self.contentCoverStore = contentCoverStore
+        self.checkInStore = checkInStore
+        self.favoriteUpdateStore = favoriteUpdateStore
         self.offlineCacheStore = offlineCacheStore
         self.clearOrdinaryImageCache = clearOrdinaryImageCache
         self.resetApplicationData = resetApplicationData

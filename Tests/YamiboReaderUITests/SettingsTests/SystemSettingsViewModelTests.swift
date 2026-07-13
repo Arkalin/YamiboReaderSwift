@@ -363,40 +363,47 @@ final class SystemSettingsViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.favoriteBackground, FavoriteBackgroundSettings())
     }
 
-    func testLoadReadsNovelAndMangaStorageUsage() async throws {
+    func testLoadReadsStorageUsageAcrossAllCacheCategories() async throws {
         let fixture = try makeFixture()
         try await seedNovelCache(fixture)
         try await seedMangaIndexCache(fixture)
+        try await seedForumCache(fixture)
+        try await seedContentCover(fixture)
         try await seedMangaOfflineCache(fixture)
 
         let viewModel = SystemSettingsViewModel(dependencies: fixture.appContext.settingsDependencies)
         await viewModel.load()
 
-        XCTAssertGreaterThan(viewModel.novelCacheBytes, 0)
-        XCTAssertGreaterThan(viewModel.mangaIndexCacheBytes, 0)
+        XCTAssertGreaterThan(viewModel.webReaderCacheBytes, 0)
+        XCTAssertGreaterThan(viewModel.contentCoverCacheBytes, 0)
+        XCTAssertGreaterThan(viewModel.mangaDirectoryCacheBytes, 0)
         XCTAssertGreaterThan(viewModel.offlineCacheBytes, 0)
-        XCTAssertEqual(viewModel.mangaIndexCacheLabel, cacheLabel(for: viewModel.mangaIndexCacheBytes))
+        XCTAssertEqual(viewModel.webReaderCacheLabel, cacheLabel(for: viewModel.webReaderCacheBytes))
+        XCTAssertEqual(viewModel.contentCoverCacheLabel, cacheLabel(for: viewModel.contentCoverCacheBytes))
+        XCTAssertEqual(viewModel.mangaDirectoryCacheLabel, cacheLabel(for: viewModel.mangaDirectoryCacheBytes))
         XCTAssertEqual(viewModel.offlineCacheLabel, cacheLabel(for: viewModel.offlineCacheBytes))
     }
 
-    func testClearNovelCacheClearsReaderProjectionCacheOnly() async throws {
+    func testClearWebReaderCacheClearsNovelMangaProjectionAndForumCacheOnly() async throws {
         let fixture = try makeFixture()
         try await seedNovelCache(fixture)
         try await seedMangaIndexCache(fixture)
+        try await seedForumCache(fixture)
         try await seedMangaOfflineCache(fixture)
 
         let viewModel = SystemSettingsViewModel(dependencies: fixture.appContext.settingsDependencies)
         await viewModel.load()
         let novelBytesBeforeClear = await fixture.novelReaderCacheStore.totalDiskUsageBytes()
-        let directoryBytesBeforeClear = await fixture.mangaDirectoryStore.totalDiskUsageBytes()
         let projectionBytesBeforeClear = await fixture.mangaReaderProjectionStore.totalDiskUsageBytes()
-        let indexBytesBeforeClear = directoryBytesBeforeClear + projectionBytesBeforeClear
+        let forumBytesBeforeClear = await fixture.forumCacheStore.totalDiskUsageBytes()
+        let directoryBytesBeforeClear = await fixture.mangaDirectoryStore.totalDiskUsageBytes()
         let offlineBytesBeforeClear = await fixture.offlineCacheStore.totalDiskUsageBytes()
 
-        let didClear = await viewModel.clearNovelCache()
+        let didClear = await viewModel.clearWebReaderCache()
         let novelBytesAfterClear = await fixture.novelReaderCacheStore.totalDiskUsageBytes()
-        let directoryBytesAfterClear = await fixture.mangaDirectoryStore.totalDiskUsageBytes()
         let projectionBytesAfterClear = await fixture.mangaReaderProjectionStore.totalDiskUsageBytes()
+        let forumBytesAfterClear = await fixture.forumCacheStore.totalDiskUsageBytes()
+        let directoryBytesAfterClear = await fixture.mangaDirectoryStore.totalDiskUsageBytes()
         let offlineBytesAfterClear = await fixture.offlineCacheStore.totalDiskUsageBytes()
         let offlineMembershipAfterClear = await fixture.offlineCacheStore.mangaOfflineCacheMembership(
             ownerName: "favorite-seed",
@@ -405,33 +412,64 @@ final class SystemSettingsViewModelTests: XCTestCase {
 
         XCTAssertTrue(didClear)
         XCTAssertGreaterThan(novelBytesBeforeClear, 0)
-        XCTAssertGreaterThan(indexBytesBeforeClear, 0)
+        XCTAssertGreaterThan(projectionBytesBeforeClear, 0)
+        XCTAssertGreaterThan(forumBytesBeforeClear, 0)
+        XCTAssertGreaterThan(directoryBytesBeforeClear, 0)
         XCTAssertGreaterThan(offlineBytesBeforeClear, 0)
         XCTAssertEqual(novelBytesAfterClear, 0)
+        XCTAssertEqual(projectionBytesAfterClear, 0)
+        XCTAssertEqual(forumBytesAfterClear, 0)
         XCTAssertEqual(directoryBytesAfterClear, directoryBytesBeforeClear)
-        XCTAssertEqual(projectionBytesAfterClear, projectionBytesBeforeClear)
         XCTAssertEqual(offlineBytesAfterClear, offlineBytesBeforeClear)
         XCTAssertNotNil(offlineMembershipAfterClear)
-        XCTAssertEqual(viewModel.novelCacheBytes, 0)
-        XCTAssertEqual(viewModel.mangaIndexCacheBytes, indexBytesBeforeClear)
+        XCTAssertEqual(viewModel.webReaderCacheBytes, 0)
+        XCTAssertEqual(viewModel.mangaDirectoryCacheBytes, directoryBytesBeforeClear)
         XCTAssertEqual(viewModel.offlineCacheBytes, offlineBytesBeforeClear)
     }
 
-    func testClearMangaIndexCacheClearsDirectoriesAndReaderProjectionsOnly() async throws {
+    func testClearContentCoverCacheClearsOnlyContentCovers() async throws {
         let fixture = try makeFixture()
-        try await seedMangaIndexCache(fixture)
+        try await seedContentCover(fixture)
+        try await seedNovelCache(fixture)
 
         let viewModel = SystemSettingsViewModel(dependencies: fixture.appContext.settingsDependencies)
         await viewModel.load()
+        let novelBytesBeforeClear = await fixture.novelReaderCacheStore.totalDiskUsageBytes()
 
-        let didClear = await viewModel.clearMangaIndexCache()
-        let directoryBytesAfterClear = await fixture.mangaDirectoryStore.totalDiskUsageBytes()
-        let projectionBytesAfterClear = await fixture.mangaReaderProjectionStore.totalDiskUsageBytes()
+        let didClear = await viewModel.clearContentCoverCache()
+        let coverAfterClear = await fixture.appContext.contentCoverStore.cover(for: .smartManga(cleanBookName: "测试漫画"))
+        let novelBytesAfterClear = await fixture.novelReaderCacheStore.totalDiskUsageBytes()
 
         XCTAssertTrue(didClear)
-        XCTAssertEqual(directoryBytesAfterClear, 0)
-        XCTAssertEqual(projectionBytesAfterClear, 0)
-        XCTAssertEqual(viewModel.mangaIndexCacheBytes, 0)
+        XCTAssertNil(coverAfterClear)
+        XCTAssertEqual(novelBytesAfterClear, novelBytesBeforeClear)
+        XCTAssertEqual(viewModel.contentCoverCacheBytes, 0)
+    }
+
+    func testClearOtherCachesClearsCheckInAndFavoriteUpdateStoreOnly() async throws {
+        let fixture = try makeFixture()
+        let session = makeAuthenticatedSession()
+        await fixture.appContext.checkInStore.markCheckedIn(session: session)
+        try await seedFavoriteUpdateStoreState(fixture)
+        try await seedNovelCache(fixture)
+
+        let viewModel = SystemSettingsViewModel(dependencies: fixture.appContext.settingsDependencies)
+        await viewModel.load()
+        let novelBytesBeforeClear = await fixture.novelReaderCacheStore.totalDiskUsageBytes()
+
+        let didClear = await viewModel.clearOtherCaches()
+        let needsCheckInAfterClear = await fixture.appContext.checkInStore.needsCheckIn(session: session)
+        let stateAfterClear = await fixture.appContext.favoriteUpdateStore.loadState()
+        let novelBytesAfterClear = await fixture.novelReaderCacheStore.totalDiskUsageBytes()
+
+        XCTAssertTrue(didClear)
+        XCTAssertTrue(needsCheckInAfterClear)
+        XCTAssertTrue(stateAfterClear.trackedTargets.isEmpty)
+        XCTAssertTrue(stateAfterClear.events.isEmpty)
+        XCTAssertTrue(stateAfterClear.runs.isEmpty)
+        XCTAssertTrue(stateAfterClear.fidFilters.isEmpty)
+        XCTAssertTrue(stateAfterClear.categoryFilters.isEmpty)
+        XCTAssertEqual(novelBytesAfterClear, novelBytesBeforeClear)
     }
 
     func testClearImageCachePreservesReaderAndUserOwnedCaches() async throws {
@@ -469,16 +507,16 @@ final class SystemSettingsViewModelTests: XCTestCase {
 
         let viewModel = SystemSettingsViewModel(dependencies: fixture.appContext.settingsDependencies)
         await viewModel.load()
-        let novelBytesBeforeClear = await fixture.novelReaderCacheStore.totalDiskUsageBytes()
-        let directoryBytesBeforeClear = await fixture.mangaDirectoryStore.totalDiskUsageBytes()
-        let projectionBytesBeforeClear = await fixture.mangaReaderProjectionStore.totalDiskUsageBytes()
-        let indexBytesBeforeClear = directoryBytesBeforeClear + projectionBytesBeforeClear
+        let webReaderBytesBeforeClear = viewModel.webReaderCacheBytes
+        let mangaDirectoryBytesBeforeClear = viewModel.mangaDirectoryCacheBytes
         let offlineBytesBeforeClear = await fixture.offlineCacheStore.totalDiskUsageBytes()
 
         let didClear = await viewModel.clearImageCache()
         let novelBytesAfterClear = await fixture.novelReaderCacheStore.totalDiskUsageBytes()
-        let directoryBytesAfterClear = await fixture.mangaDirectoryStore.totalDiskUsageBytes()
         let projectionBytesAfterClear = await fixture.mangaReaderProjectionStore.totalDiskUsageBytes()
+        let forumBytesAfterClear = await fixture.forumCacheStore.totalDiskUsageBytes()
+        let webReaderBytesAfterClear = novelBytesAfterClear + projectionBytesAfterClear + forumBytesAfterClear
+        let mangaDirectoryBytesAfterClear = await fixture.mangaDirectoryStore.totalDiskUsageBytes()
         let offlineBytesAfterClear = await fixture.offlineCacheStore.totalDiskUsageBytes()
         let offlineMembershipAfterClear = await fixture.offlineCacheStore.mangaOfflineCacheMembership(ownerName: "作品A", tid: "903")
         let offlineWorkAfterClear = await fixture.offlineCacheStore.mangaQueueWork(ownerName: "作品B", tid: "904")
@@ -488,9 +526,8 @@ final class SystemSettingsViewModelTests: XCTestCase {
 
         XCTAssertTrue(didClear)
         XCTAssertEqual(fixture.ordinaryImageCache.removeAllCallCount, 1)
-        XCTAssertEqual(novelBytesAfterClear, novelBytesBeforeClear)
-        XCTAssertEqual(directoryBytesAfterClear, directoryBytesBeforeClear)
-        XCTAssertEqual(projectionBytesAfterClear, projectionBytesBeforeClear)
+        XCTAssertEqual(webReaderBytesAfterClear, webReaderBytesBeforeClear)
+        XCTAssertEqual(mangaDirectoryBytesAfterClear, mangaDirectoryBytesBeforeClear)
         XCTAssertEqual(offlineBytesAfterClear, offlineBytesBeforeClear)
         XCTAssertNotNil(offlineMembershipAfterClear)
         XCTAssertNotNil(offlineWorkAfterClear)
@@ -498,8 +535,8 @@ final class SystemSettingsViewModelTests: XCTestCase {
         XCTAssertEqual(settingsAfterClear.system.homePage, .favorites)
         XCTAssertEqual(settingsAfterClear.favorites.background.imageID, favoriteBackgroundID)
         XCTAssertEqual(favoriteLibraryAfterClear, favoriteLibrary)
-        XCTAssertEqual(viewModel.novelCacheBytes, novelBytesBeforeClear)
-        XCTAssertEqual(viewModel.mangaIndexCacheBytes, indexBytesBeforeClear)
+        XCTAssertEqual(viewModel.webReaderCacheBytes, webReaderBytesBeforeClear)
+        XCTAssertEqual(viewModel.mangaDirectoryCacheBytes, mangaDirectoryBytesBeforeClear)
         XCTAssertEqual(viewModel.offlineCacheBytes, offlineBytesBeforeClear)
     }
 
@@ -797,8 +834,8 @@ final class SystemSettingsViewModelTests: XCTestCase {
 
         let viewModel = SystemSettingsViewModel(dependencies: fixture.appContext.settingsDependencies)
         await viewModel.load()
-        XCTAssertGreaterThan(viewModel.novelCacheBytes, 0)
-        XCTAssertGreaterThan(viewModel.mangaIndexCacheBytes, 0)
+        XCTAssertGreaterThan(viewModel.webReaderCacheBytes, 0)
+        XCTAssertGreaterThan(viewModel.mangaDirectoryCacheBytes, 0)
         XCTAssertGreaterThan(viewModel.offlineCacheBytes, 0)
 
         let didReset = await viewModel.resetApplication()
@@ -810,11 +847,171 @@ final class SystemSettingsViewModelTests: XCTestCase {
 
         XCTAssertTrue(didReset)
         XCTAssertEqual(fixture.ordinaryImageCache.removeAllCallCount, 1)
-        XCTAssertEqual(viewModel.novelCacheBytes, 0)
-        XCTAssertEqual(viewModel.mangaIndexCacheBytes, 0)
+        XCTAssertEqual(viewModel.webReaderCacheBytes, 0)
+        XCTAssertEqual(viewModel.mangaDirectoryCacheBytes, 0)
         XCTAssertEqual(viewModel.offlineCacheBytes, 0)
         XCTAssertEqual(offlineBytesAfterReset, 0)
         XCTAssertNil(offlineMembershipAfterReset)
+    }
+
+    /// Regression test for the bug where `resetApplicationData()` claimed to
+    /// wipe "全部缓存" but never actually cleared the per-account check-in
+    /// date cache or the favorites-update tracking state (tracked targets,
+    /// detected events, run history, fid/category filters).
+    func testResetApplicationClearsCheckInAndFavoriteUpdateStores() async throws {
+        let fixture = try makeFixture()
+        let session = makeAuthenticatedSession()
+        await fixture.appContext.checkInStore.markCheckedIn(session: session)
+        try await seedFavoriteUpdateStoreState(fixture)
+        let needsCheckInBeforeReset = await fixture.appContext.checkInStore.needsCheckIn(session: session)
+        let stateBeforeReset = await fixture.appContext.favoriteUpdateStore.loadState()
+        XCTAssertFalse(needsCheckInBeforeReset)
+        XCTAssertFalse(stateBeforeReset.trackedTargets.isEmpty)
+        XCTAssertFalse(stateBeforeReset.events.isEmpty)
+        XCTAssertFalse(stateBeforeReset.runs.isEmpty)
+        XCTAssertFalse(stateBeforeReset.fidFilters.isEmpty)
+        XCTAssertFalse(stateBeforeReset.categoryFilters.isEmpty)
+
+        let viewModel = SystemSettingsViewModel(dependencies: fixture.appContext.settingsDependencies)
+        let didReset = await viewModel.resetApplication()
+
+        let needsCheckInAfterReset = await fixture.appContext.checkInStore.needsCheckIn(session: session)
+        let stateAfterReset = await fixture.appContext.favoriteUpdateStore.loadState()
+
+        XCTAssertTrue(didReset)
+        XCTAssertTrue(needsCheckInAfterReset)
+        XCTAssertTrue(stateAfterReset.trackedTargets.isEmpty)
+        XCTAssertTrue(stateAfterReset.events.isEmpty)
+        XCTAssertTrue(stateAfterReset.runs.isEmpty)
+        XCTAssertTrue(stateAfterReset.fidFilters.isEmpty)
+        XCTAssertTrue(stateAfterReset.categoryFilters.isEmpty)
+    }
+
+    func testMangaDirectoryManagementListsDirectoriesWithChapterCounts() async throws {
+        let fixture = try makeFixture()
+        try await seedMangaDirectory(fixture, cleanBookName: "作品A", chapterTIDs: ["101", "102"])
+        try await seedMangaDirectory(fixture, cleanBookName: "作品B", chapterTIDs: ["201"])
+
+        let viewModel = SystemSettingsViewModel(dependencies: fixture.appContext.settingsDependencies)
+        await viewModel.refreshMangaDirectoryManagement()
+
+        let rowsByTitle = Dictionary(uniqueKeysWithValues: viewModel.mangaDirectoryManagementRows.map { ($0.title, $0) })
+        XCTAssertEqual(rowsByTitle["作品A"]?.chapterCount, 2)
+        XCTAssertEqual(rowsByTitle["作品B"]?.chapterCount, 1)
+        XCTAssertFalse(viewModel.mangaDirectoryManagementIsEmpty)
+    }
+
+    func testMangaDirectoryManagementSingleDeletePreparesConfirmation() async throws {
+        let fixture = try makeFixture()
+        try await seedMangaDirectory(fixture, cleanBookName: "作品A", chapterTIDs: ["101"])
+        let viewModel = SystemSettingsViewModel(dependencies: fixture.appContext.settingsDependencies)
+        await viewModel.refreshMangaDirectoryManagement()
+
+        viewModel.requestMangaDirectoryDeletion(id: "作品A")
+        XCTAssertEqual(viewModel.pendingMangaDirectoryManagementConfirmation?.directoryIDs, ["作品A"])
+
+        viewModel.cancelMangaDirectoryManagementConfirmation()
+        XCTAssertNil(viewModel.pendingMangaDirectoryManagementConfirmation)
+    }
+
+    func testMangaDirectoryManagementBatchDeleteUsesOneConfirmationForSelectedDirectories() async throws {
+        let fixture = try makeFixture()
+        try await seedMangaDirectory(fixture, cleanBookName: "作品A", chapterTIDs: ["101"])
+        try await seedMangaDirectory(fixture, cleanBookName: "作品B", chapterTIDs: ["201"])
+        let viewModel = SystemSettingsViewModel(dependencies: fixture.appContext.settingsDependencies)
+        await viewModel.refreshMangaDirectoryManagement()
+
+        viewModel.setMangaDirectoryManagementSelectionMode(true)
+        viewModel.toggleMangaDirectoryManagementSelection(id: "作品A")
+        viewModel.toggleMangaDirectoryManagementSelection(id: "作品B")
+        viewModel.requestSelectedMangaDirectoryDeletion()
+
+        XCTAssertEqual(viewModel.pendingMangaDirectoryManagementConfirmation?.directoryIDs, ["作品A", "作品B"])
+    }
+
+    func testMangaDirectoryManagementConfirmDeletesOnlySelectedDirectories() async throws {
+        let fixture = try makeFixture()
+        try await seedMangaDirectory(fixture, cleanBookName: "作品A", chapterTIDs: ["101"])
+        try await seedMangaDirectory(fixture, cleanBookName: "作品B", chapterTIDs: ["201"])
+        let viewModel = SystemSettingsViewModel(dependencies: fixture.appContext.settingsDependencies)
+        await viewModel.refreshMangaDirectoryManagement()
+
+        viewModel.requestMangaDirectoryDeletion(id: "作品A")
+        let didDelete = await viewModel.confirmPendingMangaDirectoryManagementDeletion()
+
+        let removedDirectory = try await fixture.mangaDirectoryStore.directory(named: "作品A")
+        let retainedDirectory = try await fixture.mangaDirectoryStore.directory(named: "作品B")
+
+        XCTAssertTrue(didDelete)
+        XCTAssertNil(removedDirectory)
+        XCTAssertNotNil(retainedDirectory)
+        XCTAssertEqual(viewModel.mangaDirectoryManagementRows.map(\.title), ["作品B"])
+        XCTAssertFalse(viewModel.isMangaDirectoryManagementSelectionMode)
+        XCTAssertTrue(viewModel.selectedMangaDirectoryIDs.isEmpty)
+    }
+
+    /// The directory index and offline downloads/favorite-update tracking
+    /// for the same book are independent stores with no FK/cascade between
+    /// them — deleting the index entry must not silently wipe either.
+    func testMangaDirectoryDeletionDoesNotTouchOfflineCacheOrFavoriteUpdateTracking() async throws {
+        let fixture = try makeFixture()
+        try await seedMangaDirectory(fixture, cleanBookName: "作品A", chapterTIDs: ["310"])
+        let imageURL = try XCTUnwrap(URL(string: "https://img.example.com/directory-delete-310.jpg"))
+        try await fixture.offlineCacheStore.saveOfflineImageData(Data([1]), for: imageURL)
+        try await fixture.offlineCacheStore.saveMangaOfflineCacheMembership(
+            try makeMangaOfflineMembership(ownerName: "作品A", tid: "310", imageURLs: [imageURL])
+        )
+        try await fixture.appContext.favoriteUpdateStore.upsertTrackedTarget(
+            makeMangaDirectoryTrackedTarget(cleanBookName: "作品A")
+        )
+
+        let viewModel = SystemSettingsViewModel(dependencies: fixture.appContext.settingsDependencies)
+        await viewModel.refreshMangaDirectoryManagement()
+
+        viewModel.requestMangaDirectoryDeletion(id: "作品A")
+        let didDelete = await viewModel.confirmPendingMangaDirectoryManagementDeletion()
+
+        let removedDirectory = try await fixture.mangaDirectoryStore.directory(named: "作品A")
+        let membershipAfterDelete = await fixture.offlineCacheStore.mangaOfflineCacheMembership(ownerName: "作品A", tid: "310")
+        let stateAfterDelete = await fixture.appContext.favoriteUpdateStore.loadState()
+
+        XCTAssertTrue(didDelete)
+        XCTAssertNil(removedDirectory)
+        XCTAssertNotNil(membershipAfterDelete)
+        XCTAssertFalse(stateAfterDelete.trackedTargets.isEmpty)
+    }
+
+    /// "Select all" then delete is how the two-level menu supports clearing
+    /// every directory, mirroring offline cache management's select-all flow
+    /// rather than adding a second, separate destructive action.
+    func testMangaDirectoryManagementSelectAllThenDeleteClearsAllDirectories() async throws {
+        let fixture = try makeFixture()
+        try await seedMangaDirectory(fixture, cleanBookName: "作品A", chapterTIDs: ["101"])
+        try await seedMangaDirectory(fixture, cleanBookName: "作品B", chapterTIDs: ["201"])
+        let viewModel = SystemSettingsViewModel(dependencies: fixture.appContext.settingsDependencies)
+        await viewModel.refreshMangaDirectoryManagement()
+
+        viewModel.setMangaDirectoryManagementSelectionMode(true)
+        viewModel.toggleAllMangaDirectoryManagementRows()
+        XCTAssertTrue(viewModel.isMangaDirectoryManagementSelectionComplete)
+
+        // Toggling again while fully selected must deselect everything
+        // (the method's other branch) rather than being a no-op.
+        viewModel.toggleAllMangaDirectoryManagementRows()
+        XCTAssertTrue(viewModel.selectedMangaDirectoryIDs.isEmpty)
+        XCTAssertFalse(viewModel.isMangaDirectoryManagementSelectionComplete)
+
+        viewModel.toggleAllMangaDirectoryManagementRows()
+        XCTAssertTrue(viewModel.isMangaDirectoryManagementSelectionComplete)
+
+        viewModel.requestSelectedMangaDirectoryDeletion()
+        let didDelete = await viewModel.confirmPendingMangaDirectoryManagementDeletion()
+
+        XCTAssertTrue(didDelete)
+        XCTAssertTrue(viewModel.mangaDirectoryManagementRows.isEmpty)
+        XCTAssertTrue(viewModel.mangaDirectoryManagementIsEmpty)
+        let directoryBytesAfterClear = await fixture.mangaDirectoryStore.totalDiskUsageBytes()
+        XCTAssertEqual(directoryBytesAfterClear, 0)
     }
 }
 
@@ -825,6 +1022,7 @@ private struct SystemSettingsFixture {
     let favoriteBackgroundImageStore: FavoriteBackgroundImageStore
     let mangaDirectoryStore: MangaDirectoryStore
     let mangaReaderProjectionStore: MangaReaderProjectionStore
+    let forumCacheStore: ForumCacheStore
     let offlineCacheStore: any TestOfflineCacheStoring
     let ordinaryImageCache: RecordingOrdinaryImageCache
 }
@@ -846,6 +1044,10 @@ private func makeFixture() throws -> SystemSettingsFixture {
     )
     let mangaDirectoryStore = MangaDirectoryStore(databasePool: database)
     let mangaReaderProjectionStore = MangaReaderProjectionStore(databasePool: database)
+    let forumCacheStore = ForumCacheStore(
+        databasePool: database,
+        baseDirectory: root.appendingPathComponent("forum-cache", isDirectory: true)
+    )
     let offlineCacheStore = OfflineCacheStore(
         databasePool: database,
         baseDirectory: root.appendingPathComponent("manga-offline-cache", isDirectory: true)
@@ -862,7 +1064,10 @@ private func makeFixture() throws -> SystemSettingsFixture {
         mangaDirectoryStore: mangaDirectoryStore,
         mangaReaderProjectionStore: mangaReaderProjectionStore,
         offlineCacheStore: offlineCacheStore,
-        ordinaryImageCache: ordinaryImageCache
+        forumCacheStore: forumCacheStore,
+        ordinaryImageCache: ordinaryImageCache,
+        databasePool: database,
+        grdbRootDirectory: root
     )
 
     return SystemSettingsFixture(
@@ -872,6 +1077,7 @@ private func makeFixture() throws -> SystemSettingsFixture {
         favoriteBackgroundImageStore: favoriteBackgroundImageStore,
         mangaDirectoryStore: mangaDirectoryStore,
         mangaReaderProjectionStore: mangaReaderProjectionStore,
+        forumCacheStore: forumCacheStore,
         offlineCacheStore: offlineCacheStore,
         ordinaryImageCache: ordinaryImageCache
     )
@@ -989,6 +1195,68 @@ private func seedMangaIndexCache(_ fixture: SystemSettingsFixture) async throws 
         sourceIdentity: sourceIdentity,
         sourceFingerprint: "settings-fixture"
     ))
+}
+
+private func seedForumCache(_ fixture: SystemSettingsFixture) async throws {
+    try await fixture.forumCacheStore.saveThreadPage(
+        makeSystemSettingsOfflineSourcePage(tid: "950"),
+        thread: ThreadIdentity(tid: "950")
+    )
+}
+
+private func seedContentCover(_ fixture: SystemSettingsFixture) async throws {
+    _ = try await fixture.appContext.contentCoverStore.setAutomaticCover(
+        try XCTUnwrap(URL(string: "https://img.example.com/cover.jpg")),
+        for: .smartManga(cleanBookName: "测试漫画")
+    )
+}
+
+private func seedMangaDirectory(
+    _ fixture: SystemSettingsFixture,
+    cleanBookName: String,
+    chapterTIDs: [String]
+) async throws {
+    try await fixture.mangaDirectoryStore.saveDirectory(
+        MangaDirectory(
+            cleanBookName: cleanBookName,
+            strategy: .tag,
+            sourceKey: "tag:\(cleanBookName)",
+            chapters: chapterTIDs.enumerated().map { index, tid in
+                MangaChapter(tid: tid, rawTitle: "第\(index + 1)话", chapterNumber: Double(index + 1))
+            }
+        )
+    )
+}
+
+private func makeAuthenticatedSession() -> SessionState {
+    SessionState(cookie: "\(SessionState.authenticationCookieName)=settings-test-account", isLoggedIn: true)
+}
+
+private func makeMangaDirectoryTrackedTarget(cleanBookName: String) -> FavoriteUpdateTrackedTarget {
+    FavoriteUpdateTrackedTarget(
+        target: .mangaDirectory(cleanBookName: cleanBookName),
+        title: cleanBookName,
+        mode: .mangaDirectory
+    )
+}
+
+/// Populates all 5 tables `FavoriteUpdateStore.clearAll()` touches (tracked
+/// targets, events, runs, fid filters, category filters) so tests can assert
+/// every one of them is actually wiped, not just the tracked-targets table.
+private func seedFavoriteUpdateStoreState(_ fixture: SystemSettingsFixture) async throws {
+    let store = fixture.appContext.favoriteUpdateStore
+    try await store.upsertTrackedTarget(makeMangaDirectoryTrackedTarget(cleanBookName: "测试漫画"))
+    try await store.insertEvent(FavoriteUpdateEvent(
+        target: .mangaDirectory(cleanBookName: "测试漫画"),
+        title: "测试漫画",
+        mode: .mangaDirectory,
+        summary: .newChapters(count: 1)
+    ))
+    try await store.saveRun(FavoriteUpdateRunSnapshot(status: .completed, phase: .completed))
+    try await store.replaceFilters(
+        fidFilters: [FavoriteUpdateFidFilter(fid: "30", forumName: "测试板块")],
+        categoryFilters: [FavoriteUpdateCategoryFilter(categoryID: "cat-1", categoryName: "测试分类")]
+    )
 }
 
 private func seedMangaOfflineCache(_ fixture: SystemSettingsFixture) async throws {

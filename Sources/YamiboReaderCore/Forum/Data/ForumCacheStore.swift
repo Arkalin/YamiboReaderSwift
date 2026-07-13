@@ -14,6 +14,7 @@ public actor ForumCacheStore {
 
     private let cacheStore: DiskCacheStore
     private let now: @Sendable () -> Date
+    private nonisolated(unsafe) let fileManager: FileManager
 
     init(
         databasePool: DatabasePool? = nil,
@@ -42,6 +43,7 @@ public actor ForumCacheStore {
             )
         }
         self.now = now
+        self.fileManager = fileManager
     }
 
     public func loadHome(allowExpired: Bool = false) async -> ForumHomePage? {
@@ -188,6 +190,27 @@ public actor ForumCacheStore {
         try await cacheStore.clearNamespace(Self.homeNamespace)
         try await cacheStore.clearNamespace(Self.boardNamespace)
         try await cacheStore.clearNamespace(Self.threadPageNamespace)
+    }
+
+    public func totalDiskUsageBytes() async -> Int {
+        var total = 0
+        for namespace in [Self.homeNamespace, Self.boardNamespace, Self.threadPageNamespace] {
+            let entries: [DiskCacheStore.CacheEntry]
+            do {
+                entries = try await cacheStore.entries(namespace: namespace)
+            } catch {
+                YamiboLog.offlineCache.warning("ForumCacheStore: failed to enumerate entries namespace=\(namespace, privacy: .public) for disk usage: \(error)")
+                continue
+            }
+            for entry in entries {
+                guard let fileURL = try? await cacheStore.fileURL(namespace: entry.namespace, key: entry.key),
+                      let byteCount = try? fileManager.attributesOfItem(atPath: fileURL.path)[.size] as? NSNumber else {
+                    continue
+                }
+                total += byteCount.intValue
+            }
+        }
+        return total
     }
 
     private func isExpired(_ fetchedAt: Date, ttl: TimeInterval) -> Bool {

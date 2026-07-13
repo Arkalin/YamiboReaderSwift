@@ -12,6 +12,7 @@ struct SettingsStorageView: View {
 
     @State private var showingWebDAVSettings = false
     @State private var showingOfflineCacheManagement = false
+    @State private var showingMangaDirectoryManagement = false
     @State private var pendingConfirmation: SystemSettingsConfirmation?
 
     var body: some View {
@@ -30,21 +31,11 @@ struct SettingsStorageView: View {
 
             Section(L10n.string("settings.section.storage")) {
                 Button {
-                    pendingConfirmation = .clearNovelCache
+                    pendingConfirmation = .clearWebReaderCache
                 } label: {
                     SystemSettingsRow(
-                        title: L10n.string("settings.clear_novel_cache"),
-                        value: viewModel.novelCacheLabel
-                    )
-                }
-                .disabled(viewModel.isBusy)
-
-                Button {
-                    pendingConfirmation = .clearMangaIndexCache
-                } label: {
-                    SystemSettingsRow(
-                        title: L10n.string("settings.clear_manga_index_cache"),
-                        value: viewModel.mangaIndexCacheLabel
+                        title: L10n.string("settings.clear_web_reader_cache"),
+                        value: viewModel.webReaderCacheLabel
                     )
                 }
                 .disabled(viewModel.isBusy)
@@ -53,7 +44,39 @@ struct SettingsStorageView: View {
                     pendingConfirmation = .clearImageCache
                 } label: {
                     SystemSettingsRow(
-                        title: L10n.string("settings.clear_image_cache")
+                        title: L10n.string("settings.clear_image_cache"),
+                        showsChevron: false
+                    )
+                }
+                .disabled(viewModel.isBusy)
+
+                Button {
+                    pendingConfirmation = .clearContentCoverCache
+                } label: {
+                    SystemSettingsRow(
+                        title: L10n.string("settings.clear_content_cover_cache"),
+                        value: viewModel.contentCoverCacheLabel
+                    )
+                }
+                .disabled(viewModel.isBusy)
+
+                Button {
+                    pendingConfirmation = .clearOtherCaches
+                } label: {
+                    SystemSettingsRow(
+                        title: L10n.string("settings.clear_other_caches"),
+                        showsChevron: false
+                    )
+                }
+                .disabled(viewModel.isBusy)
+
+                Button {
+                    showingMangaDirectoryManagement = true
+                } label: {
+                    SystemSettingsRow(
+                        title: L10n.string("settings.manga_directory.cleanup"),
+                        value: viewModel.mangaDirectoryCacheLabel,
+                        showsChevronAfterValue: true
                     )
                 }
                 .disabled(viewModel.isBusy)
@@ -87,6 +110,9 @@ struct SettingsStorageView: View {
         }
         .navigationDestination(isPresented: $showingOfflineCacheManagement) {
             OfflineCacheManagementView(viewModel: viewModel)
+        }
+        .navigationDestination(isPresented: $showingMangaDirectoryManagement) {
+            MangaDirectoryManagementView(viewModel: viewModel)
         }
         .alert(L10n.string("common.operation_failed"), isPresented: errorIsPresented, actions: {
             Button(L10n.string("common.ok")) {
@@ -162,10 +188,12 @@ struct SettingsStorageView: View {
 
     private func handleConfirmation(_ confirmation: SystemSettingsConfirmation) async {
         switch confirmation {
-        case .clearNovelCache:
-            _ = await viewModel.clearNovelCache()
-        case .clearMangaIndexCache:
-            _ = await viewModel.clearMangaIndexCache()
+        case .clearWebReaderCache:
+            _ = await viewModel.clearWebReaderCache()
+        case .clearContentCoverCache:
+            _ = await viewModel.clearContentCoverCache()
+        case .clearOtherCaches:
+            _ = await viewModel.clearOtherCaches()
         case .clearImageCache:
             _ = await viewModel.clearImageCache()
         case .resetApplication:

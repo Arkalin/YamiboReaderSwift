@@ -144,22 +144,34 @@ enum SettingsSearchRegistry {
             keywords: ["WebDAV", "备份", "同步"]
         ),
         SettingsSearchEntry(
-            id: "storage.clear_novel_cache",
-            title: L10n.string("settings.clear_novel_cache"),
+            id: "storage.clear_web_reader_cache",
+            title: L10n.string("settings.clear_web_reader_cache"),
             category: .storage,
-            keywords: ["清除", "缓存", "空间", "小说"]
-        ),
-        SettingsSearchEntry(
-            id: "storage.clear_manga_index_cache",
-            title: L10n.string("settings.clear_manga_index_cache"),
-            category: .storage,
-            keywords: ["清除", "缓存", "空间", "漫画", "索引"]
+            keywords: ["清理", "清除", "缓存", "空间", "网页", "论坛", "小说", "漫画", "阅读器"]
         ),
         SettingsSearchEntry(
             id: "storage.clear_image_cache",
             title: L10n.string("settings.clear_image_cache"),
             category: .storage,
             keywords: ["清除", "缓存", "空间", "图片"]
+        ),
+        SettingsSearchEntry(
+            id: "storage.clear_content_cover_cache",
+            title: L10n.string("settings.clear_content_cover_cache"),
+            category: .storage,
+            keywords: ["清理", "缓存", "空间", "封面", "索引"]
+        ),
+        SettingsSearchEntry(
+            id: "storage.clear_other_caches",
+            title: L10n.string("settings.clear_other_caches"),
+            category: .storage,
+            keywords: ["清理", "缓存", "其他", "签到", "收藏更新", "网络"]
+        ),
+        SettingsSearchEntry(
+            id: "storage.manga_directory",
+            title: L10n.string("settings.manga_directory.cleanup"),
+            category: .storage,
+            keywords: ["漫画", "目录", "索引", "清理", "分组"]
         ),
         SettingsSearchEntry(
             id: "storage.offline_cache",

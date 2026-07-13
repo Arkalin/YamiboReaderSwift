@@ -118,6 +118,7 @@ public actor MangaDirectoryStore: MangaDirectoryPersisting, MangaDirectoryRenami
         try await database.write { db in
             try db.execute(sql: "DELETE FROM manga_directories WHERE clean_book_name = ?", arguments: [name])
         }
+        postChangeNotification()
     }
 
     public func renameDirectory(
@@ -145,6 +146,36 @@ public actor MangaDirectoryStore: MangaDirectoryPersisting, MangaDirectoryRenami
         try await database.write { db in
             try db.execute(sql: "DELETE FROM manga_directory_chapters")
             try db.execute(sql: "DELETE FROM manga_directories")
+        }
+    }
+
+    /// Lightweight per-directory listing for the settings management screen:
+    /// name + chapter count instead of every chapter's full metadata.
+    public func allDirectorySummaries() async -> [MangaDirectorySummary] {
+        do {
+            return try await database.read { db in
+                try Row.fetchAll(
+                    db,
+                    sql: """
+                    SELECT d.clean_book_name, d.strategy, d.last_updated_at, COUNT(c.tid) AS chapter_count
+                    FROM manga_directories d
+                    LEFT JOIN manga_directory_chapters c ON c.directory_name = d.clean_book_name
+                    GROUP BY d.clean_book_name
+                    ORDER BY d.clean_book_name ASC
+                    """
+                ).compactMap { row -> MangaDirectorySummary? in
+                    guard let strategy = MangaDirectoryStrategy(rawValue: row["strategy"] as String) else { return nil }
+                    return MangaDirectorySummary(
+                        cleanBookName: row["clean_book_name"],
+                        strategy: strategy,
+                        chapterCount: row["chapter_count"],
+                        lastUpdatedAt: optionalDate(from: row["last_updated_at"] as Double?)
+                    )
+                }
+            }
+        } catch {
+            YamiboLog.persistence.warning("Failed to list manga directory summaries: \(error)")
+            return []
         }
     }
 

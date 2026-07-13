@@ -3,10 +3,12 @@ import YamiboReaderCore
 
 enum SystemSettingsAction: Equatable {
     case loading
-    case clearingNovelCache
-    case clearingMangaIndexCache
+    case clearingWebReaderCache
+    case clearingContentCoverCache
+    case clearingOtherCaches
     case clearingImageCache
     case clearingOfflineCache
+    case clearingMangaDirectory
     case resettingApplication
 }
 
@@ -106,8 +108,9 @@ struct OfflineCacheManagementConfirmation: Identifiable, Equatable {
 }
 
 enum SystemSettingsConfirmation: String, Identifiable {
-    case clearNovelCache
-    case clearMangaIndexCache
+    case clearWebReaderCache
+    case clearContentCoverCache
+    case clearOtherCaches
     case clearImageCache
     case restoreBoardReaderDefaults
     case resetApplication
@@ -117,10 +120,12 @@ enum SystemSettingsConfirmation: String, Identifiable {
 
     var title: String {
         switch self {
-        case .clearNovelCache:
-            L10n.string("settings.confirm_clear_novel_cache")
-        case .clearMangaIndexCache:
-            L10n.string("settings.confirm_clear_manga_index_cache")
+        case .clearWebReaderCache:
+            L10n.string("settings.confirm_clear_web_reader_cache")
+        case .clearContentCoverCache:
+            L10n.string("settings.confirm_clear_content_cover_cache")
+        case .clearOtherCaches:
+            L10n.string("settings.confirm_clear_other_caches")
         case .clearImageCache:
             L10n.string("settings.confirm_clear_image_cache")
         case .restoreBoardReaderDefaults:
@@ -134,11 +139,7 @@ enum SystemSettingsConfirmation: String, Identifiable {
 
     var buttonTitle: String {
         switch self {
-        case .clearNovelCache:
-            L10n.string("common.clear")
-        case .clearMangaIndexCache:
-            L10n.string("common.clear")
-        case .clearImageCache:
+        case .clearWebReaderCache, .clearContentCoverCache, .clearOtherCaches, .clearImageCache:
             L10n.string("common.clear")
         case .restoreBoardReaderDefaults:
             L10n.string("settings.board_reader.restore")
@@ -151,10 +152,12 @@ enum SystemSettingsConfirmation: String, Identifiable {
 
     var message: String {
         switch self {
-        case .clearNovelCache:
-            L10n.string("settings.clear_novel_cache_message")
-        case .clearMangaIndexCache:
-            L10n.string("settings.clear_manga_index_cache_message")
+        case .clearWebReaderCache:
+            L10n.string("settings.clear_web_reader_cache_message")
+        case .clearContentCoverCache:
+            L10n.string("settings.clear_content_cover_cache_message")
+        case .clearOtherCaches:
+            L10n.string("settings.clear_other_caches_message")
         case .clearImageCache:
             L10n.string("settings.clear_image_cache_message")
         case .restoreBoardReaderDefaults:
@@ -164,5 +167,71 @@ enum SystemSettingsConfirmation: String, Identifiable {
         case .signOut:
             L10n.string("settings.sign_out_message")
         }
+    }
+}
+
+struct MangaDirectoryManagementRow: Hashable, Identifiable {
+    var id: String
+    var title: String
+    var chapterCount: Int
+
+    init(summary: MangaDirectorySummary) {
+        id = summary.cleanBookName
+        title = summary.cleanBookName
+        chapterCount = summary.chapterCount
+    }
+
+    var summaryText: String {
+        L10n.string("settings.manga_directory.chapter_count_format", chapterCount)
+    }
+}
+
+struct MangaDirectoryManagementConfirmation: Identifiable, Equatable {
+    var directoryIDs: [String]
+    var titles: [String]
+
+    var id: String { directoryIDs.sorted().joined(separator: "|") }
+
+    init(directoryIDs: [String], titles: [String]) {
+        self.directoryIDs = directoryIDs
+        self.titles = titles
+    }
+
+    var title: String {
+        directoryIDs.count == 1
+            ? L10n.string("settings.manga_directory.confirm_single_title")
+            : L10n.string("settings.manga_directory.confirm_batch_title")
+    }
+
+    var message: String {
+        if let firstTitle = titles.first, directoryIDs.count == 1 {
+            return L10n.string("settings.manga_directory.confirm_single_message", firstTitle)
+        }
+        return L10n.string("settings.manga_directory.confirm_batch_message", directoryIDs.count)
+    }
+}
+
+/// Builds the manga-directory management selection-mode bottom bar's single
+/// "delete selected" action, mirroring `OfflineCacheManagementSelectionActions`.
+enum MangaDirectoryManagementSelectionActions {
+    static func delete(
+        selectedCount: Int,
+        canDelete: Bool,
+        onDelete: @escaping () -> Void
+    ) -> [SelectionToolbarAction] {
+        [
+            SelectionToolbarAction(
+                id: "delete",
+                title: L10n.string("common.delete"),
+                systemImage: "trash",
+                role: .destructive,
+                isEnabled: canDelete,
+                accessibilityLabel: L10n.string(
+                    "settings.manga_directory.delete_selected_format",
+                    selectedCount
+                ),
+                action: onDelete
+            )
+        ]
     }
 }

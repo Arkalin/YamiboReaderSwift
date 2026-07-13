@@ -328,6 +328,17 @@ public actor FavoriteUpdateStore {
         }
     }
 
+    public func clearAll() async throws {
+        try await write { db in
+            try db.execute(sql: "DELETE FROM favorite_update_tracked_targets")
+            try db.execute(sql: "DELETE FROM favorite_update_events")
+            try db.execute(sql: "DELETE FROM favorite_update_runs")
+            try db.execute(sql: "DELETE FROM favorite_update_fid_filters")
+            try db.execute(sql: "DELETE FROM favorite_update_category_filters")
+            return true
+        }
+    }
+
     public func dismissAllEvents(date: Date = .now) async throws {
         try await write { db in
             for var event in try Self.activeEvents(in: db) {

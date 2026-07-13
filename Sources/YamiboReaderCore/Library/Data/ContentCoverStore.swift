@@ -263,6 +263,29 @@ public actor ContentCoverStore {
         postChangeNotification()
     }
 
+    public func totalDiskUsageBytes() async -> Int {
+        do {
+            return try await database.read { db in
+                try Int.fetchOne(
+                    db,
+                    sql: """
+                    SELECT COALESCE(SUM(
+                        length(CAST(target_type AS BLOB)) +
+                        length(CAST(target_id AS BLOB)) +
+                        COALESCE(length(CAST(automatic_url AS BLOB)), 0) +
+                        COALESCE(length(CAST(manual_url AS BLOB)), 0) +
+                        24
+                    ), 0)
+                    FROM content_cover
+                    """
+                ) ?? 0
+            }
+        } catch {
+            YamiboLog.library.warning("Failed to read content cover disk usage: \(error)")
+            return 0
+        }
+    }
+
     public static func normalizedCoverURL(from rawValue: String) -> URL? {
         let value = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !value.isEmpty else { return nil }

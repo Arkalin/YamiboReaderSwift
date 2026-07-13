@@ -239,6 +239,10 @@ public final class YamiboAppContext: Sendable {
             novelReaderCacheStore: novelReaderCacheStore,
             mangaDirectoryStore: mangaDirectoryStore,
             mangaReaderProjectionStore: mangaReaderProjectionStore,
+            forumCacheStore: forumCacheStore,
+            contentCoverStore: contentCoverStore,
+            checkInStore: checkInStore,
+            favoriteUpdateStore: favoriteUpdateStore,
             offlineCacheStore: offlineCacheStore,
             clearOrdinaryImageCache: { [self] in await clearOrdinaryImageCache() },
             resetApplicationData: { [self] in try await resetApplicationData() },
@@ -399,10 +403,12 @@ public final class YamiboAppContext: Sendable {
     func resetApplicationData() async throws {
         try await sessionStore.reset()
         await profileStore.clear()
+        await checkInStore.clearAll()
         try await settingsStore.reset()
         try await webDAVSyncSettingsStore.reset()
         await readerResumeRouteStore.clear()
         try await localFavoriteLibraryStore.clearAll()
+        try await favoriteUpdateStore.clearAll()
         try await readingProgressStore.clearAll()
         try await browsingHistoryStore.clearAll()
         try await contentCoverStore.clearAll()
