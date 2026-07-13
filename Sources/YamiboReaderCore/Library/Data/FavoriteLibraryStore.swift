@@ -128,7 +128,7 @@ public actor FavoriteLibraryStore {
                 defaults.set(databaseID, forKey: idKey)
             }
             let root = FileManager.default.temporaryDirectory
-                .appendingPathComponent("YamiboReaderLocalFavoriteLibrary", isDirectory: true)
+                .appendingPathComponent("yamibo-reader-local-favorite-library", isDirectory: true)
                 .appendingPathComponent(databaseID, isDirectory: true)
             return try cachedDatabasePool(rootDirectory: root)
         } catch {

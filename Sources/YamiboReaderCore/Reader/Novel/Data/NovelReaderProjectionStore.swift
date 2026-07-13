@@ -2,7 +2,7 @@ import Foundation
 @preconcurrency import GRDB
 
 public actor NovelReaderProjectionStore {
-    public static let projectionNamespace = "novel_reader_projections"
+    public static let projectionNamespace = "novel-reader-projections"
 
     private let cacheStore: DiskCacheStore
     private nonisolated(unsafe) let fileManager: FileManager
@@ -20,7 +20,7 @@ public actor NovelReaderProjectionStore {
         } else {
             // An injected directory hosts both the database and the cache
             // files (tests); the no-argument fallback mirrors the app context:
-            // yamibo.sqlite in Application Support, yamibo_cache in Caches.
+            // yamibo.sqlite in Application Support, yamibo-cache in Caches.
             let injectedRootDirectory = rootDirectory ?? baseDirectory
             let resolvedDatabase = databasePool ?? Self.openDatabase(
                 rootDirectory: injectedRootDirectory ?? YamiboDatabase.defaultRootDirectory(fileManager: fileManager),

@@ -37,7 +37,7 @@ public actor FavoriteUpdateStore {
                 defaults.set(databaseID, forKey: idKey)
             }
             let root = FileManager.default.temporaryDirectory
-                .appendingPathComponent("YamiboReaderFavoriteUpdates", isDirectory: true)
+                .appendingPathComponent("yamibo-reader-favorite-updates", isDirectory: true)
                 .appendingPathComponent(databaseID, isDirectory: true)
             return try cachedDatabasePool(rootDirectory: root)
         } catch {

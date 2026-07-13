@@ -82,7 +82,7 @@ import YamiboReaderTestSupport
     let jsonCacheNamespaces = try await database.read { db in
         try String.fetchAll(db, sql: "SELECT namespace FROM cache_entries ORDER BY namespace")
     }
-    #expect(jsonCacheNamespaces == ["forum_thread_pages", "manga_reader_projections", "novel_reader_projections"])
+    #expect(jsonCacheNamespaces == ["forum-thread-pages", "manga-reader-projections", "novel-reader-projections"])
     #expect(!FileManager.default.fileExists(atPath: rootDirectory.appendingPathComponent("reader-cache/index.json", isDirectory: false).path))
     #expect(!FileManager.default.fileExists(atPath: rootDirectory.appendingPathComponent("image-data/index.json", isDirectory: false).path))
 }
@@ -132,19 +132,19 @@ import YamiboReaderTestSupport
     )
     #expect(FileManager.default.fileExists(
         atPath: YamiboDatabase.cacheDirectoryURL(rootDirectory: rootDirectory)
-            .appendingPathComponent("novel_reader_projections", isDirectory: true)
+            .appendingPathComponent("novel-reader-projections", isDirectory: true)
             .path
     ))
     #expect(FileManager.default.fileExists(atPath: offlineCacheDirectory(rootDirectory: rootDirectory).appendingPathComponent("images", isDirectory: true).path))
     #expect(FileManager.default.fileExists(atPath: YamiboDatabase.cacheDirectoryURL(rootDirectory: rootDirectory).path))
     #expect(FileManager.default.fileExists(
         atPath: YamiboDatabase.cacheDirectoryURL(rootDirectory: rootDirectory)
-            .appendingPathComponent("forum_home", isDirectory: true)
+            .appendingPathComponent("forum-home", isDirectory: true)
             .path
     ))
     #expect(FileManager.default.fileExists(
         atPath: YamiboDatabase.cacheDirectoryURL(rootDirectory: rootDirectory)
-            .appendingPathComponent("forum_boards", isDirectory: true)
+            .appendingPathComponent("forum-boards", isDirectory: true)
             .path
     ))
 
@@ -186,23 +186,23 @@ import YamiboReaderTestSupport
     #expect(!imageDataCacheEntriesTableExists)
     #expect(!FileManager.default.fileExists(
         atPath: YamiboDatabase.cacheDirectoryURL(rootDirectory: rootDirectory)
-            .appendingPathComponent("novel_reader_projections", isDirectory: true)
+            .appendingPathComponent("novel-reader-projections", isDirectory: true)
             .path
     ))
     #expect(!FileManager.default.fileExists(atPath: offlineCacheDirectory(rootDirectory: rootDirectory).path))
     #expect(!FileManager.default.fileExists(
         atPath: YamiboDatabase.cacheDirectoryURL(rootDirectory: rootDirectory)
-            .appendingPathComponent("forum_home", isDirectory: true)
+            .appendingPathComponent("forum-home", isDirectory: true)
             .path
     ))
     #expect(!FileManager.default.fileExists(
         atPath: YamiboDatabase.cacheDirectoryURL(rootDirectory: rootDirectory)
-            .appendingPathComponent("forum_boards", isDirectory: true)
+            .appendingPathComponent("forum-boards", isDirectory: true)
             .path
     ))
     #expect(!FileManager.default.fileExists(
         atPath: YamiboDatabase.cacheDirectoryURL(rootDirectory: rootDirectory)
-            .appendingPathComponent("forum_thread_pages", isDirectory: true)
+            .appendingPathComponent("forum-thread-pages", isDirectory: true)
             .path
     ))
     #expect(defaults.data(forKey: "yamibo.favoriteLibrary.localFirst") == legacyLibraryData)

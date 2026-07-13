@@ -41,7 +41,7 @@ struct StoreMigrationIssue001Tests {
         try await store.set(payload, namespace: "forum", key: "home")
 
         let fileURL = try await store.fileURL(namespace: "forum", key: "home")
-        #expect(fileURL.path.hasSuffix("/yamibo_cache/forum/home.json"))
+        #expect(fileURL.path.hasSuffix("/yamibo-cache/forum/home.json"))
         #expect(FileManager.default.fileExists(atPath: fileURL.path))
         #expect(try JSONDecoder().decode(CachePayload.self, from: Data(contentsOf: fileURL)) == payload)
 

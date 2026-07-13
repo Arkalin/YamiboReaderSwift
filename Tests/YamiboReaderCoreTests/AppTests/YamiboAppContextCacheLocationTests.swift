@@ -5,7 +5,7 @@ import Testing
 /// Pins each disk artifact to its intended root: offline-cache holds
 /// user-requested downloads the system must never purge, so it stays under the
 /// Application Support root with the backup exclusion marker, while the
-/// regenerable `yamibo_cache` projections live under the purgeable Caches
+/// regenerable `yamibo-cache` projections live under the purgeable Caches
 /// root. Everything else under the Application Support root (yamibo.sqlite,
 /// favorite-background, like-images) is user data that participates in
 /// backups.

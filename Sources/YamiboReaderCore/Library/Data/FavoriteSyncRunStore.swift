@@ -111,7 +111,7 @@ public actor FavoriteSyncRunStore {
                 defaults.set(databaseID, forKey: idKey)
             }
             let root = FileManager.default.temporaryDirectory
-                .appendingPathComponent("YamiboReaderFavoriteSyncRuns", isDirectory: true)
+                .appendingPathComponent("yamibo-reader-favorite-sync-runs", isDirectory: true)
                 .appendingPathComponent(databaseID, isDirectory: true)
             return try YamiboDatabase.openPool(rootDirectory: root)
         } catch {

@@ -372,7 +372,7 @@ public actor LikeStore {
                 defaults.set(databaseID, forKey: idKey)
             }
             let root = FileManager.default.temporaryDirectory
-                .appendingPathComponent("YamiboReaderLikeStore", isDirectory: true)
+                .appendingPathComponent("yamibo-reader-like-store", isDirectory: true)
                 .appendingPathComponent(databaseID, isDirectory: true)
             return try YamiboDatabase.openPool(rootDirectory: root)
         } catch {

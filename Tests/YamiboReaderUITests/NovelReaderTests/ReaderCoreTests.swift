@@ -2927,7 +2927,7 @@ private final class StubURLProtocol: URLProtocol {
     let metadata = try #require(rows.first)
 
     #expect(rows.count == 1)
-    #expect(metadata.namespace == "novel_reader_projections")
+    #expect(metadata.namespace == "novel-reader-projections")
     #expect(metadata.key == "tid_18610_author_12_view_4")
     #expect(!metadata.key.contains("https://"))
     #expect(FileManager.default.fileExists(

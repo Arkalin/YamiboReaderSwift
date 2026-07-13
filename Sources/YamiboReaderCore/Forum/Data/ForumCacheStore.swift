@@ -7,9 +7,9 @@ public actor ForumCacheStore {
     public static let threadPageTTL: TimeInterval = 24 * 60 * 60
     private static let threadPageMaxEntries = 50
     private static let boardMaxEntries = 50
-    public static let homeNamespace = "forum_home"
-    public static let boardNamespace = "forum_boards"
-    public static let threadPageNamespace = "forum_thread_pages"
+    public static let homeNamespace = "forum-home"
+    public static let boardNamespace = "forum-boards"
+    public static let threadPageNamespace = "forum-thread-pages"
     private static let homeKey = "home"
 
     private let cacheStore: DiskCacheStore
@@ -30,7 +30,7 @@ public actor ForumCacheStore {
         } else {
             // An injected directory hosts both the database and the cache
             // files (tests); the no-argument fallback mirrors the app context:
-            // yamibo.sqlite in Application Support, yamibo_cache in Caches.
+            // yamibo.sqlite in Application Support, yamibo-cache in Caches.
             let injectedRootDirectory = rootDirectory ?? baseDirectory
             let resolvedDatabase = databasePool ?? Self.openDatabase(
                 rootDirectory: injectedRootDirectory ?? YamiboDatabase.defaultRootDirectory(fileManager: fileManager),

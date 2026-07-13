@@ -5,7 +5,7 @@ import Foundation
 /// aggregation of the feature schema modules that own the actual tables.
 enum YamiboDatabase {
     static let databaseFileName = "yamibo.sqlite"
-    static let cacheDirectoryName = "yamibo_cache"
+    static let cacheDirectoryName = "yamibo-cache"
 
     /// Every feature module owning tables in `yamibo.sqlite`.
     private static let schemaModules: [any DatabaseSchemaModule.Type] = [
@@ -23,7 +23,7 @@ enum YamiboDatabase {
             ?? URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("YamiboReader", isDirectory: true)
     }
 
-    /// Root for the regenerable `yamibo_cache` file cache. Lives under
+    /// Root for the regenerable `yamibo-cache` file cache. Lives under
     /// `Library/Caches`, which the OS keeps out of backups and may purge under
     /// disk pressure; anything that must survive belongs under
     /// `defaultRootDirectory()` instead.

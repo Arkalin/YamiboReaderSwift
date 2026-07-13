@@ -398,7 +398,7 @@ public actor ContentCoverStore {
                 defaults.set(databaseID, forKey: idKey)
             }
             let root = FileManager.default.temporaryDirectory
-                .appendingPathComponent("YamiboReaderContentCovers", isDirectory: true)
+                .appendingPathComponent("yamibo-reader-content-covers", isDirectory: true)
                 .appendingPathComponent(databaseID, isDirectory: true)
             return try YamiboDatabase.openPool(rootDirectory: root)
         } catch {

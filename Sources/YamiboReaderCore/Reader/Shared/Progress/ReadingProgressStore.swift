@@ -360,7 +360,7 @@ public actor ReadingProgressStore {
                 defaults.set(databaseID, forKey: idKey)
             }
             let root = FileManager.default.temporaryDirectory
-                .appendingPathComponent("YamiboReaderReadingProgress", isDirectory: true)
+                .appendingPathComponent("yamibo-reader-reading-progress", isDirectory: true)
                 .appendingPathComponent(databaseID, isDirectory: true)
             return try cachedDatabasePool(rootDirectory: root)
         } catch {

@@ -31,7 +31,7 @@ import Testing
     #expect(loaded?.categories.first?.boards.first?.fid == "5")
     #expect(FileManager.default.fileExists(
         atPath: YamiboDatabase.cacheDirectoryURL(rootDirectory: directory)
-            .appendingPathComponent("forum_home", isDirectory: true)
+            .appendingPathComponent("forum-home", isDirectory: true)
             .appendingPathComponent("home.json", isDirectory: false)
             .path
     ))
@@ -100,11 +100,11 @@ import Testing
     }
     let row = try #require(rows.first)
     #expect(rows.count == 1)
-    #expect(row.namespace == "forum_boards")
+    #expect(row.namespace == "forum-boards")
     #expect(row.key.hasPrefix("board_"))
     #expect(FileManager.default.fileExists(
         atPath: YamiboDatabase.cacheDirectoryURL(rootDirectory: root)
-            .appendingPathComponent("forum_boards", isDirectory: true)
+            .appendingPathComponent("forum-boards", isDirectory: true)
             .appendingPathComponent("\(row.key).json", isDirectory: false)
             .path
     ))
@@ -303,13 +303,13 @@ import Testing
         }
     }
     #expect(rows.count == 2)
-    #expect(rows.map(\.namespace) == ["forum_home", "forum_thread_pages"])
-    #expect(rows.first(where: { $0.namespace == "forum_home" })?.key == "home")
-    #expect(rows.first(where: { $0.namespace == "forum_thread_pages" })?.key == "tid_990_page_4_author_42")
-    #expect(rows.first(where: { $0.namespace == "forum_thread_pages" })?.key.contains("https://") == false)
+    #expect(rows.map(\.namespace) == ["forum-home", "forum-thread-pages"])
+    #expect(rows.first(where: { $0.namespace == "forum-home" })?.key == "home")
+    #expect(rows.first(where: { $0.namespace == "forum-thread-pages" })?.key == "tid_990_page_4_author_42")
+    #expect(rows.first(where: { $0.namespace == "forum-thread-pages" })?.key.contains("https://") == false)
 
     let cacheFile = YamiboDatabase.cacheDirectoryURL(rootDirectory: root)
-        .appendingPathComponent("forum_thread_pages", isDirectory: true)
+        .appendingPathComponent("forum-thread-pages", isDirectory: true)
         .appendingPathComponent("tid_990_page_4_author_42.json", isDirectory: false)
     #expect(FileManager.default.fileExists(atPath: cacheFile.path))
     #expect(!FileManager.default.fileExists(
