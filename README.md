@@ -1,92 +1,102 @@
 # Yamibo X
 
-`Yamibo X` 是一个面向百合会内容的小说 / 漫画阅读器 SwiftUI 实现。项目包含可复用的核心解析与数据层、SwiftUI 界面层，以及一个独立 iOS App 入口。
+<p align="center">
+  <img src="YamiboX/Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png" width="128" alt="Yamibo X icon">
+</p>
+
+<p align="center">
+  <strong>Yamibo X</strong><br>
+  面向百合会论坛的非官方 iOS 综合客户端
+</p>
+
+<p align="center">
+  <a href="https://github.com/Arkalin/YamiboReaderSwift/releases"><img src="https://img.shields.io/github/v/release/Arkalin/YamiboReaderSwift?style=flat-square&label=%E4%B8%8B%E8%BD%BD&color=2f6f73" alt="最新版本"></a>
+  <img src="https://img.shields.io/badge/平台-iOS%2018.0%2B-247344?style=flat-square" alt="iOS 18.0+">
+  <img src="https://img.shields.io/badge/许可-AGPL--3.0-1f5f9c?style=flat-square" alt="AGPL-3.0 License">
+</p>
+
+> [!IMPORTANT]
+> Yamibo X 在功能设计上参考了 [prprbell/YamiboReaderPro](https://github.com/prprbell/YamiboReaderPro) 和 [LittleSurvival/yamibo-app](https://github.com/LittleSurvival/yamibo-app) 等项目。感谢原作者及所有相关项目贡献者。
+
+## 项目简介
+
+Yamibo X 是面向百合会论坛的非官方 iOS 阅读客户端。项目围绕原生阅读体验，整合论坛浏览、收藏管理、浏览历史、小说阅读和漫画阅读等功能，并针对 iPad 做了适配。
+
+## 功能概览
+
+- 可插拔的板块阅读：可自定义 `普通`/`小说`/`漫画`/`智能漫画` 板块阅读模式.
+- 类 `Apple Books` 原生阅读器：支持 `小说`/`漫画`/`智能漫画` 阅读。
+- `小说`阅读器：支持 滑动/卷页/快速淡入淡出/滚动 四种阅读模式、翻页方向、字体字号行距页边距、iPad横屏双页等排版设置、正文图片、章节目录、章节评论与阅读进度保存。
+- `漫画`阅读器：支持 滑动/卷页/快速淡入淡出/滚动 四种阅读模式、翻页方向、画面缩放、边缘填充、iPad横屏双页等排版设置、章节评论与阅读进度保存。
+- `智能漫画` 阅读器：在`漫画`阅读器的基础上，自动识别、聚合归属于同一漫画的所有章节帖子并提供目录管理功能（感谢[prprbell/YamiboReaderPro](https://github.com/prprbell/YamiboReaderPro)及上游项目提供的设计与实现参考）。
+- 论坛浏览：基于原生组件提供百合会论坛浏览入口，支持历史记录、`小说`/`智能漫画`详情页（感谢[LittleSurvival/yamibo-app](https://github.com/LittleSurvival/yamibo-app)提供的设计与实现参考）。
+- 本地收藏管理：同步论坛收藏，支持分类、合集、标签、手动排序、搜索、批量操作、更新检查与更新通知、封面管理（感谢[LittleSurvival/yamibo-app](https://github.com/LittleSurvival/yamibo-app)提供的设计与实现参考）。
+- 我的喜欢：阅读器中的精选摘录，支持文本、图片、作品和摘录项二级列表浏览、卡片化展示与搜索。
+- 离线缓存：可断点续传的下载队列，支持`小说`/`漫画`/`智能漫画`阅读器缓存，`小说`缓存自动更新。
+- 外设支持：支持Apple Pencil (Pro)、游戏手柄和键盘控制阅读器翻页与章节评论查看，并可自定义按键绑定。
+- 数据同步：支持通过 WebDAV 备份和恢复收藏、阅读进度与设置。
+- 剪贴板识别：支持识别`bbs.yamibo.com`开头的链接并在论坛页原生打开。
+- 签到：支持 基于 iOS 快捷指令-自动化 实现的自动签到和手动签到功能。
 
 ## 界面预览
 
 <p align="center">
-  <img src="docs/images/1.png" width="20%" alt="iPhone 收藏列表" />
-  <img src="docs/images/2.png" width="20%" alt="iPhone 小说阅读器" />
-  <img src="docs/images/3.png" width="20%" alt="iPhone 漫画阅读器" />
-  <img src="docs/images/4.png" width="20%" alt="iPhone 应用设置" />
-  <br />
-  <img src="docs/images/5.png" width="40%" alt="iPad 收藏列表" />
-  <img src="docs/images/6.png" width="40%" alt="iPad 阅读设置" />
+  <img src="docs/images/favorite.png" width="25%" alt="收藏页">
+  <img src="docs/images/novel_reader.png" width="25%" alt="小说阅读器">
+  <img src="docs/images/manga_reader.png" width="25%" alt="漫画阅读器">
+  <img src="docs/images/forum_home.png" width="25%" alt="论坛页">
+  <img src="docs/images/forum_novel_detail.png" width="25%" alt="小说详情页">
+  <img src="docs/images/forum_manga_detail.png" width="25%" alt="漫画详情页">
+  <img src="docs/images/likes.png" width="25%" alt="喜欢页">
+  <img src="docs/images/manga_reader_settings.png" width="25%" alt="漫画阅读设置">
+  <img src="docs/images/mine.png" width="25%" alt="我的页">
 </p>
 
-## 功能概览
+## 使用方式
 
-### 论坛浏览
+### 安装使用
 
-- 基于 `WebKit` 提供百合会移动版论坛浏览入口
-- 支持论坛历史、原帖打开、刷新与外部浏览器跳转
-- 支持从论坛页面识别并进入小说或漫画阅读流程
-- 提供“论坛 / 收藏 / 我的”三标签主界面，并可配置默认启动页
-
-### 收藏管理
-
-- 支持拉取并展示百合会收藏页内容
-- 支持本地收藏库、合集分组、标签管理、手动排序、筛选、搜索与批量选择
-- 支持编辑显示名、隐藏 / 取消隐藏、移动合集、分享与删除收藏
-- 支持收藏外观分类配色和漫画目录缓存管理
-
-### 小说阅读
-
-- 提供阅读内容抓取、HTML 解析与正文清洗能力
-- 支持章节标题归一化、网页页码跳转、章节切换和阅读进度保存
-- 支持查看章节评论
-- 支持分页与纵向两种阅读模式
-- 支持字体、字号、行距、字距、页边距、背景、简繁转换、两页横屏显示等阅读设置
-- 支持阅读缓存、缓存更新、缓存删除和后台缓存任务
-- 支持内联图片加载和 iPad Apple Pencil 翻页设置
-
-### 漫画阅读
-
-- 支持漫画目录、章节、页面与图片地址解析
-- 支持查看章节评论
-- 提供原生漫画阅读器，支持分页 / 纵向阅读切换
-- 支持目录跳转、章节排序、章节名修正、阅读进度保存与图片缓存
-- 在无法顺利进入原生阅读时，可回退到网页漫画视图
-
-### 登录、同步与本地能力
-
-- 支持会话状态、Cookie / UA 等访问上下文的持久化管理
-- 提供百合会每日签到能力，并包含 App Shortcuts / 快捷指令入口
-- 支持通过 WebDAV 上传或下载本地收藏、阅读进度和设置快照
-- 支持阅读缓存、漫画图片缓存、目录缓存与设置存储
-- 提供应用数据重置、小说缓存清理、漫画缓存清理与本地 Web 数据清理能力
-
-## 下载
-
-访问 [releases](https://github.com/Arkalin/YamiboReaderSwift/releases) 并获得最新的 `.ipa`.
+从 [Releases](https://github.com/Arkalin/YamiboReaderSwift/releases) 下载最新的 `.ipa`，通过 [AltStore](https://altstore.io) 等工具签名安装；也可以点击下方按钮，通过 AltSource 添加软件源后在 AltStore 内安装和更新。
 
 <a href="https://celloserenity.github.io/altdirect/?url=https://raw.githubusercontent.com/Arkalin/YamiboReaderSwift/main/app-repo.json" target="_blank">
    <img src="https://github.com/CelloSerenity/altdirect/blob/main/assets/png/AltSource_Blue.png?raw=true" alt="Add AltSource" width="200">
 </a>
 
-## 运行与验证
+### 系统要求
 
-### 环境要求
+iOS 18.0 及以上，支持 iPhone 和 iPad。
 
-- Swift 6.2+
-- iOS 17+（Swift Package 仅面向 iOS）
-- 支持 Swift 6.2 工具链的 Xcode 版本
+### 更新方式
 
-### Swift Package
+应用可在“我的 - 关于”页手动检查新版本，检测到更新后会提示下载地址和更新说明；通过 AltStore 软件源安装的用户也可以直接在 AltStore 内检查并安装更新。
+
+## 数据与安全
+
+- 登录状态、收藏、历史、阅读进度和缓存等数据保存在设备本地或来自百合会论坛账号本身。
+- WebDAV 同步使用用户自行配置的服务器，数据不会经过任何第三方服务器。
+- 请只从本仓库 Releases 或上方 AltSource 安装 `.ipa`，避免使用来源不明的改包版本。
+- 清理应用数据、卸载应用或更换设备可能导致本地历史、缓存和设置丢失。
+
+## 内容边界
+
+- 本项目为非官方客户端，与百合会论坛运营方无隶属关系。
+- 请遵守目标论坛规则、版权要求以及所在地法律法规。
+- 论坛内容、图片和用户发表的信息来自原站点，其版权与内容责任归原始来源所有。
+- 本项目在功能设计上参考了相关上游项目，相关来源与许可证信息请同时参考本仓库的 [LICENSE](./LICENSE)。
+
+## 开发者
 
 仓库通过 [`Package.swift`](Package.swift) 定义核心模块：
 
-- `YamiboXCore`：数据模型、网络访问、HTML 解析、缓存、同步与本地存储
-- `YamiboXUI`：SwiftUI 界面、论坛容器、收藏页、小说阅读器与漫画阅读器
-- `YamiboXTestSupport`：跨测试目标共享的测试基础设施
+- [`Sources/YamiboXCore`](Sources/YamiboXCore)：数据模型、网络访问、HTML 解析、缓存、同步与本地存储
+- [`Sources/YamiboXUI`](Sources/YamiboXUI)：SwiftUI 界面、论坛容器、收藏页、小说阅读器与漫画阅读器
+- [`Sources/YamiboXTestSupport`](Sources/YamiboXTestSupport)：跨测试目标共享的测试基础设施
+- [`YamiboX`](YamiboX)：独立 iOS App 入口，对应 Xcode 工程 [`YamiboX.xcodeproj`](YamiboX.xcodeproj)
+- [`Tests/YamiboXCoreTests`](Tests/YamiboXCoreTests) / [`Tests/YamiboXUITests`](Tests/YamiboXUITests)：核心与界面测试
 
-依赖：
+依赖：[`Kanna`](https://github.com/tid-kijyun/Kanna)、[`GRDB.swift`](https://github.com/groue/GRDB.swift)、[`Nuke`](https://github.com/kean/Nuke)
 
-- [`Kanna`](https://github.com/tid-kijyun/Kanna)
-- [`GRDB.swift`](https://github.com/groue/GRDB.swift)
-- [`Nuke`](https://github.com/kean/Nuke)
-
-在仓库根目录执行测试。将示例中的模拟器名称替换为本机可用的 iOS Simulator：
+环境要求为 Swift 6.2+、iOS 18+，以及支持 Swift 6.2 工具链的 Xcode 版本。在仓库根目录执行测试，将示例中的模拟器名称替换为本机可用的 iOS Simulator：
 
 ```bash
 xcodebuild test \
@@ -98,41 +108,21 @@ xcodebuild test \
   CODE_SIGNING_ALLOWED=NO
 ```
 
-### iOS App
+如果需要在模拟器或真机中运行，使用 Xcode 打开 [`YamiboX.xcodeproj`](YamiboX.xcodeproj) 并构建 `YamiboX` App target。
 
-iOS App 入口位于 [`YamiboX/YamiboXApp.swift`](YamiboX/YamiboXApp.swift)，对应的 Xcode 工程位于 [`YamiboX.xcodeproj`](YamiboX.xcodeproj)。
+## 许可协议
 
-如果需要在模拟器或真机中运行，使用 Xcode 打开工程并构建 `YamiboX` App target。
+本项目依据 [GNU AGPL-3.0](./LICENSE) 发布。
 
-## 项目结构
+第三方依赖和相关项目以其原作者或原项目的许可证声明为准。
 
-- [`Sources/YamiboXCore`](Sources/YamiboXCore)：核心模型、网络访问、解析、同步、缓存与存储，按 feature 目录组织，基础设施位于 `Infrastructure/`
-- [`Sources/YamiboXUI`](Sources/YamiboXUI)：SwiftUI 界面、论坛 Web 容器、阅读器和收藏管理，按 `Features/` 组织，跨 feature 组件位于 `Platform/`
-- [`Sources/YamiboXTestSupport`](Sources/YamiboXTestSupport)：测试目标共享的测试支撑代码
-- [`YamiboX`](YamiboX)：独立 iOS App 入口、资源和系统集成能力
-- [`Tests/YamiboXCoreTests`](Tests/YamiboXCoreTests)：核心解析、缓存、存储、签到与 WebDAV 同步测试
-- [`Tests/YamiboXUITests`](Tests/YamiboXUITests)：界面模型、路由、阅读器状态和漫画流程测试
-
-## TODO
-
-- [x] 多设备阅读进度同步
-- [x] 更完善的 iPad 支持
-- [x] 章节评论查看
-- [ ] Mac 支持
-- [ ] 多账号管理
-- [ ] 更新检查
-- [ ] 更新推送
-
-## 为什么要做本项目？
-
-~~因为我自己要看~~
-
-## 特别感谢
+相关项目：
 
 - [prprbell/YamiboReaderPro](https://github.com/prprbell/YamiboReaderPro)
 - [flben233/YamiboReader](https://github.com/flben233/YamiboReader)
-- [tid-kijyun/Kanna](https://github.com/tid-kijyun/Kanna)
+- [LittleSurvival/yamibo-app](https://github.com/LittleSurvival/yamibo-app)
+- [KrelinnBios/YamiboReaderLite](https://github.com/KrelinnBios/YamiboReaderLite)
 
-## License
+## 反馈与贡献
 
-本项目采用 `GNU Affero General Public License v3.0` (`AGPL-3.0`) 许可发布。详见 [`LICENSE`](LICENSE)。
+欢迎通过 [GitHub Issue](https://github.com/Arkalin/YamiboReaderSwift/issues) 提交使用问题、兼容性问题、功能建议或其他改进建议。
