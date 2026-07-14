@@ -42,15 +42,8 @@ struct ReaderChapterCommentsContent: View {
                 systemImage: "text.bubble"
             )
         case let .failed(target, message):
-            VStack(spacing: 12) {
-                ContentUnavailableView(
-                    message,
-                    systemImage: "exclamationmark.triangle"
-                )
-                Button(L10n.string("common.retry")) {
-                    retry(target)
-                }
-                .buttonStyle(.borderedProminent)
+            LoadFailureView(message: message, prominentRetry: true) {
+                retry(target)
             }
             .padding()
         case let .loaded(target, page):

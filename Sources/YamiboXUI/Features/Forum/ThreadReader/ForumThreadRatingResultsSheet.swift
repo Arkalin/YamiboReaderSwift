@@ -98,13 +98,7 @@ struct ForumThreadRatingResultsSheet: View {
                     }
                 }
             }
-            .overlay(alignment: .top) {
-                if model.isLoading && model.page != nil {
-                    ProgressView()
-                        .controlSize(.small)
-                        .padding(.top, 8)
-                }
-            }
+            .topRefreshIndicator(isVisible: model.isLoading && model.page != nil)
         }
         .task {
             await model.loadPage()

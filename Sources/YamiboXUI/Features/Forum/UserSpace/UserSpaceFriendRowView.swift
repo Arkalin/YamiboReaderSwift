@@ -42,17 +42,7 @@ struct UserSpaceFriendRowView: View {
 
     private var friendContent: some View {
         HStack(spacing: 10) {
-            YamiboRemoteImage(source: friend.avatarURL.map { YamiboImageSource(url: $0) }) { image in
-                image.resizable().scaledToFill()
-            } placeholder: {
-                Image(systemName: "person.crop.circle")
-                    .foregroundStyle(ForumColors.secondaryText)
-            } failure: {
-                Image(systemName: "person.crop.circle")
-                    .foregroundStyle(ForumColors.secondaryText)
-            }
-            .frame(width: 36, height: 36)
-            .clipShape(Circle())
+            ForumAvatarView(url: friend.avatarURL, size: 36)
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(friend.name)

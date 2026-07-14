@@ -32,7 +32,6 @@ struct LocalFavoriteCollectionEditorSheet: View {
     let onCancel: () -> Void
     let onSave: (String, FavoriteCollectionColor) async -> Void
 
-    @State private var name: String
     @State private var color: FavoriteCollectionColor
 
     init(
@@ -43,35 +42,25 @@ struct LocalFavoriteCollectionEditorSheet: View {
         self.draft = draft
         self.onCancel = onCancel
         self.onSave = onSave
-        _name = State(initialValue: draft.initialName)
         _color = State(initialValue: draft.initialColor)
     }
 
     var body: some View {
-        NavigationStack {
-            Form {
-                TextField(L10n.string("favorites.collection_name"), text: $name)
-                Picker(L10n.string("common.select"), selection: $color) {
-                    ForEach(FavoriteCollectionColor.allCases, id: \.self) { color in
-                        Label {
-                            Text(color.localizedTitle)
-                        } icon: {
-                            color.pickerIcon
-                        }
-                        .tag(color)
+        FavoriteNameEditorSheet(
+            title: title,
+            fieldLabel: L10n.string("favorites.collection_name"),
+            initialName: draft.initialName,
+            onCancel: onCancel,
+            onSave: { name in await onSave(name, color) }
+        ) {
+            Picker(L10n.string("common.select"), selection: $color) {
+                ForEach(FavoriteCollectionColor.allCases, id: \.self) { color in
+                    Label {
+                        Text(color.localizedTitle)
+                    } icon: {
+                        color.pickerIcon
                     }
-                }
-            }
-            .navigationTitle(title)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button(L10n.string("common.cancel"), action: onCancel)
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button(L10n.string("common.done")) {
-                        Task { await onSave(name, color) }
-                    }
-                    .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .tag(color)
                 }
             }
         }

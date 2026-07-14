@@ -29,7 +29,7 @@ struct UserSpaceContentView: View {
                             onAuthorTap: onUserTap
                         )
                     }
-                    ForumPageNavigationBar(navigation: pageNavigation, currentPage: currentPage, goToPage: goToPage)
+                    ForumPageNavigationBar(navigation: pageNavigation, currentPage: currentPage, goToPage: goToPage, hidesOnSinglePage: true)
                 }
             }
         case .replies:
@@ -42,7 +42,7 @@ struct UserSpaceContentView: View {
                             onThreadTap(reply.threadURL, reply.threadTitle)
                         }
                     }
-                    ForumPageNavigationBar(navigation: pageNavigation, currentPage: currentPage, goToPage: goToPage)
+                    ForumPageNavigationBar(navigation: pageNavigation, currentPage: currentPage, goToPage: goToPage, hidesOnSinglePage: true)
                 }
             }
         case .myBlogs, .friendBlogs, .viewAllBlogs:
@@ -55,7 +55,7 @@ struct UserSpaceContentView: View {
                             onBlogTap(blog)
                         }
                     }
-                    ForumPageNavigationBar(navigation: pageNavigation, currentPage: currentPage, goToPage: goToPage)
+                    ForumPageNavigationBar(navigation: pageNavigation, currentPage: currentPage, goToPage: goToPage, hidesOnSinglePage: true)
                 }
             }
         case .friends, .online, .visitors, .traces:
@@ -72,7 +72,7 @@ struct UserSpaceContentView: View {
                             onUserTap(friend.uid, friend.name)
                         }
                     }
-                    ForumPageNavigationBar(navigation: pageNavigation, currentPage: currentPage, goToPage: goToPage)
+                    ForumPageNavigationBar(navigation: pageNavigation, currentPage: currentPage, goToPage: goToPage, hidesOnSinglePage: true)
                 }
             }
         }

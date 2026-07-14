@@ -186,7 +186,7 @@ private struct ForumBoardBodyView: View {
 
     var body: some View {
         if isLoading && page == nil {
-            ForumBoardLoadingView()
+            ForumContentLoadingView(layout: .fillsPage)
         } else if let errorMessage, page == nil {
             ForumBoardErrorView(message: errorMessage, retry: retry)
         } else if let page {
@@ -270,11 +270,13 @@ private struct ForumBoardContentView: View {
                 }
 
                 if let pageNavigation {
-                    ForumPageNavigationView(
+                    ForumPageNavigationBar(
                         navigation: pageNavigation,
+                        currentPage: pageNavigation.currentPage,
                         goToPage: goToPage,
                         restorePreviousPage: restorePreviousPage
                     )
+                    .padding(.top, 4)
                 }
             }
             .padding(.horizontal, 16)
@@ -283,13 +285,7 @@ private struct ForumBoardContentView: View {
         .refreshable {
             await refresh()
         }
-        .overlay(alignment: .top) {
-            if isRefreshing {
-                ProgressView()
-                    .controlSize(.small)
-                    .padding(.top, 8)
-            }
-        }
+        .topRefreshIndicator(isVisible: isRefreshing)
         .forumPageBackground()
     }
 
@@ -574,69 +570,7 @@ private struct ForumPinnedRowView: View {
     }
 }
 
-private struct ForumPageNavigationView: View {
-    let navigation: ForumPageNavigation
-    let goToPage: (Int) -> Void
-    var restorePreviousPage: (() -> Void)? = nil
 
-    var body: some View {
-        HStack(spacing: 12) {
-            if let restorePreviousPage {
-                Button(action: restorePreviousPage) {
-                    Image(systemName: "arrow.uturn.backward")
-                }
-                .accessibilityLabel(L10n.string("forum.page_navigation.undo_jump"))
-            }
-
-            Button {
-                goToPage(navigation.currentPage - 1)
-            } label: {
-                Label(L10n.string("forum.board.previous_page"), systemImage: "chevron.left")
-            }
-            .disabled(navigation.currentPage <= 1)
-
-            Spacer()
-
-            Text(pageText)
-                .font(.subheadline.weight(.medium))
-                .foregroundStyle(ForumColors.secondaryText)
-
-            Spacer()
-
-            Button {
-                goToPage(navigation.currentPage + 1)
-            } label: {
-                Label(L10n.string("forum.board.next_page"), systemImage: "chevron.right")
-            }
-            .labelStyle(.titleAndIcon)
-            .disabled(navigation.totalPages.map { navigation.currentPage >= $0 } ?? false)
-        }
-        .buttonStyle(.bordered)
-        .controlSize(.small)
-        .tint(ForumColors.brownEmphasis)
-        .padding(.top, 4)
-    }
-
-    private var pageText: String {
-        if let totalPages = navigation.totalPages {
-            return L10n.string("forum.board.page_count", navigation.currentPage, totalPages)
-        }
-        return L10n.string("forum.board.current_page", navigation.currentPage)
-    }
-}
-
-private struct ForumBoardLoadingView: View {
-    var body: some View {
-        VStack(spacing: 12) {
-            ProgressView()
-            Text(L10n.string("common.loading"))
-                .font(.subheadline)
-                .foregroundStyle(ForumColors.secondaryText)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .forumPageBackground()
-    }
-}
 
 private struct ForumBoardErrorView: View {
     let message: String

@@ -68,16 +68,13 @@ struct ForumMangaDetailView: View {
         .task {
             await model.load()
         }
-        .alert(
+        .destructiveConfirmationAlert(
             L10n.string("manga.directory.reset_confirm_title"),
-            isPresented: $isResetConfirmationPresented
+            isPresented: $isResetConfirmationPresented,
+            actionTitle: L10n.string("manga.directory.reset"),
+            message: L10n.string("manga.directory.reset_confirm_message")
         ) {
-            Button(L10n.string("common.cancel"), role: .cancel) {}
-            Button(L10n.string("manga.directory.reset"), role: .destructive) {
-                Task { await model.resetDirectoryFromDetail() }
-            }
-        } message: {
-            Text(L10n.string("manga.directory.reset_confirm_message"))
+            Task { await model.resetDirectoryFromDetail() }
         }
         .sheet(isPresented: $isCorrectionPresented) {
             MangaDirectoryCorrectionSheet(
@@ -316,39 +313,7 @@ private struct ForumMangaDetailHeader: View {
     }
 
     private var cover: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(ForumColors.brownPrimary.opacity(0.12))
-
-            if let coverURL {
-                YamiboRemoteImage(source: YamiboImageSource(url: coverURL)) { image in
-                    image
-                        .resizable()
-                        .scaledToFill()
-                } placeholder: {
-                    ProgressView()
-                        .controlSize(.small)
-                        .tint(ForumColors.brownPrimary)
-                } failure: {
-                    coverPlaceholder
-                }
-            } else {
-                coverPlaceholder
-            }
-        }
-        .frame(width: 86, height: 112)
-        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .stroke(ForumColors.border.opacity(0.7), lineWidth: 1)
-        }
-        .accessibilityHidden(true)
-    }
-
-    private var coverPlaceholder: some View {
-        Image(systemName: "book.closed")
-            .font(.title2)
-            .foregroundStyle(ForumColors.brownPrimary.opacity(0.55))
+        ForumBookCoverView(source: coverURL.map { YamiboImageSource(url: $0) })
     }
 }
 

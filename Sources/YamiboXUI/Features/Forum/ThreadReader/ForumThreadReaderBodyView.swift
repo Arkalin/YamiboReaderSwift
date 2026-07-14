@@ -114,7 +114,8 @@ struct ForumThreadReaderBodyView: View {
                         ForumPageNavigationBar(
                             navigation: pageNavigation,
                             currentPage: currentPage,
-                            goToPage: goToPage
+                            goToPage: goToPage,
+                            hidesOnSinglePage: true
                         )
                     } else if isLoading {
                         ForumContentLoadingView()
@@ -128,13 +129,7 @@ struct ForumThreadReaderBodyView: View {
             .refreshable {
                 await refresh()
             }
-            .overlay(alignment: .top) {
-                if isLoading && page != nil {
-                    ProgressView()
-                        .controlSize(.small)
-                        .padding(.top, 8)
-                }
-            }
+            .topRefreshIndicator(isVisible: isLoading && page != nil)
             .task(id: scrollTaskIdentity(page: page, targetPostID: targetPostID, restoredAnchorPostID: restoredAnchorPostID)) {
                 guard page != nil else { return }
                 if let targetPostID {

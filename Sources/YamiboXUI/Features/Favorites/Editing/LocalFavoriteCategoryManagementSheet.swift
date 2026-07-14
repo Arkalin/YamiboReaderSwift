@@ -20,30 +20,20 @@ struct LocalFavoriteCategoryManagementSheet: View {
                 .onMove(perform: moveCategories)
             }
             .navigationTitle(L10n.string("favorites.category.manage"))
-            .alert(
-                L10n.string("favorites.category.delete"),
-                isPresented: deleteCategoryAlertBinding
-            ) {
-                Button(L10n.string("common.cancel"), role: .cancel) {
-                    pendingDeleteCategory = nil
-                }
-                Button(L10n.string("common.delete"), role: .destructive) {
-                    if let pendingDeleteCategory {
-                        Task {
-                            await organizer.deleteCategory(id: pendingDeleteCategory.id)
-                            self.pendingDeleteCategory = nil
-                        }
-                    }
-                }
-            } message: {
-                if let pendingDeleteCategory {
-                    Text(
-                        L10n.string(
-                            "favorites.category.delete_message",
-                            pendingDeleteCategory.displayName,
-                            organizer.derived.categoryEntryCounts[pendingDeleteCategory.id] ?? 0
-                        )
+            .destructiveConfirmationAlert(
+                item: $pendingDeleteCategory,
+                title: { _ in L10n.string("favorites.category.delete") },
+                actionTitle: { _ in L10n.string("common.delete") },
+                message: { category in
+                    L10n.string(
+                        "favorites.category.delete_message",
+                        category.displayName,
+                        organizer.derived.categoryEntryCounts[category.id] ?? 0
                     )
+                }
+            ) { category in
+                Task {
+                    await organizer.deleteCategory(id: category.id)
                 }
             }
             .toolbar {
@@ -112,16 +102,6 @@ struct LocalFavoriteCategoryManagementSheet: View {
         }
     }
 
-    private var deleteCategoryAlertBinding: Binding<Bool> {
-        Binding(
-            get: { pendingDeleteCategory != nil },
-            set: { isPresented in
-                if !isPresented {
-                    pendingDeleteCategory = nil
-                }
-            }
-        )
-    }
 
     private var sortedCategories: [FavoriteCategory] {
         organizer.categories.manualOrderSorted

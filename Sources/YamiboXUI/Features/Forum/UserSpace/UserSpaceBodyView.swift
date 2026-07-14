@@ -70,13 +70,7 @@ struct UserSpaceBodyView: View {
         .refreshable {
             await refresh()
         }
-        .overlay(alignment: .top) {
-            if isLoadingContent && content != nil {
-                ProgressView()
-                    .controlSize(.small)
-                    .padding(.top, 8)
-            }
-        }
+        .topRefreshIndicator(isVisible: isLoadingContent && content != nil)
         .forumPageBackground()
         .tint(ForumColors.brownDeep)
     }

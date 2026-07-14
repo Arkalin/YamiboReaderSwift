@@ -87,14 +87,12 @@ struct OfflineCacheQueueScreen: View {
 
                 ToolbarItem(placement: .primaryAction) {
                     if !viewModel.isEmpty {
-                        Button(
-                            viewModel.isSelectionMode
-                                ? L10n.string("common.done")
-                                : L10n.string("common.select")
+                        SelectionModeToggleButton(
+                            isSelecting: viewModel.isSelectionMode,
+                            isDisabled: viewModel.isCommandRunning
                         ) {
                             viewModel.setSelectionMode(!viewModel.isSelectionMode)
                         }
-                        .disabled(viewModel.isCommandRunning)
                     }
                 }
 
@@ -124,17 +122,12 @@ private struct OfflineCacheQueueSelectAllButton: View {
     var groupID: OfflineCacheGroupID? = nil
 
     var body: some View {
-        Button(title) {
+        SelectAllToolbarButton(
+            isSelectionComplete: viewModel.isWorkSelectionComplete(groupID: groupID),
+            isDisabled: viewModel.isEmpty
+        ) {
             viewModel.toggleAllWorks(groupID: groupID)
         }
-        .disabled(viewModel.isEmpty)
-        .accessibilityLabel(title)
-    }
-
-    private var title: String {
-        viewModel.isWorkSelectionComplete(groupID: groupID)
-            ? L10n.string("common.invert_selection")
-            : L10n.string("common.select_all")
     }
 }
 
@@ -214,7 +207,7 @@ private struct OfflineCacheQueueOwnerRow: View {
     var body: some View {
         HStack(spacing: 12) {
             Image(systemName: "books.vertical.fill")
-                .foregroundStyle(isDimmed ? Color.secondary.opacity(0.55) : Color.indigo)
+                .foregroundStyle(dimming.emphasis(.indigo))
                 .frame(width: 24)
 
             VStack(alignment: .leading, spacing: 8) {
@@ -222,42 +215,42 @@ private struct OfflineCacheQueueOwnerRow: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(group.ownerName)
                             .font(.headline)
-                            .foregroundStyle(titleColor)
+                            .foregroundStyle(dimming.titleColor)
                             .lineLimit(2)
 
                         Text(L10n.string("mine.offline_queue.chapter_count_format", group.chapterCount))
                             .font(.caption)
-                            .foregroundStyle(secondaryColor)
+                            .foregroundStyle(dimming.secondaryColor)
                     }
 
                     Spacer(minLength: 8)
 
                     Text(group.percentageText)
                         .font(.caption.monospacedDigit())
-                        .foregroundStyle(secondaryColor)
+                        .foregroundStyle(dimming.secondaryColor)
                         .lineLimit(1)
                 }
 
                 ProgressView(value: group.progressFraction)
-                    .tint(isDimmed ? Color.secondary : Color.accentColor)
+                    .tint(dimming.isDimmed ? Color.secondary : Color.accentColor)
 
                 HStack(spacing: 8) {
                     Text(group.progressText)
                         .font(.caption)
-                        .foregroundStyle(secondaryColor)
+                        .foregroundStyle(dimming.secondaryColor)
                         .lineLimit(1)
 
                     if let currentSpeedText = group.currentSpeedText {
                         Text(currentSpeedText)
                             .font(.caption.monospacedDigit())
-                            .foregroundStyle(secondaryColor)
+                            .foregroundStyle(dimming.secondaryColor)
                             .lineLimit(1)
                     }
 
                     if let failureStatusText = group.failureStatusText {
                         Text(failureStatusText)
                             .font(.caption)
-                            .foregroundStyle(isDimmed ? Color.secondary.opacity(0.55) : Color.red)
+                            .foregroundStyle(dimming.emphasis(.red))
                             .lineLimit(1)
                     }
                 }
@@ -272,21 +265,7 @@ private struct OfflineCacheQueueOwnerRow: View {
                 .opacity(isSelecting ? 0 : 1)
                 .accessibilityHidden(isSelecting)
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(YamiboColors.SystemSurface.secondaryGroupedBackground)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .strokeBorder(isSelecting && isSelected ? Color.accentColor : Color.clear, lineWidth: 2)
-        )
-        .contentShape(Rectangle())
-        .animation(.spring(response: 0.24, dampingFraction: 0.72), value: isSelected)
-        .onTapGesture(perform: rowAction)
-        .accessibilityAddTraits(isSelected ? .isSelected : [])
+        .selectableCardRow(isSelecting: isSelecting, isSelected: isSelected, onTap: rowAction)
         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
             Button(role: .destructive, action: cancel) {
                 Label(L10n.string("common.cancel"), systemImage: "xmark.circle")
@@ -294,16 +273,8 @@ private struct OfflineCacheQueueOwnerRow: View {
         }
     }
 
-    private var isDimmed: Bool {
-        isSelecting && !isSelected
-    }
-
-    private var titleColor: Color {
-        isDimmed ? .secondary : .primary
-    }
-
-    private var secondaryColor: Color {
-        isDimmed ? Color.secondary.opacity(0.55) : .secondary
+    private var dimming: SelectionRowDimming {
+        SelectionRowDimming(isSelecting: isSelecting, isSelected: isSelected)
     }
 
     private func rowAction() {
@@ -392,14 +363,12 @@ private struct OfflineCacheQueueOwnerScreen: View {
 
                 ToolbarItem(placement: .primaryAction) {
                     if group != nil {
-                        Button(
-                            viewModel.isSelectionMode
-                                ? L10n.string("common.done")
-                                : L10n.string("common.select")
+                        SelectionModeToggleButton(
+                            isSelecting: viewModel.isSelectionMode,
+                            isDisabled: viewModel.isCommandRunning
                         ) {
                             viewModel.setSelectionMode(!viewModel.isSelectionMode)
                         }
-                        .disabled(viewModel.isCommandRunning)
                     }
                 }
 
@@ -441,56 +410,42 @@ private struct OfflineCacheQueueChapterRowView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text(chapter.title)
-                    .foregroundStyle(titleColor)
+                    .foregroundStyle(dimming.titleColor)
                     .lineLimit(2)
 
                 Spacer(minLength: 8)
 
                 Text(chapter.percentageText)
                     .font(.caption.monospacedDigit())
-                    .foregroundStyle(secondaryColor)
+                    .foregroundStyle(dimming.secondaryColor)
                     .lineLimit(1)
             }
 
             ProgressView(value: chapter.progressFraction)
-                .tint(isDimmed ? Color.secondary : Color.accentColor)
+                .tint(dimming.isDimmed ? Color.secondary : Color.accentColor)
 
             HStack(spacing: 8) {
                 Text(chapter.progressText)
                     .font(.caption)
-                    .foregroundStyle(secondaryColor)
+                    .foregroundStyle(dimming.secondaryColor)
                     .lineLimit(1)
 
                 if let speedText = chapter.speedText {
                     Text(speedText)
                         .font(.caption.monospacedDigit())
-                        .foregroundStyle(secondaryColor)
+                        .foregroundStyle(dimming.secondaryColor)
                         .lineLimit(1)
                 }
 
                 if let failureStatusText = chapter.failureStatusText {
                     Text(failureStatusText)
                         .font(.caption)
-                        .foregroundStyle(isDimmed ? Color.secondary.opacity(0.55) : Color.red)
+                        .foregroundStyle(dimming.emphasis(.red))
                         .lineLimit(1)
                 }
             }
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(YamiboColors.SystemSurface.secondaryGroupedBackground)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .strokeBorder(isSelecting && isSelected ? Color.accentColor : Color.clear, lineWidth: 2)
-        )
-        .contentShape(Rectangle())
-        .animation(.spring(response: 0.24, dampingFraction: 0.72), value: isSelected)
-        .onTapGesture(perform: rowAction)
-        .accessibilityAddTraits(isSelected ? .isSelected : [])
+        .selectableCardRow(isSelecting: isSelecting, isSelected: isSelected, onTap: rowAction)
         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
             Button(role: .destructive, action: cancel) {
                 Label(L10n.string("common.cancel"), systemImage: "xmark.circle")
@@ -498,16 +453,8 @@ private struct OfflineCacheQueueChapterRowView: View {
         }
     }
 
-    private var isDimmed: Bool {
-        isSelecting && !isSelected
-    }
-
-    private var titleColor: Color {
-        isDimmed ? .secondary : .primary
-    }
-
-    private var secondaryColor: Color {
-        isDimmed ? Color.secondary.opacity(0.55) : .secondary
+    private var dimming: SelectionRowDimming {
+        SelectionRowDimming(isSelecting: isSelecting, isSelected: isSelected)
     }
 
     private func rowAction() {
@@ -518,23 +465,9 @@ private struct OfflineCacheQueueChapterRowView: View {
 
 private struct OfflineCacheQueueEmptyState: View {
     var body: some View {
-        VStack(spacing: 10) {
-            Image(systemName: "tray")
-                .font(.title2)
-                .foregroundStyle(.secondary)
-            Text(L10n.string("mine.offline_queue.empty_title"))
-                .font(.headline)
-            Text(L10n.string("mine.offline_queue.empty_message"))
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 32)
-        .padding(.horizontal, 16)
-        .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(YamiboColors.SystemSurface.secondaryGroupedBackground)
+        GroupedEmptyStateCard(
+            title: L10n.string("mine.offline_queue.empty_title"),
+            message: L10n.string("mine.offline_queue.empty_message")
         )
     }
 }

@@ -92,27 +92,8 @@ struct LocalFavoritesOrganizationView: View {
                 actions: dialogActions,
                 message: dialogMessage
             )
-            .confirmationDialog(
-                L10n.string("favorites.quick.remove_prompt.title"),
-                isPresented: removeRemotePromptBinding,
-                titleVisibility: .visible,
-                presenting: organizer.removeRemotePrompt
-            ) { _ in
-                Button(L10n.string("favorites.quick.remove_prompt.both"), role: .destructive) {
-                    Task { await organizer.confirmRemoveRemotePrompt(removeRemote: true, remember: false) }
-                }
-                Button(L10n.string("favorites.quick.remove_prompt.local_only"), role: .destructive) {
-                    Task { await organizer.confirmRemoveRemotePrompt(removeRemote: false, remember: false) }
-                }
-                Button(L10n.string("favorites.quick.remove_prompt.both_remember"), role: .destructive) {
-                    Task { await organizer.confirmRemoveRemotePrompt(removeRemote: true, remember: true) }
-                }
-                Button(L10n.string("favorites.quick.remove_prompt.local_remember"), role: .destructive) {
-                    Task { await organizer.confirmRemoveRemotePrompt(removeRemote: false, remember: true) }
-                }
-                Button(L10n.string("common.cancel"), role: .cancel) {}
-            } message: { _ in
-                Text(L10n.string("favorites.quick.remove_prompt.message"))
+            .favoriteRemovePromptDialog(prompt: $organizer.removeRemotePrompt) { _, removeRemote, remember in
+                Task { await organizer.confirmRemoveRemotePrompt(removeRemote: removeRemote, remember: remember) }
             }
             .sheet(item: $routes.sheet) { sheet in
                 LocalFavoritesSheetContent(
@@ -521,14 +502,12 @@ struct LocalFavoritesOrganizationView: View {
     @ToolbarContentBuilder
     private var selectionToolbarContent: some ToolbarContent {
         ToolbarItem(placement: .cancellationAction) {
-            Button(
-                organizer.isAllVisibleSelected
-                    ? L10n.string("common.invert_selection")
-                    : L10n.string("common.select_all")
+            SelectAllToolbarButton(
+                isSelectionComplete: organizer.isAllVisibleSelected,
+                isDisabled: !organizer.hasVisibleSelectableEntries
             ) {
                 organizer.toggleSelectAllVisible()
             }
-            .disabled(!organizer.hasVisibleSelectableEntries)
         }
         ToolbarItem(placement: .primaryAction) {
             Button(L10n.string("common.done")) {
@@ -637,17 +616,6 @@ struct LocalFavoritesOrganizationView: View {
 
     /// Dismissing without picking aborts the pending delete entirely — the
     /// prompt IS the delete's remote-decision step, not an optional add-on.
-    private var removeRemotePromptBinding: Binding<Bool> {
-        Binding(
-            get: { organizer.removeRemotePrompt != nil },
-            set: { isPresented in
-                if !isPresented {
-                    organizer.removeRemotePrompt = nil
-                }
-            }
-        )
-    }
-
     private var dialogTitle: Text {
         switch routes.dialog {
         case .dissolveCollection, .dissolveSelectedCollections:

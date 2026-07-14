@@ -8,17 +8,7 @@ struct ForumThreadPostHeader: View {
 
     var body: some View {
         HStack(alignment: .center, spacing: 10) {
-            YamiboRemoteImage(source: post.author.avatarURL.map { YamiboImageSource(url: $0) }) { image in
-                image.resizable().scaledToFill()
-            } placeholder: {
-                Image(systemName: "person.crop.circle")
-                    .foregroundStyle(ForumColors.secondaryText)
-            } failure: {
-                Image(systemName: "person.crop.circle")
-                    .foregroundStyle(ForumColors.secondaryText)
-            }
-            .frame(width: 38, height: 38)
-            .clipShape(Circle())
+            ForumAvatarView(url: post.author.avatarURL, size: 38)
 
             VStack(alignment: .leading, spacing: 3) {
                 if let uid = post.author.uid {

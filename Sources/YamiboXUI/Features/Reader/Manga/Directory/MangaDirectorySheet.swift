@@ -75,14 +75,8 @@ struct MangaDirectorySheet: View {
                             onBeginSelection: beginSelection
                         )
                         .mangaDirectoryListRow(top: 5, bottom: 5)
-                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                            if canDeleteChapterFromSwipe(chapter) {
-                                Button(role: .destructive) {
-                                    deleteChapter(chapter)
-                                } label: {
-                                    Label(L10n.string("common.delete"), systemImage: "trash")
-                                }
-                            }
+                        .deleteSwipeAction(isVisible: canDeleteChapterFromSwipe(chapter)) {
+                            deleteChapter(chapter)
                         }
                     }
                 }
@@ -144,26 +138,18 @@ struct MangaDirectorySheet: View {
             } message: {
                 Text(L10n.string("manga.delete_current_chapter_failed_message"))
             }
-            .confirmationDialog(
+            .destructiveConfirmationDialog(
                 L10n.string("manga.delete_selected_chapters_confirm_title", selectedChapterTIDs.count),
                 isPresented: $isBatchDeleteConfirmationPresented,
-                titleVisibility: .visible
-            ) {
-                Button(L10n.string("common.delete"), role: .destructive) {
-                    performDeleteSelectedChapters()
-                }
-            }
-            .alert(
+                onConfirm: performDeleteSelectedChapters
+            )
+            .destructiveConfirmationAlert(
                 L10n.string("manga.directory.reset_confirm_title"),
-                isPresented: $isResetConfirmationPresented
-            ) {
-                Button(L10n.string("common.cancel"), role: .cancel) {}
-                Button(L10n.string("manga.directory.reset"), role: .destructive) {
-                    onResetDirectory()
-                }
-            } message: {
-                Text(L10n.string("manga.directory.reset_confirm_message"))
-            }
+                isPresented: $isResetConfirmationPresented,
+                actionTitle: L10n.string("manga.directory.reset"),
+                message: L10n.string("manga.directory.reset_confirm_message"),
+                onConfirm: onResetDirectory
+            )
             .sheet(isPresented: $isCorrectionPresented) {
                 MangaDirectoryCorrectionSheet(
                     draft: $draft,
@@ -352,15 +338,14 @@ private struct MangaDirectoryChapterControlsRow: View {
     var body: some View {
         HStack {
             if isSelecting {
-                Button {
-                    onToggleVisibleSelection()
-                } label: {
-                    Text(visibleSelectionIsComplete ? L10n.string("common.invert_selection") : L10n.string("common.select_all"))
-                        .expandedHitTarget(width: 0)
-                }
+                SelectAllToolbarButton(
+                    isSelectionComplete: visibleSelectionIsComplete,
+                    isDisabled: !hasChapters,
+                    expandsHitTarget: true,
+                    toggle: onToggleVisibleSelection
+                )
                 .font(.subheadline.weight(.semibold))
                 .buttonStyle(.plain)
-                .disabled(!hasChapters)
             } else {
                 MangaDirectorySortToggleButton(
                     sortOrder: sortOrder,
@@ -484,20 +469,7 @@ private struct MangaDirectoryChapterRow: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(backgroundColor)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .strokeBorder(isSelecting && isSelected ? Color.accentColor : Color.clear, lineWidth: 2)
-        )
-        .contentShape(Rectangle())
-        .animation(.spring(response: 0.24, dampingFraction: 0.72), value: isSelected)
-        .onTapGesture {
+        .selectableCardRow(isSelecting: isSelecting, isSelected: isSelected, fill: backgroundColor) {
             if isSelecting {
                 onToggleSelection(chapter)
             } else {

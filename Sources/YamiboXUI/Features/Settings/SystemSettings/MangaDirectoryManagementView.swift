@@ -57,16 +57,14 @@ struct MangaDirectoryManagementView: View {
 
             ToolbarItem(placement: .primaryAction) {
                 if !viewModel.mangaDirectoryManagementIsEmpty {
-                    Button(
-                        viewModel.isMangaDirectoryManagementSelectionMode
-                            ? L10n.string("common.done")
-                            : L10n.string("common.select")
+                    SelectionModeToggleButton(
+                        isSelecting: viewModel.isMangaDirectoryManagementSelectionMode,
+                        isDisabled: viewModel.activeAction == .clearingMangaDirectory
                     ) {
                         viewModel.setMangaDirectoryManagementSelectionMode(
                             !viewModel.isMangaDirectoryManagementSelectionMode
                         )
                     }
-                    .disabled(viewModel.activeAction == .clearingMangaDirectory)
                 }
             }
 

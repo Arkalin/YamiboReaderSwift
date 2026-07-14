@@ -99,11 +99,12 @@ private struct PrivateMessageContentView: View {
                                 PrivateMessageBubbleView(message: message, currentProfile: currentProfile)
                             }
                         }
-                        PrivateMessagePageNavigationView(
+                        ForumPageNavigationBar(
                             navigation: page.pageNavigation,
                             currentPage: currentPage,
                             goToPage: goToPage
                         )
+                        .padding(.top, 6)
                     }
                     .padding(.horizontal, 14)
                     .padding(.vertical, 16)
@@ -111,17 +112,13 @@ private struct PrivateMessageContentView: View {
                 .refreshable {
                     await refresh()
                 }
-                .overlay(alignment: .top) {
-                    if isLoading {
-                        ProgressView()
-                            .controlSize(.small)
-                            .padding(.top, 8)
-                    }
-                }
+                .topRefreshIndicator(isVisible: isLoading)
             } else if isLoading {
-                PrivateMessageLoadingView()
+                ForumContentLoadingView(layout: .fills)
             } else if let errorMessage {
-                PrivateMessageErrorView(message: errorMessage, retry: retry)
+                LoadFailureView(message: errorMessage, retry: retry)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .padding()
             } else {
                 PrivateMessageEmptyView()
             }
@@ -156,7 +153,7 @@ private struct PrivateMessageBubbleView: View {
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
             if !isMine {
-                PrivateMessageAvatarView(url: avatarURL)
+                ForumAvatarView(url: avatarURL, size: 38)
             }
 
             VStack(alignment: isMine ? .trailing : .leading, spacing: 4) {
@@ -186,7 +183,7 @@ private struct PrivateMessageBubbleView: View {
             .frame(maxWidth: .infinity, alignment: isMine ? .trailing : .leading)
 
             if isMine {
-                PrivateMessageAvatarView(url: avatarURL)
+                ForumAvatarView(url: avatarURL, size: 38)
             }
         }
     }
@@ -196,23 +193,6 @@ private struct PrivateMessageBubbleView: View {
     }
 }
 
-private struct PrivateMessageAvatarView: View {
-    let url: URL?
-
-    var body: some View {
-        YamiboRemoteImage(source: url.map { YamiboImageSource(url: $0) }) { image in
-            image.resizable().scaledToFill()
-        } placeholder: {
-            Image(systemName: "person.crop.circle")
-                .foregroundStyle(ForumColors.secondaryText)
-        } failure: {
-            Image(systemName: "person.crop.circle")
-                .foregroundStyle(ForumColors.secondaryText)
-        }
-        .frame(width: 38, height: 38)
-        .clipShape(Circle())
-    }
-}
 
 private struct PrivateMessageInputBar: View {
     @Binding var text: String
@@ -244,79 +224,8 @@ private struct PrivateMessageInputBar: View {
     }
 }
 
-private struct PrivateMessagePageNavigationView: View {
-    let navigation: ForumPageNavigation?
-    let currentPage: Int
-    let goToPage: (Int) -> Void
 
-    var body: some View {
-        if let navigation {
-            HStack(spacing: 12) {
-                Button {
-                    goToPage(currentPage - 1)
-                } label: {
-                    Label(L10n.string("forum.board.previous_page"), systemImage: "chevron.left")
-                }
-                .disabled(currentPage <= 1)
 
-                Spacer()
-
-                Text(pageText(navigation))
-                    .font(.subheadline.weight(.medium))
-                    .foregroundStyle(ForumColors.secondaryText)
-
-                Spacer()
-
-                Button {
-                    goToPage(currentPage + 1)
-                } label: {
-                    Label(L10n.string("forum.board.next_page"), systemImage: "chevron.right")
-                }
-                .disabled(navigation.totalPages.map { currentPage >= $0 } ?? false)
-            }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
-            .tint(ForumColors.brownEmphasis)
-            .padding(.top, 6)
-        }
-    }
-
-    private func pageText(_ navigation: ForumPageNavigation) -> String {
-        if let totalPages = navigation.totalPages {
-            return L10n.string("forum.board.page_count", currentPage, totalPages)
-        }
-        return L10n.string("forum.board.current_page", currentPage)
-    }
-}
-
-private struct PrivateMessageLoadingView: View {
-    var body: some View {
-        VStack(spacing: 12) {
-            ProgressView()
-            Text(L10n.string("common.loading"))
-                .font(.subheadline)
-                .foregroundStyle(ForumColors.secondaryText)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-}
-
-private struct PrivateMessageErrorView: View {
-    let message: String
-    let retry: () -> Void
-
-    var body: some View {
-        ContentUnavailableView {
-            Label(L10n.string("common.load_failed"), systemImage: "exclamationmark.triangle")
-        } description: {
-            Text(message)
-        } actions: {
-            Button(L10n.string("common.retry"), action: retry)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding()
-    }
-}
 
 private struct PrivateMessageEmptyView: View {
     var body: some View {

@@ -31,17 +31,13 @@ struct BrowsingHistoryView: View {
                 .disabled(model.entries.isEmpty)
             }
         }
-        .confirmationDialog(
+        .destructiveConfirmationDialog(
             L10n.string("history.clear_all.title"),
             isPresented: Bindable(model).clearAllConfirmationPresented,
-            titleVisibility: .visible
+            actionTitle: L10n.string("history.clear_all"),
+            message: L10n.string("history.clear_all.message")
         ) {
-            Button(L10n.string("history.clear_all"), role: .destructive) {
-                Task { await model.clearAll() }
-            }
-            Button(L10n.string("common.cancel"), role: .cancel) {}
-        } message: {
-            Text(L10n.string("history.clear_all.message"))
+            Task { await model.clearAll() }
         }
         .favoriteQuickActionDialogs(
             addPromptPresented: Bindable(model).favoriteAddPromptPresented,
@@ -137,12 +133,8 @@ struct BrowsingHistoryView: View {
                 Task { await model.presentFavoriteLocationPicker(entry) }
             }
         )
-        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-            Button(role: .destructive) {
-                Task { await model.delete(entry) }
-            } label: {
-                Label(L10n.string("common.delete"), systemImage: "trash")
-            }
+        .deleteSwipeAction {
+            Task { await model.delete(entry) }
         }
     }
 

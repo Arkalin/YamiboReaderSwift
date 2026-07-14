@@ -43,14 +43,8 @@ struct LikeWorkItemsView: View {
                 .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
                 .listRowSeparator(.hidden)
                 .listRowBackground(Color.clear)
-                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                    if !isSelecting {
-                        Button(role: .destructive) {
-                            delete(item)
-                        } label: {
-                            Label(L10n.string("common.delete"), systemImage: "trash")
-                        }
-                    }
+                .deleteSwipeAction(allowsFullSwipe: false, isVisible: !isSelecting) {
+                    delete(item)
                 }
             }
         }
@@ -79,14 +73,11 @@ struct LikeWorkItemsView: View {
         .toolbar {
             if isSelecting {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button(
-                        isAllVisibleSelected
-                            ? L10n.string("common.invert_selection")
-                            : L10n.string("common.select_all")
-                    ) {
-                        toggleSelectAll()
-                    }
-                    .disabled(filteredItems.isEmpty)
+                    SelectAllToolbarButton(
+                        isSelectionComplete: isAllVisibleSelected,
+                        isDisabled: filteredItems.isEmpty,
+                        toggle: toggleSelectAll
+                    )
                 }
                 ToolbarItem(placement: .primaryAction) {
                     Button(L10n.string("common.done")) {
@@ -129,17 +120,12 @@ struct LikeWorkItemsView: View {
                 .selectionBottomToolbarCapsule()
             }
         }
-        .confirmationDialog(
+        .destructiveConfirmationDialog(
             L10n.string("likes.delete_selected_items_title"),
             isPresented: $isShowingDeleteConfirmation,
-            titleVisibility: .visible
+            message: L10n.string("likes.delete_selected_items_message", selectedItemIDs.count)
         ) {
-            Button(L10n.string("common.delete"), role: .destructive) {
-                Task { await deleteSelection() }
-            }
-            Button(L10n.string("common.cancel"), role: .cancel) {}
-        } message: {
-            Text(L10n.string("likes.delete_selected_items_message", selectedItemIDs.count))
+            Task { await deleteSelection() }
         }
         .sensoryFeedback(.selection, trigger: selectedItemIDs)
         .task { await load() }

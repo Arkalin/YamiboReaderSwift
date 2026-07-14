@@ -63,14 +63,11 @@ struct LikeWorkListView: View {
         .toolbar {
             if isSelecting {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button(
-                        isAllVisibleSelected
-                            ? L10n.string("common.invert_selection")
-                            : L10n.string("common.select_all")
-                    ) {
-                        toggleSelectAll()
-                    }
-                    .disabled(filteredSummaries.isEmpty)
+                    SelectAllToolbarButton(
+                        isSelectionComplete: isAllVisibleSelected,
+                        isDisabled: filteredSummaries.isEmpty,
+                        toggle: toggleSelectAll
+                    )
                 }
                 ToolbarItem(placement: .primaryAction) {
                     Button(L10n.string("common.done")) {
@@ -125,17 +122,12 @@ struct LikeWorkListView: View {
             }
             Task { await load() }
         }
-        .confirmationDialog(
+        .destructiveConfirmationDialog(
             L10n.string("likes.delete_selected_works_title"),
             isPresented: $isShowingDeleteConfirmation,
-            titleVisibility: .visible
+            message: L10n.string("likes.delete_selected_works_message", selectedWorkKeys.count)
         ) {
-            Button(L10n.string("common.delete"), role: .destructive) {
-                Task { await deleteSelection() }
-            }
-            Button(L10n.string("common.cancel"), role: .cancel) {}
-        } message: {
-            Text(L10n.string("likes.delete_selected_works_message", selectedWorkKeys.count))
+            Task { await deleteSelection() }
         }
         .sensoryFeedback(.selection, trigger: selectedWorkKeys)
     }

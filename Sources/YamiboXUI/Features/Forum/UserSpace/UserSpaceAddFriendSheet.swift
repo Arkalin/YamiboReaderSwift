@@ -91,19 +91,7 @@ private struct UserSpaceAddFriendFormView: View {
         Form {
             Section {
                 HStack(spacing: 12) {
-                    YamiboRemoteImage(source: avatarURL.map { YamiboImageSource(url: $0) }) { image in
-                        image.resizable().scaledToFill()
-                    } placeholder: {
-                        Image(systemName: "person.crop.circle")
-                            .font(.largeTitle)
-                            .foregroundStyle(ForumColors.secondaryText)
-                    } failure: {
-                        Image(systemName: "person.crop.circle")
-                            .font(.largeTitle)
-                            .foregroundStyle(ForumColors.secondaryText)
-                    }
-                    .frame(width: 52, height: 52)
-                    .clipShape(Circle())
+                    ForumAvatarView(url: avatarURL, size: 52, placeholderFont: .largeTitle)
 
                     VStack(alignment: .leading, spacing: 4) {
                         Text(targetName ?? L10n.string("user_space.unknown_user"))
@@ -131,20 +119,11 @@ private struct UserSpaceAddFriendFormView: View {
             }
 
             Section {
-                Button {
-                    submit()
-                } label: {
-                    HStack {
-                        Spacer()
-                        if isSubmitting {
-                            ProgressView()
-                        } else {
-                            Text(L10n.string("user_space.add_friend_submit"))
-                                .font(.headline)
-                        }
-                        Spacer()
-                    }
-                }
+                FormSubmitButton(
+                    title: L10n.string("user_space.add_friend_submit"),
+                    isLoading: isSubmitting,
+                    action: submit
+                )
                 .disabled(isSubmitting)
             }
         }

@@ -66,17 +66,17 @@ struct OfflineCacheManagementGroupRowView: View {
     var body: some View {
         HStack(spacing: 12) {
             Image(systemName: row.readerKind == .manga ? "photo.on.rectangle.angled" : "text.book.closed.fill")
-                .foregroundStyle(isDimmed ? Color.secondary.opacity(0.55) : Color.indigo)
+                .foregroundStyle(dimming.emphasis(.indigo))
                 .frame(width: 24)
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(row.title)
-                    .foregroundStyle(titleColor)
+                    .foregroundStyle(dimming.titleColor)
                     .lineLimit(2)
 
                 Text(row.summaryText)
                     .font(.caption)
-                    .foregroundStyle(secondaryColor)
+                    .foregroundStyle(dimming.secondaryColor)
                     .lineLimit(2)
             }
 
@@ -89,40 +89,12 @@ struct OfflineCacheManagementGroupRowView: View {
                 .opacity(isSelecting ? 0 : 1)
                 .accessibilityHidden(isSelecting)
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(YamiboColors.SystemSurface.secondaryGroupedBackground)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .strokeBorder(isSelecting && isSelected ? Color.accentColor : Color.clear, lineWidth: 2)
-        )
-        .contentShape(Rectangle())
-        .animation(.spring(response: 0.24, dampingFraction: 0.72), value: isSelected)
-        .onTapGesture(perform: rowAction)
-        .accessibilityAddTraits(isSelected ? .isSelected : [])
-        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-            Button(role: .destructive) {
-                delete()
-            } label: {
-                Label(L10n.string("common.delete"), systemImage: "trash")
-            }
-        }
+        .selectableCardRow(isSelecting: isSelecting, isSelected: isSelected, onTap: rowAction)
+        .deleteSwipeAction(perform: delete)
     }
 
-    private var isDimmed: Bool {
-        isSelecting && !isSelected
-    }
-
-    private var titleColor: Color {
-        isDimmed ? .secondary : .primary
-    }
-
-    private var secondaryColor: Color {
-        isDimmed ? Color.secondary.opacity(0.55) : .secondary
+    private var dimming: SelectionRowDimming {
+        SelectionRowDimming(isSelecting: isSelecting, isSelected: isSelected)
     }
 
     private func rowAction() {
@@ -157,20 +129,8 @@ private struct OfflineCacheManagementEntryRowView: View {
 
             Spacer(minLength: 8)
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(YamiboColors.SystemSurface.secondaryGroupedBackground)
-        )
-        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-            Button(role: .destructive) {
-                delete()
-            } label: {
-                Label(L10n.string("common.delete"), systemImage: "trash")
-            }
-        }
+        .cardRowChrome()
+        .deleteSwipeAction(perform: delete)
     }
 
     private var entrySummary: String {
@@ -207,17 +167,12 @@ struct OfflineCacheManagementSelectAllButton: View {
     let viewModel: SystemSettingsViewModel
 
     var body: some View {
-        Button(title) {
+        SelectAllToolbarButton(
+            isSelectionComplete: viewModel.isOfflineCacheManagementSelectionComplete,
+            isDisabled: viewModel.offlineCacheManagementIsEmpty
+        ) {
             viewModel.toggleAllOfflineCacheManagementRows()
         }
-        .disabled(viewModel.offlineCacheManagementIsEmpty)
-        .accessibilityLabel(title)
-    }
-
-    private var title: String {
-        viewModel.isOfflineCacheManagementSelectionComplete
-            ? L10n.string("common.invert_selection")
-            : L10n.string("common.select_all")
     }
 }
 
@@ -247,68 +202,33 @@ enum OfflineCacheManagementSelectionActions {
 
 struct OfflineCacheManagementEmptyState: View {
     var body: some View {
-        VStack(spacing: 10) {
-            Image(systemName: "tray")
-                .font(.title2)
-                .foregroundStyle(.secondary)
-
-            Text(L10n.string("settings.offline_cache.empty_title"))
-                .font(.headline)
-
-            Text(L10n.string("settings.offline_cache.empty_message"))
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 32)
-        .padding(.horizontal, 16)
-        .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(YamiboColors.SystemSurface.secondaryGroupedBackground)
-        )
-    }
-}
-
-private struct OfflineCacheManagementAlertModifier: ViewModifier {
-    @ObservedObject var viewModel: SystemSettingsViewModel
-
-    func body(content: Content) -> some View {
-        content
-            .alert(
-                viewModel.pendingOfflineCacheManagementConfirmation?.title ?? "",
-                isPresented: confirmationIsPresented,
-                presenting: viewModel.pendingOfflineCacheManagementConfirmation
-            ) { confirmation in
-                Button(L10n.string("common.delete"), role: .destructive) {
-                    Task {
-                        _ = await viewModel.confirmOfflineCacheManagementDeletion(confirmation)
-                    }
-                }
-                Button(L10n.string("common.cancel"), role: .cancel) {
-                    viewModel.cancelOfflineCacheManagementConfirmation()
-                }
-            } message: { confirmation in
-                Text(confirmation.message)
-            }
-    }
-
-    private var confirmationIsPresented: Binding<Bool> {
-        Binding(
-            get: { viewModel.pendingOfflineCacheManagementConfirmation != nil },
-            set: { isPresented in
-                if !isPresented {
-                    Task { @MainActor in
-                        viewModel.cancelOfflineCacheManagementConfirmation()
-                    }
-                }
-            }
+        GroupedEmptyStateCard(
+            title: L10n.string("settings.offline_cache.empty_title"),
+            message: L10n.string("settings.offline_cache.empty_message")
         )
     }
 }
 
 extension View {
     func offlineCacheManagementAlert(viewModel: SystemSettingsViewModel) -> some View {
-        modifier(OfflineCacheManagementAlertModifier(viewModel: viewModel))
+        destructiveConfirmationAlert(
+            item: Binding(
+                get: { viewModel.pendingOfflineCacheManagementConfirmation },
+                set: { pending in
+                    if pending == nil {
+                        Task { @MainActor in
+                            viewModel.cancelOfflineCacheManagementConfirmation()
+                        }
+                    }
+                }
+            ),
+            title: \.title,
+            actionTitle: { _ in L10n.string("common.delete") },
+            message: \.message
+        ) { confirmation in
+            Task {
+                _ = await viewModel.confirmOfflineCacheManagementDeletion(confirmation)
+            }
+        }
     }
 }
