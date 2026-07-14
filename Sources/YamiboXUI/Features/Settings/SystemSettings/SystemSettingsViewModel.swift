@@ -28,15 +28,15 @@ final class SystemSettingsViewModel: ObservableObject {
     @Published private(set) var contentCoverCacheBytes = 0
     @Published private(set) var mangaDirectoryCacheBytes = 0
     @Published private(set) var offlineCacheBytes = 0
-    @Published internal(set) var offlineCacheManagementRows: [OfflineCacheManagementRow] = []
-    @Published internal(set) var selectedOfflineCacheGroupIDs: Set<OfflineCacheGroupID> = []
+    @Published var offlineCacheManagementRows: [OfflineCacheManagementRow] = []
+    @Published var selectedOfflineCacheGroupIDs: Set<OfflineCacheGroupID> = []
     @Published var isOfflineCacheManagementSelectionMode = false
-    @Published internal(set) var pendingOfflineCacheManagementConfirmation: OfflineCacheManagementConfirmation?
-    @Published internal(set) var mangaDirectoryManagementRows: [MangaDirectoryManagementRow] = []
-    @Published internal(set) var selectedMangaDirectoryIDs: Set<String> = []
+    @Published var pendingOfflineCacheManagementConfirmation: OfflineCacheManagementConfirmation?
+    @Published var mangaDirectoryManagementRows: [MangaDirectoryManagementRow] = []
+    @Published var selectedMangaDirectoryIDs: Set<String> = []
     @Published var isMangaDirectoryManagementSelectionMode = false
-    @Published internal(set) var pendingMangaDirectoryManagementConfirmation: MangaDirectoryManagementConfirmation?
-    @Published internal(set) var activeAction: SystemSettingsAction?
+    @Published var pendingMangaDirectoryManagementConfirmation: MangaDirectoryManagementConfirmation?
+    @Published var activeAction: SystemSettingsAction?
     @Published var errorMessage: String?
 
     let dependencies: SettingsDependencies
