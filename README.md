@@ -1,3 +1,6 @@
+> [!WARNING]
+> **本项目已停止维护并归档。** 后续开发已迁移至新仓库 [Arkalin/YamiboX](https://github.com/Arkalin/YamiboX)，请前往新仓库获取最新版本、提交问题与反馈。本仓库仅作历史存档保留，不再更新。
+
 # Yamibo X
 
 <p align="center">
