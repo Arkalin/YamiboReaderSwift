@@ -96,9 +96,11 @@ private struct MessageCenterBodyView: View {
                 MessageCenterTabPickerView(selectedTab: selectedTab, selectTab: selectTab)
 
                 if let errorMessage, content == nil {
-                    MessageCenterErrorView(message: errorMessage, retry: retry)
+                    LoadFailureView(message: errorMessage, retry: retry)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 36)
                 } else if isLoading && content == nil {
-                    MessageCenterLoadingView()
+                    ForumContentLoadingView()
                 } else {
                     MessageCenterContentView(
                         selectedTab: selectedTab,
@@ -117,13 +119,7 @@ private struct MessageCenterBodyView: View {
         .refreshable {
             await refresh()
         }
-        .overlay(alignment: .top) {
-            if isLoading && content != nil {
-                ProgressView()
-                    .controlSize(.small)
-                    .padding(.top, 8)
-            }
-        }
+        .topRefreshIndicator(isVisible: isLoading && content != nil)
         .forumPageBackground()
         .tint(ForumColors.brownDeep)
     }
@@ -178,7 +174,8 @@ private struct MessageCenterContentView: View {
                             onPrivateMessageTap(message.uid, message.name)
                         }
                     }
-                    MessageCenterPageNavigationView(navigation: pageNavigation, currentPage: currentPage, goToPage: goToPage)
+                    ForumPageNavigationBar(navigation: pageNavigation, currentPage: currentPage, goToPage: goToPage)
+                        .padding(.top, 4)
                 }
             }
         case .notices:
@@ -189,7 +186,8 @@ private struct MessageCenterContentView: View {
                     ForEach(page.notices) { notice in
                         MessageCenterNoticeRowView(notice: notice, onUserTap: onUserTap)
                     }
-                    MessageCenterPageNavigationView(navigation: pageNavigation, currentPage: currentPage, goToPage: goToPage)
+                    ForumPageNavigationBar(navigation: pageNavigation, currentPage: currentPage, goToPage: goToPage)
+                        .padding(.top, 4)
                 }
             }
         }
@@ -206,7 +204,7 @@ private struct MessageCenterPrivateMessageRowView: View {
             Button {
                 onUserTap(message.uid, message.name)
             } label: {
-                MessageCenterAvatarView(url: message.avatarURL, systemImage: "person.crop.circle")
+                ForumAvatarView(url: message.avatarURL, size: 42, placeholderFont: .title3)
             }
             .buttonStyle(.plain)
 
@@ -259,11 +257,11 @@ private struct MessageCenterNoticeRowView: View {
                 Button {
                     onUserTap(userID, nil)
                 } label: {
-                    MessageCenterAvatarView(url: notice.avatarURL, systemImage: "bell")
+                    ForumAvatarView(url: notice.avatarURL, size: 42, placeholderSystemImage: "bell", placeholderFont: .title3)
                 }
                 .buttonStyle(.plain)
             } else {
-                MessageCenterAvatarView(url: notice.avatarURL, systemImage: "bell")
+                ForumAvatarView(url: notice.avatarURL, size: 42, placeholderSystemImage: "bell", placeholderFont: .title3)
             }
 
             VStack(alignment: .leading, spacing: 7) {
@@ -292,101 +290,9 @@ private struct MessageCenterNoticeRowView: View {
     }
 }
 
-private struct MessageCenterAvatarView: View {
-    let url: URL?
-    let systemImage: String
 
-    var body: some View {
-        YamiboRemoteImage(source: url.map { YamiboImageSource(url: $0) }) { image in
-            image.resizable().scaledToFill()
-        } placeholder: {
-            Image(systemName: systemImage)
-                .font(.title3)
-                .foregroundStyle(ForumColors.secondaryText)
-        } failure: {
-            Image(systemName: systemImage)
-                .font(.title3)
-                .foregroundStyle(ForumColors.secondaryText)
-        }
-        .frame(width: 42, height: 42)
-        .clipShape(Circle())
-    }
-}
 
-private struct MessageCenterPageNavigationView: View {
-    let navigation: ForumPageNavigation?
-    let currentPage: Int
-    let goToPage: (Int) -> Void
 
-    var body: some View {
-        if let navigation {
-            HStack(spacing: 12) {
-                Button {
-                    goToPage(currentPage - 1)
-                } label: {
-                    Label(L10n.string("forum.board.previous_page"), systemImage: "chevron.left")
-                }
-                .disabled(currentPage <= 1)
-
-                Spacer()
-
-                Text(pageText(navigation))
-                    .font(.subheadline.weight(.medium))
-                    .foregroundStyle(ForumColors.secondaryText)
-
-                Spacer()
-
-                Button {
-                    goToPage(currentPage + 1)
-                } label: {
-                    Label(L10n.string("forum.board.next_page"), systemImage: "chevron.right")
-                }
-                .disabled(navigation.totalPages.map { currentPage >= $0 } ?? false)
-            }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
-            .tint(ForumColors.brownEmphasis)
-            .padding(.top, 4)
-        }
-    }
-
-    private func pageText(_ navigation: ForumPageNavigation) -> String {
-        if let totalPages = navigation.totalPages {
-            return L10n.string("forum.board.page_count", currentPage, totalPages)
-        }
-        return L10n.string("forum.board.current_page", currentPage)
-    }
-}
-
-private struct MessageCenterLoadingView: View {
-    var body: some View {
-        VStack(spacing: 12) {
-            ProgressView()
-            Text(L10n.string("common.loading"))
-                .font(.subheadline)
-                .foregroundStyle(ForumColors.secondaryText)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 36)
-    }
-}
-
-private struct MessageCenterErrorView: View {
-    let message: String
-    let retry: () -> Void
-
-    var body: some View {
-        ContentUnavailableView {
-            Label(L10n.string("common.load_failed"), systemImage: "exclamationmark.triangle")
-        } description: {
-            Text(message)
-        } actions: {
-            Button(L10n.string("common.retry"), action: retry)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 36)
-    }
-}
 
 private struct MessageCenterEmptyView: View {
     let message: String

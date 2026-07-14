@@ -30,31 +30,25 @@ struct FavoriteBoardListView: View {
             } message: {
                 Text(model.actionErrorMessage ?? "")
             }
-            .alert(
-                L10n.string("favorites.boards.delete_confirm_title"),
-                isPresented: deleteConfirmBinding,
-                presenting: pendingDeletion
+            .destructiveConfirmationAlert(
+                item: $pendingDeletion,
+                title: { _ in L10n.string("favorites.boards.delete_confirm_title") },
+                actionTitle: { _ in L10n.string("common.delete") },
+                message: { board in L10n.string("favorites.boards.delete_confirm_message", board.title) }
             ) { board in
-                Button(L10n.string("common.cancel"), role: .cancel) {}
-                Button(L10n.string("common.delete"), role: .destructive) {
-                    Task { await model.delete(board) }
-                }
-            } message: { board in
-                Text(L10n.string("favorites.boards.delete_confirm_message", board.title))
+                Task { await model.delete(board) }
             }
     }
 
     @ViewBuilder
     private var content: some View {
         if let errorMessage = model.errorMessage, model.boards == nil {
-            ContentUnavailableView {
-                Label(L10n.string("favorites.boards.load_failed"), systemImage: "wifi.exclamationmark")
-            } description: {
-                Text(errorMessage)
-            } actions: {
-                Button(L10n.string("common.retry")) {
-                    Task { await model.refresh() }
-                }
+            LoadFailureView(
+                title: L10n.string("favorites.boards.load_failed"),
+                systemImage: "wifi.exclamationmark",
+                message: errorMessage
+            ) {
+                Task { await model.refresh() }
             }
         } else if let boards = model.boards {
             List {
@@ -99,12 +93,8 @@ struct FavoriteBoardListView: View {
             }
         }
         .disabled(model.isDeleting(board))
-        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-            Button(role: .destructive) {
-                pendingDeletion = board
-            } label: {
-                Label(L10n.string("common.delete"), systemImage: "trash")
-            }
+        .deleteSwipeAction(allowsFullSwipe: false) {
+            pendingDeletion = board
         }
         .contextMenu {
             Button {
@@ -131,14 +121,4 @@ struct FavoriteBoardListView: View {
         )
     }
 
-    private var deleteConfirmBinding: Binding<Bool> {
-        Binding(
-            get: { pendingDeletion != nil },
-            set: { isPresented in
-                if !isPresented {
-                    pendingDeletion = nil
-                }
-            }
-        )
-    }
 }

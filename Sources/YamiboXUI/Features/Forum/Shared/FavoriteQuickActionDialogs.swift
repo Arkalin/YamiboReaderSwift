@@ -33,39 +33,49 @@ struct FavoriteQuickActionDialogs: ViewModifier {
             } message: {
                 Text(L10n.string("favorites.quick.add_prompt.message"))
             }
-            .confirmationDialog(
-                L10n.string("favorites.quick.remove_prompt.title"),
-                isPresented: removePromptBinding,
-                titleVisibility: .visible,
-                presenting: removePrompt
-            ) { prompt in
-                Button(L10n.string("favorites.quick.remove_prompt.both"), role: .destructive) {
-                    onConfirmRemoval(prompt.favorite, true, false)
-                }
-                Button(L10n.string("favorites.quick.remove_prompt.local_only"), role: .destructive) {
-                    onConfirmRemoval(prompt.favorite, false, false)
-                }
-                Button(L10n.string("favorites.quick.remove_prompt.both_remember"), role: .destructive) {
-                    onConfirmRemoval(prompt.favorite, true, true)
-                }
-                Button(L10n.string("favorites.quick.remove_prompt.local_remember"), role: .destructive) {
-                    onConfirmRemoval(prompt.favorite, false, true)
-                }
-                Button(L10n.string("common.cancel"), role: .cancel) {}
-            } message: { _ in
-                Text(L10n.string("favorites.quick.remove_prompt.message"))
+            .favoriteRemovePromptDialog(prompt: $removePrompt) { prompt, removeRemote, remember in
+                onConfirmRemoval(prompt.favorite, removeRemote, remember)
             }
     }
+}
 
-    private var removePromptBinding: Binding<Bool> {
-        Binding(
-            get: { removePrompt != nil },
-            set: { isPresented in
-                if !isPresented {
-                    removePrompt = nil
+extension View {
+    /// The four-way "also remove from Yamibo?" prompt (both/local-only, each
+    /// with a remember variant). Generic over the pending-prompt type so
+    /// flows that resolve the favorite elsewhere can reuse it.
+    func favoriteRemovePromptDialog<Prompt>(
+        prompt: Binding<Prompt?>,
+        onConfirm: @escaping (_ prompt: Prompt, _ removeRemote: Bool, _ remember: Bool) -> Void
+    ) -> some View {
+        confirmationDialog(
+            L10n.string("favorites.quick.remove_prompt.title"),
+            isPresented: Binding(
+                get: { prompt.wrappedValue != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        prompt.wrappedValue = nil
+                    }
                 }
+            ),
+            titleVisibility: .visible,
+            presenting: prompt.wrappedValue
+        ) { value in
+            Button(L10n.string("favorites.quick.remove_prompt.both"), role: .destructive) {
+                onConfirm(value, true, false)
             }
-        )
+            Button(L10n.string("favorites.quick.remove_prompt.local_only"), role: .destructive) {
+                onConfirm(value, false, false)
+            }
+            Button(L10n.string("favorites.quick.remove_prompt.both_remember"), role: .destructive) {
+                onConfirm(value, true, true)
+            }
+            Button(L10n.string("favorites.quick.remove_prompt.local_remember"), role: .destructive) {
+                onConfirm(value, false, true)
+            }
+            Button(L10n.string("common.cancel"), role: .cancel) {}
+        } message: { _ in
+            Text(L10n.string("favorites.quick.remove_prompt.message"))
+        }
     }
 }
 

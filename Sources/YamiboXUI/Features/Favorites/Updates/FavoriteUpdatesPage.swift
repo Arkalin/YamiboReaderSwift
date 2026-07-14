@@ -20,14 +20,12 @@ struct FavoriteUpdatesPage: View {
         }
         .navigationTitle(L10n.string("favorites.updates.title"))
         .navigationBarTitleDisplayMode(.inline)
-        .confirmationDialog(
+        .destructiveConfirmationDialog(
             L10n.string("favorites.updates.dismiss_all_confirm_title"),
             isPresented: $isDismissAllConfirmationPresented,
-            titleVisibility: .visible
+            actionTitle: L10n.string("favorites.updates.dismiss_all")
         ) {
-            Button(L10n.string("favorites.updates.dismiss_all"), role: .destructive) {
-                Task { await updateMonitor.dismissAllEvents() }
-            }
+            Task { await updateMonitor.dismissAllEvents() }
         }
         .toolbar {
             ToolbarItem(placement: .primaryAction) {

@@ -9,9 +9,9 @@ struct ForumHomeView: View {
     var body: some View {
         Group {
             if model.isLoading && model.page == nil {
-                ForumHomeLoadingView()
+                ForumContentLoadingView(layout: .fillsPage)
             } else if let error = model.errorMessage, model.page == nil {
-                ForumHomeErrorView(message: error, retry: retry)
+                LoadFailureView(message: error, retry: retry)
             } else if model.categories.isEmpty {
                 ForumHomeEmptyView()
             } else {
@@ -78,13 +78,7 @@ private struct ForumHomeContentView: View {
         .refreshable {
             await refresh()
         }
-        .overlay(alignment: .top) {
-            if isRefreshing {
-                ProgressView()
-                    .controlSize(.small)
-                    .padding(.top, 8)
-            }
-        }
+        .topRefreshIndicator(isVisible: isRefreshing)
         .forumPageBackground()
     }
 }
@@ -538,34 +532,6 @@ private struct ForumBoardIconView: View {
         .frame(width: 38, height: 38)
         .background(ForumColors.mutedFill, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         .accessibilityHidden(true)
-    }
-}
-
-private struct ForumHomeLoadingView: View {
-    var body: some View {
-        VStack(spacing: 12) {
-            ProgressView()
-            Text(L10n.string("common.loading"))
-                .font(.subheadline)
-                .foregroundStyle(ForumColors.secondaryText)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .forumPageBackground()
-    }
-}
-
-private struct ForumHomeErrorView: View {
-    let message: String
-    let retry: () -> Void
-
-    var body: some View {
-        ContentUnavailableView {
-            Label(L10n.string("common.load_failed"), systemImage: "exclamationmark.triangle")
-        } description: {
-            Text(message)
-        } actions: {
-            Button(L10n.string("common.retry"), action: retry)
-        }
     }
 }
 

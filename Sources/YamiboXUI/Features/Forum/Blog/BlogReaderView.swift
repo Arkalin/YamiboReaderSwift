@@ -131,9 +131,11 @@ private struct BlogReaderBodyView: View {
                         onWebTap: onWebTap
                     )
                 } else if isLoading {
-                    BlogReaderLoadingView()
+                    ForumContentLoadingView()
                 } else if let errorMessage {
-                    BlogReaderErrorView(message: errorMessage, retry: retry)
+                    LoadFailureView(message: errorMessage, retry: retry)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 36)
                 }
             }
             .padding(.horizontal, 16)
@@ -142,13 +144,7 @@ private struct BlogReaderBodyView: View {
         .refreshable {
             await refresh()
         }
-        .overlay(alignment: .top) {
-            if isLoading && page != nil {
-                ProgressView()
-                    .controlSize(.small)
-                    .padding(.top, 8)
-            }
-        }
+        .topRefreshIndicator(isVisible: isLoading && page != nil)
         .forumPageBackground()
         .tint(ForumColors.brownDeep)
     }
@@ -191,17 +187,7 @@ private struct BlogReaderAuthorRow: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            YamiboRemoteImage(source: user.avatarURL.map { YamiboImageSource(url: $0) }) { image in
-                image.resizable().scaledToFill()
-            } placeholder: {
-                Image(systemName: "person.crop.circle")
-                    .foregroundStyle(ForumColors.secondaryText)
-            } failure: {
-                Image(systemName: "person.crop.circle")
-                    .foregroundStyle(ForumColors.secondaryText)
-            }
-            .frame(width: 38, height: 38)
-            .clipShape(Circle())
+            ForumAvatarView(url: user.avatarURL, size: 38)
 
             VStack(alignment: .leading, spacing: 2) {
                 if let uid = user.uid {
@@ -317,7 +303,7 @@ private struct BlogReaderCommentSection: View {
                     BlogReaderCommentRow(comment: comment, onUserTap: onUserTap, onWebTap: onWebTap)
                 }
             }
-            BlogReaderPageNavigationView(navigation: pageNavigation, currentPage: currentPage, goToPage: goToPage)
+            ForumPageNavigationBar(navigation: pageNavigation, currentPage: currentPage, goToPage: goToPage)
             BlogReaderCommentEditor(
                 text: commentText,
                 placeholder: commentPlaceholder,
@@ -387,17 +373,7 @@ private struct BlogReaderCommentRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .top, spacing: 10) {
-                YamiboRemoteImage(source: comment.author.avatarURL.map { YamiboImageSource(url: $0) }) { image in
-                    image.resizable().scaledToFill()
-                } placeholder: {
-                    Image(systemName: "person.crop.circle")
-                        .foregroundStyle(ForumColors.secondaryText)
-                } failure: {
-                    Image(systemName: "person.crop.circle")
-                        .foregroundStyle(ForumColors.secondaryText)
-                }
-                .frame(width: 34, height: 34)
-                .clipShape(Circle())
+                ForumAvatarView(url: comment.author.avatarURL, size: 34)
 
                 VStack(alignment: .leading, spacing: 2) {
                     if let uid = comment.author.uid {
@@ -440,76 +416,5 @@ private struct BlogReaderCommentRow: View {
     }
 }
 
-private struct BlogReaderPageNavigationView: View {
-    let navigation: ForumPageNavigation?
-    let currentPage: Int
-    let goToPage: (Int) -> Void
 
-    var body: some View {
-        if let navigation {
-            HStack(spacing: 12) {
-                Button {
-                    goToPage(currentPage - 1)
-                } label: {
-                    Label(L10n.string("forum.board.previous_page"), systemImage: "chevron.left")
-                }
-                .disabled(currentPage <= 1)
 
-                Spacer()
-
-                Text(pageText(navigation))
-                    .font(.subheadline.weight(.medium))
-                    .foregroundStyle(ForumColors.secondaryText)
-
-                Spacer()
-
-                Button {
-                    goToPage(currentPage + 1)
-                } label: {
-                    Label(L10n.string("forum.board.next_page"), systemImage: "chevron.right")
-                }
-                .disabled(navigation.totalPages.map { currentPage >= $0 } ?? false)
-            }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
-            .tint(ForumColors.brownEmphasis)
-        }
-    }
-
-    private func pageText(_ navigation: ForumPageNavigation) -> String {
-        if let totalPages = navigation.totalPages {
-            return L10n.string("forum.board.page_count", currentPage, totalPages)
-        }
-        return L10n.string("forum.board.current_page", currentPage)
-    }
-}
-
-private struct BlogReaderLoadingView: View {
-    var body: some View {
-        VStack(spacing: 12) {
-            ProgressView()
-            Text(L10n.string("common.loading"))
-                .font(.subheadline)
-                .foregroundStyle(ForumColors.secondaryText)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 36)
-    }
-}
-
-private struct BlogReaderErrorView: View {
-    let message: String
-    let retry: () -> Void
-
-    var body: some View {
-        ContentUnavailableView {
-            Label(L10n.string("common.load_failed"), systemImage: "exclamationmark.triangle")
-        } description: {
-            Text(message)
-        } actions: {
-            Button(L10n.string("common.retry"), action: retry)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 36)
-    }
-}

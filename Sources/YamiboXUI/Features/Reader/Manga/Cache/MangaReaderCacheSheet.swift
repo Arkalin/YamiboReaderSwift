@@ -373,7 +373,8 @@ private struct MangaReaderCacheChapterSection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            MangaReaderCacheSelectionHeader(
+            ReaderCacheSelectionHeader(
+                sectionTitle: L10n.string("manga.offline_cache.chapter_section"),
                 isSelecting: isSelecting,
                 isAllSelected: isAllSelected,
                 isEmpty: rows.isEmpty,
@@ -427,45 +428,6 @@ private struct MangaReaderCacheChapterSection: View {
     }
 }
 
-private struct MangaReaderCacheSelectionHeader: View {
-    let isSelecting: Bool
-    let isAllSelected: Bool
-    let isEmpty: Bool
-    let onToggleAll: () -> Void
-    let onToggleSelectionMode: () -> Void
-
-    var body: some View {
-        HStack {
-            if isSelecting {
-                Button {
-                    onToggleAll()
-                } label: {
-                    Text(isAllSelected ? L10n.string("common.invert_selection") : L10n.string("common.select_all"))
-                        .expandedHitTarget(width: 0)
-                }
-                .font(.subheadline.weight(.semibold))
-                .disabled(isEmpty)
-            } else {
-                Text(L10n.string("manga.offline_cache.chapter_section"))
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.secondary)
-            }
-
-            Spacer(minLength: 0)
-
-            Button {
-                onToggleSelectionMode()
-            } label: {
-                Text(isSelecting ? L10n.string("common.done") : L10n.string("common.select"))
-                    .expandedHitTarget(width: 0)
-            }
-            .font(.subheadline.weight(.semibold))
-            .buttonStyle(.plain)
-            .disabled(isEmpty && !isSelecting)
-        }
-    }
-}
-
 private struct MangaReaderCacheRowView: View {
     let row: MangaReaderCacheRow
     let isSelecting: Bool
@@ -487,37 +449,23 @@ private struct MangaReaderCacheRowView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            MangaReaderCacheStateBadge(state: row.state, isDimmed: isDimmed)
+            MangaReaderCacheStateBadge(state: row.state, isDimmed: dimming.isDimmed)
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(YamiboColors.SystemSurface.secondaryGroupedBackground)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .strokeBorder(isSelecting && isSelected ? Color.accentColor : Color.clear, lineWidth: 2)
-        )
-        .contentShape(Rectangle())
-        .animation(.spring(response: 0.24, dampingFraction: 0.72), value: isSelected)
-        .onTapGesture {
+        .selectableCardRow(isSelecting: isSelecting, isSelected: isSelected) {
             onToggleSelection()
         }
-        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
-    private var isDimmed: Bool {
-        isSelecting && !isSelected
+    private var dimming: SelectionRowDimming {
+        SelectionRowDimming(isSelecting: isSelecting, isSelected: isSelected)
     }
 
     private var titleColor: Color {
-        isDimmed ? .secondary : .primary
+        dimming.titleColor
     }
 
     private var numberColor: Color {
-        isDimmed ? Color.secondary.opacity(0.55) : .secondary
+        dimming.secondaryColor
     }
 }
 

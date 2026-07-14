@@ -115,7 +115,8 @@ struct ForumThreadPollVotersSheet: View {
                             currentPage: votersPage.pageNavigation?.currentPage ?? model.pageNumber,
                             goToPage: { page in
                                 model.goToPage(page)
-                            }
+                            },
+                            hidesOnSinglePage: true
                         )
                     }
                     .padding(16)
@@ -130,13 +131,7 @@ struct ForumThreadPollVotersSheet: View {
                     }
                 }
             }
-            .overlay(alignment: .top) {
-                if model.isLoading && model.votersPage != nil {
-                    ProgressView()
-                        .controlSize(.small)
-                        .padding(.top, 8)
-                }
-            }
+            .topRefreshIndicator(isVisible: model.isLoading && model.votersPage != nil)
         }
         .task(id: model.loadIdentity) {
             await model.loadPage()

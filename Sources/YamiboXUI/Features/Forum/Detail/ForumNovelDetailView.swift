@@ -414,49 +414,19 @@ private struct ForumNovelDetailHeader: View {
     }
 
     private var cover: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(ForumColors.brownPrimary.opacity(0.12))
-
-            if let coverURL = summary.coverURL {
-                YamiboRemoteImage(
-                    source: YamiboImageSource(
-                        url: coverURL,
-                        refererPageURL: YamiboRoute.threadByID(
-                            tid: summary.threadID,
-                            page: 1,
-                            authorID: nil,
-                            reverse: false
-                        ).url
-                    )
-                ) { image in
-                    image
-                        .resizable()
-                        .scaledToFill()
-                } placeholder: {
-                        ProgressView()
-                            .controlSize(.small)
-                            .tint(ForumColors.brownPrimary)
-                } failure: {
-                    coverPlaceholder(systemImage: "book.closed")
-                }
-            } else {
-                coverPlaceholder(systemImage: "book.closed")
+        ForumBookCoverView(
+            source: summary.coverURL.map { coverURL in
+                YamiboImageSource(
+                    url: coverURL,
+                    refererPageURL: YamiboRoute.threadByID(
+                        tid: summary.threadID,
+                        page: 1,
+                        authorID: nil,
+                        reverse: false
+                    ).url
+                )
             }
-        }
-        .frame(width: 86, height: 112)
-        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .stroke(ForumColors.border.opacity(0.7), lineWidth: 1)
-        }
-        .accessibilityHidden(true)
-    }
-
-    private func coverPlaceholder(systemImage: String) -> some View {
-        Image(systemName: systemImage)
-            .font(.title2)
-            .foregroundStyle(ForumColors.brownPrimary.opacity(0.55))
+        )
     }
 
 }

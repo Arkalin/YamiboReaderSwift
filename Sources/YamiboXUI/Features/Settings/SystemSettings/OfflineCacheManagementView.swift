@@ -62,16 +62,14 @@ struct OfflineCacheManagementView: View {
 
             ToolbarItem(placement: .primaryAction) {
                 if !viewModel.offlineCacheManagementIsEmpty {
-                    Button(
-                        viewModel.isOfflineCacheManagementSelectionMode
-                            ? L10n.string("common.done")
-                            : L10n.string("common.select")
+                    SelectionModeToggleButton(
+                        isSelecting: viewModel.isOfflineCacheManagementSelectionMode,
+                        isDisabled: viewModel.activeAction == .clearingOfflineCache
                     ) {
                         viewModel.setOfflineCacheManagementSelectionMode(
                             !viewModel.isOfflineCacheManagementSelectionMode
                         )
                     }
-                    .disabled(viewModel.activeAction == .clearingOfflineCache)
                 }
             }
 

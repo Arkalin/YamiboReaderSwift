@@ -160,23 +160,16 @@ struct FavoriteTagPickerView: View {
                     editorDraft = nil
                 }
             }
-            .alert(
-                L10n.string("favorites.delete_tag"),
-                isPresented: pendingDeleteTagBinding,
-                presenting: pendingDeleteTag
+            .destructiveConfirmationAlert(
+                item: $pendingDeleteTag,
+                title: { _ in L10n.string("favorites.delete_tag") },
+                actionTitle: { _ in L10n.string("common.delete") },
+                message: { tag in L10n.string("favorites.delete_tag_message", tag.name) }
             ) { tag in
-                Button(L10n.string("common.cancel"), role: .cancel) {
-                    pendingDeleteTag = nil
+                Task {
+                    await organizer.deleteTag(id: tag.id)
+                    selectedTagIDs.remove(tag.id)
                 }
-                Button(L10n.string("common.delete"), role: .destructive) {
-                    Task {
-                        await organizer.deleteTag(id: tag.id)
-                        selectedTagIDs.remove(tag.id)
-                        pendingDeleteTag = nil
-                    }
-                }
-            } message: { tag in
-                Text(L10n.string("favorites.delete_tag_message", tag.name))
             }
             #if os(iOS)
             .environment(\.editMode, .constant(canReorderCurrentTags ? .active : .inactive))
@@ -255,16 +248,6 @@ struct FavoriteTagPickerView: View {
         .background(.bar)
     }
 
-    private var pendingDeleteTagBinding: Binding<Bool> {
-        Binding(
-            get: { pendingDeleteTag != nil },
-            set: { isPresented in
-                if !isPresented {
-                    pendingDeleteTag = nil
-                }
-            }
-        )
-    }
 
     private var showsOverwriteWarning: Bool {
         draft.mode == .selection

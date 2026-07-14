@@ -88,20 +88,8 @@ private struct ForumThreadSummaryAuthorView: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            YamiboRemoteImage(source: authorAvatarURL.map { YamiboImageSource(url: $0) }) { image in
-                image
-                    .resizable()
-                    .scaledToFill()
-            } placeholder: {
-                Image(systemName: "person.crop.circle")
-                    .foregroundStyle(ForumColors.secondaryText)
-            } failure: {
-                Image(systemName: "person.crop.circle")
-                    .foregroundStyle(ForumColors.secondaryText)
-            }
-            .frame(width: 26, height: 26)
-            .clipShape(Circle())
-            .accessibilityHidden(true)
+            ForumAvatarView(url: authorAvatarURL, size: 26)
+                .accessibilityHidden(true)
 
             if let authorName {
                 Text(authorName)

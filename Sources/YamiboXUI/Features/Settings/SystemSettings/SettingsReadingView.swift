@@ -53,19 +53,15 @@ struct SettingsReadingView: View {
         }, message: {
             Text(viewModel.errorMessage ?? "")
         })
-        .alert(
-            confirmationTitle,
-            isPresented: confirmationIsPresented,
-            presenting: pendingConfirmation
+        .destructiveConfirmationAlert(
+            item: $pendingConfirmation,
+            title: \.title,
+            actionTitle: \.buttonTitle,
+            message: \.message
         ) { confirmation in
-            Button(confirmation.buttonTitle, role: .destructive) {
-                Task {
-                    await handleConfirmation(confirmation)
-                }
+            Task {
+                await handleConfirmation(confirmation)
             }
-            Button(L10n.string("common.cancel"), role: .cancel) {}
-        } message: { confirmation in
-            Text(confirmation.message)
         }
     }
 
@@ -80,20 +76,6 @@ struct SettingsReadingView: View {
         )
     }
 
-    private var confirmationTitle: String {
-        pendingConfirmation?.title ?? ""
-    }
-
-    private var confirmationIsPresented: Binding<Bool> {
-        Binding(
-            get: { pendingConfirmation != nil },
-            set: { isPresented in
-                if !isPresented {
-                    pendingConfirmation = nil
-                }
-            }
-        )
-    }
 
     private var novelOfflineCacheRetainsInlineImagesBinding: Binding<Bool> {
         Binding(

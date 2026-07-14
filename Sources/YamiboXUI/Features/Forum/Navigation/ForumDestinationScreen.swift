@@ -171,14 +171,10 @@ struct ForumThreadLinkScreen: View {
     private var content: some View {
         switch resolution {
         case .resolving:
-            VStack(spacing: 12) {
-                ProgressView()
-                Text(L10n.string("forum.thread_link.loading"))
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .forumPageBackground()
+            ForumContentLoadingView(
+                text: L10n.string("forum.thread_link.loading"),
+                layout: .fillsPage
+            )
             .navigationTitle(title ?? L10n.string("forum.default_title"))
             .yamiboInlineNavigationTitleDisplayMode()
         case let .thread(context):
@@ -195,18 +191,11 @@ struct ForumThreadLinkScreen: View {
                 listensToForumNavigationRequest: false
             )
         case let .failed(message):
-            VStack(spacing: 12) {
-                ContentUnavailableView(
-                    message,
-                    systemImage: "exclamationmark.triangle"
-                )
-                Button(L10n.string("common.retry")) {
-                    resolution = .resolving
-                    Task {
-                        await resolveIfNeeded()
-                    }
+            LoadFailureView(message: message, prominentRetry: true) {
+                resolution = .resolving
+                Task {
+                    await resolveIfNeeded()
                 }
-                .buttonStyle(.borderedProminent)
             }
             .padding()
             .forumPageBackground()

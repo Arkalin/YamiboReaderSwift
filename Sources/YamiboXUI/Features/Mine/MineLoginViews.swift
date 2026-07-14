@@ -73,7 +73,10 @@ private struct MineLoginSection: View {
         }
 
         Section {
-            Button {
+            FormSubmitButton(
+                title: L10n.string("mine.login"),
+                isLoading: viewModel.isLoggingIn
+            ) {
                 Task {
                     let didLogin = await viewModel.login(
                         username: username,
@@ -86,17 +89,6 @@ private struct MineLoginSection: View {
                         answer = ""
                         onLoginSuccess()
                     }
-                }
-            } label: {
-                HStack {
-                    Spacer()
-                    if viewModel.isLoggingIn {
-                        ProgressView()
-                    } else {
-                        Text(L10n.string("mine.login"))
-                            .fontWeight(.semibold)
-                    }
-                    Spacer()
                 }
             }
             .disabled(loginIsDisabled)

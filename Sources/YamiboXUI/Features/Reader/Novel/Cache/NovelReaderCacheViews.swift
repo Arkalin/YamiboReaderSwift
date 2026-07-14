@@ -71,18 +71,14 @@ struct NovelReaderCachePanel: View {
             .sheet(isPresented: $isQueuePresented) {
                 OfflineCacheQueueSheet(viewModel: queueViewModel)
             }
-            .confirmationDialog(
+            .destructiveConfirmationDialog(
                 L10n.string(
                     "reader.cache.delete_selected_confirm_title",
                     selectionState.cachedSelectedViews.count
                 ),
                 isPresented: $isDeleteConfirmationPresented,
-                titleVisibility: .visible
-            ) {
-                Button(L10n.string("common.delete"), role: .destructive) {
-                    performDeleteSelection()
-                }
-            }
+                onConfirm: performDeleteSelection
+            )
             .task {
                 await cache.refresh()
             }
@@ -194,7 +190,8 @@ private struct NovelReaderCachePageSection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            NovelReaderCacheSelectionHeader(
+            ReaderCacheSelectionHeader(
+                sectionTitle: L10n.string("reader.cache_page_section"),
                 isSelecting: isSelecting,
                 isAllSelected: isAllSelected,
                 isEmpty: rows.isEmpty,
@@ -248,44 +245,6 @@ private struct NovelReaderCachePageSection: View {
     }
 }
 
-private struct NovelReaderCacheSelectionHeader: View {
-    let isSelecting: Bool
-    let isAllSelected: Bool
-    let isEmpty: Bool
-    let onToggleAll: () -> Void
-    let onToggleSelectionMode: () -> Void
-
-    var body: some View {
-        HStack {
-            if isSelecting {
-                Button {
-                    onToggleAll()
-                } label: {
-                    Text(isAllSelected ? L10n.string("common.invert_selection") : L10n.string("common.select_all"))
-                        .expandedHitTarget(width: 0)
-                }
-                .font(.subheadline.weight(.semibold))
-                .disabled(isEmpty)
-            } else {
-                Text(L10n.string("reader.cache_page_section"))
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.secondary)
-            }
-
-            Spacer(minLength: 0)
-
-            Button {
-                onToggleSelectionMode()
-            } label: {
-                Text(isSelecting ? L10n.string("common.done") : L10n.string("common.select"))
-                    .expandedHitTarget(width: 0)
-            }
-            .font(.subheadline.weight(.semibold))
-            .buttonStyle(.plain)
-            .disabled(isEmpty && !isSelecting)
-        }
-    }
-}
 
 private struct NovelReaderCachePageRowView: View {
     let row: NovelReaderCachePageRow
@@ -302,40 +261,26 @@ private struct NovelReaderCachePageRowView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
 
             VStack(alignment: .trailing, spacing: 3) {
-                NovelReaderCacheStateBadge(status: row.status, isDimmed: isDimmed)
+                NovelReaderCacheStateBadge(status: row.status, isDimmed: dimming.isDimmed)
 
                 if let updateTime = row.updateTime {
                     Text(L10n.string("reader.cache_updated_at", updateTime.formatted(date: .abbreviated, time: .shortened)))
                         .font(.caption2)
-                        .foregroundStyle(isDimmed ? Color.secondary.opacity(0.55) : Color.secondary)
+                        .foregroundStyle(dimming.secondaryColor)
                 }
             }
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(YamiboColors.SystemSurface.secondaryGroupedBackground)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .strokeBorder(isSelecting && isSelected ? Color.accentColor : Color.clear, lineWidth: 2)
-        )
-        .contentShape(Rectangle())
-        .animation(.spring(response: 0.24, dampingFraction: 0.72), value: isSelected)
-        .onTapGesture {
+        .selectableCardRow(isSelecting: isSelecting, isSelected: isSelected) {
             onToggleSelection()
         }
-        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
-    private var isDimmed: Bool {
-        isSelecting && !isSelected
+    private var dimming: SelectionRowDimming {
+        SelectionRowDimming(isSelecting: isSelecting, isSelected: isSelected)
     }
 
     private var titleColor: Color {
-        isDimmed ? .secondary : .primary
+        dimming.titleColor
     }
 }
 

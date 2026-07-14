@@ -83,9 +83,11 @@ private struct ForumSearchBodyView: View {
                 ForumSearchInputView(query: $query, isLoading: isLoading, submit: submit)
 
                 if isLoading && results.isEmpty {
-                    ForumSearchLoadingView()
+                    ForumContentLoadingView(text: L10n.string("forum.search.loading"))
                 } else if let errorMessage, results.isEmpty {
-                    ForumSearchErrorView(message: errorMessage, retry: submit)
+                    LoadFailureView(message: errorMessage, retry: submit)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 36)
                 } else if results.isEmpty {
                     ForumSearchIdleView()
                 } else {
@@ -106,12 +108,13 @@ private struct ForumSearchBodyView: View {
                     }
 
                     if let pageNavigation {
-                        ForumSearchPageNavigationView(
+                        ForumPageNavigationBar(
                             navigation: pageNavigation,
                             currentPage: currentPage,
                             goToPage: goToPage,
                             restorePreviousPage: restorePreviousPage
                         )
+                        .padding(.top, 4)
                     }
                 }
             }
@@ -158,57 +161,6 @@ private struct ForumSearchInputView: View {
     }
 }
 
-private struct ForumSearchPageNavigationView: View {
-    let navigation: ForumPageNavigation
-    let currentPage: Int
-    let goToPage: (Int) -> Void
-    var restorePreviousPage: (() -> Void)? = nil
-
-    var body: some View {
-        HStack(spacing: 12) {
-            if let restorePreviousPage {
-                Button(action: restorePreviousPage) {
-                    Image(systemName: "arrow.uturn.backward")
-                }
-                .accessibilityLabel(L10n.string("forum.page_navigation.undo_jump"))
-            }
-
-            Button {
-                goToPage(currentPage - 1)
-            } label: {
-                Label(L10n.string("forum.board.previous_page"), systemImage: "chevron.left")
-            }
-            .disabled(currentPage <= 1)
-
-            Spacer()
-
-            Text(pageText)
-                .font(.subheadline.weight(.medium))
-                .foregroundStyle(ForumColors.secondaryText)
-
-            Spacer()
-
-            Button {
-                goToPage(currentPage + 1)
-            } label: {
-                Label(L10n.string("forum.board.next_page"), systemImage: "chevron.right")
-            }
-            .labelStyle(.titleAndIcon)
-            .disabled(navigation.totalPages.map { currentPage >= $0 } ?? false)
-        }
-        .buttonStyle(.bordered)
-        .controlSize(.small)
-        .tint(ForumColors.brownEmphasis)
-        .padding(.top, 4)
-    }
-
-    private var pageText: String {
-        if let totalPages = navigation.totalPages {
-            return L10n.string("forum.board.page_count", currentPage, totalPages)
-        }
-        return L10n.string("forum.board.current_page", currentPage)
-    }
-}
 
 private struct ForumSearchIdleView: View {
     var body: some View {
@@ -222,32 +174,4 @@ private struct ForumSearchIdleView: View {
     }
 }
 
-private struct ForumSearchLoadingView: View {
-    var body: some View {
-        VStack(spacing: 12) {
-            ProgressView()
-            Text(L10n.string("forum.search.loading"))
-                .font(.subheadline)
-                .foregroundStyle(ForumColors.secondaryText)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 36)
-    }
-}
 
-private struct ForumSearchErrorView: View {
-    let message: String
-    let retry: () -> Void
-
-    var body: some View {
-        ContentUnavailableView {
-            Label(L10n.string("common.load_failed"), systemImage: "exclamationmark.triangle")
-        } description: {
-            Text(message)
-        } actions: {
-            Button(L10n.string("common.retry"), action: retry)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 36)
-    }
-}
