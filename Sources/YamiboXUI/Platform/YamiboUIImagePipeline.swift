@@ -11,7 +11,7 @@ typealias YamiboPlatformImage = UIImage
 @MainActor
 public final class YamiboUIImagePipeline {
     public static let shared = YamiboUIImagePipeline()
-    static let defaultMemoryLimitBytes = 80 * 1024 * 1024
+    static let defaultMemoryLimitBytes = 128 * 1024 * 1024
 
     private let core: YamiboImagePipeline
     private let pipeline: ImagePipeline
