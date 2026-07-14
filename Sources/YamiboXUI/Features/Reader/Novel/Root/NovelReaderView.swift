@@ -340,6 +340,47 @@ public struct NovelReaderView: View {
         return adjusted
     }
 
+
+    /// Shared bindings for the three paged viewport branches; see
+    /// `NovelReaderPagedViewportBindings`.
+    // MARK: - Content viewports
+
+    private func pagedViewportBindings(pagerIdentity: ReaderPagedPagerIdentity) -> NovelReaderPagedViewportBindings {
+        NovelReaderPagedViewportBindings(
+            displayReferenceProvider: { surfaceIdentity in
+                model.novelTextViewportDisplayReference(for: surfaceIdentity)
+            },
+            selectionController: novelTextSelectionController,
+            likeHighlightController: likeHighlightController,
+            likedImageAnchors: likedNovelImageAnchors,
+            isChromeVisible: chromeState.showsChrome,
+            canBoundaryPageTurn: { delta in
+                canNavigatePagedBoundary(delta: delta)
+            },
+            onSelectionChange: { selectionIndex in
+                model.selectPagedViewportIndex(selectionIndex)
+            },
+            onBoundaryPageTurn: { delta in
+                Task { await goRelativePage(delta, pagerIdentity: pagerIdentity) }
+            },
+            onPageTapZone: { zone in
+                handlePagedTapZone(zone, pagerIdentity: pagerIdentity)
+            },
+            onScrollAnimationRequestConsumed: { request in
+                clearPagedScrollAnimationRequest(request)
+            },
+            onChromeVisibleImageTap: {
+                enterImmersiveMode()
+            },
+            onImageTap: { url, title in
+                handleImageTap(url: url, title: title)
+            },
+            onImageLongPress: { anchor, imageURL in
+                handleImageLongPress(anchor, imageURL: imageURL)
+            }
+        )
+    }
+
     private func pagedContent(topInset: CGFloat, layout: NovelReaderLayout) -> some View {
         let pagerIdentity = ReaderPagedPagerIdentity(
             visibleView: model.visibleView,
@@ -349,6 +390,7 @@ public struct NovelReaderView: View {
             layout: layout
         )
         let pagedTopInset = topInset + layout.chromeInsets.top
+        let bindings = pagedViewportBindings(pagerIdentity: pagerIdentity)
         return Group {
             if effectivePagedSettings.pagedTurnStyle == .pageCurl {
                 NovelReaderPagedPageCurlViewport(
@@ -363,37 +405,19 @@ public struct NovelReaderView: View {
                     usesTwoPageSpread: model.isTwoPageSpreadActive,
                     pagerIdentity: pagerIdentity,
                     scrollAnimationRequest: pagedScrollAnimationRequest,
-                    displayReferenceProvider: { surfaceIdentity in
-                        model.novelTextViewportDisplayReference(for: surfaceIdentity)
-                    },
-                    selectionController: novelTextSelectionController,
-                    likeHighlightController: likeHighlightController,
-                    likedImageAnchors: likedNovelImageAnchors,
-                    isChromeVisible: chromeState.showsChrome,
-                    canBoundaryPageTurn: { delta in
-                        canNavigatePagedBoundary(delta: delta)
-                    },
-                    onSelectionChange: { selectionIndex in
-                        model.selectPagedViewportIndex(selectionIndex)
-                    },
-                    onBoundaryPageTurn: { delta in
-                        Task { await goRelativePage(delta, pagerIdentity: pagerIdentity) }
-                    },
-                    onPageTapZone: { zone in
-                        handlePagedTapZone(zone, pagerIdentity: pagerIdentity)
-                    },
-                    onScrollAnimationRequestConsumed: { request in
-                        clearPagedScrollAnimationRequest(request)
-                    },
-                    onChromeVisibleImageTap: {
-                        enterImmersiveMode()
-                    },
-                    onImageTap: { url, title in
-                        handleImageTap(url: url, title: title)
-                    },
-                    onImageLongPress: { anchor, imageURL in
-                        handleImageLongPress(anchor, imageURL: imageURL)
-                    }
+                    displayReferenceProvider: bindings.displayReferenceProvider,
+                    selectionController: bindings.selectionController,
+                    likeHighlightController: bindings.likeHighlightController,
+                    likedImageAnchors: bindings.likedImageAnchors,
+                    isChromeVisible: bindings.isChromeVisible,
+                    canBoundaryPageTurn: bindings.canBoundaryPageTurn,
+                    onSelectionChange: bindings.onSelectionChange,
+                    onBoundaryPageTurn: bindings.onBoundaryPageTurn,
+                    onPageTapZone: bindings.onPageTapZone,
+                    onScrollAnimationRequestConsumed: bindings.onScrollAnimationRequestConsumed,
+                    onChromeVisibleImageTap: bindings.onChromeVisibleImageTap,
+                    onImageTap: bindings.onImageTap,
+                    onImageLongPress: bindings.onImageLongPress
                 )
             } else if model.isTwoPageSpreadActive {
                 NovelReaderPresentationSpreadCollectionViewport(
@@ -407,37 +431,19 @@ public struct NovelReaderView: View {
                     selectionIndex: model.pagedViewportSelectionIndex,
                     pagerIdentity: pagerIdentity,
                     scrollAnimationRequest: pagedScrollAnimationRequest,
-                    displayReferenceProvider: { surfaceIdentity in
-                        model.novelTextViewportDisplayReference(for: surfaceIdentity)
-                    },
-                    selectionController: novelTextSelectionController,
-                    likeHighlightController: likeHighlightController,
-                    likedImageAnchors: likedNovelImageAnchors,
-                    isChromeVisible: chromeState.showsChrome,
-                    canBoundaryPageTurn: { delta in
-                        canNavigatePagedBoundary(delta: delta)
-                    },
-                    onSelectionChange: { selectionIndex in
-                        model.selectPagedViewportIndex(selectionIndex)
-                    },
-                    onBoundaryPageTurn: { delta in
-                        Task { await goRelativePage(delta, pagerIdentity: pagerIdentity) }
-                    },
-                    onPageTapZone: { zone in
-                        handlePagedTapZone(zone, pagerIdentity: pagerIdentity)
-                    },
-                    onScrollAnimationRequestConsumed: { request in
-                        clearPagedScrollAnimationRequest(request)
-                    },
-                    onChromeVisibleImageTap: {
-                        enterImmersiveMode()
-                    },
-                    onImageTap: { url, title in
-                        handleImageTap(url: url, title: title)
-                    },
-                    onImageLongPress: { anchor, imageURL in
-                        handleImageLongPress(anchor, imageURL: imageURL)
-                    }
+                    displayReferenceProvider: bindings.displayReferenceProvider,
+                    selectionController: bindings.selectionController,
+                    likeHighlightController: bindings.likeHighlightController,
+                    likedImageAnchors: bindings.likedImageAnchors,
+                    isChromeVisible: bindings.isChromeVisible,
+                    canBoundaryPageTurn: bindings.canBoundaryPageTurn,
+                    onSelectionChange: bindings.onSelectionChange,
+                    onBoundaryPageTurn: bindings.onBoundaryPageTurn,
+                    onPageTapZone: bindings.onPageTapZone,
+                    onScrollAnimationRequestConsumed: bindings.onScrollAnimationRequestConsumed,
+                    onChromeVisibleImageTap: bindings.onChromeVisibleImageTap,
+                    onImageTap: bindings.onImageTap,
+                    onImageLongPress: bindings.onImageLongPress
                 )
             } else {
                 NovelReaderPagedCollectionViewport(
@@ -450,37 +456,19 @@ public struct NovelReaderView: View {
                     selectionIndex: model.pagedViewportSelectionIndex,
                     pagerIdentity: pagerIdentity,
                     scrollAnimationRequest: pagedScrollAnimationRequest,
-                    displayReferenceProvider: { surfaceIdentity in
-                        model.novelTextViewportDisplayReference(for: surfaceIdentity)
-                    },
-                    selectionController: novelTextSelectionController,
-                    likeHighlightController: likeHighlightController,
-                    likedImageAnchors: likedNovelImageAnchors,
-                    isChromeVisible: chromeState.showsChrome,
-                    canBoundaryPageTurn: { delta in
-                        canNavigatePagedBoundary(delta: delta)
-                    },
-                    onSelectionChange: { selectionIndex in
-                        model.selectPagedViewportIndex(selectionIndex)
-                    },
-                    onBoundaryPageTurn: { delta in
-                        Task { await goRelativePage(delta, pagerIdentity: pagerIdentity) }
-                    },
-                    onPageTapZone: { zone in
-                        handlePagedTapZone(zone, pagerIdentity: pagerIdentity)
-                    },
-                    onScrollAnimationRequestConsumed: { request in
-                        clearPagedScrollAnimationRequest(request)
-                    },
-                    onChromeVisibleImageTap: {
-                        enterImmersiveMode()
-                    },
-                    onImageTap: { url, title in
-                        handleImageTap(url: url, title: title)
-                    },
-                    onImageLongPress: { anchor, imageURL in
-                        handleImageLongPress(anchor, imageURL: imageURL)
-                    }
+                    displayReferenceProvider: bindings.displayReferenceProvider,
+                    selectionController: bindings.selectionController,
+                    likeHighlightController: bindings.likeHighlightController,
+                    likedImageAnchors: bindings.likedImageAnchors,
+                    isChromeVisible: bindings.isChromeVisible,
+                    canBoundaryPageTurn: bindings.canBoundaryPageTurn,
+                    onSelectionChange: bindings.onSelectionChange,
+                    onBoundaryPageTurn: bindings.onBoundaryPageTurn,
+                    onPageTapZone: bindings.onPageTapZone,
+                    onScrollAnimationRequestConsumed: bindings.onScrollAnimationRequestConsumed,
+                    onChromeVisibleImageTap: bindings.onChromeVisibleImageTap,
+                    onImageTap: bindings.onImageTap,
+                    onImageLongPress: bindings.onImageLongPress
                 )
             }
         }
@@ -731,6 +719,8 @@ public struct NovelReaderView: View {
         )
     }
 
+    // MARK: - Image taps and browser
+
     private func handleImageTap(url: URL, title: String?) {
         guard !chromeState.showsChrome else {
             enterImmersiveMode()
@@ -774,6 +764,8 @@ public struct NovelReaderView: View {
             appModel.dismissNovelReader()
         }
     }
+
+    // MARK: - Chrome state and control events
 
     private func toggleChrome() {
         guard !model.novelReaderSurfaces.isEmpty else { return }
@@ -845,6 +837,8 @@ public struct NovelReaderView: View {
             chromeState.hideChrome()
         }
     }
+
+    // MARK: - Tap routing
 
     private func handlePagedContentTap(
         pageDelta: Int? = nil,
@@ -927,6 +921,8 @@ public struct NovelReaderView: View {
     private func openLikes() {
         showingLikes = true
     }
+
+    // MARK: - Like capture
 
     private func configureLikeCapture() {
         novelTextSelectionController.configureLikeCapture(
@@ -1077,6 +1073,8 @@ public struct NovelReaderView: View {
         )
     }
 
+    // MARK: - Vertical position persistence and restore
+
     private func rememberCurrentVerticalPositioningFingerprint() {
         lastVerticalPositioningFingerprint = currentVerticalPositioningFingerprint
     }
@@ -1100,6 +1098,8 @@ public struct NovelReaderView: View {
         model.jumpToAdjacentChapter(delta)
         restoreVerticalPositionIfNeeded()
     }
+
+    // MARK: - Navigation intents
 
     private func jumpToChapter(_ chapter: NovelReaderChapter) {
         model.jumpToChapter(chapter)
@@ -1442,278 +1442,5 @@ public struct NovelReaderView: View {
             .flatMap(\.windows)
             .first(where: \.isKeyWindow)?
             .safeAreaInsets ?? .zero
-    }
-}
-
-private enum NovelReaderLoadingOverlayReason: Equatable, Sendable {
-    case appearanceSettingsApply
-    case verticalRestore
-    case novelReaderPageDocumentNavigation
-    case initialContentLoad
-}
-
-private struct NovelReaderLoadingOverlayPresentation: Equatable, Sendable {
-    let reason: NovelReaderLoadingOverlayReason?
-
-    init(
-        isLoading: Bool,
-        hasSurfaces: Bool,
-        hasInitialLoadError: Bool = false,
-        isApplyingAppearanceSettings: Bool,
-        isNavigatingNovelReaderProjection: Bool = false,
-        shouldConcealViewportContent: Bool
-    ) {
-        if isApplyingAppearanceSettings {
-            reason = .appearanceSettingsApply
-        } else if shouldConcealViewportContent {
-            reason = .verticalRestore
-        } else if isNavigatingNovelReaderProjection {
-            reason = .novelReaderPageDocumentNavigation
-        } else if isLoading && !hasSurfaces && !hasInitialLoadError {
-            reason = .initialContentLoad
-        } else {
-            reason = nil
-        }
-    }
-
-    var isPresented: Bool {
-        reason != nil
-    }
-
-    var allowsChrome: Bool {
-        !isPresented
-    }
-}
-
-private struct NovelReaderLifecycleModifier: ViewModifier {
-    let currentLayout: NovelReaderLayout
-    let onInitialTask: () async -> Void
-    let onLayoutChange: (NovelReaderLayout) -> Void
-    let onMemoryWarning: () -> Void
-    let onDisappear: () -> Void
-
-    func body(content: Content) -> some View {
-        content
-            .task {
-                await onInitialTask()
-            }
-            .onChange(of: currentLayout) { _, newValue in
-                onLayoutChange(newValue)
-            }
-            .onReceive(NotificationCenter.default.publisher(
-                for: UIApplication.didReceiveMemoryWarningNotification
-            )) { _ in
-                onMemoryWarning()
-            }
-            .onDisappear {
-                onDisappear()
-            }
-    }
-}
-
-private struct NovelReaderPresentationModifier: ViewModifier {
-    @ObservedObject var model: NovelReaderViewModel
-    @Binding var showingSettings: Bool
-    @Binding var showingCachePanel: Bool
-    @Binding var showingCacheProgress: Bool
-    @Binding var showingChapterSheet: Bool
-    @Binding var showingChapterComments: Bool
-    @Binding var showingLikes: Bool
-    @Binding var forumThreadOverlayItem: ForumThreadOverlayItem?
-    @Binding var imageBrowserItem: ImageBrowserItem?
-
-    let chapterCommentsTarget: ReaderChapterCommentTarget?
-    let likeDependencies: LikeDependencies
-    let appModel: YamiboAppModel
-    let onJumpToChapterDirectoryChapter: (NovelReaderChapter) -> Void
-    let onPreviewChapterDirectoryWebView: (Int) -> Void
-    let onOpenLikeAnchor: (LikeAnchorPayload) -> Void
-
-    func body(content: Content) -> some View {
-        content
-            .sheet(isPresented: $showingSettings) {
-                NovelReaderSettingsSheet(model: model)
-                    .presentationDetents([.large])
-                    .presentationDragIndicator(.hidden)
-                    .presentationBackground(.clear)
-            }
-            .sheet(isPresented: $showingChapterSheet) {
-                NovelReaderChapterSheet(model: model) { chapter in
-                    onJumpToChapterDirectoryChapter(chapter)
-                } onSelectWebView: { view in
-                    onPreviewChapterDirectoryWebView(view)
-                }
-            }
-            .sheet(isPresented: $showingChapterComments) {
-                ReaderChapterCommentsSheet(
-                    target: chapterCommentsTarget,
-                    state: model.chapterComments.state,
-                    isLoadingMore: model.chapterComments.isLoadingMore,
-                    loadMoreError: model.chapterComments.loadMoreError,
-                    refreshError: model.chapterComments.refreshError,
-                    loadInitial: model.loadChapterComments(for:),
-                    refresh: model.refreshChapterComments(for:),
-                    loadNext: model.loadNextChapterCommentsPage,
-                    forumDependencies: appModel.appContext.forumDependencies,
-                    appModel: appModel,
-                    discussionWorkTIDs: [model.context.threadID]
-                )
-            }
-            .fullScreenCover(item: $forumThreadOverlayItem) { item in
-                ForumThreadOverlayScreen(
-                    item: item,
-                    dependencies: appModel.appContext.forumDependencies,
-                    appModel: appModel,
-                    rootIsDiscussionView: true,
-                    discussionWorkTIDs: [model.context.threadID]
-                )
-            }
-            .sheet(isPresented: $showingCachePanel) {
-                NovelReaderCachePanel(cache: model.cache)
-            }
-            .sheet(
-                isPresented: $showingCacheProgress,
-                onDismiss: {
-                    if model.cache.hasOperationSession {
-                        model.cache.hideProgress()
-                    }
-                }
-            ) {
-                NovelReaderCacheProgressSheet(cache: model.cache) {
-                    showingCacheProgress = false
-                }
-            }
-            .fullScreenCover(item: $imageBrowserItem) { item in
-                ImageBrowserView(
-                    items: [item],
-                    initialItemID: item.id,
-                    mode: .single,
-                    coverActionsProvider: model.imageBrowserCoverActionsProvider
-                ) {
-                    imageBrowserItem = nil
-                }
-            }
-            .sheet(isPresented: $showingLikes) {
-                NavigationStack {
-                    LikeWorkItemsView(
-                        work: .novel(threadID: model.context.threadID),
-                        workTitle: model.title,
-                        like: likeDependencies,
-                        onOpenAnchor: onOpenLikeAnchor,
-                        onDismiss: { showingLikes = false }
-                    )
-                }
-            }
-    }
-}
-
-private struct NovelReaderStateObserverModifier: ViewModifier {
-    @ObservedObject var model: NovelReaderViewModel
-    @Binding var showingSettings: Bool
-    @Binding var showingCachePanel: Bool
-    @Binding var showingCacheProgress: Bool
-    @Binding var showingChapterSheet: Bool
-    @Binding var showingChapterComments: Bool
-    @Binding var showingLikes: Bool
-    @Binding var forumThreadOverlayItem: ForumThreadOverlayItem?
-    @Binding var imageBrowserItem: ImageBrowserItem?
-
-    let isStatusBarHidden: Bool
-    let isChromeVisible: Bool
-    let onUpdateChromeForContentState: () -> Void
-    let onRestoreVerticalPositionIfNeeded: () -> Void
-
-    func body(content: Content) -> some View {
-        content
-            .statusBarHidden(isStatusBarHidden)
-            .persistentSystemOverlays(isChromeVisible ? .automatic : .hidden)
-            .onChange(of: model.isLoading) { _, _ in
-                onUpdateChromeForContentState()
-            }
-            .onChange(of: model.errorMessage) { _, _ in
-                onUpdateChromeForContentState()
-            }
-            .onChange(of: model.novelReaderSurfaces.count) { _, _ in
-                onUpdateChromeForContentState()
-            }
-            .onChange(of: model.novelReaderPresentation?.generation) { _, _ in
-                onUpdateChromeForContentState()
-                onRestoreVerticalPositionIfNeeded()
-            }
-            .onChange(of: model.settings.readingMode) { _, _ in
-                onUpdateChromeForContentState()
-                onRestoreVerticalPositionIfNeeded()
-            }
-            .onChange(of: showingSettings) { _, _ in
-                onUpdateChromeForContentState()
-            }
-            .onChange(of: showingCachePanel) { _, _ in
-                onUpdateChromeForContentState()
-            }
-            .onChange(of: showingCacheProgress) { _, _ in
-                onUpdateChromeForContentState()
-            }
-            .onChange(of: showingChapterSheet) { _, _ in
-                onUpdateChromeForContentState()
-            }
-            .onChange(of: showingChapterComments) { _, _ in
-                onUpdateChromeForContentState()
-            }
-            .onChange(of: showingLikes) { _, _ in
-                onUpdateChromeForContentState()
-            }
-            .onChange(of: forumThreadOverlayItem) { _, _ in
-                onUpdateChromeForContentState()
-            }
-            .onChange(of: imageBrowserItem) { _, _ in
-                onUpdateChromeForContentState()
-            }
-    }
-}
-
-private struct NovelReaderChromeHeightObserverModifier: ViewModifier {
-    @Binding var topChromeHeight: CGFloat
-    @Binding var bottomChromeHeight: CGFloat
-
-    func body(content: Content) -> some View {
-        content
-            .onPreferenceChange(NovelReaderTopChromeHeightPreferenceKey.self) { value in
-                guard topChromeHeight != value else { return }
-                topChromeHeight = value
-            }
-            .onPreferenceChange(NovelReaderBottomChromeHeightPreferenceKey.self) { value in
-                guard bottomChromeHeight != value else { return }
-                bottomChromeHeight = value
-            }
-    }
-}
-
-private struct NovelReaderOfflineFallbackBanner: View {
-    let message: String
-    let retry: () -> Void
-
-    var body: some View {
-        HStack(spacing: 10) {
-            Image(systemName: "clock.arrow.circlepath")
-                .font(.callout.weight(.semibold))
-                .foregroundStyle(.orange)
-
-            Text(message)
-                .font(.footnote.weight(.medium))
-                .foregroundStyle(.primary)
-                .lineLimit(2)
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-            Button(action: retry) {
-                Label(L10n.string("common.retry"), systemImage: "arrow.clockwise")
-                    .labelStyle(.iconOnly)
-            }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
-            .accessibilityLabel(L10n.string("common.retry"))
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 9)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 }

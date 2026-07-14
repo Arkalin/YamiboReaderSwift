@@ -475,6 +475,8 @@ public final class NovelReaderViewModel: ObservableObject {
     /// is presented while another sheet is still dismissing, as with a My
     /// Likes jump-to-original) doesn't strand the reader on a permanent
     /// error once a valid layout follows.
+    // MARK: - Loading
+
     private func performInitialLoadIfNeeded() async {
         guard novelReaderSurfaces.isEmpty, !isLoading else { return }
         if readingWorkflow?.state == nil {
@@ -838,6 +840,8 @@ public final class NovelReaderViewModel: ObservableObject {
     }
 
     @discardableResult
+    // MARK: - Page loads
+
     private func load(
         view: Int,
         preferredSurfaceOrdinal: Int,
@@ -989,6 +993,8 @@ public final class NovelReaderViewModel: ObservableObject {
     // Does not itself record navigation history — callers that represent a
     // user-initiated nonlinear jump (see `jumpToLikeAnchor` below) must do
     // that themselves.
+    // MARK: - Resume points and like anchors
+
     func restoreResumePoint(_ resumePoint: NovelResumePoint) async -> Bool {
         if resumePoint.view == currentView,
            let state = readingWorkflow?.restoreResumePointInCurrentDocument(resumePoint) {
@@ -1278,6 +1284,8 @@ public final class NovelReaderViewModel: ObservableObject {
             return false
         }
     }
+
+    // MARK: - Appearance persistence
 
     private func persistSettings(
         novelReaderSettings: NovelReaderAppearanceSettings? = nil,

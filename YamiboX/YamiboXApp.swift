@@ -20,7 +20,10 @@ struct YamiboXApp: App {
 
     init() {
         let initialTab = YamiboXApp.resolveInitialTab()
-        let appContext = YamiboAppContext(ordinaryImageCache: YamiboUIImagePipeline.shared)
+        let appContext = YamiboAppContext(
+            ordinaryImageCache: YamiboUIImagePipeline.shared,
+            websiteDataClearer: WebKitWebsiteDataClearer()
+        )
         #if os(iOS)
         YamiboAppDelegate.appContext = appContext
         #endif

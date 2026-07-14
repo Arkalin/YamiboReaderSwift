@@ -28,18 +28,18 @@ final class SystemSettingsViewModel: ObservableObject {
     @Published private(set) var contentCoverCacheBytes = 0
     @Published private(set) var mangaDirectoryCacheBytes = 0
     @Published private(set) var offlineCacheBytes = 0
-    @Published private(set) var offlineCacheManagementRows: [OfflineCacheManagementRow] = []
-    @Published private(set) var selectedOfflineCacheGroupIDs: Set<OfflineCacheGroupID> = []
+    @Published internal(set) var offlineCacheManagementRows: [OfflineCacheManagementRow] = []
+    @Published internal(set) var selectedOfflineCacheGroupIDs: Set<OfflineCacheGroupID> = []
     @Published var isOfflineCacheManagementSelectionMode = false
-    @Published private(set) var pendingOfflineCacheManagementConfirmation: OfflineCacheManagementConfirmation?
-    @Published private(set) var mangaDirectoryManagementRows: [MangaDirectoryManagementRow] = []
-    @Published private(set) var selectedMangaDirectoryIDs: Set<String> = []
+    @Published internal(set) var pendingOfflineCacheManagementConfirmation: OfflineCacheManagementConfirmation?
+    @Published internal(set) var mangaDirectoryManagementRows: [MangaDirectoryManagementRow] = []
+    @Published internal(set) var selectedMangaDirectoryIDs: Set<String> = []
     @Published var isMangaDirectoryManagementSelectionMode = false
-    @Published private(set) var pendingMangaDirectoryManagementConfirmation: MangaDirectoryManagementConfirmation?
-    @Published private(set) var activeAction: SystemSettingsAction?
+    @Published internal(set) var pendingMangaDirectoryManagementConfirmation: MangaDirectoryManagementConfirmation?
+    @Published internal(set) var activeAction: SystemSettingsAction?
     @Published var errorMessage: String?
 
-    private let dependencies: SettingsDependencies
+    let dependencies: SettingsDependencies
 
     init(dependencies: SettingsDependencies) {
         self.dependencies = dependencies
@@ -93,6 +93,8 @@ final class SystemSettingsViewModel: ObservableObject {
         !selectedMangaDirectoryIDs.isEmpty && activeAction != .clearingMangaDirectory
     }
 
+    // MARK: - Loading
+
     func load() async {
         activeAction = .loading
         defer { activeAction = nil }
@@ -119,6 +121,8 @@ final class SystemSettingsViewModel: ObservableObject {
         await refreshStorageUsage()
     }
 
+    // MARK: - General
+
     func updateHomePage(_ value: AppHomePage) {
         let previous = homePage
         homePage = value
@@ -137,6 +141,8 @@ final class SystemSettingsViewModel: ObservableObject {
             }
         }
     }
+
+    // MARK: - Favorites appearance and display
 
     func loadFavoriteBackgroundImageData() async -> Data? {
         await dependencies.favoriteBackgroundImageStore.loadData(imageID: favoriteBackground.imageID)
@@ -296,6 +302,8 @@ final class SystemSettingsViewModel: ObservableObject {
         settings.favorites.showsCategoryCounts = favoriteShowsCategoryCounts
     }
 
+    // MARK: - Peripherals (Apple Pencil / gamepad / keyboard)
+
     func updateApplePencilPageTurnEnabled(_ isEnabled: Bool) {
         var updated = applePencilPageTurn
         updated.isEnabled = isEnabled
@@ -355,6 +363,8 @@ final class SystemSettingsViewModel: ObservableObject {
         updated.restoreDefaultBindings()
         updateKeyboard(updated)
     }
+
+    // MARK: - Favorite sync behavior
 
     func updateFavoriteAddSyncPromptEnabled(_ value: Bool) {
         let previous = favoriteAddSyncPromptEnabled
@@ -422,6 +432,8 @@ final class SystemSettingsViewModel: ObservableObject {
         }
     }
 
+    // MARK: - Reading (novel offline cache / board reader)
+
     func updateNovelOfflineCacheRetainsInlineImages(_ retainsInlineImages: Bool) {
         var updated = novelOfflineCache
         updated.retainsInlineImages = retainsInlineImages
@@ -457,6 +469,8 @@ final class SystemSettingsViewModel: ObservableObject {
     /// reader page projections plus the forum home/board/thread-page cache.
     /// These three share the same underlying engine and are all equally
     /// re-fetchable, so a single button covers all of them.
+    // MARK: - Storage and cache actions
+
     func clearWebReaderCache() async -> Bool {
         activeAction = .clearingWebReaderCache
         defer { activeAction = nil }
@@ -557,301 +571,7 @@ final class SystemSettingsViewModel: ObservableObject {
         offlineCacheBytes = await dependencies.offlineCacheStore.totalDiskUsageBytes()
     }
 
-    func refreshOfflineCacheManagement() async {
-        activeAction = .loading
-        defer { activeAction = nil }
-
-        await refreshOfflineCacheManagementRows()
-    }
-
-    func requestOfflineCacheGroupDeletion(id: OfflineCacheGroupID) {
-        prepareOfflineCacheManagementConfirmation(groupIDs: [id])
-    }
-
-    func requestOfflineCacheSwipeGroupDeletion(id: OfflineCacheGroupID) {
-        requestOfflineCacheGroupDeletion(id: id)
-    }
-
-    func requestOfflineCacheEntryDeletion(id: OfflineCacheEntryID) {
-        prepareOfflineCacheManagementConfirmation(entryIDs: [id])
-    }
-
-    func requestSelectedOfflineCacheGroupDeletion() {
-        prepareOfflineCacheManagementConfirmation(groupIDs: Array(selectedOfflineCacheGroupIDs))
-    }
-
-    func cancelOfflineCacheManagementConfirmation() {
-        pendingOfflineCacheManagementConfirmation = nil
-    }
-
-    func confirmPendingOfflineCacheManagementDeletion() async -> Bool {
-        guard let confirmation = pendingOfflineCacheManagementConfirmation else { return false }
-        return await confirmOfflineCacheManagementDeletion(confirmation)
-    }
-
-    func confirmOfflineCacheManagementDeletion(_ confirmation: OfflineCacheManagementConfirmation) async -> Bool {
-        await clearOfflineCache(groupIDs: confirmation.groupIDs, entryIDs: confirmation.entryIDs)
-    }
-
-    func setOfflineCacheManagementSelectionMode(_ isSelecting: Bool) {
-        isOfflineCacheManagementSelectionMode = isSelecting
-        if !isSelecting {
-            selectedOfflineCacheGroupIDs.removeAll()
-        }
-    }
-
-    func toggleOfflineCacheManagementSelection(id: OfflineCacheGroupID) {
-        let visibleIDs = Set(offlineCacheManagementRows.map(\.id))
-        guard visibleIDs.contains(id) else { return }
-        if selectedOfflineCacheGroupIDs.contains(id) {
-            selectedOfflineCacheGroupIDs.remove(id)
-        } else {
-            selectedOfflineCacheGroupIDs.insert(id)
-        }
-    }
-
-    var isOfflineCacheManagementSelectionComplete: Bool {
-        let visibleGroupIDs = Set(offlineCacheManagementRows.map(\.id))
-        return !visibleGroupIDs.isEmpty && visibleGroupIDs.isSubset(of: selectedOfflineCacheGroupIDs)
-    }
-
-    func toggleAllOfflineCacheManagementRows() {
-        let visibleGroupIDs = Set(offlineCacheManagementRows.map(\.id))
-        guard !visibleGroupIDs.isEmpty else { return }
-
-        if visibleGroupIDs.isSubset(of: selectedOfflineCacheGroupIDs) {
-            selectedOfflineCacheGroupIDs.subtract(visibleGroupIDs)
-        } else {
-            selectedOfflineCacheGroupIDs.formUnion(visibleGroupIDs)
-        }
-    }
-
-    func offlineCacheManagementRow(id: OfflineCacheGroupID) -> OfflineCacheManagementRow? {
-        offlineCacheManagementRows.first { $0.id == id }
-    }
-
-    private func clearOfflineCache(groupIDs: [OfflineCacheGroupID], entryIDs: [OfflineCacheEntryID]) async -> Bool {
-        let normalizedGroupIDs = normalizedOfflineCacheGroupIDs(groupIDs)
-        let normalizedEntryIDs = normalizedOfflineCacheEntryIDs(entryIDs)
-        guard !normalizedGroupIDs.isEmpty || !normalizedEntryIDs.isEmpty else { return false }
-
-        activeAction = .clearingOfflineCache
-        defer { activeAction = nil }
-
-        do {
-            for groupID in normalizedGroupIDs {
-                try await dependencies.offlineCacheStore.removeOfflineCacheGroup(groupID)
-            }
-            for entryID in normalizedEntryIDs {
-                try await dependencies.offlineCacheStore.removeOfflineCacheEntry(entryID)
-            }
-            pendingOfflineCacheManagementConfirmation = nil
-            selectedOfflineCacheGroupIDs.subtract(normalizedGroupIDs)
-            if selectedOfflineCacheGroupIDs.isEmpty {
-                isOfflineCacheManagementSelectionMode = false
-            }
-            await refreshStorageUsage()
-            await refreshOfflineCacheManagementRows()
-            return true
-        } catch {
-            errorMessage = error.localizedDescription
-            return false
-        }
-    }
-
-    private func refreshOfflineCacheManagementRows() async {
-        let snapshot = await dependencies.offlineCacheStore.offlineCacheManagementSnapshot()
-        offlineCacheManagementRows = snapshot.groups
-            .map(OfflineCacheManagementRow.init(group:))
-            .sorted { lhs, rhs in
-                let titleComparison = lhs.title.localizedStandardCompare(rhs.title)
-                if titleComparison != .orderedSame {
-                    return titleComparison == .orderedAscending
-                }
-                return lhs.id.ownerKey.localizedStandardCompare(rhs.id.ownerKey) == .orderedAscending
-            }
-
-        let visibleIDs = Set(offlineCacheManagementRows.map(\.id))
-        selectedOfflineCacheGroupIDs.formIntersection(visibleIDs)
-        if selectedOfflineCacheGroupIDs.isEmpty && offlineCacheManagementRows.isEmpty {
-            isOfflineCacheManagementSelectionMode = false
-        }
-    }
-
-    private func prepareOfflineCacheManagementConfirmation(
-        groupIDs: [OfflineCacheGroupID] = [],
-        entryIDs: [OfflineCacheEntryID] = []
-    ) {
-        let normalizedGroupIDs = normalizedOfflineCacheGroupIDs(groupIDs)
-        let normalizedEntryIDs = normalizedOfflineCacheEntryIDs(entryIDs)
-        guard !normalizedGroupIDs.isEmpty || !normalizedEntryIDs.isEmpty else { return }
-        let rowsByID = Dictionary(uniqueKeysWithValues: offlineCacheManagementRows.map { ($0.id, $0) })
-        let entriesByID = Dictionary(
-            uniqueKeysWithValues: offlineCacheManagementRows.flatMap(\.entries).map { ($0.id, $0) }
-        )
-        pendingOfflineCacheManagementConfirmation = OfflineCacheManagementConfirmation(
-            groupIDs: normalizedGroupIDs,
-            entryIDs: normalizedEntryIDs,
-            titles: normalizedGroupIDs.map { rowsByID[$0]?.title ?? $0.ownerKey }
-                + normalizedEntryIDs.map { entriesByID[$0]?.title ?? $0.entryKey }
-        )
-    }
-
-    private func normalizedOfflineCacheGroupIDs(_ groupIDs: [OfflineCacheGroupID]) -> [OfflineCacheGroupID] {
-        let visibleIDs = Set(offlineCacheManagementRows.map(\.id))
-        var seen: Set<OfflineCacheGroupID> = []
-        return groupIDs
-            .filter { visibleIDs.contains($0) && seen.insert($0).inserted }
-            .sorted { lhs, rhs in
-                lhs.ownerKey.localizedStandardCompare(rhs.ownerKey) == .orderedAscending
-            }
-    }
-
-    private func normalizedOfflineCacheEntryIDs(_ entryIDs: [OfflineCacheEntryID]) -> [OfflineCacheEntryID] {
-        let visibleIDs = Set(offlineCacheManagementRows.flatMap(\.entries).map(\.id))
-        var seen: Set<OfflineCacheEntryID> = []
-        return entryIDs
-            .filter { visibleIDs.contains($0) && seen.insert($0).inserted }
-            .sorted { lhs, rhs in
-                if lhs.ownerKey != rhs.ownerKey {
-                    return lhs.ownerKey.localizedStandardCompare(rhs.ownerKey) == .orderedAscending
-                }
-                return lhs.entryKey.localizedStandardCompare(rhs.entryKey) == .orderedAscending
-            }
-    }
-
-    func refreshMangaDirectoryManagement() async {
-        activeAction = .loading
-        defer { activeAction = nil }
-
-        await refreshMangaDirectoryManagementRows()
-    }
-
-    func requestMangaDirectoryDeletion(id: String) {
-        prepareMangaDirectoryManagementConfirmation(ids: [id])
-    }
-
-    func requestSelectedMangaDirectoryDeletion() {
-        prepareMangaDirectoryManagementConfirmation(ids: Array(selectedMangaDirectoryIDs))
-    }
-
-    func cancelMangaDirectoryManagementConfirmation() {
-        pendingMangaDirectoryManagementConfirmation = nil
-    }
-
-    func confirmPendingMangaDirectoryManagementDeletion() async -> Bool {
-        guard let confirmation = pendingMangaDirectoryManagementConfirmation else { return false }
-        return await confirmMangaDirectoryManagementDeletion(confirmation)
-    }
-
-    func confirmMangaDirectoryManagementDeletion(_ confirmation: MangaDirectoryManagementConfirmation) async -> Bool {
-        await clearMangaDirectories(ids: confirmation.directoryIDs)
-    }
-
-    func setMangaDirectoryManagementSelectionMode(_ isSelecting: Bool) {
-        isMangaDirectoryManagementSelectionMode = isSelecting
-        if !isSelecting {
-            selectedMangaDirectoryIDs.removeAll()
-        }
-    }
-
-    func toggleMangaDirectoryManagementSelection(id: String) {
-        let visibleIDs = Set(mangaDirectoryManagementRows.map(\.id))
-        guard visibleIDs.contains(id) else { return }
-        if selectedMangaDirectoryIDs.contains(id) {
-            selectedMangaDirectoryIDs.remove(id)
-        } else {
-            selectedMangaDirectoryIDs.insert(id)
-        }
-    }
-
-    var isMangaDirectoryManagementSelectionComplete: Bool {
-        let visibleIDs = Set(mangaDirectoryManagementRows.map(\.id))
-        return !visibleIDs.isEmpty && visibleIDs.isSubset(of: selectedMangaDirectoryIDs)
-    }
-
-    /// Selecting every visible row and deleting the selection is how this
-    /// screen supports "clear all" — the same select-all-then-delete flow the
-    /// offline cache management screen already uses, rather than a second,
-    /// separate destructive action.
-    func toggleAllMangaDirectoryManagementRows() {
-        let visibleIDs = Set(mangaDirectoryManagementRows.map(\.id))
-        guard !visibleIDs.isEmpty else { return }
-
-        if visibleIDs.isSubset(of: selectedMangaDirectoryIDs) {
-            selectedMangaDirectoryIDs.subtract(visibleIDs)
-        } else {
-            selectedMangaDirectoryIDs.formUnion(visibleIDs)
-        }
-    }
-
-    /// Refreshes rows/selection/confirmation unconditionally, even when a
-    /// directory partway through the batch fails to delete — the refresh's
-    /// own `formIntersection` against the store's real current directories
-    /// (in `refreshMangaDirectoryManagementRows`) is what reconciles
-    /// `selectedMangaDirectoryIDs` to reality, rather than assuming the whole
-    /// batch either fully succeeded or fully no-opped.
-    private func clearMangaDirectories(ids: [String]) async -> Bool {
-        let normalizedIDs = normalizedMangaDirectoryIDs(ids)
-        guard !normalizedIDs.isEmpty else { return false }
-
-        activeAction = .clearingMangaDirectory
-        defer { activeAction = nil }
-
-        var deletionError: Error?
-        for id in normalizedIDs {
-            do {
-                try await dependencies.mangaDirectoryStore.deleteDirectory(named: id)
-            } catch {
-                deletionError = error
-                break
-            }
-        }
-
-        pendingMangaDirectoryManagementConfirmation = nil
-        await refreshStorageUsage()
-        await refreshMangaDirectoryManagementRows()
-        if selectedMangaDirectoryIDs.isEmpty {
-            isMangaDirectoryManagementSelectionMode = false
-        }
-
-        if let deletionError {
-            errorMessage = deletionError.localizedDescription
-            return false
-        }
-        return true
-    }
-
-    private func refreshMangaDirectoryManagementRows() async {
-        let summaries = await dependencies.mangaDirectoryStore.allDirectorySummaries()
-        mangaDirectoryManagementRows = summaries
-            .map(MangaDirectoryManagementRow.init(summary:))
-            .sorted { $0.title.localizedStandardCompare($1.title) == .orderedAscending }
-
-        let visibleIDs = Set(mangaDirectoryManagementRows.map(\.id))
-        selectedMangaDirectoryIDs.formIntersection(visibleIDs)
-        if selectedMangaDirectoryIDs.isEmpty && mangaDirectoryManagementRows.isEmpty {
-            isMangaDirectoryManagementSelectionMode = false
-        }
-    }
-
-    private func prepareMangaDirectoryManagementConfirmation(ids: [String]) {
-        let normalizedIDs = normalizedMangaDirectoryIDs(ids)
-        guard !normalizedIDs.isEmpty else { return }
-        let rowsByID = Dictionary(uniqueKeysWithValues: mangaDirectoryManagementRows.map { ($0.id, $0) })
-        pendingMangaDirectoryManagementConfirmation = MangaDirectoryManagementConfirmation(
-            directoryIDs: normalizedIDs,
-            titles: normalizedIDs.map { rowsByID[$0]?.title ?? $0 }
-        )
-    }
-
-    private func normalizedMangaDirectoryIDs(_ ids: [String]) -> [String] {
-        let visibleIDs = Set(mangaDirectoryManagementRows.map(\.id))
-        var seen: Set<String> = []
-        return ids
-            .filter { visibleIDs.contains($0) && seen.insert($0).inserted }
-            .sorted { $0.localizedStandardCompare($1) == .orderedAscending }
-    }
+    // MARK: - Shared helpers
 
     private func cacheLabel(for bytes: Int) -> String {
         let megabytes = Double(max(0, bytes)) / 1_048_576

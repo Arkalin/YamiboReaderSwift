@@ -1,24 +1,24 @@
 import Foundation
-#if canImport(WebKit)
-import WebKit
-#endif
 
 public struct YamiboAccountService: Sendable {
     private let session: URLSession
     private let sessionStore: SessionStore
     private let profileStore: YamiboProfileStore
     private let userAgent: String
+    private let websiteDataClearer: (any WebsiteDataClearing)?
 
     init(
         session: URLSession = YamiboNetworkConfiguration.makeSession(),
         sessionStore: SessionStore,
         profileStore: YamiboProfileStore,
-        userAgent: String = YamiboNetworkConfiguration.defaultMobileUserAgent
+        userAgent: String = YamiboNetworkConfiguration.defaultMobileUserAgent,
+        websiteDataClearer: (any WebsiteDataClearing)? = nil
     ) {
         self.session = session
         self.sessionStore = sessionStore
         self.profileStore = profileStore
         self.userAgent = userAgent
+        self.websiteDataClearer = websiteDataClearer
     }
 
     public func login(_ request: YamiboLoginRequest) async throws -> YamiboProfile {
@@ -106,7 +106,7 @@ public struct YamiboAccountService: Sendable {
         try await sessionStore.reset()
         await profileStore.clear()
         clearHTTPCookies()
-        await clearWebKitCookies()
+        await websiteDataClearer?.clearYamiboCookies()
     }
 
     private func fetchLoginForm() async throws -> YamiboLoginForm {
@@ -174,18 +174,6 @@ public struct YamiboAccountService: Sendable {
         }
     }
 
-    #if canImport(WebKit)
-    @MainActor
-    private func clearWebKitCookies() async {
-        let cookieStore = WKWebsiteDataStore.default().httpCookieStore
-        let cookies = await cookieStore.allCookies()
-        for cookie in cookies where YamiboDomain.containsYamiboDomain(cookie.domain) {
-            await cookieStore.deleteCookieAsync(cookie)
-        }
-    }
-    #else
-    private func clearWebKitCookies() async {}
-    #endif
 
     private func requiresAdditionalVerification(_ html: String) -> Bool {
         let markers = [
@@ -230,22 +218,3 @@ private extension String {
     }
 }
 
-#if canImport(WebKit)
-private extension WKHTTPCookieStore {
-    func allCookies() async -> [HTTPCookie] {
-        await withCheckedContinuation { continuation in
-            getAllCookies { cookies in
-                continuation.resume(returning: cookies)
-            }
-        }
-    }
-
-    func deleteCookieAsync(_ cookie: HTTPCookie) async {
-        await withCheckedContinuation { continuation in
-            delete(cookie) {
-                continuation.resume()
-            }
-        }
-    }
-}
-#endif

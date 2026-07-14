@@ -1,8 +1,5 @@
 @preconcurrency import Foundation
 @preconcurrency import GRDB
-#if canImport(WebKit)
-import WebKit
-#endif
 
 /// Composition root. Owns the infrastructure singletons, assembles each
 /// feature's dependency package, and is referenced only by the app-entry
@@ -50,6 +47,7 @@ public final class YamiboAppContext: Sendable {
     private let offlineCacheQueueExecutorBox = OfflineCacheQueueExecutorBox()
     private nonisolated(unsafe) let uiDefaults: UserDefaults
     private let clearsWebDataOnReset: Bool
+    private let websiteDataClearer: (any WebsiteDataClearing)?
 
     public init(
         sessionStore: SessionStore = SessionStore(),
@@ -81,6 +79,7 @@ public final class YamiboAppContext: Sendable {
         cachesRootDirectory: URL? = nil,
         uiDefaults: UserDefaults = .standard,
         clearsWebDataOnReset: Bool = true,
+        websiteDataClearer: (any WebsiteDataClearing)? = nil,
         session: URLSession = YamiboNetworkConfiguration.makeSession()
     ) {
         let resolvedGRDBRootDirectory = grdbRootDirectory ?? YamiboDatabase.defaultRootDirectory()
@@ -93,6 +92,7 @@ public final class YamiboAppContext: Sendable {
         )
         self.uiDefaults = uiDefaults
         self.clearsWebDataOnReset = clearsWebDataOnReset
+        self.websiteDataClearer = websiteDataClearer
         self.sessionStore = sessionStore
         self.profileStore = profileStore
         self.checkInStore = checkInStore
@@ -367,7 +367,8 @@ public final class YamiboAppContext: Sendable {
         YamiboAccountService(
             session: session,
             sessionStore: sessionStore,
-            profileStore: profileStore
+            profileStore: profileStore,
+            websiteDataClearer: websiteDataClearer
         )
     }
 
@@ -476,19 +477,7 @@ public final class YamiboAppContext: Sendable {
     private func clearWebData() async {
         HTTPCookieStorage.shared.removeCookies(since: .distantPast)
         URLCache.shared.removeAllCachedResponses()
-
-        #if canImport(WebKit)
-        let dataStore = WKWebsiteDataStore.default()
-        let dataTypes = WKWebsiteDataStore.allWebsiteDataTypes()
-        let records = await withCheckedContinuation { continuation in
-            dataStore.fetchDataRecords(ofTypes: dataTypes) { continuation.resume(returning: $0) }
-        }
-        await withCheckedContinuation { continuation in
-            dataStore.removeData(ofTypes: dataTypes, for: records) {
-                continuation.resume()
-            }
-        }
-        #endif
+        await websiteDataClearer?.clearAllWebsiteData()
     }
 }
 

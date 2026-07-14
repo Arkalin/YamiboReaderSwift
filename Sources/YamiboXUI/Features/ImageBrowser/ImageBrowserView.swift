@@ -160,7 +160,7 @@ struct ImageBrowserView: View {
         } message: { feedback in
             Text(feedback.message)
         }
-        .forumTransientMessage(transientMessage) {
+        .transientMessage(transientMessage) {
             transientMessage = nil
         }
         .accessibilityIdentifier("reader-image-browser")

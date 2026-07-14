@@ -67,7 +67,7 @@ public struct MineHomeView: View {
                     }
                 )
                 MineLibraryEntriesSection(
-                    offlineCacheQueueCount: viewModel.offlineCacheQueueEntryCount,
+                    offlineCacheQueueCount: viewModel.offlineQueue.entryCount,
                     showMessages: {
                         if viewModel.isLoggedIn {
                             navigator.openMessageCenter(tab: .privateMessages)
@@ -102,12 +102,12 @@ public struct MineHomeView: View {
             }
             .alert(L10n.string("common.operation_failed"), isPresented: errorIsPresented, actions: {
                 Button(L10n.string("common.ok")) {
-                    viewModel.errorMessage = nil
+                    clearErrorMessages()
                 }
             }, message: {
-                Text(viewModel.errorMessage ?? "")
+                Text(viewModel.errorMessage ?? viewModel.offlineQueue.errorMessage ?? "")
             })
-            .forumTransientMessage(viewModel.checkInResultMessage) {
+            .transientMessage(viewModel.checkInResultMessage) {
                 viewModel.checkInResultMessage = nil
             }
             .sheet(isPresented: $showingLoginSheet) {
@@ -134,7 +134,7 @@ public struct MineHomeView: View {
                 )
             }
             .navigationDestination(isPresented: $isOfflineCacheQueuePushed) {
-                MineOfflineCacheQueueScreen(viewModel: viewModel)
+                OfflineCacheQueueScreen(viewModel: viewModel.offlineQueue)
             }
             .navigationDestination(isPresented: $isMyLikesPushed) {
                 LikeWorkListView(
@@ -156,13 +156,21 @@ public struct MineHomeView: View {
 
     private var errorIsPresented: Binding<Bool> {
         Binding(
-            get: { viewModel.errorMessage != nil && !showingLoginSheet },
+            get: {
+                (viewModel.errorMessage != nil || viewModel.offlineQueue.errorMessage != nil)
+                    && !showingLoginSheet
+            },
             set: { isPresented in
                 if !isPresented {
-                    viewModel.errorMessage = nil
+                    clearErrorMessages()
                 }
             }
         )
+    }
+
+    private func clearErrorMessages() {
+        viewModel.errorMessage = nil
+        viewModel.offlineQueue.errorMessage = nil
     }
 
 }

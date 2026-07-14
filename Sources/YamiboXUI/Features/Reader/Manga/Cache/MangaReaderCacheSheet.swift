@@ -5,7 +5,7 @@ import YamiboXCore
 #if os(iOS)
 struct MangaReaderCacheSheet: View {
     @StateObject private var model: MangaReaderCacheViewModel
-    @State private var queueViewModel: MineHomeViewModel
+    @State private var queueViewModel: OfflineCacheQueueViewModel
     @Environment(\.dismiss) private var dismiss
     @State private var isSelecting = false
     @State private var selectedTIDs: Set<String> = []
@@ -28,7 +28,7 @@ struct MangaReaderCacheSheet: View {
                 }
             )
         )
-        _queueViewModel = State(initialValue: MineHomeViewModel(dependencies: dependencies.account))
+        _queueViewModel = State(initialValue: OfflineCacheQueueViewModel(dependencies: dependencies.account))
     }
 
     var body: some View {
@@ -67,12 +67,15 @@ struct MangaReaderCacheSheet: View {
                 }
 
                 ToolbarItem(placement: .topBarTrailing) {
-                    MangaNovelReaderCacheQueueToolbarButton(
+                    ReaderCacheQueueToolbarButton(
                         entryCount: model.offlineCacheQueueEntryCount,
                         action: {
                             isQueuePresented = true
                         }
-                    )
+                    ) { isActive in
+                        ReaderCacheDownloadQueueIcon(isActive: isActive)
+                            .anchorPreference(key: MangaReaderCacheQueueButtonAnchorKey.self, value: .bounds) { $0 }
+                    }
                 }
 
                 if isSelecting && usesSystemSelectionBottomToolbar {
@@ -88,7 +91,7 @@ struct MangaReaderCacheSheet: View {
                 }
             }
             .sheet(isPresented: $isQueuePresented) {
-                MineOfflineCacheQueueSheet(viewModel: queueViewModel)
+                OfflineCacheQueueSheet(viewModel: queueViewModel)
             }
             .task {
                 await model.load()
@@ -140,7 +143,7 @@ struct MangaReaderCacheSheet: View {
         }
     }
 
-    private var selectionState: MangaNovelReaderCacheSelectionState {
+    private var selectionState: ReaderCacheSelectionState {
         model.selectionState(for: selectedTIDs)
     }
 
@@ -344,31 +347,6 @@ private struct MangaReaderCacheQueueFlightBadge: View {
     }
 }
 
-private struct MangaNovelReaderCacheQueueToolbarButton: View {
-    let entryCount: Int
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: 5) {
-                ReaderCacheDownloadQueueIcon(isActive: entryCount > 0)
-                    .anchorPreference(key: MangaReaderCacheQueueButtonAnchorKey.self, value: .bounds) { $0 }
-                Text(verbatim: "\(entryCount)")
-                    .font(.caption.monospacedDigit().weight(.semibold))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
-                    .frame(minWidth: 12, alignment: .trailing)
-            }
-            .frame(minWidth: 48, minHeight: 32, alignment: .center)
-            .foregroundStyle(entryCount > 0 ? Color.accentColor : Color.secondary)
-            .contentShape(Rectangle())
-        }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(
-            L10n.string("reader.cache_queue_button_accessibility_format", entryCount)
-        )
-    }
-}
 
 private struct MangaReaderCacheErrorBanner: View {
     let message: String

@@ -100,7 +100,7 @@ struct ForumThreadReaderView: View {
         .onDisappear {
             model.flushReadingProgress()
         }
-        .forumTransientMessage(model.transientMessage, bottomPadding: model.page == nil ? 24 : 82) {
+        .transientMessage(model.transientMessage, bottomPadding: model.page == nil ? 24 : 82) {
             model.clearTransientMessage()
         }
     }

@@ -753,19 +753,3 @@ final class ForumThreadReaderViewModel {
     }
 }
 
-private extension FavoriteItem {
-    func favorite(type: FavoriteType) -> Favorite {
-        guard let threadID = target.threadID else {
-            preconditionFailure("Thread favorite conversion requires thread target")
-        }
-        return Favorite(
-            id: id,
-            title: title,
-            displayName: displayName,
-            threadID: threadID,
-            remoteFavoriteID: remoteMapping?.yamiboFavoriteID,
-            type: type,
-            tagIDs: tagIDs
-        )
-    }
-}
